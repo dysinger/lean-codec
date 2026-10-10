@@ -23,17 +23,30 @@ proof that they are inverses: `apply a = some b ↔ unapply b = some a`, for all
 
 ### Requirement: Byte-exact roundtrip
 
-For every codec `c : Codec α` and every value `x : α` in `c`'s domain, encoding
-then decoding SHALL reproduce the exact value and consume exactly the encoded
-bytes:
+For every **`alt`-free** codec `c : Codec α` (i.e. `NoAlt c`, descriptions built
+from `$`, `*`, `empty`, `pure`, and `byte` only) and every value `x : α` in
+`c`'s domain, encoding then decoding SHALL reproduce the exact value and consume
+exactly the encoded bytes:
 
-`encode c x = some s → decode c s = .ok (x, empty)`.
+`encode c x = some s → decode c s = .ok (x, [])`.
+
+`alt` (committed choice) is **out of scope** for this guarantee: the committed
+decoder's left-bias disagrees with the backtracking `Rel` relation whenever two
+branches accept competing prefixes of the same input. Soundness over `alt` is a
+separate, deferred requirement (`alt` prefix-disjointness, below).
 
 #### Scenario: Encode-then-decode returns the value
 
 - **WHEN** `x` is in the codec's domain and `encode c x = some s`
-- **THEN** `decode c s` returns `(x, empty)` — the value plus an empty remaining
+- **THEN** `decode c s` returns `(x, [])` — the value plus an empty remaining
   buffer.
+
+#### Scenario: Committed choice is excluded from the guarantee
+
+- **WHEN** a description contains `alt` (committed `|`)
+- **THEN** the unconditionally-proven roundtrip does **not** extend to it; the
+  decoder's single-result, left-biased semantics can disagree with `Rel` when
+  branches overlap on a prefix.
 
 ### Requirement: Lossless capture of allowable bytes
 
@@ -50,16 +63,16 @@ discarded.
 
 ### Requirement: Deterministic, positional decoding
 
-Decoding SHALL be a deterministic, single-result function over a byte buffer that
-returns the decoded value together with the (possibly empty) remaining bytes; on
-failure it SHALL return an error whose position is the length of the unconsumed
-prefix.
+Decoding SHALL be a deterministic, single-result function over a byte buffer (a
+`List UInt8`) that returns the decoded value together with the (possibly empty)
+remaining bytes; on failure it SHALL return an error whose position is the
+length of the unconsumed prefix.
 
 #### Scenario: Failure reports a position
 
 - **WHEN** a decode fails
 - **THEN** the returned error carries the remaining unconsumed bytes, from which
-  the failure position is `whole.size - remaining.size`.
+  the failure position is `whole.length - remaining.length`.
 
 ### Requirement: Partial encoding
 
@@ -81,4 +94,19 @@ yields a proven-inverse description.
 #### Scenario: Composition preserves the roundtrip
 
 - **WHEN** two codecs `c₁`, `c₂` are composed with `*`
-- **THEN** `encode (c₁ * c₂) (x₁, x₂)` roundtrips through `decode` to `((x₁, x₂), empty)` whenever each component roundtrips.
+- **THEN** `encode (c₁ * c₂) (x₁, x₂)` roundtrips through `decode` to `((x₁, x₂), [])` whenever each component roundtrips.
+
+### Requirement: `alt` prefix-disjointness (future)
+
+Soundness of the committed `|` decoder SHALL require the two branches to accept
+**prefix-disjoint** byte strings: no string accepted by the left branch SHALL be
+a (possibly improper) prefix of a string accepted by the right branch, and vice
+versa. This is a **named future condition**, not yet implemented; it shares its
+core with the deferred coinductive `iterate`/`foldl` combinators.
+
+#### Scenario: Prefix overlap is rejected
+
+- **WHEN** two branches `d₁ | d₂` accept strings where one is a prefix of the
+  other (e.g. `byte | (byte * byte)`)
+- **THEN** the description does **not** satisfy the prefix-disjointness
+  condition, and no roundtrip claim is made for it.

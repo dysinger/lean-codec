@@ -11,11 +11,12 @@ proof. The authoritative reference is `PAPER.md`.
 **Goals:**
 
 - A three-layer core: `Iso` (with the inverse law as a field), `Codec` (the
-  description typeclass), `Rel` (the denotational relation over `ByteArray`).
+  description typeclass), `Rel` (the denotational relation over `List UInt8`).
 - Byte-exact `decode (encode x) = x`, with the strict `Iso` law holding
-  *unconditionally* (no "modulo equivalence classes" escape hatch).
-- Deterministic, positional decoding (`Except DecodeError (α × ByteArray)`) and
-  partial encoding (`α → Option ByteArray`).
+  *unconditionally* (no "modulo equivalence classes" escape hatch) — over the
+  `alt`-free (`NoAlt`) fragment; over `alt` it is deferred (see below).
+- Deterministic, positional decoding (`Except DecodeError (α × List UInt8)`) and
+  partial encoding (`α → Option (List UInt8)`).
 
 **Non-Goals:**
 
@@ -38,9 +39,12 @@ proof. The authoritative reference is `PAPER.md`.
   derived structurally (`whole.size − remaining.size`). (Alternative rejected: an
   explicit `Nat` cursor, which is neither the paper's nor fstar-codec's design and
   adds no capability.)
-- **Determinism with an `Unambiguous` gate.** A single result (not the paper's
-  list), sound-and-complete only on the `Unambiguous` domain; `|` is committed
-  choice. Backtracking and peeking are out of scope.
+- **Determinism with a `NoAlt` gate.** A single result (not the paper's list),
+  sound-and-complete **unconditionally on the `alt`-free (`NoAlt`) fragment**;
+  `|` is committed choice. Soundness of committed `|` itself is **deferred**: it
+  requires a prefix-disjointness condition on the branches (see Risks), which
+  shares its core with the deferred coinductive `iterate`/`foldl` combinators.
+  Backtracking and peeking are out of scope.
 - **`Codec` is a typeclass**, matching the paper's §3.4 "class of syntax
   descriptions" and its `IsoFunctor`/`ProductFunctor`/`Alternative` superclasses;
   the two interpreters are instances. (Alternative rejected: a `structure`.)
@@ -52,10 +56,12 @@ proof. The authoritative reference is `PAPER.md`.
 ## Risks / Trade-offs
 
 - [Determinism narrows the paper's relation to a function] → Mitigation: the
-  `Unambiguous` precondition is stated explicitly and proved per demo, not
-  hidden.
-- \[Committed `|` changes observable semantics\] → Mitigation: documented as a
-  deliberate departure (§4.4's predictive-`|` observation), not a forced
-  consequence.
-- \[`ByteArray` ops may resist `simp`\] → Mitigation: prefer direct `simp`; fall
-  back to a `List UInt8` model + transport lemma (proof-ergonomics only).
+  `NoAlt` gate is stated explicitly and the roundtrip is proved unconditionally
+  on that fragment; the `alt` case is named as deferred, not hidden.
+- \[Committed `|` changes observable semantics\] → Mitigation: out of scope for the
+  current roundtrip guarantee; the prefix-disjointness condition that would
+  restore soundness is recorded as future work (same coinductive core as
+  `iterate`/`foldl`), not silently asserted.
+- \[`ByteArray` ops may resist `simp`\] → Mitigation: model the provable core as
+  `List UInt8`; reserve `ByteArray` for the executable wrapper transported on
+  afterwards (proof ergonomics only).

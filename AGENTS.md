@@ -34,15 +34,20 @@ Codec.roundtrip` ⇒ `[propext, Quot.sound]`):
 4. `iterate`/`foldl`/`chainl1` are deferred — coinductive at the `Iso` level.
 
 **Open, in order:**
-1. **Resolve the `alt` soundness condition (blocking, spec change).** `Unambiguous`
-   ("at most one value per whole string") is *insufficient* for committed `|`;
-   need a prefix-disjointness condition (paper §4.4). Options: strengthen
-   `Unambiguous`; keep `NoAlt` gate; amend spec §5.3 (currently unconditional).
-2. **Finish §5.2** — the `Rel d x s ↔ decode d s = .ok (x, [])` bidirectional law.
-3. **`iterate`/`foldl` + `chainl1`** (tasks 2.5/6.1) — design decision needed.
-4. **`ByteArray` wrapper + extraction + benchmark** (tasks 7.1–7.3).
-5. **README rewrite** (task 7.4) — stale; record `List UInt8` core, `NoAlt` gate, downstream split.
-6. **Housekeeping** — `Codec/Codec.lean` type-vs-module collision (`Codec.Codec` declaring `Codec`).
+
+1. **`alt` soundness / coinductive combinators (one deferred item, blocking only
+   for `alt`-and-above).** Committed `|` cannot be proven sound over the
+   backtracking `Rel` without a **prefix-disjointness** condition on the
+   branches (paper §4.4). That condition's compositional proof has the *same
+   coinductive core* as `iterate`/`foldl`. Decided this session: **keep the
+   `NoAlt` gate** (do not try to strengthen `Unambiguous`); amend spec §5.3 to
+   be `NoAlt`-conditional; record prefix-disjointness as a *named future*
+   condition. `iterate`/`foldl`/`chainl1` stay deferred with it.
+2. **Finish §5.2 (bidirectional law).** Now stated as
+   `NoAlt d → (Rel d x s ↔ decode d s = .ok (x, []))`; needs proving.
+3. **`ByteArray` wrapper + extraction + benchmark** (tasks 7.1–7.3).
+4. **README rewrite** (task 7.4) — stale; record `List UInt8` core, `NoAlt` gate, downstream split.
+5. **Housekeeping** — `Codec/Codec.lean` type-vs-module collision (`Codec.Codec` declaring `Codec`).
 
 ## Openspec workflow
 

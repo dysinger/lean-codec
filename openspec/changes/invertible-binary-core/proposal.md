@@ -15,7 +15,7 @@ covers binary, variable-binary, and structured data.
 - A **pure-framework core library** `codec`: `Iso` (partial isomorphisms with the
   inverse law as a *field*), `Codec` (the description typeclass), `Rel` (the
   denotational relation), and two interpreters `decode`/`encode`.
-- **Byte concrete syntax** (`ByteArray`/`UInt8`), with `byte` and `pure` as the
+- **Byte concrete syntax** (`List UInt8` as the provable core, `ByteArray` as the later executable wrapper), with `byte` and `pure` as the
   only primitive descriptions.
 - A **byte-exact roundtrip guarantee** (`decode (encode x) = x`) with no
   "modulo equivalence classes" weakening — achieved by **lossless capture** of

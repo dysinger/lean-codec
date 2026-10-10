@@ -34,8 +34,8 @@ well-formed `x` — not tested, not asserted, and not discharged by a solver.
 - **Proof-carrying by construction.** There is no "verified vs unverified"
   tier; every codec is verified by its type.
 
-See `openspec/invertible-binary/proposal.md` for the full design, and
-`openspec/invertible-binary/tasks.md` for the task ledger.
+See `openspec/changes/invertible-binary-core/proposal.md` for the full design, and
+`openspec/changes/invertible-binary-core/tasks.md` for the task ledger.
 
 ______________________________________________________________________
 
@@ -47,20 +47,23 @@ that are not semantic changes at all.
 
 **Departures** (observable-semantics changes):
 
-1. **`String`/`Char` → `ByteArray`/`UInt8` (bytes become the base unit).** The
+1. **`String`/`Char` → `List UInt8`/`UInt8` (bytes become the base unit).** The
    paper's concrete syntax is textual (`Rel : [(α, String)]`, `token : δ Char`).
    Our core targets binary (fixed-width integers, endianness, image files, LEB128
    framing); a byte base is the natural fit, and bytes become the primitive,
-   with text rebuilt downstream in `lean-text` on top of them.
+   with text rebuilt downstream in `lean-text` on top of them. The provable core
+   is the `List UInt8` model; `ByteArray` is the later executable wrapper (§7).
 
 1. **Nondeterministic list-decoder → a deterministic decoder.** The paper's
    decoder returns a *list* of results (`[(α, String)]`) — a relation — and the
    paper itself admits it is exponential (§4.4). We need speed, so `decode`
    returns a single result plus the remaining bytes. This is a real semantic
    narrowing (the paper's §4.3 "decode = find a pair" becomes "decode = the
-   unique pair"), made explicit: on the `Unambiguous` domain — at most one value
-   per input, a **per-codec proof obligation the library does not decide** — the
-   deterministic decode is sound and complete w.r.t. `Rel`.
+   unique pair"), made explicit: on the `NoAlt` domain — descriptions built from
+   `$`, `*`, `empty`, `pure`, and `byte`, with **no committed `|`** — the
+   deterministic decode is sound and complete w.r.t. `Rel`. For `|` itself
+   (committed choice), soundness requires a *prefix-disjointness* condition on
+   the branches, recorded as deferred (see below), not silently asserted.
 
 1. **`|` becomes committed choice, not full backtracking.** A consequence of
    determinism (a single result cannot try both branches), not a forced re-base.
@@ -89,7 +92,7 @@ and remove text-flavored naming):
   paper §3.1 states the inverse invariant in prose and admits it is unchecked;
   §7.5 notes in passing that it "would be interesting to see" it encoded in a
   dependently typed language. We answer: `Iso.law` is a **field**, so an `Iso`
-  without its proof cannot be built, and `codec_roundtrip` is a **closed
+  without its proof cannot be built, and the roundtrip is a **closed
   theorem** over `Codec`. Crucially, because departure #4 removes the
   lossy `ignore` primitive, the strict law
   `∀ a b, apply a = some b ↔ unapply b = some a` holds for **every** core
@@ -128,21 +131,24 @@ structure Iso (α β : Type) where
   -- | / empty : Codec α → Codec α → Codec α / Codec α   (Alternative / choice)
   -- pure / byte : α → Codec α / Codec UInt8            (the paper's `pure`/`token`)
 
--- Layer 2: denotational semantics (the paper §4.3)
-def Rel (d : Codec α) (x : α) (s : ByteArray) : Prop := ...
+-- Layer 2: denotational semantics (the paper §4.3), over the provable List model
+def Rel (d : Codec α) (x : α) (s : List UInt8) : Prop := ...
 
 -- the two interpreters (format-agnostic naming):
---   decode : Codec α → ByteArray → Except DecodeError (α × ByteArray)  -- returns errors
---   encode : Codec α → α → Option ByteArray                            -- partial
+--   decode : Codec α → List UInt8 → Except DecodeError (α × List UInt8)  -- returns errors
+--   encode : Codec α → α → Option (List UInt8)                            -- partial
 
 -- the two theorems that make "one description = one relation" precise:
---   bidirectional:  Unambiguous d → (Rel d x s ↔ decode d s = .ok (x, empty))
---   roundtrip:      encode d x = some s → decode d s = .ok (x, empty)
+--   bidirectional:  NoAlt d → (Rel d x s ↔ decode d s = .ok (x, []))
+--   roundtrip:      NoAlt d → (encode d x = some s → decode d s = .ok (x, []))
 ```
 
-Every `Codec` is a composition of `Iso`s via `$`/`*`/`|`/`pure`/`byte`, so the
+Every `Codec` is a composition of `Iso`s via `$`/`*`/`|`/`pure`/`byte`; the
 inverse guarantee is **structural**: the `Iso` law is a field, and the two
-`Rel` theorems above close by composition — no solver, no per-combinator lemma.
+`Rel` theorems above close by composition over the `NoAlt` (`alt`-free) fragment
+— no solver, no per-combinator lemma. The provable core is `List UInt8`;
+`ByteArray` (whose FFI-backed ops do not reduce under `simp`) is the later
+executable wrapper transported on top.
 
 ______________________________________________________________________
 
@@ -164,6 +170,8 @@ ______________________________________________________________________
 
 ## Status
 
-Planning/review complete (`openspec/invertible-binary/`). Implementation has
-not yet started; the task ledger (`tasks.md`) is the authority for what comes
-next.
+The `alt`-free core is implemented and proven (see the task ledger
+`openspec/changes/invertible-binary-core/tasks.md`): `Iso`, `Codec`, `Rel`,
+`decode`/`encode`, and the roundtrip over the `NoAlt` fragment. Deferred (one
+shared coinductive item): the `alt` prefix-disjointness condition, and the
+`iterate`/`foldl`/`chainl1` combinators.
