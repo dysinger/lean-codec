@@ -6,3 +6,4 @@ defaultTargets = ["codec"]
 
 [[lean_lib]]
 name = "codec"
+roots = ["Codec"]

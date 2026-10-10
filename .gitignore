@@ -8,6 +8,9 @@ build/
 *.olean.lock
 *.ilean
 
+# Lake dependency lockfile (library: consumers resolve their own deps)
+lake-manifest.json
+
 # Reference paper is tracked as markdown only; the PDF is deliberately ignored.
 docs/*.pdf
 
