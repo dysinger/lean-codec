@@ -14,8 +14,9 @@ Generic, byte-agnostic combinators built from the primitives (the paper §6.1):
 
 `many` is recursive and hence `partial`; it introduces committed `alt`, so it is
 outside the `NoAlt` fragment for which the roundtrip law holds unconditionally
-(see `Codec.Sound`). `chainl1` is deferred: it needs `foldl`/`iterate`
-(paper §5.2/§5.3), the coinductive `Iso` combinators not yet in `Codec.Iso`.
+(see `Codec.Sound`). `chainl1` (below) is built on the proved `Iso.foldl`
+(paper §5.2/§5.3); its `law` is part of `Iso.foldl`'s law field, not a separate
+proof.
 -/
 
 namespace Codec
@@ -41,5 +42,14 @@ def between {α : Type} (l r : Codec Unit) (p : Codec α) : Codec α :=
 partial def many {α : Type} (p : Codec α) : Codec (List α) :=
   Codec.alt (Codec.iso (Iso.nil) (Codec.pure ()))
     (Codec.iso (Iso.cons) (Codec.seq p (many p)))
+
+/-- `chainl1 arg op f` parses/prints a *non-empty* left-associative chain of
+`arg` separated by `op`, folding left via the step iso `f : Iso (α × (β × α)) α`
+(the paper's `chainl1`, §6.1). Built on `Iso.foldl`; `measure`/`h` are the
+well-foundedness witness (see `Iso.MeasureDecreases`). -/
+noncomputable def chainl1 {α β : Type} (arg : Codec α) (op : Codec β)
+    (f : Iso (α × (β × α)) α) (measure : α → Nat)
+    (h : Iso.MeasureDecreases measure f) : Codec α :=
+  Codec.iso (Iso.foldl f measure h) (Codec.seq arg (many (Codec.seq op arg)))
 
 end Codec
