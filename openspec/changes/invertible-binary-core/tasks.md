@@ -2,7 +2,7 @@
 
 ## 1. Feasibility spike
 
-- [ ] 1.1 Confirm the paper (`docs/rendel10invertible.md`) is the spec; adopt `Iso` (§3.1/§5.1), the `Codec` interface (§3.4), `Rel` (§4.3), derived combinators (§6.1), `foldl`/`iterate` (§5.2/5.3); re-base to bytes (`byte : Codec UInt8`, `Rel` over `ByteArray`).
+- [ ] 1.1 Confirm the paper (`PAPER.md`) is the spec; adopt `Iso` (§3.1/§5.1), the `Codec` interface (§3.4), `Rel` (§4.3), derived combinators (§6.1), `foldl`/`iterate` (§5.2/5.3); re-base to bytes (`byte : Codec UInt8`, `Rel` over `ByteArray`).
 - [ ] 1.2 Confirm binary + speed + high-level-Lean feasibility: `ByteArray`/`UInt8/16/32/64`/`Array`/`List`/`Nat.div/mod` are stdlib; no mathlib (`Equiv`/`PEquiv` are mathlib, NOT reused).
 - [ ] 1.3 Record that the `Iso` inverse law holds unconditionally (no `ignore`, so no "modulo equivalence classes" — resolved by design).
 - [ ] 1.4 Record that `Codec` is a typeclass (matches the paper §3.4; two interpreters are instances).

@@ -4,7 +4,7 @@
 
 See `proposal.md` for the motivation. This library re-bases Rendel & Ostermann's
 *syntax descriptions* onto a byte core and makes their invertibility a machine
-proof. The authoritative reference is `docs/rendel10invertible.md`.
+proof. The authoritative reference is `PAPER.md`.
 
 ## Goals / Non-Goals
 
