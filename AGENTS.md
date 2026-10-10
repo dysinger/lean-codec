@@ -55,23 +55,23 @@ Codec.roundtrip` ⇒ `[propext, Quot.sound]`):
 
 **Open, in order:**
 
-1. **`alt` prefix-disjointness (blocking for `|`-and-above soundness).** Committed
-   `|` cannot be proven sound over the backtracking `Rel` without a
-   **prefix-disjointness** condition on the branches (paper §4.4): no string accepted
-   by the left branch may be a proper prefix of one the right branch accepts, and
-   vice versa. This is the one remaining coinductive/design item, distinct from the
-   now-resolved `foldl`. Decided: **keep the `NoAlt` gate** (do not strengthen
-   `Unambiguous`); spec §5.3 is `NoAlt`-conditional; record prefix-disjointness as a
-   *named future* condition (already in `spec.md`). **Open sub-questions:** (a) exact
-   statement — pointwise per-`alt` vs. an indexed/derived predicate over the whole
-   description; (b) whether to prove it compositionally (like `NoAlt`) or require it
-   as a per-demo proof obligation.
+1. **`alt` prefix-disjointness (blocking — this is now concrete combinator work, not
+   an abstract design question).** See README departure #5 and `tasks.md` §8. The path:
+   (a) define a structural `NonNull : Codec α → Prop`; (b) prove the prefix-disjointness
+   lemma (`NonNull d₁` ⇒ no `Rel d₁`-string is a proper prefix of a `Rel d₂`-string);
+   (c) extend `decode_spec`/`roundtrip`/`bidir` past `NoAlt`; (d) implement
+   `some`/`many1`, `sepBy`/`sepBy1`, `optional`/`maybe`/`choice`, `chainr1`, and
+   multi-operator `chainl1` — each proven under `NonNull`. These are the combinators
+   every real format needs; they are currently missing or outside `NoAlt`.
+   **Decision already made: stay cursor-free — no backtracking, no peeking.**
+   Prefix-disjointness is a denotational `Prop` provable by well-founded induction
+   (same style as `foldl`), strictly better than an operational cursor. Ambiguous
+   formats (e.g. `if | if_then_else`) must be left-factored — the standard LL(1)
+   restriction, surfaced as a witness. Do not reopen this.
 2. **`ByteArray` wrapper + extraction + benchmark** (tasks 7.1–7.3).
 3. **README rewrite** (task 7.4) — largely done; check the combinator table +
    downstream split are current, and record `foldl`/`chainl1` done + `iterate` omitted.
 4. **Housekeeping** — `Codec/Codec.lean` type-vs-module collision (`Codec.Codec` declaring `Codec`).
-5. **Ledger reconciliation** — `tasks.md` 2.5/6.1 still look unchecked; mark `foldl`/`chainl1`
-   done and `iterate` omitted-with-rationale.
 
 ## Openspec workflow
 

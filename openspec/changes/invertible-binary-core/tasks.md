@@ -31,13 +31,15 @@
 ## 5. Rel (denotational semantics) + roundtrip theorems
 
 - [x] 5.1 `Rel` over whole byte sequences (remaining-bytes is private to `decode`).
-- [x] 5.2 Bidirectional law: `NoAlt d → (Rel d x s ↔ decode d s = .ok (x, []))` (as `decode_spec`/`bidir`; the `alt` case → prefix-disjointness, deferred).
+- [x] 5.2 Bidirectional law: `NoAlt d → (Rel d x s ↔ decode d s = .ok (x, []))` (as `decode_spec`/`bidir`; the `alt` case → prefix-disjointness, §8).
 - [x] 5.3 Roundtrip: `NoAlt d → (encode d x = some s → decode d s = .ok (x, []))`.
 - [x] 5.4 Prove the laws by `simp`/`rfl`/induction — no solver.
 
 ## 6. Derived combinators (generic, byte-agnostic)
 
-- [x] 6.1 `many`, `*>`, `<*`, `between`; `chainl1` built on `.2.5` `Iso.foldl`.
+- [x] 6.1 `many`, `*>`, `<*`, `between`; `chainl1` built on §2.5 `Iso.foldl`.
+- [ ] 6.2 `chainr1` (dual of `chainl1`), `some`/`many1`, `sepBy`/`sepBy1`,
+  `optional`/`maybe`/`choice` — see §8 (gated on prefix-disjointness).
 
 ## 7. Benchmark, extraction, docs
 
@@ -45,5 +47,29 @@
 - [ ] 7.2 Benchmark `decode`/`encode` on a synthetic `byte`/`many` description — linear time, no per-byte boxing; record the number.
 - [ ] 7.3 Confirm `get!`/remaining-bytes (not `getElem`-with-proof) actually runs post-extraction.
 - [ ] 7.4 `README.md`: guarantee, `Iso`/`Codec`/`Rel` model, pure-framework scope, combinator table, usage.
-- [ ] 7.5 Zero-`sorry` + `#print axioms` = stdlib only (`propext`, `Classical.choice`, `Quot.sound`).
-- [ ] 7.6 Document the deliberate departures (byte core, return-the-rest decode, deterministic single result, committed `|`, lossless capture) and why; note `lean-binary`/`lean-text` as downstream consumers.
+- [x] 7.5 Zero-`sorry` + `#print axioms` = stdlib only (`propext`, `Classical.choice`, `Quot.sound`).
+- [x] 7.6 Document the deliberate departures (byte core, return-the-rest decode, deterministic single result, committed `|`, lossless capture) and why; note `lean-binary`/`lean-text` as downstream consumers.
+
+## 8. `alt` prefix-disjointness (the blocking soundness condition)
+
+- [ ] 8.1 Define a **structural non-emptiness predicate** `NonNull : Codec α → Prop`
+  (like `NoAlt`): `NonNull byte = True`, `NonNull (pure _) = False`,
+  `NonNull (d₁ * d₂) = NonNull d₁ ∨ NonNull d₂`, `NonNull (iso _ d) = NonNull d`,
+  `NonNull empty = True`, `NonNull (alt d₁ d₂) = NonNull d₁ ∧ NonNull d₂`.
+- [ ] 8.2 Prove the **prefix-disjointness lemma**: if `NonNull d₁`, then no string
+  accepted by `d₁` is a (proper) prefix of a string accepted by `d₂` (and the
+  relevant dual). This is the relation-level, cursor-free, LL(1)-style condition —
+  constructive and closed by induction, no `Classical.choice`, no coinduction.
+- [ ] 8.3 Extend `decode_spec`/`roundtrip`/`bidir` from `NoAlt` to descriptions
+  satisfying prefix-disjointness at each `alt` (decide: compositional predicate vs.
+  per-description proof obligation — see README departure #5 sub-questions).
+- [ ] 8.4 Implement `some`/`many1`, `sepBy`/`sepBy1`, `optional`/`maybe`/`choice`,
+  and `chainr1` — each **proven** under the `NonNull` (or equivalent) precondition;
+  multi-operator `chainl1`/`chainr1` (`+ | *`) sound under the same condition.
+
+The **decision recorded** (do not reopen): stay cursor-free — **no backtracking,
+no peeking**. Prefix-disjointness is a *denotational* `Prop` over `Rel`, provable
+by well-founded induction (the same style that already proved `foldl`), and is
+strictly preferable to an operational cursor/lookahead state machine. The cost is
+that genuinely-ambiguous formats (e.g. `if | if_then_else`) must be left-factored
+by hand — the standard LL(1) restriction, surfaced as a type-level witness.
