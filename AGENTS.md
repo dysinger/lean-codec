@@ -32,6 +32,9 @@ Codec.roundtrip` ⇒ `[propext, Quot.sound]`):
 2. `ByteArray` becomes the executable wrapper later (§7.1–7.3), not the proof model.
 3. Roundtrip is **not** unconditional over `alt`; committed `|` needs a gate (currently `NoAlt`).
 4. `iterate`/`foldl`/`chainl1` are deferred — coinductive at the `Iso` level.
+5. `Codec` is an **inductive description AST**, *not* the paper's §3.4 typeclass
+   — needed so `Rel`/`decode`/`encode` are ordinary functions over one
+   description value (see `Codec/Codec.lean` docstring).
 
 **Open, in order:**
 
@@ -43,11 +46,10 @@ Codec.roundtrip` ⇒ `[propext, Quot.sound]`):
    `NoAlt` gate** (do not try to strengthen `Unambiguous`); amend spec §5.3 to
    be `NoAlt`-conditional; record prefix-disjointness as a *named future*
    condition. `iterate`/`foldl`/`chainl1` stay deferred with it.
-2. **Finish §5.2 (bidirectional law).** Now stated as
-   `NoAlt d → (Rel d x s ↔ decode d s = .ok (x, []))`; needs proving.
-3. **`ByteArray` wrapper + extraction + benchmark** (tasks 7.1–7.3).
-4. **README rewrite** (task 7.4) — stale; record `List UInt8` core, `NoAlt` gate, downstream split.
-5. **Housekeeping** — `Codec/Codec.lean` type-vs-module collision (`Codec.Codec` declaring `Codec`).
+2. **`ByteArray` wrapper + extraction + benchmark** (tasks 7.1–7.3).
+3. **README rewrite** (task 7.4) — largely done; check the combinator table +
+   downstream split are current.
+4. **Housekeeping** — `Codec/Codec.lean` type-vs-module collision (`Codec.Codec` declaring `Codec`).
 
 ## Openspec workflow
 

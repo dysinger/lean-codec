@@ -5,7 +5,7 @@
 - [x] 1.1 Confirm the paper (`PAPER.md`) is the spec; adopt `Iso` (§3.1/§5.1), the `Codec` interface (§3.4), `Rel` (§4.3), derived combinators (§6.1), `foldl`/`iterate` (§5.2/5.3); re-base to bytes (`byte : Codec UInt8`, `Rel` over `List UInt8`).
 - [x] 1.2 Confirm binary + speed + high-level-Lean feasibility: `List UInt8`/`UInt8/16/32/64`/`Array`/`List`/`Nat.div/mod` are stdlib; no mathlib (`Equiv`/`PEquiv` are mathlib, NOT reused).
 - [x] 1.3 Record that the `Iso` inverse law holds unconditionally (no `ignore`, so no "modulo equivalence classes" — resolved by design).
-- [ ] 1.4 Record that `Codec` is a typeclass (matches the paper §3.4; two interpreters are instances).
+- [x] 1.4 Record that `Codec` is an inductive description AST (free-alternative / free-applicative), *not* the paper's §3.4 typeclass — a deliberate departure so that `Rel`/`decode`/`encode` are ordinary functions over one description value (the typeclass reading would make the description implicit and block structural induction).
 - [x] 1.5 Record the `List UInt8` proof-model strategy: the provable core is `List UInt8`; `ByteArray` ops don't reduce under `simp`, so it becomes a transport target later (proof ergonomics only).
 - [ ] 1.6 Benchmark a multi-MB roundtrip (on `List UInt8` now, `ByteArray` after the §7 wrapper); acceptance = linear time, no per-byte boxing (confirms the return-the-rest design).
 
@@ -31,7 +31,7 @@
 ## 5. Rel (denotational semantics) + roundtrip theorems
 
 - [x] 5.1 `Rel` over whole byte sequences (remaining-bytes is private to `decode`).
-- [ ] 5.2 Bidirectional law: `NoAlt d → (Rel d x s ↔ decode d s = .ok (x, []))`. (The `alt` case → prefix-disjointness, deferred.)
+- [x] 5.2 Bidirectional law: `NoAlt d → (Rel d x s ↔ decode d s = .ok (x, []))` (as `decode_spec`/`bidir`; the `alt` case → prefix-disjointness, deferred).
 - [x] 5.3 Roundtrip: `NoAlt d → (encode d x = some s → decode d s = .ok (x, []))`.
 - [x] 5.4 Prove the laws by `simp`/`rfl`/induction — no solver.
 

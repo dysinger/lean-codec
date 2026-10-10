@@ -11,7 +11,8 @@ proof. The authoritative reference is `PAPER.md`.
 **Goals:**
 
 - A three-layer core: `Iso` (with the inverse law as a field), `Codec` (the
-  description typeclass), `Rel` (the denotational relation over `List UInt8`).
+  description interface, an inductive AST), `Rel` (the denotational relation over
+  `List UInt8`).
 - Byte-exact `decode (encode x) = x`, with the strict `Iso` law holding
   *unconditionally* (no "modulo equivalence classes" escape hatch) — over the
   `alt`-free (`NoAlt`) fragment; over `alt` it is deferred (see below).
@@ -45,9 +46,15 @@ proof. The authoritative reference is `PAPER.md`.
   requires a prefix-disjointness condition on the branches (see Risks), which
   shares its core with the deferred coinductive `iterate`/`foldl` combinators.
   Backtracking and peeking are out of scope.
-- **`Codec` is a typeclass**, matching the paper's §3.4 "class of syntax
-  descriptions" and its `IsoFunctor`/`ProductFunctor`/`Alternative` superclasses;
-  the two interpreters are instances. (Alternative rejected: a `structure`.)
+- **`Codec` is an inductive description AST**, a deliberate departure from the
+  paper's §3.4 typeclass. The typeclass reading (one `Codec` per use site, two
+  *instances* for parsing/printing) would make the description implicit, so
+  `Rel : Codec α → α → …`, `decode : Codec α → ByteArray → …`, and
+  `encode : Codec α → α → …` could not be ordinary functions *of* a description
+  value, and structural induction over a single description would not typecheck.
+  The free-alternative / free-applicative encoding makes `Codec` an explicit
+  value the interpreters consume. (Alternative rejected: the paper's typeclass,
+  and a `structure`; both hide the description from structural recursion.)
 - **`encode` partial, `decode` error-returning.** `encode` returns `Option`
   (out-of-domain is silent and expected, e.g. trying the next `|` branch);
   `decode` returns `Except DecodeError` (malformed input is informative, with a
