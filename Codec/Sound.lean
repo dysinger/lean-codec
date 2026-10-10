@@ -5,62 +5,46 @@ import Codec.Decode
 import Codec.Encode
 
 /-!
-# Soundness: the roundtrip law
+# Soundness: the roundtrip and bidirectional laws
 
-The theorem that makes "one description, two directions" precise:
+The theorems that make "one description, two directions" precise, now over the
+paper's **nondeterministic** decoding relation (see `Codec.Decode`):
 
-  * `decode_encode` — the strong invariant `encode d x = some s → decode d (s ++ r) = .ok (x, r)`.
-  * `roundtrip` — `encode d x = some s → decode d s = .ok (x, [])`.
-  * `decode_rel` / `bidir` — the bidirectional law relating `decode` to `Rel`.
+  * `encode_rel` — encoder soundness: `encode d x = some s → Rel d x s`
+    (hypothesis-free, inductive on `d`).
+  * `decode_spec` — the bidirectional law: `(x, r) ∈ decode d s ↔ ∃ s₀,
+    s = s₀ ++ r ∧ Rel d x s₀`. Soundness (→) and completeness (←) of the
+    list decoder w.r.t. `Rel`.
+  * `bidir` — the `r = []` case: `Rel d x s ↔ (x, []) ∈ decode d s`.
+  * `decode_encode` — the strong invariant: `encode d x = some s →
+    (x, r) ∈ decode d (s ++ r)`.
+  * `roundtrip` — `encode d x = some s → (x, []) ∈ decode d s`.
 
-Both hold *unconditionally* for the `alt`-free fragment (`$`, `*`, `empty`,
-`pure`, `byte`): encoding then decoding reproduces the value byte-for-byte, with
-no "modulo equivalence classes" weakening, because the core has no lossy
-`ignore` primitive.
-
-For `alt` (committed choice, a documented departure from the paper's
-backtracking — §4.4), the deterministic decoder is sound-and-complete only on
-prefix-disjointness domain not yet formalized (a deferred condition); the
-predicate `NoAlt` below singles out the fragment where the laws hold
-unconditionally.
+All of these hold **unconditionally** (no `NoAlt`, no `Disjoint`, no
+prefix-disjointness). They are the point of the backtracking-union semantics:
+`Rel (d₁ | d₂) = Rel d₁ ∨ Rel d₂` and `decode (d₁ | d₂) = decode d₁ ++ decode d₂`
+agree by construction, so the committed-choice `alt` gate — and the
+prefix-disjointness machinery it required — is unnecessary and has been dropped.
 -/
 
 namespace Codec
 
-/-- A description is *unambiguous* when every byte string relates to at most one
-value. Per-codec proof obligation; the deterministic decoder (committed `|`) is
-sound-and-complete on this domain. -/
-def Unambiguous {α : Type} (d : Codec α) : Prop :=
-  ∀ s x y, Rel d x s → Rel d y s → x = y
-
-/-- `NoAlt d` says the description `d` uses no committed-choice (`alt`)
-constructor. On this fragment the roundtrip holds unconditionally. -/
-def NoAlt {α : Type} (d : Codec α) : Prop :=
-  match d with
-  | @Codec.iso _ _ _ d => NoAlt d
-  | @Codec.seq _ _ d₁ d₂ => NoAlt d₁ ∧ NoAlt d₂
-  | @Codec.alt _ _ _ => False
-  | @Codec.empty _ => True
-  | @Codec.pure _ _ _ => True
-  | @Codec.byte => True
-
-/-- The strong roundtrip invariant, on the `alt`-free fragment. -/
-theorem decode_encode {α : Type} (d : Codec α) (x : α) (h : NoAlt d) :
-    ∀ {s : List UInt8}, encode d x = some s → ∀ r, decode d (s ++ r) = .ok (x, r) := by
+/-- Encoder soundness: any value the encoder prints is in the description's
+denotational domain (`Rel d x s`). Inductive on `d`, no hypothesis. -/
+theorem encode_rel {α : Type} (d : Codec α) (x : α) :
+    ∀ {s : List UInt8}, encode d x = some s → Rel d x s := by
   induction d with
   | iso i d ih =>
-      intro s he r
-      by_cases hua : i.unapply x = none
-      · simp [encode, hua] at he
-      · rcases Option.ne_none_iff_exists.mp hua with ⟨a, hua⟩
-        have hia : i.apply a = some x := (i.law a x).2 hua.symm
-        have hs : encode d a = some s := by simpa [encode, hua.symm] using he
-        have hd : decode d (s ++ r) = .ok (a, r) := ih a h hs r
-        simp [decode, hd, hia]
+      intro s he
+      cases hua : i.unapply x with
+      | none => simp [encode, hua] at he
+      | some a =>
+          have hs : encode d a = some s := by simpa [encode, hua] using he
+          have hia : i.apply a = some x := (i.law a x).2 hua
+          exact ⟨a, hia, ih a hs⟩
   | seq d₁ d₂ ih₁ ih₂ =>
-      intro s he r
+      intro s he
       rcases x with ⟨x₁, x₂⟩
-      rcases h with ⟨hna₁, hna₂⟩
       cases h₁ : encode d₁ x₁ with
       | none => simp [encode, h₁] at he
       | some s₁ =>
@@ -68,142 +52,147 @@ theorem decode_encode {α : Type} (d : Codec α) (x : α) (h : NoAlt d) :
           | none => simp [encode, h₁, h₂] at he
           | some s₂ =>
               have hs : s₁ ++ s₂ = s := by simpa [encode, h₁, h₂] using he
-              subst s
-              have hd₂ : decode d₂ (s₂ ++ r) = .ok (x₂, r) := ih₂ x₂ hna₂ h₂ r
-              have hd₁ : decode d₁ (s₁ ++ (s₂ ++ r)) = .ok (x₁, s₂ ++ r) := ih₁ x₁ hna₁ h₁ (s₂ ++ r)
-              simp [decode, hd₁, hd₂, List.append_assoc]
+              rw [hs.symm]
+              exact ⟨s₁, s₂, rfl, ih₁ x₁ h₁, ih₂ x₂ h₂⟩
   | alt d₁ d₂ ih₁ ih₂ =>
-      intro s he r
-      cases h
+      intro s he
+      cases h₁ : encode d₁ x with
+      | some s₁ =>
+          have hs : s₁ = s := by simpa [encode, h₁] using he
+          subst s₁
+          exact Or.inl (ih₁ x h₁)
+      | none =>
+          have he' : encode d₂ x = some s := by simpa [encode, h₁] using he
+          exact Or.inr (ih₂ x he')
   | empty =>
-      intro s he r
+      intro s he
       simp [encode] at he
   | pure x₀ =>
-      intro s he r
+      intro s he
       by_cases hx : x = x₀
       · subst x
         have hs : s = [] := by simpa [encode] using he
         subst s
-        simp [decode]
+        simp [Rel]
       · simp [encode, hx] at he
   | byte =>
-      intro s he r
+      intro s he
       have hs : single x = s := by simpa [encode] using he
       subst s
-      simp [decode, single]
+      rw [Rel_byte]
 
-/-- The byte-exact roundtrip on the `alt`-free fragment. -/
-theorem roundtrip {α : Type} (d : Codec α) (x : α) (h : NoAlt d) :
-    encode d x = some s → decode d s = .ok (x, []) := by
-  intro he
-  simpa using (decode_encode d x h he [])
+/-- The sequential decoder threads the remaining bytes: `((x, y), r)` is a result
+of `seq d₁ d₂` exactly when `(x, t)` is a result of `d₁` and `(y, r)` of `d₂`
+on the leftover `t`. (Membership lemma for the `seq` case of `decode_spec`.) -/
+theorem decode_seq_mem {α β : Type} (d₁ : Codec α) (d₂ : Codec β) (x : α × β)
+    (s r : List UInt8) :
+    (x, r) ∈ decode (Codec.seq d₁ d₂) s ↔
+      ∃ t, (x.1, t) ∈ decode d₁ s ∧ (x.2, r) ∈ decode d₂ t := by
+  rcases x with ⟨x₁, x₂⟩
+  rw [decode]
+  rw [List.mem_flatMap]
+  constructor
+  · intro h
+    rcases h with ⟨ab, hab, hm⟩
+    rcases ab with ⟨a, t⟩
+    rw [List.mem_flatMap] at hm
+    rcases hm with ⟨ys, hys, hsing⟩
+    rcases ys with ⟨y, s₂⟩
+    rw [List.mem_singleton] at hsing
+    cases hsing
+    exact ⟨t, hab, hys⟩
+  · intro h
+    rcases h with ⟨t, hd₁, hd₂⟩
+    refine ⟨(x₁, t), hd₁, ?_⟩
+    rw [List.mem_flatMap]
+    refine ⟨(x₂, r), hd₂, ?_⟩
+    rw [List.mem_singleton]
 
-
-/-! ## The bidirectional law -/
-
-/-- The bidirectional law, generalized over the remaining suffix `r`: decoding `s`
-yields `x` leaving exactly `r` unconsumed iff `s` splits as a relating prefix plus
-`r`. Soundness (→) and completeness (←) of the deterministic decoder w.r.t. `Rel`,
-on the `alt`-free (`NoAlt`) fragment. -/
-theorem decode_spec {α : Type} (d : Codec α) (x : α) (h : NoAlt d) :
-    ∀ {s r : List UInt8}, decode d s = .ok (x, r) ↔
+/-- The bidirectional law: decoding yields `x` with exactly `r` remaining iff the
+input splits as a relating prefix plus `r`. Unconditional — soundness and
+completeness of the *nondeterministic* decoder against `Rel`, for every
+description. -/
+theorem decode_spec {α : Type} (d : Codec α) (x : α) :
+    ∀ {s r : List UInt8}, (x, r) ∈ decode d s ↔
       ∃ s₀, s = s₀ ++ r ∧ Rel d x s₀ := by
   induction d with
   | iso i d ih =>
       intro s r
+      rw [decode, List.mem_filterMap]
       constructor
-      · intro hd
-        cases hd' : decode d s with
-        | error e => simp [decode, hd'] at hd
-        | ok val =>
-            rcases val with ⟨a, s'⟩
-            cases hia : i.apply a with
-            | none => simp [decode, hd', hia] at hd
-            | some y =>
-                simp [decode, hd', hia] at hd
-                rcases hd with ⟨hyx, hsr⟩
-                subst x
-                subst s'
-                rcases (ih a h).1 hd' with ⟨s₀, hs, hr⟩
-                exact ⟨s₀, hs, a, hia, hr⟩
-      · intro hd
-        rcases hd with ⟨s₀, hs, a, hia, hr⟩
-        have hdec : decode d s = .ok (a, r) := (ih a h).2 ⟨s₀, hs, hr⟩
-        simp [decode, hdec, hia]
+      · intro h
+        rcases h with ⟨a, ha, hf⟩
+        rcases a with ⟨a₀, s'⟩
+        cases hia : i.apply a₀ with
+        | none => simp [hia] at hf
+        | some y =>
+            simp [hia] at hf
+            rcases hf with ⟨rfl, hs'r⟩
+            subst s'
+            rcases (ih a₀).1 ha with ⟨s₀, hs, hrel⟩
+            exact ⟨s₀, hs, a₀, hia, hrel⟩
+      · intro h
+        rcases h with ⟨s₀, hs, a₀, hia, hrel⟩
+        refine ⟨(a₀, r), ?_, ?_⟩
+        · exact (ih a₀).2 ⟨s₀, hs, hrel⟩
+        · simp [hia]
   | seq d₁ d₂ ih₁ ih₂ =>
       intro s r
-      rcases x with ⟨x₁, x₂⟩
+      rw [decode_seq_mem]
       constructor
-      · intro hd
-        cases h₁ : decode d₁ s with
-        | error e => simp [decode, h₁] at hd
-        | ok val₁ =>
-            rcases val₁ with ⟨a, t⟩
-            cases h₂ : decode d₂ t with
-            | error e => simp [decode, h₁, h₂] at hd
-            | ok val₂ =>
-                rcases val₂ with ⟨b, r'⟩
-                simp [decode, h₁, h₂] at hd
-                rcases hd with ⟨⟨hax₁, hbx₂⟩, hr'⟩
-                subst a; subst b; subst r'
-                rcases (ih₁ x₁ h.1).1 h₁ with ⟨s₁, hs₁, hr₁⟩
-                rcases (ih₂ x₂ h.2).1 h₂ with ⟨s₂, hs₂, hr₂⟩
-                refine ⟨s₁ ++ s₂, ?_, s₁, s₂, rfl, hr₁, hr₂⟩
-                rw [hs₁, hs₂]
-                simp [List.append_assoc]
-      · intro hd
-        rcases hd with ⟨s₀, hs, s₁₀, s₂₀, hs₀, hr₁, hr₂⟩
-        have hdec₁ : decode d₁ s = .ok (x₁, s₂₀ ++ r) := by
-          rw [hs, hs₀, List.append_assoc]
-          exact (ih₁ x₁ h.1).2 ⟨s₁₀, rfl, hr₁⟩
-        have hdec₂ : decode d₂ (s₂₀ ++ r) = .ok (x₂, r) :=
-          (ih₂ x₂ h.2).2 ⟨s₂₀, rfl, hr₂⟩
-        simp [decode, hdec₁, hdec₂]
+      · intro h
+        rcases h with ⟨t, hd₁, hd₂⟩
+        rcases (ih₁ x.1).1 hd₁ with ⟨s₁, hs₁, hrel₁⟩
+        rcases (ih₂ x.2).1 hd₂ with ⟨s₂, hs₂, hrel₂⟩
+        refine ⟨s₁ ++ s₂, ?_, s₁, s₂, rfl, hrel₁, hrel₂⟩
+        rw [hs₁, hs₂]
+        simp [List.append_assoc]
+      · intro h
+        rcases h with ⟨s₀, hs, s₁, s₂, hs₀, hrel₁, hrel₂⟩
+        refine ⟨s₂ ++ r, ?_, ?_⟩
+        · exact (ih₁ x.1).2 ⟨s₁, by rw [hs, hs₀, List.append_assoc], hrel₁⟩
+        · exact (ih₂ x.2).2 ⟨s₂, rfl, hrel₂⟩
   | alt d₁ d₂ ih₁ ih₂ =>
       intro s r
-      cases h
+      rw [decode, List.mem_append]
+      constructor
+      · intro h
+        rcases h with hl | hr
+        · rcases (ih₁ x).1 hl with ⟨s₀, hs, hrel⟩
+          exact ⟨s₀, hs, Or.inl hrel⟩
+        · rcases (ih₂ x).1 hr with ⟨s₀, hs, hrel⟩
+          exact ⟨s₀, hs, Or.inr hrel⟩
+      · intro h
+        rcases h with ⟨s₀, hs, hrel⟩
+        rcases hrel with hl | hr
+        · exact Or.inl ((ih₁ x).2 ⟨s₀, hs, hl⟩)
+        · exact Or.inr ((ih₂ x).2 ⟨s₀, hs, hr⟩)
   | empty =>
       intro s r
-      constructor <;> intro hd <;> simp [decode, Rel] at hd
+      simp [decode, Rel]
   | pure x₀ =>
       intro s r
+      simp [decode, Rel]
       constructor
-      · intro hd
-        simp [decode] at hd
-        rcases hd with ⟨hx₀x, hsr⟩
-        refine ⟨[], ?_, hx₀x.symm, rfl⟩
-        simpa using hsr
-      · intro hd
-        rcases hd with ⟨s₀, hs, hx, hs₀⟩
-        subst s₀
-        rw [hs]
-        simp [decode, hx]
+      · rintro ⟨hx, hr⟩; exact ⟨hr.symm, hx⟩
+      · rintro ⟨hsr, hx⟩; exact ⟨hx, hsr.symm⟩
   | byte =>
       intro s r
-      constructor
-      · intro hd
-        simp [decode] at hd
-        cases s with
-        | nil => simp at hd
-        | cons b bs =>
-            simp [Rel, single] at hd ⊢
-            rcases hd with ⟨hb, hbs⟩
-            subst b
-            subst bs
-            exact ⟨rfl, rfl⟩
-      · intro hd
-        rcases hd with ⟨s₀, hs, hs₀⟩
-        simp [Rel, single] at hs₀
-        subst s₀
-        rw [hs]
-        simp [decode]
+      cases s with
+      | nil =>
+          simp [decode, Rel, single]
+      | cons b bs =>
+          simp [decode, Rel, single]
+          constructor
+          · rintro ⟨hxb, hr⟩; exact ⟨hxb.symm, hr.symm⟩
+          · rintro ⟨hbx, hbs⟩; exact ⟨hbx.symm, hbs.symm⟩
 
-/-- The bidirectional law relating `decode` and `Rel` over whole strings (the
-`r = []` case of `decode_spec`): on the `alt`-free fragment, `Rel d x s` holds
-exactly when the deterministic decoder accepts `s` fully as `x`. -/
-theorem bidir {α : Type} (d : Codec α) (x : α) (s : List UInt8) (h : NoAlt d) :
-    Rel d x s ↔ decode d s = .ok (x, []) := by
-  have hspec := decode_spec d x h (s := s) (r := [])
+/-- The bidirectional law over whole strings (the `r = []` case of
+`decode_spec`): `Rel d x s` holds exactly when the nondeterministic decoder
+accepts `s` fully as `x`. Unconditional. -/
+theorem bidir {α : Type} (d : Codec α) (x : α) (s : List UInt8) :
+    Rel d x s ↔ (x, []) ∈ decode d s := by
+  have hspec := decode_spec d x (s := s) (r := [])
   constructor
   · intro hr
     exact hspec.2 ⟨s, by simp, hr⟩
@@ -211,5 +200,20 @@ theorem bidir {α : Type} (d : Codec α) (x : α) (s : List UInt8) (h : NoAlt d)
     rcases hspec.1 hd with ⟨s₀, hs, hr⟩
     simpa [hs] using hr
 
-end Codec
+/-- The strong roundtrip invariant: a value encoded to `s` decodes back to
+`(x, r)` (with `x` fully consumed and `r` left over) from any suffixing input
+`s ++ r`. Unconditional. -/
+theorem decode_encode {α : Type} (d : Codec α) (x : α) :
+    ∀ {s : List UInt8}, encode d x = some s → ∀ r, (x, r) ∈ decode d (s ++ r) := by
+  intro s he r
+  have hrel : Rel d x s := encode_rel d x he
+  exact (decode_spec d x (s := s ++ r) (r := r)).2 ⟨s, rfl, hrel⟩
 
+/-- The byte-exact roundtrip: a value encoded to `s` decodes back to `x` with
+no remainder. Unconditional. -/
+theorem roundtrip {α : Type} (d : Codec α) (x : α) (s : List UInt8) :
+    encode d x = some s → (x, []) ∈ decode d s := by
+  intro he
+  simpa using (decode_encode d x he [])
+
+end Codec

@@ -4,62 +4,43 @@
 import Codec.Codec
 
 /-!
-# The deterministic decoder
+# The nondeterministic decoder
 
-This file gives `decode`, the deterministic, single-result decoder:
+This file gives `decode`, the paper's list-monad decoder (§4.1):
 
-    decode : Codec α → List UInt8 → Except DecodeError (α × List UInt8)
+    decode : Codec α → List UInt8 → List (α × List UInt8)
 
-It is "return-the-rest": on success it returns the decoded value together with
-the (possibly empty) remaining bytes; on failure it returns an error carrying
-the remaining unconsumed bytes, from which the failure position is derived
-structurally as `whole.length - remaining.length`.
+It returns *all* (value, remaining-bytes) pairs — a relation, not a single
+result. Choice (`alt`) is the full backtracking union `decode d₁ s ++ decode d₂ s`,
+exactly as in the paper. This is why the bidirectional law (`decode_spec`) holds
+**unconditionally** for every description, with no prefix-disjointness or
+unambiguity gate: `Rel (alt d₁ d₂) = Rel d₁ ∨ Rel d₂` and `decode (alt d₁ d₂) =
+decode d₁ ++ decode d₂` agree by construction.
 
-There is no cursor, no backtracking, and no peeking; choice (`alt`) is
-committed. This is a deliberate, documented departure from the paper's
-nondeterministic list decoder (§4.1, §4.4): see the repository README.
+The paper notes (§4.4) that this proof-of-concept decoder has exponential
+worst-case complexity and a space leak under unlimited backtracking; replacing it
+with an efficient implementation of the *same* semantics is the open problem the
+paper names, and is future work here (not the semantics of `decode`).
 -/
 
 namespace Codec
 
-/-- A decode failure, carrying the remaining unconsumed bytes. The position of
-the failure (relative to the input `whole`) is `whole.length - remaining.length`. -/
-structure DecodeError where
-  /-- The bytes not yet consumed when the failure occurred. -/
-  remaining : List UInt8
-  deriving Repr
-
-/-- The failure position of a decode error against a whole input: the number of
-bytes already consumed. -/
-def DecodeError.position (e : DecodeError) (whole : List UInt8) : Nat :=
-  whole.length - e.remaining.length
-
-/-- The deterministic decoder: one result plus remaining bytes, or a positioned error. -/
-def decode {α : Type} (d : Codec α) (s : List UInt8) : Except DecodeError (α × List UInt8) :=
+/-- The nondeterministic decoder: every `(value, remaining)` pair derivable from
+the description against the input. This is the paper's `Parser` (§4.1) re-based
+onto `List UInt8`, with `|` as list concatenation (unlimited backtracking). -/
+def decode {α : Type} (d : Codec α) (s : List UInt8) : List (α × List UInt8) :=
   match d with
   | Codec.iso i d =>
-      match decode d s with
-      | .error e => .error e
-      | .ok (a, s') =>
-          match i.apply a with
-          | some x => .ok (x, s')
-          | none => .error { remaining := s' }
+      (decode d s).filterMap fun (a, s') => (i.apply a).map fun x => (x, s')
   | Codec.seq d₁ d₂ =>
-      match decode d₁ s with
-      | .error e => .error e
-      | .ok (x, s₁) =>
-          match decode d₂ s₁ with
-          | .error e => .error e
-          | .ok (y, s₂) => .ok ((x, y), s₂)
-  | Codec.alt d₁ d₂ =>
-      match decode d₁ s with
-      | .ok r => .ok r
-      | .error _ => decode d₂ s
-  | Codec.empty => .error { remaining := s }
-  | Codec.pure x => .ok (x, s)
+      (decode d₁ s).flatMap fun (x, s₁) =>
+        (decode d₂ s₁).flatMap fun (y, s₂) => [((x, y), s₂)]
+  | Codec.alt d₁ d₂ => decode d₁ s ++ decode d₂ s
+  | Codec.empty => []
+  | Codec.pure x => [(x, s)]
   | Codec.byte =>
       match s with
-      | [] => .error { remaining := s }
-      | b :: rest => .ok (b, rest)
+      | [] => []
+      | b :: rest => [(b, rest)]
 
 end Codec

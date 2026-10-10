@@ -12,11 +12,12 @@ Generic, byte-agnostic combinators built from the primitives (the paper §6.1):
   * `p *> q`, `p <* q` — pair variants that ignore a side (the paper's `*>`, `<*`)
   * `between open close p` — `open *> p <* close`
 
-`many` is recursive and hence `partial`; it introduces committed `alt`, so it is
-outside the `NoAlt` fragment for which the roundtrip law holds unconditionally
-(see `Codec.Sound`). `chainl1` (below) is built on the proved `Iso.foldl`
-(paper §5.2/§5.3); its `law` is part of `Iso.foldl`'s law field, not a separate
-proof.
+`many` is recursive and hence `partial`. Under the nondeterministic (backtracking)
+decoder it is sound *unconditionally* — exactly the paper's `many` (§3.4): `decode
+(many p) s` returns the empty-list result *and* every one-or-more result, so the
+bidirectional law holds without any prefix-disjointness gate. `chainl1` (below) is
+built on the proved `Iso.foldl` (paper §5.2/§5.3); its `law` is part of
+`Iso.foldl`'s law field, not a separate proof.
 -/
 
 namespace Codec

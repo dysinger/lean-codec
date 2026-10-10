@@ -11,7 +11,7 @@ library's components:
 
   * `Codec.Iso` — partial isomorphisms with the inverse law as a field
   * `Codec.Codec` — the description interface over bytes, plus `Rel`
-  * `Codec.Decode` — the deterministic decoder
+  * `Codec.Decode` — the nondeterministic (backtracking) decoder
   * `Codec.Encode` — the partial encoder
   * `Codec.Sound` — the bidirectional and roundtrip laws
   * `Codec.Combinators` — derived combinators (`many`, `*>`, `<*`, …)
