@@ -15,7 +15,7 @@
 - [x] 2.2 `Category Iso` (`∘`, `id`) with the composition law proved.
 - [x] 2.3 Product bifunctor `×`, `associate`, `commute`, `unit`.
 - [x] 2.4 `element`, `subset`, `inverse` (carry `[DecidableEq α]`/`[Decidable p]`).
-- [ ] 2.5 `foldl`/`iterate` (paper §5.2/5.3), `foldl : Iso (α×β) α → Iso (α, List β) α` — deferred, coinductive at the `Iso` level.
+- [x] 2.5 `foldl`/`iterate` (paper §5.2/5.3), `foldl : Iso (α × β) α → Iso (α, List β) α` — `foldl` done and proved (`Iso.MeasureDecreases` + well-founded recursion); `iterate` deliberately omitted (forward/backward fixpoints need not coincide, so no field law without a per-element precondition).
 
 ## 3. Codec (description interface, over bytes)
 
@@ -37,7 +37,7 @@
 
 ## 6. Derived combinators (generic, byte-agnostic)
 
-- [x] 6.1 `many`, `*>`, `<*`, `between`; `chainl1` deferred (uses §2.5 `foldl`/`iterate`).
+- [x] 6.1 `many`, `*>`, `<*`, `between`; `chainl1` built on `.2.5` `Iso.foldl`.
 
 ## 7. Benchmark, extraction, docs
 
