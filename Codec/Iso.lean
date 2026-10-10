@@ -255,6 +255,30 @@ def inverse {α : Type u} {β : Type v} (i : Iso α β) : Iso β α where
     intro a b
     exact (i.law b a).symm
 
+/-- `optionSome` is the partial iso `α ↔ Option α` mapping `x ↦ some x`; the
+inverse maps `some x ↦ x` and is undefined on `none`. Used to lift a `Codec α`
+to `Codec (Option α)` before the `| pure none` branch of `optional`. -/
+def optionSome {α : Type u} : Iso α (Option α) where
+  apply x := some (some x)
+  unapply o := match o with
+    | none => none
+    | some x => some x
+  law := by
+    intro a b
+    cases b with
+    | none =>
+        constructor <;> intro h <;> simp at h
+    | some x =>
+        constructor
+        · intro h
+          simp at h
+          subst a
+          rfl
+        · intro h
+          simp at h
+          subst x
+          rfl
+
 /-! ## Lists -/
 
 /-- `nil` is the partial iso between `Unit` and the empty list. -/
