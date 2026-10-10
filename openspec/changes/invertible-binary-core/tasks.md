@@ -20,26 +20,39 @@
 ## 3. Codec (description interface, over bytes)
 
 - [x] 3.1 The interface: `$`, `*`, `|`/`empty`, `pure`, `byte : Codec UInt8`.
-- [x] 3.2 Declare `Rel : Codec α → α → List UInt8 → Prop` (so `Unambiguous` has no forward reference; theorems live in §5).
+- [x] 3.2 Declare `Rel : Codec α → α → List UInt8 → Prop` (with no forward
+  reference; the two interpreters and laws live in §4/§5).
 
 ## 4. Two interpretations (decode / encode)
 
-- [x] 4.1 Deterministic decoder `decode : Codec α → List UInt8 → Except DecodeError (α × List UInt8)` (returns value + remaining bytes; no cursor; no backtracking; no peeking).
+- [x] 4.1 **Nondeterministic (backtracking) decoder**
+  `decode : Codec α → List UInt8 → List (α × List UInt8)` (returns *all*
+  value+remaining pairs). `|` is list concatenation `decode d₁ s ++ decode d₂ s` —
+  exactly the paper's unified parser (§4.1), no cursor/peeking/narrowing.
 - [x] 4.2 Builder encoder `encode : Codec α → α → Option (List UInt8)` (partial; rejects out-of-domain).
-- [x] 4.3 `NoAlt` discipline (the roundtrip is proved unconditionally on the `alt`-free fragment); deterministic decoder is sound-and-complete on that domain; `|` is committed choice. `Unambiguous` (per-demo obligation) is not decidable by the library.
+- [x] 4.3 ~~`NoAlt`/committed-choice discipline~~ **removed.** The roundtrip and
+  bidirectional laws now hold *unconditionally* for every description (see §5);
+  there is no `alt` gate.
 
 ## 5. Rel (denotational semantics) + roundtrip theorems
 
 - [x] 5.1 `Rel` over whole byte sequences (remaining-bytes is private to `decode`).
-- [x] 5.2 Bidirectional law: `NoAlt d → (Rel d x s ↔ decode d s = .ok (x, []))` (as `decode_spec`/`bidir`; the `alt` case → prefix-disjointness, §8).
-- [x] 5.3 Roundtrip: `NoAlt d → (encode d x = some s → decode d s = .ok (x, []))`.
+- [x] 5.2 Bidirectional law, **unconditional**: `(x, r) ∈ decode d s ↔
+  ∃ s₀, s = s₀ ++ r ∧ Rel d x s₀` (`decode_spec`); whole-string case `bidir`:
+  `Rel d x s ↔ (x, []) ∈ decode d s`.
+- [x] 5.3 Roundtrip, **unconditional**: `encode d x = some s → (x, []) ∈ decode d s`;
+  strong invariant `decode_encode`: `encode d x = some s → (x, r) ∈ decode d (s ++ r)`.
 - [x] 5.4 Prove the laws by `simp`/`rfl`/induction — no solver.
 
 ## 6. Derived combinators (generic, byte-agnostic)
 
 - [x] 6.1 `many`, `*>`, `<*`, `between`; `chainl1` built on §2.5 `Iso.foldl`.
 - [ ] 6.2 `chainr1` (dual of `chainl1`), `some`/`many1`, `sepBy`/`sepBy1`,
-  `optional`/`maybe`/`choice` — see §8 (gated on prefix-disjointness).
+  `optional`/`maybe`/`choice` — now *unblocked* (no prefix-disjointness gate): these
+  are ordinary definitions over the backtracking `|`, and their soundness falls out
+  of the unconditional laws in §5. Implement them (§6.1 style). Caveat: `many` is a
+  `partial` description (an infinite AST), so it is *provable* but not `#eval`-able
+  in its current recursive form; making it evaluable is part of this work.
 
 ## 7. Benchmark, extraction, docs
 
@@ -48,28 +61,33 @@
 - [ ] 7.3 Confirm `get!`/remaining-bytes (not `getElem`-with-proof) actually runs post-extraction.
 - [ ] 7.4 `README.md`: guarantee, `Iso`/`Codec`/`Rel` model, pure-framework scope, combinator table, usage.
 - [x] 7.5 Zero-`sorry` + `#print axioms` = stdlib only (`propext`, `Classical.choice`, `Quot.sound`).
-- [x] 7.6 Document the deliberate departures (byte core, return-the-rest decode, deterministic single result, committed `|`, lossless capture) and why; note `lean-binary`/`lean-text` as downstream consumers.
+- [x] 7.6 Document the deliberate departures (byte core, backtracking-union
+  `|`, lossless capture) and why; note `lean-binary`/`lean-text` as downstream
+  consumers.
 
-## 8. `alt` prefix-disjointness (the blocking soundness condition)
+## 8. ~~`alt` prefix-disjointness~~ — superseded by Path A (backtracking union)
 
-- [ ] 8.1 Define a **structural non-emptiness predicate** `NonNull : Codec α → Prop`
-  (like `NoAlt`): `NonNull byte = True`, `NonNull (pure _) = False`,
-  `NonNull (d₁ * d₂) = NonNull d₁ ∨ NonNull d₂`, `NonNull (iso _ d) = NonNull d`,
-  `NonNull empty = True`, `NonNull (alt d₁ d₂) = NonNull d₁ ∧ NonNull d₂`.
-- [ ] 8.2 Prove the **prefix-disjointness lemma**: if `NonNull d₁`, then no string
-  accepted by `d₁` is a (proper) prefix of a string accepted by `d₂` (and the
-  relevant dual). This is the relation-level, cursor-free, LL(1)-style condition —
-  constructive and closed by induction, no `Classical.choice`, no coinduction.
-- [ ] 8.3 Extend `decode_spec`/`roundtrip`/`bidir` from `NoAlt` to descriptions
-  satisfying prefix-disjointness at each `alt` (decide: compositional predicate vs.
-  per-description proof obligation — see README departure #5 sub-questions).
-- [ ] 8.4 Implement `some`/`many1`, `sepBy`/`sepBy1`, `optional`/`maybe`/`choice`,
-  and `chainr1` — each **proven** under the `NonNull` (or equivalent) precondition;
-  multi-operator `chainl1`/`chainr1` (`+ | *`) sound under the same condition.
+This entire section is **obsolete** and the once-blocking work in it
+(`NonNull`, `PrefixDisjoint`, `Disjoint`, `Unambiguous`, the prefix trichotomy,
+and the `Disjoint`-gated laws) has been **deleted**. The reason it was needed at
+all was the committed-`|` narrowing (departure #2/#3: deterministic
+single-result decoder). Restoring the paper's *backtracking-union* `|`
+(`decode (d₁ | d₂) s = decode d₁ s ++ decode d₂ s`, §4.1) makes `Rel (d₁ | d₂) =
+Rel d₁ ∨ Rel d₂` and `decode` agree **by construction**, so the bidirectional and
+roundtrip laws became unconditional again and no prefix condition is required —
+and no prefix condition *can* work for repetition anyway (`[]` is a proper prefix
+of every non-empty string, so `nil | cons` in `many` is never prefix-disjoint).
 
-The **decision recorded** (do not reopen): stay cursor-free — **no backtracking,
-no peeking**. Prefix-disjointness is a *denotational* `Prop` over `Rel`, provable
-by well-founded induction (the same style that already proved `foldl`), and is
-strictly preferable to an operational cursor/lookahead state machine. The cost is
-that genuinely-ambiguous formats (e.g. `if | if_then_else`) must be left-factored
-by hand — the standard LL(1) restriction, surfaced as a type-level witness.
+- [x] 8.1–8.3 Obsolete; the `NonNull`/`Disjoint`/`PrefixDisjoint` machinery is
+  removed (file `Codec/NonNull.lean` deleted; `Codec/Sound.lean` rewritten to
+  unconditional laws).
+- [ ] 8.4 Repetition/sum combinators (`some`/`many1`, `sepBy`/`sepBy1`,
+  `optional`/`maybe`/`choice`, `chainr1`) are now **unblocked** — see §6.2.
+
+**Final recorded decision (replaces the old “no backtracking” note):** the decoder
+is the paper's **nondeterministic (backtracking) list decoder**, `|` is union,
+and the laws hold unconditionally. Efficiency (the paper's own §4.4 concern about
+exponential/space-leak under unlimited backtracking) is **future work** — a
+separate spike to re-implement the *same* semantics efficiently, not a change to
+the semantics. The type-level/denotational core (`Iso`, `Rel`, `foldl`, the laws)
+is unchanged and reused.

@@ -54,22 +54,21 @@ that are not semantic changes at all.
    with text rebuilt downstream in `lean-text` on top of them. The provable core
    is the `List UInt8` model; `ByteArray` is the later executable wrapper (§7).
 
-1. **Nondeterministic list-decoder → a deterministic decoder.** The paper's
-   decoder returns a *list* of results (`[(α, String)]`) — a relation — and the
-   paper itself admits it is exponential (§4.4). We need speed, so `decode`
-   returns a single result plus the remaining bytes. This is a real semantic
-   narrowing (the paper's §4.3 "decode = find a pair" becomes "decode = the
-   unique pair"), made explicit: on the `NoAlt` domain — descriptions built from
-   `$`, `*`, `empty`, `pure`, and `byte`, with **no committed `|`** — the
-   deterministic decode is sound and complete w.r.t. `Rel`. For `|` itself
-   (committed choice), soundness requires a *prefix-disjointness* condition on
-   the branches, recorded as deferred (see below), not silently asserted.
+1. **Nondeterministic list-decoder → kept, not narrowed.** The paper's
+   decoder returns a *list* of results (`[(α, String)]`) — a relation. We once
+   narrowed this to a deterministic single-result decoder for speed (the paper's
+   §4.4 admits the nondeterministic decoder is exponential), but that narrowed
+   `|` into *committed* choice, which is **incompatible with the paper's `|`
+   and `many`** (an empty branch always wins; `nil`/`cons` are never
+   prefix-disjoint). We have **restored** the paper's semantics: `decode :
+   Codec α → List UInt8 → List (α × List UInt8)`, with `|` as list
+   concatenation. The laws are now *unconditional*. Efficiency is future work
+   (§4.4's open problem), not a reason to change the semantics.
 
-1. **`|` becomes committed choice, not full backtracking.** A consequence of
-   determinism (a single result cannot try both branches), not a forced re-base.
-   §4.4 notes predictive `|` (Parsec) is a common *deviation* from full
-   backtracking — evidence that committed choice is practical — but determinism
-   is the actual reason we adopt it. Backtracking and peeking are out of scope.
+1. **`|` is the paper's backtracking union, not committed choice.** `decode
+   (d₁ | d₂) s = decode d₁ s ++ decode d₂ s`, matching `Rel (d₁ | d₂) = Rel d₁
+   ∨ Rel d₂` by construction. (The earlier committed-choice deviation and its
+   prefix-disjointness gate are gone; see departure #5.)
 
 1. **Lossless capture — "allowed" bytes are kept, not discarded.** The paper
    (§3.1, §6.3) deliberately *discards* optional bytes (`ignore`/`skipSpace` map
@@ -81,10 +80,12 @@ that are not semantic changes at all.
    "modulo equivalence classes" weakening. There is therefore **no `ignore`
    combinator in core**; it is the one thing that would reintroduce the loss.
 
-1. **`|` soundness is gated on a *prefix-disjointness* condition we have not yet
-   proved — the one departure that is still *open*.** See the dedicated section
-   below. Every other departure is settled; this one is the boundary of what the
-   current core can *prove*.
+1. **`|` needs no prefix-disjointness condition.** This was the one *open*
+   departure under the (now-reversed) committed choice. With `|` as the paper's
+   backtracking union (departure #2/#3 above), no prefix condition is required —
+   and none works for repetition anyway (`[]` is a proper prefix of every
+   non-empty string, so `nil | cons` is never prefix-disjoint). The former
+   `NonNull`/`PrefixDisjoint`/`Disjoint` machinery is deleted.
 
 `encode` staying partial (`Option`) is **not** a departure — it is a *kept*
 property: `empty`/`pure x`/`subset p` reject out-of-domain values exactly as the
@@ -116,120 +117,38 @@ and remove text-flavored naming):
   Separation of concerns, not a claim of forced necessity.
 
 Everything else is **kept**, and kept strongly: `Rel` is preserved as the
-*specification* (determinism is an operational constraint layered on top of it),
-and partial encoding is preserved.
+*specification* (decoding is the paper's full relation; no narrowing layered on
+top of it), and partial encoding is preserved.
 
 ______________________________________________________________________
 
-## Departure #5, in depth: committed choice and prefix-disjointness
+## Departure #5, resolved: the committed-choice detour and its reversal
 
-This is the **one departure that is still open** — a genuinely unsolved design
-question, not a settled choice. The rest of the library is proven; this section
-is about what we *cannot yet* prove, and everything that blocks on it.
+This departure is **closed**. The committed-choice `|` (and the
+prefix-disjointness machinery it required — `NonNull`, `PrefixDisjoint`,
+`Disjoint`, `Unambiguous`, and the prefix trichotomy) was a consequence of
+attempting a deterministic single-result decoder for speed. We discovered,
+over several sessions, that committed `|` is *incompatible* with the paper's
+`|` and `many`:
 
-### Why committed `|` is unsound on its own
+  * `decode (nil $ pure ()) s` always succeeds consuming 0 bytes, so a
+    committed `many p = nil | cons $ p * many p` always returns `[]` and never
+    reaches `cons`.
+  * even reordered, `nil` and `cons` are never prefix-disjoint, because `[]`
+    is a proper prefix of every non-empty string — so no prefix condition can
+    gate repetition, regardless of `NonNull p`.
 
-Departures #2 and #3 together make `decode` a **deterministic, single-result**
-function whose `|` is **committed** (left branch wins; no backtracking, no
-peeking). The paper's `|` (§4.3) is a *backtracking union*: `Rel (p | q) = Rel p
-∨ Rel q` — both branches may relate a value to the same string.
+Both facts were proved in the process (`ProperPrefix [] s ↔ s ≠ []`), showing
+the *approach* was unsound, not merely unfinished. The fix was to **restore the
+paper's semantics** (departure #2/#3): `decode : Codec α → List UInt8 →
+List (α × List UInt8)` with `|` as list concatenation. Then `Rel (d₁ | d₂) =
+Rel d₁ ∨ Rel d₂` and `decode` agree by construction, the laws became
+unconditional, and the entire prefix-disjointness section was deleted.
 
-These two readings agree **only** when the two branches are **prefix-disjoint**:
-no string accepted by the left branch is a prefix of a string accepted by the
-right branch (and vice versa). The canonical counterexample is
-
-```
-byte | (byte * byte)
-```
-
-decoding `0x00 0x01`. The committed decoder takes the left branch (`byte`),
-consumes `0x00`, and returns with `0x01` remaining — it **never reaches** the
-right branch. But `Rel (byte | (byte * byte)) (0x00, 0x01) [0x00, 0x01]` holds via
-the right branch. So `decode` and `Rel` **disagree**: the decoder returns a value
-the relation does not relate to the *whole* input, and misses a value it does.
-
-`Unambiguous` — the paper's "at most one value per whole string" — is
-**insufficient**: it rules out two *complete* parses of the same string, but not a
-complete parse competing with a *strict prefix* of another. The fix is a strictly
-stronger, *prefix-sensitive* condition.
-
-### The condition, stated
-
-For `alt d₁ d₂`, soundness of committed `|` requires:
-
-> **Prefix-disjointness:** whenever `Rel d₁ x₁ s₁` and `Rel d₂ x₂ s₂` hold, then
-> `s₁ ⊑ s₂` (proper prefix) is **false** in both directions — for every `s₁`, `s₂`
-> accepted by the two branches, neither is a proper prefix of the other (equal
-> strings are allowed only if the branches are themselves compatible, which
-> `Unambiguous` can then handle).
-
-This is a relation-level condition, expressible **without** cursors/backtracking/peeking
-in the *decoder* (those stay out of scope); it lives entirely over `Rel`, the
-denotational layer. It is closely analogous to the classic **LL(1) / predictive-parsing
-disjointness** of grammar alternatives (paper §4.4's "predictive `|`" observation),
-pushed from first-sets of a grammar to byte-prefixes of a denotational relation.
-
-### The two open sub-questions (do not resolve by fiat)
-
-1. **Statement granularity.** Pointwise *per-`alt`* — a predicate on the two branch
-descriptions, composed structurally like `NoAlt` — versus an *indexed/derived*
-predicate over a whole description (e.g. an "each `alt` node is prefix-disjoint"
-relation defined by structural recursion on `d`). `NoAlt` is the latter style; a
-pointwise predicate is simpler to discharge but easier to get wrong under `seq`
-threading (the leading bytes of a `seq` come from its *first* component's whole prefix).
-
-2. **Proved vs. asserted.** Whether to *prove* prefix-disjointness as a compositional
-lemma (so the roundtrip law extends to `alt`-using descriptions) — which is where it
-touches the same coinductive/well-founded territory as `foldl` — or to require it as a
-**per-description proof obligation** the library does not decide (like `Unambiguous`
-was before `NoAlt` replaced it). The former is a real, hard compositional proof; the
-latter is honest but keeps every `alt`-using codec outside the *unconditional* law.
-
-### What we cannot implement without it
-
-Until prefix-disjointness is resolved (proved or, at minimum, precisely specified),
-the following are **out of reach** as *verified* (sound-and-complete) codecs. This is
-not a list of conveniences — it is the list of what *any* realistic format needs and
-the core currently cannot certify:
-
-- **Any algebraic/sum-type codec.** The paper's entire §4/§6 case study —
-  `data Expression = Variable | Literal | BinOp | IfZero` serialized by
-  `(left $ …) | (right $ …) | …` — is a chain of `alt`s. Without prefix-disjointness,
-  we cannot be sure a committed `|` picks the same constructor the relation would.
-- **`many`/`some`/`sepBy` (already shipped, outside `NoAlt`).** `many p` is
-  `alt nil (cons $ p * many p)`; it commits to `nil` or `cons` before knowing
-  whether `p` matches, so its soundness *as a general combinator* depends on
-  `nil`/`cons` being prefix-disjoint with `p`'s prefixes (true for `many` only when
-  `p` never accepts the empty string — the classic `many`/optional ambiguity).
-- **`optional` / `maybe` / `choice`-style leaves** in `lean-binary`/`lean-text` —
-  any combinator with a "try this, else that" shape.
-- **Keyword/reserved-word alternation** in `lean-text` (e.g. `identifier | keyword`,
-  or a fixed set of keywords `"let" | "in" | "if"`), which is exactly the prefix-
-  overlap case (`"in"` is a prefix of `"in"`… and of `"let"`-adjacent identifiers).
-- **`chainl1`/`chainr1` over *multiple* operator alternatives.** The fold step (`Iso.foldl`)
-  is now **proved**; but a chain whose operators are chosen by committed `|` (e.g.
-  `+ | *`) inherits the same `alt` soundness gap inside each iteration.
-- **The unconditional reciprocal laws.** `roundtrip`, `decode_spec`, and `bidir` are
-  currently stated over the `NoAlt` fragment. Without prefix-disjointness we cannot
-  *extend* any of them to a description that uses `|` at all — the strongest honest
-  statement remains `NoAlt d → …`.
-
-Put differently: **the core is a complete, proven framework for prefix-free formats**
-(fixed-width integers, `bytes n`, LEB128 framing — anything expressed with `*`/`map`
-only), and a **sound-but-unproven** one the moment a description uses `|`. Closing
-departure #5 is what turns "sound-but-unproven for `|`" into "proved for `|`" and
-unlocks sum types, grammars, and the paper's own running example as *certified* codecs.
-
-### Relationship to the other deferred items
-
-`iterate`/`foldl`/`chainl1` are **not** gated on this. `foldl` and `chainl1` are
-now proved (well-founded recursion, not coinduction); `iterate` is deliberately
-omitted for an orthogonal reason (its forward/backward fixpoints need not coincide,
-so it has no field law). Prefix-disjointness is the *only* remaining condition for
-`alt`, and it does not block the `foldl` family — it blocks the *sum-type* family
-above.
-
-______________________________________________________________________
+Efficiency remains the paper's §4.4 open problem (exponential/space-leak under
+unlimited backtracking) and is future work — a separate spike to re-implement
+the *same* semantics more efficiently, not a change to the semantics. The
+type-level core (`Iso`, `Rel`, `foldl`, the laws) is unaffected and reused.
 
 ## The abstraction, in brief
 
@@ -250,27 +169,27 @@ structure Iso (α β : Type) where
 def Rel (d : Codec α) (x : α) (s : List UInt8) : Prop := ...
 
 -- the two interpreters (format-agnostic naming):
---   decode : Codec α → List UInt8 → Except DecodeError (α × List UInt8)  -- returns errors
---   encode : Codec α → α → Option (List UInt8)                            -- partial
+--   decode : Codec α → List UInt8 → List (α × List UInt8)   -- all (value, rest) pairs
+--   encode : Codec α → α → Option (List UInt8)              -- partial
 
 -- the two theorems that make "one description = one relation" precise:
---   bidirectional:  NoAlt d → (Rel d x s ↔ decode d s = .ok (x, []))
---   roundtrip:      NoAlt d → (encode d x = some s → decode d s = .ok (x, []))
+--   bidirectional:  Rel d x s ↔ (x, []) ∈ decode d s
+--   roundtrip:      encode d x = some s → (x, []) ∈ decode d s
 ```
 
 Every `Codec` is a composition of `Iso`s via `$`/`*`/`|`/`pure`/`byte`; the
 inverse guarantee is **structural**: the `Iso` law is a field, and the two
-`Rel` theorems above close by composition over the `NoAlt` (`alt`-free) fragment
-— no solver, no per-combinator lemma. The provable core is `List UInt8`;
-`ByteArray` (whose FFI-backed ops do not reduce under `simp`) is the later
-executable wrapper transported on top.
+`Rel` theorems above hold **unconditionally** (for every description, including
+`alt`/`many`) — no solver, no per-combinator lemma, no prefix-disjointness gate.
+The provable core is `List UInt8`; `ByteArray` (whose FFI-backed ops do not
+reduce under `simp`) is the later executable wrapper transported on top.
 
 ______________________________________________________________________
 
 ## Scope
 
 - **`codec`** (this package): the pure framework. `Iso`, `Codec`, `Rel`,
-  `decode`/`encode`, error reporting, and the laws.
+  `decode`/`encode`, and the laws.
 - **`lean-binary`** (downstream): `u8`, `u16le`/`u16be`, `u32le`/`u32be`,
   `u64le`/`u64be`, `bytes n`, `count n`, `varint`, `lengthPrefix`, image-header
   and Protobuf demos, and the speed benchmark.
@@ -285,9 +204,10 @@ ______________________________________________________________________
 
 ## Status
 
-The `alt`-free core is implemented and proven (see the task ledger
+The core is implemented and proven (see the task ledger
 `openspec/changes/invertible-binary-core/tasks.md`): `Iso`, `Codec`, `Rel`,
-`decode`/`encode`, `foldl`/`chainl1`, and the roundtrip over the `NoAlt` fragment.
-The one remaining open item is **`alt` prefix-disjointness** (departure #5,
-[documented above](#departure-5-in-depth-committed-choice-and-prefix-disjointness));
-`iterate` is deliberately omitted (see departure #5's closing note and `Codec/Iso.lean`).
+`decode`/`encode` (nondeterministic/backtracking `|`), `foldl`/`chainl1`, and the
+**unconditional** bidirectional/roundtrip laws. `iterate` is deliberately omitted
+(its forward/backward fixpoints need not coincide, so no field law — see
+`Codec/Iso.lean`). Remaining: the derived repetition/sum combinators (§6.2, now
+unblocked) and efficiency (a future `ByteArray` wrapper + benchmark).
