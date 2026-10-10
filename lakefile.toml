@@ -1,0 +1,8 @@
+# Copyright 2026 Department of Code LLC.
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+name = "codec"
+defaultTargets = ["codec"]
+
+[[lean_lib]]
+name = "codec"

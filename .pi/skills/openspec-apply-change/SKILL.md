@@ -1,14 +1,6 @@
----
-name: openspec-apply-change
-description: Implement tasks from an OpenSpec change. Use when the user wants to start implementing, continue implementation, or work through tasks. Also use when the user says "openspec apply", "opsx apply", or "openspec implement".
-allowed-tools: Bash(openspec:*)
-license: MIT
-compatibility: Requires openspec CLI.
-metadata:
-  author: openspec
-  version: "1.0"
-  generatedBy: "1.13.1"
----
+______________________________________________________________________
+
+## name: openspec-apply-change description: Implement tasks from an OpenSpec change. Use when the user wants to start implementing, continue implementation, or work through tasks. Also use when the user says "openspec apply", "opsx apply", or "openspec implement". allowed-tools: Bash(openspec:\*) license: MIT compatibility: Requires openspec CLI. metadata: author: openspec version: "1.0" generatedBy: "1.13.1"
 
 Implement tasks from an OpenSpec change.
 
@@ -32,28 +24,33 @@ In both branches, never create the root as a side effect: do not run `openspec i
 1. **Select the change**
 
    If a name is provided, use it. Otherwise:
+
    - Infer from conversation context if the user mentioned a change
    - Auto-select if only one active change exists
    - If ambiguous, run `openspec list --json` to get available changes and ask the user to select one
 
    Always announce: "Using change: <name>" and how to override (e.g., `/opsx-apply <other>`).
 
-2. **Check status to understand the schema**
+1. **Check status to understand the schema**
+
    ```bash
    openspec status --change "<name>" --json
    ```
+
    Parse the JSON to understand:
+
    - `schemaName`: The workflow being used (e.g., "spec-driven")
    - `planningHome`, `changeRoot`, and `actionContext`: planning scope and edit constraints
    - Which artifact contains the tasks (typically "tasks" for spec-driven, check status for others)
 
-3. **Get apply instructions**
+1. **Get apply instructions**
 
    ```bash
    openspec instructions apply --change "<name>" --json
    ```
 
    This returns:
+
    - `contextFiles`: artifact ID -> array of concrete file paths (varies by schema - could be proposal/specs/design/tasks or spec/tests/implementation/docs)
    - Progress (total, complete, remaining)
    - Task list with status
@@ -63,6 +60,7 @@ In both branches, never create the root as a side effect: do not run `openspec i
    - `missingArtifacts` (when present): required artifact ids with no output
 
    **Handle states:**
+
    - If `state: "blocked"`: show the message and pause implementation.
      - If `missingArtifacts` is non-empty: suggest completing the missing artifacts. Run `openspec status --change "<name>" --json`, select the next `ready` artifact (not `skipped` or `blocked`), and use `openspec instructions "<artifact-id>" --change "<name>" --json` for its rules and template. Keep the selected `--store <id>` on both commands.
      - Otherwise, follow the CLI instruction to create or repair the schema-configured tracking file from existing planning artifacts. Do not assume another artifact is ready or start implementation while blocked.
@@ -84,27 +82,30 @@ In both branches, never create the root as a side effect: do not run `openspec i
    conflicts with those controlling inputs, do not follow it and explain why.
    These are prompt-level behavior contracts, not enforceable checks.
 
-4. **Read context files**
+1. **Read context files**
 
    Read every file path listed under `contextFiles` from the apply instructions output.
    The files depend on the schema being used:
+
    - **spec-driven**: proposal, specs, design, tasks
    - Other schemas: follow the contextFiles from CLI output
 
    Do not copy `context` or `operationGuidance` verbatim into implementation
    files or planning artifacts unless the user separately asks for that content.
 
-5. **Show current progress**
+1. **Show current progress**
 
    Display:
+
    - Schema being used
    - Progress: "N/M tasks complete"
    - Remaining tasks overview
    - Dynamic instruction from CLI
 
-6. **Implement tasks (loop until done or blocked)**
+1. **Implement tasks (loop until done or blocked)**
 
    For each pending task:
+
    - Show which task is being worked on
    - Make the code changes required
    - Keep changes minimal and focused
@@ -112,15 +113,17 @@ In both branches, never create the root as a side effect: do not run `openspec i
    - Continue to next task
 
    **Pause if:**
+
    - Task is unclear → ask for clarification
    - Implementation reveals a design issue → suggest updating artifacts
    - A task needs work beyond what the spec and tasks describe, or you are tempted to drop, narrow, defer, or accept exceptions to specified behavior to make it fit → surface the added scope and ask; do not absorb it silently
    - Error or blocker encountered → report and wait for guidance
    - User interrupts
 
-7. **On completion or pause, show status**
+1. **On completion or pause, show status**
 
    Display:
+
    - Tasks completed this session
    - Overall progress: "N/M tasks complete"
    - If all done: suggest archive
@@ -178,6 +181,7 @@ What would you like to do?
 ```
 
 **Guardrails**
+
 - Keep going through tasks until done or blocked
 - Always read context files before starting (from the apply instructions output)
 - If task is ambiguous, pause and ask before implementing

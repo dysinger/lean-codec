@@ -16,6 +16,7 @@ proof that they are inverses: `apply a = some b ↔ unapply b = some a`, for all
 `a` and `b`.
 
 #### Scenario: An Iso carries its inverse law
+
 - **WHEN** a value of type `Iso α β` is constructed
 - **THEN** it MUST include a proof of the inverse law; there is no way to build
   an `Iso` without it.
@@ -29,6 +30,7 @@ bytes:
 `encode c x = some s → decode c s = .ok (x, empty)`.
 
 #### Scenario: Encode-then-decode returns the value
+
 - **WHEN** `x` is in the codec's domain and `encode c x = some s`
 - **THEN** `decode c s` returns `(x, empty)` — the value plus an empty remaining
   buffer.
@@ -40,6 +42,7 @@ decoded value and re-emitted verbatim on encode; no byte SHALL be silently
 discarded.
 
 #### Scenario: Optional bytes are preserved
+
 - **WHEN** a description decodes a maximal run of bytes satisfying predicate `p`
   via `many (subset p byte)`
 - **THEN** that exact run is part of the decoded value and is re-emitted byte-for-
@@ -53,6 +56,7 @@ failure it SHALL return an error whose position is the length of the unconsumed
 prefix.
 
 #### Scenario: Failure reports a position
+
 - **WHEN** a decode fails
 - **THEN** the returned error carries the remaining unconsumed bytes, from which
   the failure position is `whole.size - remaining.size`.
@@ -63,6 +67,7 @@ Encoding SHALL be partial: a codec returns no result for a value outside its
 domain.
 
 #### Scenario: Out-of-domain value
+
 - **WHEN** `encode c x` is called with `x` outside `c`'s domain (e.g. `pure x₀`
   given `x ≠ x₀`, or `subset p` given `¬ p x`)
 - **THEN** it returns `none`.
@@ -74,6 +79,6 @@ The combinators `$` (apply an iso), `*` (product/sequential), `|` (choice), and
 yields a proven-inverse description.
 
 #### Scenario: Composition preserves the roundtrip
+
 - **WHEN** two codecs `c₁`, `c₂` are composed with `*`
-- **THEN** `encode (c₁ * c₂) (x₁, x₂)` roundtrips through `decode` to `((x₁, x₂),
-  empty)` whenever each component roundtrips.
+- **THEN** `encode (c₁ * c₂) (x₁, x₂)` roundtrips through `decode` to `((x₁, x₂), empty)` whenever each component roundtrips.

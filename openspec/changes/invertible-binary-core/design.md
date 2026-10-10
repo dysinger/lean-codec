@@ -9,6 +9,7 @@ proof. The authoritative reference is `docs/rendel10invertible.md`.
 ## Goals / Non-Goals
 
 **Goals:**
+
 - A three-layer core: `Iso` (with the inverse law as a field), `Codec` (the
   description typeclass), `Rel` (the denotational relation over `ByteArray`).
 - Byte-exact `decode (encode x) = x`, with the strict `Iso` law holding
@@ -17,6 +18,7 @@ proof. The authoritative reference is `docs/rendel10invertible.md`.
   partial encoding (`α → Option ByteArray`).
 
 **Non-Goals:**
+
 - No leaf codecs in core (no `u8`/endianness/`varint`/`bytes n`/`utf8`/`text`).
 - No cursor, no backtracking, no peeking.
 - No mathlib; stdlib only.
@@ -52,8 +54,8 @@ proof. The authoritative reference is `docs/rendel10invertible.md`.
 - [Determinism narrows the paper's relation to a function] → Mitigation: the
   `Unambiguous` precondition is stated explicitly and proved per demo, not
   hidden.
-- [Committed `|` changes observable semantics] → Mitigation: documented as a
+- \[Committed `|` changes observable semantics\] → Mitigation: documented as a
   deliberate departure (§4.4's predictive-`|` observation), not a forced
   consequence.
-- [`ByteArray` ops may resist `simp`] → Mitigation: prefer direct `simp`; fall
+- \[`ByteArray` ops may resist `simp`\] → Mitigation: prefer direct `simp`; fall
   back to a `List UInt8` model + transport lemma (proof-ergonomics only).

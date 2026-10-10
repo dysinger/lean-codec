@@ -28,9 +28,11 @@ covers binary, variable-binary, and structured data.
 ## Capabilities
 
 ### New Capabilities
+
 - `codec`: the verified, byte-exact, bidirectional description framework.
 
 ### Modified Capabilities
+
 (There are no existing capabilities; this is a greenfield library.)
 
 ## Impact
