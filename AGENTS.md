@@ -27,58 +27,56 @@ Codec.roundtrip` ⇒ `[propext, Quot.sound]`):
   **not** `inverse ∘ foldl ∘ inverse` which is type-incoherent), `optionSome`,
   plus the structural isos (`nil`/`cons`/`unit`/`commute`/`associate`/`element`/
   `subset`/`inverse`). `[propext, Quot.sound]` only.
-- `Codec/Codec.lean` (+`Rel`), `Codec/Decode.lean`, `Codec/Encode.lean`,
-  `Codec/Sound.lean` — the backtracking-union list decoder and the
-  **unconditional** laws (`decode_spec`, `bidir`, `encode_rel`, `decode_encode`,
-  `roundtrip`).
-- `Codec/Combinators.lean` — §6.1/§6.2 derived combinators, **all done**: `many`
-  (still `partial def`), `*>`,`<*`, `between`, `chainl1` (on `foldl`), `chainr1`
-  (on `foldr`, step `Iso ((α × β) × α) α`), `some`/`many1`, `sepBy`/`sepBy1`,
-  `optional`/`maybe`, `choice` (right-assoc), `count n p`/`manyUpTo n p`
-  (bounded, total, `#eval`-able), plus soundness lemmas `Rel_some`,
-  `Rel_optional_some`, `Rel_choice` (`[propext]` only).
+- `Codec/Codec.lean` (+`Rel`, `relRepeat`, `Productive`), `Codec/Decode.lean`
+  (`decode`, `decodeRepeat`, `ConsumesByte`, `byteRepeat`), `Codec/Encode.lean`
+  (`encode`, `encodeRepeat`), `Codec/Sound.lean` (the **unconditional** laws:
+  `decode_spec`, `bidir`, `encode_rel`, `decode_encode`, `roundtrip`,
+  `productive_iff_consumesByte`, `decodeRepeat_spec`, `encodeRepeat_rel`).
+- `Codec/Combinators.lean` — §6.1/§6.2 derived combinators. **§9 resolved:**
+  `partial def many` is **deleted** (its `Rel` was irreducibly opaque). Unbounded
+  repetition is semantic, not a `Codec` value: `relRepeat` (denotation),
+  `decodeRepeat p h` (decoder), `encodeRepeat p` (encoder). The `many`-shaped
+  list combinators are re-derived over these three — `sepBy`/`sepBy1` as
+  `relSepBy`/`decodeSepBy`/`encodeSepBy`, and `chainl1`/`chainr1` as
+  `relChain*`/`decodeChain*`/`encodeChain*` (folds via the unchanged
+  `Iso.foldl`/`Iso.foldr`, decoders taking `hsep : ConsumesByte …`), each with an
+  unconditional `_spec`/`_rel` law. Finite combinators unchanged: `seqRight`/
+  `seqLeft`/`between`, `optional`/`maybe`, `choice`, `count`/`manyUpTo`.
 
 **Decisions already made** (read before continuing):
 1. `List UInt8`, not `ByteArray`, for the provable core.
 2. **`|` is the paper's backtracking union, not committed choice** (restored;
    `NonNull`/`Disjoint`/`PrefixDisjoint` deleted). Do not reintroduce a
    deterministic/committed decoder.
-3. `foldl`/`chainl1` and `foldr`/`chainr1` are done and proved.
+3. `foldl`/`foldr` are done and proved; `chainl1`/`chainr1` are re-derived as
+   semantic decoders/encoders over `decodeRepeat`/`encodeRepeat` (not `Codec` values).
 4. `Codec` is an inductive description AST, not the paper's §3.4 typeclass.
 5. `iterate` (paper §5.3) is deliberately omitted (no field law; forward/backward
    fixpoints can differ).
+6. **Unbounded `many`/`some`/`sepBy`/`chainl1` are *semantic*, not `Codec`.** An
+   infinite AST cannot be a finite `Codec`, and a `partial def` is proof-opaque;
+   repetition lives as `relRepeat`/`decodeRepeat`/`encodeRepeat` (cf. §9).
 
 **Open, in order:**
 
-1. **Total, correct repetition decoder** — **DONE** (change
-   `openspec/changes/total-backtracking-decoder/`, Option 1). `decode`'s
-   repetition is now **well-founded recursion on `s.length`** (`decodeRepeat`,
-   `Codec/Decode.lean`), with no fuel, no `Productive`/`AllProductive` predicate,
-   no `Codec.many` constructor. The denotation is the total least fixpoint
-   `relRepeat (Rel p)` (`Codec/Codec.lean`), and the laws are:
-   `productive_iff_consumesByte` (totality iff productive), `decodeRepeat_spec`
-   (the `many`-case bidirectional law), `relRepeat_unbounded_of_empty` +
-   `not_productive_pure` (the empty-matching contrapositive). `Rel` is unchanged;
-   laws stay unconditional; `[propext, Quot.sound]`, zero `sorry`/warnings.
-   `#eval byteRepeat [1,2,3]` = `[([],[1,2,3]),([1],[2,3]),([1,2],[3]),([1,2,3],[])]`.
-
-   **Next step (planned in the existing ledger, §9 of
-   `openspec/changes/invertible-binary-core/tasks.md`):** `many` is still a
-   `partial def Codec` (the *infinite* AST), so `Rel (many p)` is *opaque* — the
-   `Rel_many` equality `Rel (many p) xs s ↔ relRepeat (Rel p) xs s` is
-   **unprovable** with the current `partial def`. The honest reading of the
-   design's "`many` is a total `def` in denotational reading" is: `relRepeat`
-   *is* `many`'s denotation, and the list combinators (`some`/`sepBy`/`sepBy1`/
-   `chainl1`/`chainr1`, which embed `many p` as a `Codec` value) must be
-   re-derived over `relRepeat`/`decodeRepeat` directly. **Do this as §9 of the
-   `invertible-binary-core` change — no new change.**
-2. **Efficiency (the paper's §4.4 open problem)** — memoization/DP over the same
+1. **Efficiency (the paper's §4.4 open problem)** — memoization/DP over the same
    denotation, separate from correctness. (This also subsumes the future
    "lazy-stream carrier" migration if a *total* `decode (many (pure ()))` is ever
    required — see the design's "single genuine fork".)
-3. **`ByteArray` wrapper + extraction + benchmark** (tasks 7.1–7.3).
-4. **README rewrite** (task 7.4) — update the combinator table + downstream split.
-5. **Housekeeping** — `Codec/Codec.lean` type-vs-module collision.
+2. **`ByteArray` wrapper + extraction + benchmark** (tasks 7.1–7.3).
+3. **README rewrite** (task 7.4) — update the combinator table + downstream split.
+4. **Housekeeping** — `Codec/Codec.lean` type-vs-module collision; the `relSepBy`
+   `[]` case is `False` (empty list is not a valid `sepBy` value, and `encodeSepBy`
+   rejects it as `none`).
+
+> **Planning-note (this session):** `openspec/changes/invertible-binary-core/`
+> `{proposal,design}.md` and `specs/codec/spec.md` were re-written to the
+> *implemented* reality (backtracking-union `|`, nondeterministic `List` decoder,
+> unconditional laws, semantic `relRepeat`/`decodeRepeat`/`encodeRepeat`), replacing
+> the pre-departure-#5 deterministic/`NoAlt`/committed-`|` text; `tasks.md` gained a
+> `§10 Next session` ledger covering open items 1–4 above. The efficiency spike
+> (open item 1) is a plausible *new* change (`efficient-backtracking-decoder`), not a
+> §10 task — see `tasks.md` §10.1.
 
 ## Openspec workflow
 

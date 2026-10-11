@@ -75,7 +75,9 @@ that are not semantic changes at all.
    arbitrary whitespace to `unit` and back to a single blank), and therefore
    **abandons a strict isomorphism** in favor of "modulo equivalence classes".
    We reject that weakening: a run of bytes a codec allows is captured as a
-   value and re-emitted verbatim — realized by the existing `many (subset p byte)` idiom, *not* a new primitive. Consequently `decode (encode x) = x`
+   value and re-emitted verbatim — realized by the existing repetition over a
+   `subset p byte` step (`relRepeat (Rel (subset p byte))` denotation,
+   `decodeRepeat`/`encodeRepeat` interpreters), *not* a new primitive. Consequently `decode (encode x) = x`
    holds **byte-for-byte** — a true isomorphism, in place of the paper's
    "modulo equivalence classes" weakening. There is therefore **no `ignore`
    combinator in core**; it is the one thing that would reintroduce the loss.
@@ -206,24 +208,41 @@ ______________________________________________________________________
 
 The core is implemented and proven (see the task ledger
 `openspec/changes/invertible-binary-core/tasks.md`): `Iso`, `Codec`, `Rel`,
-`decode`/`encode` (nondeterministic/backtracking `|`), `foldl`/`chainl1`, and the
+`decode`/`encode` (nondeterministic/backtracking `|`), `foldl`/`foldr`, and the
 **unconditional** bidirectional/roundtrip laws. `iterate` is deliberately omitted
 (its forward/backward fixpoints need not coincide, so no field law — see
-`Codec/Iso.lean`). Bounded repetition (`count`/`manyUpTo`) is total; unbounded
-repetition is realized by `relRepeat` (the total least-fixpoint denotation of
-`many`) and `decodeRepeat` (the productive repetition decoder). The efficient
-`ByteArray` wrapper + benchmark remain future work.
+`Codec/Iso.lean`). Bounded repetition (`count`/`manyUpTo`) is total and
+`#eval`-able. Unbounded repetition is **not** a finite `Codec` value; its
+semantics lives in three already-separate places (see below): `relRepeat` (the
+total least-fixpoint denotation), `decodeRepeat` (the productive decoder),
+`encodeRepeat` (the total encoder). The `many`-shaped *list* combinators
+(`sepBy`, `chainl1`/`chainr1`) are re-derived over these three, with their own
+`_spec`/`_rel` laws. The efficient `ByteArray` wrapper + benchmark remain future
+work.
 
 ### The `many` totality note
 
 `many` (paper §3.4) is an *infinite* description, so a strict-`List` value cannot
-represent it as a finite `Codec`. Its **semantics** is the total least fixpoint
-`relRepeat (Rel p)` (in `Codec.Codec`); its **decoder** is `decodeRepeat` (in
-`Codec.Decode`), well-founded on `s.length` — total exactly for *productive* `p`
-(`productive_iff_consumesByte`, each step consumes ≥1 byte), and genuinely
-non-total only for empty-matching `p` like `pure ()`, which has infinitely many
-results (stated as `relRepeat_unbounded_of_empty`, never faked with a finite
-result). The `many`-case law is `decodeRepeat_spec`.
+represent it as a finite `Codec` (a former `partial def many` was irreducibly
+opaque at the `Rel` level — a `partial def` yields no equational lemma — making
+`Rel (many p) ↔ relRepeat (Rel p)` unprovable). `many` therefore does **not**
+exist as a `Codec`; its three readings are:
+
+  * **denotation** — `relRepeat (Rel p)` (in `Codec.Codec`), the total
+    least fixpoint;
+  * **decoder** — `decodeRepeat p h` (in `Codec.Decode`), well-founded on
+    `s.length`, total exactly for *productive* `p` (`productive_iff_consumesByte`,
+    each step consumes ≥1 byte), only diverging for a genuinely-infinite
+    empty-matching `p` like `pure ()` (`relRepeat_unbounded_of_empty`);
+  * **encoder** — `encodeRepeat p` (in `Codec.Encode`), structural on the value
+    list, total for every `p` (no productivity witness needed).
+
+The list combinators built *on* `many` — `sepBy`/`sepBy1`, `chainl1`/`chainr1` —
+are likewise re-derived as relations, decoders, and encoders (over
+`relRepeat`/`decodeRepeat`/`encodeRepeat`, keeping `Iso.foldl`/`Iso.foldr`
+unchanged), each with an unconditional `_spec` (bidirectional) and `_rel`
+(encoder-soundness) law; productivity appears only as the decoder's `hsep`
+argument.
 
 ```lean
 -- total, #eval-able: productive (each byte consumes 1 byte)
