@@ -216,4 +216,126 @@ theorem roundtrip {α : Type} (d : Codec α) (x : α) (s : List UInt8) :
   intro he
   simpa using (decode_encode d x he [])
 
+/-! ## Repetition: the totality boundary and the decoder law
+
+These complete the *computable* reading of the derived `many` combinator. Its
+denotation is the least fixpoint `relRepeat (Rel p)` (see `Codec.Codec`); its
+decoder is `decodeRepeat` (see `Codec.Decode`), well-founded on `s.length`.
+The `many`-case law is `decodeRepeat_spec`, and the totality boundary is
+`productive_iff_consumesByte` — both unconditional. -/
+
+/-- The totality boundary: `decode p` strictly shortens the input exactly when
+`p` is productive (every value it relates sits on a non-empty string). This is
+the theorem that makes `decodeRepeat p h` a *total* function for productive `p`
+and locates the genuine non-totality (empty-matching `p`, e.g. `pure ()`) as the
+only case where no such witness `h` exists. -/
+theorem productive_iff_consumesByte {α : Type} (p : Codec α) :
+    Productive p ↔ ConsumesByte p := by
+  constructor
+  · intro hprod x s₁ s₀ hmem
+    rcases (decode_spec p x).1 hmem with ⟨s₀', hs, hrel⟩
+    have hs₀' : s₀' ≠ [] := hprod x s₀' hrel
+    rw [hs]
+    cases s₀' with
+    | nil => contradiction
+    | cons b rest => simp; omega
+  · intro hcons x s hrel
+    intro hs
+    subst s
+    have hmem : (x, []) ∈ decode p [] := (bidir p x []).1 hrel
+    have hlt : [].length < [].length := hcons x [] [] hmem
+    simp at hlt
+
+/-- The `many`-case of the bidirectional law (the analogue of `decode_spec` for
+the derived repetition combinator): `(xs, r) ∈ decodeRepeat p h s` exactly when
+the input splits as a `relRepeat`-prefix plus `r`. Proved by well-founded
+induction on `s.length` — the same measure that makes `decodeRepeat` terminate. -/
+theorem decodeRepeat_spec {α : Type} (p : Codec α) (h : ConsumesByte p) :
+    ∀ (xs : List α) (s r : List UInt8), (xs, r) ∈ decodeRepeat p h s ↔
+      ∃ s₀, s = s₀ ++ r ∧ relRepeat (Rel p) xs s₀ := by
+  have hwf : WellFounded (InvImage (· < ·) (fun s : List UInt8 => s.length)) :=
+    InvImage.wf (fun s : List UInt8 => s.length) Nat.lt_wfRel.wf
+  intro xs s r
+  revert xs r
+  induction s using WellFounded.induction (hwf := hwf) with
+  | h s ih =>
+      intro xs r
+      rw [decodeRepeat_eq]
+      rw [List.mem_cons]
+      constructor
+      · intro hm
+        rcases hm with hm | hm
+        · cases hm
+          refine ⟨[], ?_, ?_⟩
+          · simp
+          · simp [relRepeat]
+        · rw [List.mem_flatMap] at hm
+          rcases hm with ⟨a, _ha_mem, hm_in_map⟩
+          rcases a with ⟨ab, hmem⟩
+          rcases ab with ⟨x, s₁⟩
+          rw [List.mem_map] at hm_in_map
+          rcases hm_in_map with ⟨pr, hpr, hprmap⟩
+          rcases pr with ⟨xs', r'⟩
+          cases hprmap
+          have hlt : InvImage (· < ·) (fun s : List UInt8 => s.length) s₁ s := h x s₁ s hmem
+          rcases (ih s₁ hlt xs' r).1 hpr with ⟨s₀', hs₁, hrel'⟩
+          rcases (decode_spec p x).1 hmem with ⟨s₀'', hs, hrelx⟩
+          refine ⟨s₀'' ++ s₀', ?_, ?_⟩
+          · rw [hs, hs₁]
+            simp [List.append_assoc]
+          · rw [relRepeat_cons]
+            exact ⟨s₀'', s₀', rfl, hrelx, hrel'⟩
+      · intro hm
+        rcases hm with ⟨s₀, hs, hrel⟩
+        cases xs with
+        | nil =>
+            simp [relRepeat] at hrel
+            subst s₀
+            rw [hs]
+            left
+            rfl
+        | cons x xs' =>
+            rw [relRepeat_cons] at hrel
+            rcases hrel with ⟨sa, sb, hs₀, hrelx, hrel'⟩
+            right
+            rw [List.mem_flatMap]
+            have hmem : (x, sb ++ r) ∈ decode p s := by
+              rw [hs, hs₀]
+              exact (decode_spec p x).2 ⟨sa, by simp [List.append_assoc], hrelx⟩
+            refine ⟨⟨(x, sb ++ r), hmem⟩, ?_, ?_⟩
+            · simp [List.mem_attach]
+            · rw [List.mem_map]
+              refine ⟨(xs', r), ?_, by rfl⟩
+              have hlt : InvImage (· < ·) (fun s : List UInt8 => s.length) (sb ++ r) s :=
+                h x (sb ++ r) s hmem
+              exact (ih (sb ++ r) hlt xs' r).2 ⟨sb, rfl, hrel'⟩
+
+/-- The contrapositive statement concretized: when a step `p` matches the empty
+string (`Rel p x []` for some `x`), repetition has *arbitrarily many* results —
+for every `n` the `n`-fold list `replicate n x` relates to the empty string. So
+no strict-`List` decoder can enumerate them all (the results are unbounded),
+which is why `decodeRepeat` is only total for *productive* `p` (see
+`productive_iff_consumesByte`). A lemma, not a gate. -/
+theorem relRepeat_unbounded_of_empty {α : Type} (p : Codec α) (x : α) (hx : Rel p x []) :
+    ∀ n : Nat, relRepeat (Rel p) (List.replicate n x) [] := by
+  intro n
+  induction n with
+  | zero => simp [relRepeat]
+  | succ n ih =>
+      change relRepeat (Rel p) (x :: List.replicate n x) []
+      rw [relRepeat_cons]
+      exact ⟨[], [], rfl, hx, ih⟩
+
+/-- The canonical empty-matching description: `pure x` relates `x` to `[]`, so it
+is *not* productive — there is no `ConsumesByte (pure x)` witness, hence no
+total `decodeRepeat (pure x) _`. This is the (constructively stated) reason
+`decode (many (pure ())) []` is genuinely infinite, never faked with a finite
+result. -/
+theorem not_productive_pure {α : Type} [DecidableEq α] (x : α) :
+    ¬ Productive (Codec.pure x : Codec α) := by
+  intro hp
+  have hrel : Rel (Codec.pure x : Codec α) x [] := by simp [Rel]
+  have h := hp x [] hrel
+  exact (h rfl)
+
 end Codec
