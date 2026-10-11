@@ -76,11 +76,12 @@ Codec.roundtrip` ⇒ `[propext, Quot.sound]`):
 
 **Open, in order** (full detail in `tasks.md` §11):
 
-1. **README rewrite** (task §10.2) — **done** this session: rewritten as a
-   high-level orientation (what/paper TL;DR/`[D#]`+`[S#]` summary table/
-   scope/status), with code details left to `Codec/*.lean` doc-comments and the
-   full rationale to `openspec/`. Remaining polish: verify the table rows and
-   downstream split still match the code exactly.
+1. **README rewrite** (task §10.2) — **done** this session: restored as the full
+   **architecture statement** (intent, the paper TL;DR, the complete `[D1]`–`[D8]`/
+   `[S1]`–`[S6]` departures/strengthenings with layman justification, scope,
+   getting-started; **no** "status"/"issues" section — that lives in `openspec/`
+   and this file). Remaining polish: verify the table rows and downstream split
+   still match the code exactly.
 2. **Extraction + benchmark** (task §10.5) — extract the `decode`/`encode` hot
    path (and `decodeRepeat`/`encodeRepeat`) to C/LLVM, benchmark a multi-MB
    roundtrip (`byte`/`many`) proving **linear time, no per-byte boxing**, and
@@ -102,12 +103,12 @@ Codec.roundtrip` ⇒ `[propext, Quot.sound]`):
 > `Bytes` = `abbrev Bytes := List UInt8` (proof substrate, reducible), `Buffer` =
 > packed `ByteArray` newtype (`Codec.Buffer`, transport via `ByteArray.data`).
 
-> **Documentation record (this session):** the README is now **high-level only** —
-> project description, paper TL;DR, a compact `[D1]`–`[D8]`/`[S1]`–`[S6]` summary
-> table, scope, and status. The detailed per-item rationale and Lean specifics live
-> in `openspec/changes/invertible-binary-core/{proposal,design}.md` and in the
-> `Codec/*.lean` doc-comments (not the README). `proposal.md`/`design.md`/`spec.md`/
-> `tasks.md` are reconciled to it. When adding code, keep every departure/
+> **Documentation record (this session):** the README is the **full architecture
+> statement** — intent, the paper TL;DR, the **complete** `[D1]`–`[D8]`/`[S1]`–`[S6]`
+> departures/strengthenings (each with a layman "why"), scope, and getting-started.
+> It deliberately has **no** status/issues section — engineering state is `openspec/`
+> and this file; the README is *about the project and the paper*. When adding code,
+> keep every departure/
 > strengthening cross-referenced to a `[D#]`/`[S#]` anchor in the README table, and
 > keep the axiom record consistent (`[propext, Quot.sound]`, never the stale
 > `Classical.choice`).
