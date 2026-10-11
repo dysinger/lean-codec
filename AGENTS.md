@@ -42,9 +42,26 @@ Codec.roundtrip` ⇒ `[propext, Quot.sound]`):
   `Iso.foldl`/`Iso.foldr`, decoders taking `hsep : ConsumesByte …`), each with an
   unconditional `_spec`/`_rel` law. Finite combinators unchanged: `seqRight`/
   `seqLeft`/`between`, `optional`/`maybe`, `choice`, `count`/`manyUpTo`.
+- `Codec/Codec.lean` also defines `abbrev Bytes := List UInt8` (the provable
+  substrate, used everywhere the core wrote `List UInt8`; *reducible*, so every
+  `List` lemma applies unchanged).
+- `Codec/Buffer.lean` — the packed, `ByteArray`-backed **transport surface** (§10.4):
+  `Buffer` (newtype over `ByteArray`), `toBytes`/`ofBytes` (routed through
+  `ByteArray.data`, the reducible `Array`, *not* the opaque `ByteArray.toList`),
+  and the transported interpreters `decodeBuffer`/`encodeBuffer` with the
+  bar-transferred laws `decodeBuffer_eq`/`encodeBuffer_eq`/`decodeBuffer_spec`/
+  `roundtripBuffer`.
+- `Codec/Sound.lean` also gained `relFunctional`/`relUnambiguous` (relation-level
+  forms) and `encodeRepeat_ne_none`; `Codec/Combinators.lean` gained the six chain
+  converse laws (§10.3a): `encodeChainl1_ne_none`/`encodeChainr1_ne_none`,
+  `encodeChainl1_of_decode`/`encodeChainr1_of_decode` (under `relFunctional`),
+  `encodeChainl1_injective_of_unambiguous`/`encodeChainr1_injective_of_unambiguous`
+  (under `relUnambiguous`).
 
 **Decisions already made** (read before continuing):
-1. `List UInt8`, not `ByteArray`, for the provable core.
+1. `Bytes` (= `List UInt8`) for the provable core; `Buffer` (a `ByteArray`-backed
+   newtype) is the separate, later executable transport surface — *not* the proof
+   substrate.
 2. **`|` is the paper's backtracking union, not committed choice** (restored;
    `NonNull`/`Disjoint`/`PrefixDisjoint` deleted). Do not reintroduce a
    deterministic/committed decoder.
@@ -59,22 +76,21 @@ Codec.roundtrip` ⇒ `[propext, Quot.sound]`):
 
 **Open, in order** (full detail in `tasks.md` §10):
 
-1. **Code organization, naming, documentation** (tasks §10.1a/10.1b/10.1c) — re-lay
-   out each `Codec/*.lean` file first-principles (bottom-up: `Iso` → `Codec`/`Rel` →
-   `Decode`/`Encode` → `Sound` → `Combinators`), constructor-order/alphabetize sibling
-   groups, name to mathlib convention, delete dead `app`/`unapp`, reconcile `comp`/`trans`
-   and the `foldrApply'` prime, and document **every** public declaration to standard
-   (one-line `/-` what+why, `/-!` section outlines, paper § and README `[D#]`/`[S#]`
-   cross-refs).
-2. **`Codec` type-vs-module rename** (task §10.1) — decide `Desc`/`Syntax` vs. keeping
-   `Codec` with a single namespace; move `Rel`/`relRepeat` into the same namespace as the
-   interpreters. Do **before** README/downstream hard-code names.
-3. **README rewrite** (task §10.2) — after the rename; the `[D#]`/`[S#]` canonical table
-   and "Why these choices?" layman section are already written, only names need re-check.
-4. **Chain-combinator decode→encode/injectivity companions** (task §10.3a) — the one
-   remaining *theorem* gap (`Functional`/`Unambiguous`-parameterized chain converse).
-5. **`ByteArray` wrapper + extraction + benchmark** (tasks §10.4/§10.5).
-6. **Efficiency (paper §4.4 open problem)** — **last**, a separate `efficient-` change.
+1. **README rewrite** (task §10.2) — the `[D#]`/`[S#]` canonical table and
+   "Why these choices?" section are written and names are now finalized
+   (`Bytes`/`Buffer`, no type rename); re-check symbol/namespace names and the
+   `Buffer`-vs-`Bytes` split.
+2. **Extraction + benchmark** (tasks §10.5) — extract the `decode`/`encode` hot
+   path to C/LLVM, benchmark a multi-MB roundtrip (`byte`/`many`), and audit that
+   `get!`/remaining-bytes don't leak per-byte `getElem`-with-proof into the hot
+   path (the `Buffer` surface is the target).
+3. **Efficiency (paper §4.4 open problem)** — **last**, a separate `efficient-` change.
+
+> Resolved this session: §10.1 (namespace — no type rename; `Rel`/`relRepeat`/`Productive`
+> now live at `Codec.*`), §10.1a/10.1b/10.1c (organization/naming/docs), §10.3a (chain
+> converse laws), §10.4 (`Buffer` transport). The `Codec` type was **not** renamed —
+> Lean lets the type `Codec` and namespace `Codec` coexist; the fix was to restore the
+> uniform `namespace Codec` in `Codec/Codec.lean`.
 
 > **Documentation record (this session):** the README now carries a canonical,
 > anchored departure/strengthening table `[D1]`–`[D8]`/`[S1]`–`[S6]` plus a layered
