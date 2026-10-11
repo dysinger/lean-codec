@@ -493,4 +493,51 @@ theorem encode_injective_of_unambiguous {α : Type} (d : Codec α) (hd : Unambig
   have hrely : Rel d y s := encode_rel d y hy
   exact hd s hrelx hrely
 
+/-! ## Relation-level completeness and functionality
+
+`Functional` and `Unambiguous` are stated over a `Codec` (quantifying over
+`Rel d`). The repetition and chain combinators are *relations*
+`α → List UInt8 → Prop` (not `Codec` values), so their decode→encode and
+injectivity laws take the same notions over an arbitrary relation. This section
+collects the relation-level forms and the `encodeRepeat` completeness mirror of
+`encode_ne_none`. -/
+
+/-- A relation is **functional** (string-directional) when each value relates to
+at most one byte string. -/
+def relFunctional {α : Type} (R : α → List UInt8 → Prop) : Prop :=
+  ∀ a ⦃s s'⦄, R a s → R a s' → s = s'
+
+/-- A relation is **unambiguous** (value-directional) when each byte string
+relates to at most one value. -/
+def relUnambiguous {α : Type} (R : α → List UInt8 → Prop) : Prop :=
+  ∀ ⦃a b⦄ s, R a s → R b s → a = b
+
+/-- **Encoder completeness for repetition**: every list in the repetition
+denotation encodes successfully (possibly to a different byte string than the
+witness — pinning the exact string requires functionality of the step). This is
+the `relRepeat`-level mirror of `encode_ne_none`; structural induction on `xs`,
+with the head step via `encode_ne_none p`. -/
+theorem encodeRepeat_ne_none {α : Type} (p : Codec α) :
+    ∀ (xs : List α) (s : List UInt8), relRepeat (Rel p) xs s → encodeRepeat p xs ≠ none := by
+  intro xs
+  induction xs with
+  | nil =>
+      intro s hrel
+      rw [relRepeat_nil] at hrel
+      subst s
+      simp [encodeRepeat]
+  | cons x rest ih =>
+      intro s hrel
+      rw [relRepeat_cons] at hrel
+      rcases hrel with ⟨s₁, s₂, hs, hx, hrest⟩
+      rw [encodeRepeat]
+      have hne : encode p x ≠ none := encode_ne_none p x s₁ hx
+      cases h₁ : encode p x with
+      | none => exact False.elim (hne h₁)
+      | some e₁ =>
+          have hne' : encodeRepeat p rest ≠ none := ih s₂ hrest
+          cases h₂ : encodeRepeat p rest with
+          | none => exact False.elim (hne' h₂)
+          | some e₂ => simp
+
 end Codec
