@@ -57,26 +57,31 @@ Codec.roundtrip` ⇒ `[propext, Quot.sound]`):
    infinite AST cannot be a finite `Codec`, and a `partial def` is proof-opaque;
    repetition lives as `relRepeat`/`decodeRepeat`/`encodeRepeat` (cf. §9).
 
-**Open, in order:**
+**Open, in order** (full detail in `tasks.md` §10):
 
-1. **Efficiency (the paper's §4.4 open problem)** — memoization/DP over the same
-   denotation, separate from correctness. (This also subsumes the future
-   "lazy-stream carrier" migration if a *total* `decode (many (pure ()))` is ever
-   required — see the design's "single genuine fork".)
-2. **`ByteArray` wrapper + extraction + benchmark** (tasks 7.1–7.3).
-3. **README rewrite** (task 7.4) — update the combinator table + downstream split.
-4. **Housekeeping** — `Codec/Codec.lean` type-vs-module collision; the `relSepBy`
-   `[]` case is `False` (empty list is not a valid `sepBy` value, and `encodeSepBy`
-   rejects it as `none`).
+1. **Code organization, naming, documentation** (tasks §10.1a/10.1b/10.1c) — re-lay
+   out each `Codec/*.lean` file first-principles (bottom-up: `Iso` → `Codec`/`Rel` →
+   `Decode`/`Encode` → `Sound` → `Combinators`), constructor-order/alphabetize sibling
+   groups, name to mathlib convention, delete dead `app`/`unapp`, reconcile `comp`/`trans`
+   and the `foldrApply'` prime, and document **every** public declaration to standard
+   (one-line `/-` what+why, `/-!` section outlines, paper § and README `[D#]`/`[S#]`
+   cross-refs).
+2. **`Codec` type-vs-module rename** (task §10.1) — decide `Desc`/`Syntax` vs. keeping
+   `Codec` with a single namespace; move `Rel`/`relRepeat` into the same namespace as the
+   interpreters. Do **before** README/downstream hard-code names.
+3. **README rewrite** (task §10.2) — after the rename; the `[D#]`/`[S#]` canonical table
+   and "Why these choices?" layman section are already written, only names need re-check.
+4. **Chain-combinator decode→encode/injectivity companions** (task §10.3a) — the one
+   remaining *theorem* gap (`Functional`/`Unambiguous`-parameterized chain converse).
+5. **`ByteArray` wrapper + extraction + benchmark** (tasks §10.4/§10.5).
+6. **Efficiency (paper §4.4 open problem)** — **last**, a separate `efficient-` change.
 
-> **Planning-note (this session):** `openspec/changes/invertible-binary-core/`
-> `{proposal,design}.md` and `specs/codec/spec.md` were re-written to the
-> *implemented* reality (backtracking-union `|`, nondeterministic `List` decoder,
-> unconditional laws, semantic `relRepeat`/`decodeRepeat`/`encodeRepeat`), replacing
-> the pre-departure-#5 deterministic/`NoAlt`/committed-`|` text; `tasks.md` gained a
-> `§10 Next session` ledger covering open items 1–4 above. The efficiency spike
-> (open item 1) is a plausible *new* change (`efficient-backtracking-decoder`), not a
-> §10 task — see `tasks.md` §10.1.
+> **Documentation record (this session):** the README now carries a canonical,
+> anchored departure/strengthening table `[D1]`–`[D8]`/`[S1]`–`[S6]` plus a layered
+> layman's "Why these choices?" section; `proposal.md`/`design.md`/`spec.md`/`tasks.md`
+> are reconciled to it. When adding code, keep every departure/strengthening cross-referenced
+> to a `[D#]`/`[S#]` anchor, and keep the axiom record consistent (`[propext, Quot.sound]`,
+> never the stale `Classical.choice`).
 
 ## Openspec workflow
 

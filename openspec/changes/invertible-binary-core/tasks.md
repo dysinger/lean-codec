@@ -157,28 +157,71 @@ post-core deliverables (the paper's §4.4 open problem and the §7 transport tar
   converse is **false** in general (needs `Functional`); the unconditional law remains the
   encode→decode `roundtrip`. This is a tightening of the claim, not a weakening of the core.
 
-### Remaining (reordered: rename before README/downstream)
+### Remaining (reordered: rename + organization/docs before README/downstream)
 
 - [ ] 10.1 **Housekeeping: resolve the `Codec` type-vs-module collision** (neé 10.5).
   The inductive `Codec` lives at top level in `Codec/Codec.lean` (no namespace), while
   the other `Codec/*.lean` modules open `namespace Codec` — so the *type* `Codec` and the
   *namespace* `Codec` collide (and the root file `Codec.lean` collides with the `Codec/`
-  directory). Rename the type (e.g. `Desc`/`Syntax`, matching paper §3.4) **before** the
-  README and downstream `lean-binary`/`lean-text` hard-code the colliding names — cheap
-  now, breaking later. (The `sepBy`-`[]` docstrings are **done**: `relSepBy` is documented
-  as non-empty `sepBy1`, with zero-or-more = `optional (sepBy p sep)`.)
-- [ ] 10.2 **`README.md` rewrite** (§7.4) — after 10.1 (names may change): combinator
-  table → the semantic-repetition split (`relRepeat`/`decodeRepeat`/`encodeRepeat` +
-  `sepBy`/`chainl1` triples), the downstream split (`lean-binary`/`lean-text`), and the
-  corrected decode→encode scoping (encode→decode unconditional roundtrip; converse under
-  `Functional`).
-- [ ] 10.3 **Theorem-coverage cleanups** (review #3/#6/#7): (a) `relRepeat` "least
-  fixpoint" — **done**: `relRepeat_induction` proved (axioms `[propext]`), the leastness
-  is now a theorem; (b) `foldl`/`foldr` share ~380 lines of near-duplicate well-founded
-  machinery — factor a common `unfoldBy`; (c) dead code — **done** for `foldrApply_append`/
-  `cons_head_tail`/unused `Rel_*` rfl lemmas/`isoMap`/`seq`/`alt`/`fail` wrappers; the
-  `Rel_optional_some`/`Rel_count_zero`/`Rel_choice` characterization lemmas are kept
-  (they document the derived combinators' `Rel`). Remaining: the `foldl`/`foldr` dedup.
+  directory). **Consequence for organization:** `Rel`/`relRepeat`/`Rel_*`/`single`/`Productive`
+  are currently *top-level* in `Codec/Codec.lean`, whereas `decode`/`encode`/all the laws live
+  inside `namespace Codec` — the denotation lives at a different nesting level than the
+  interpreters of it. **Decision to make first (drives every other naming item):** rename the
+  description *type* (e.g. `Desc` or `Syntax`, matching paper §3.4) so the module/namespace
+  `Codec` can hold *all* of `Rel`/`decode`/`encode`/the laws consistently, OR keep the type
+  name `Codec` and move *everything* (incl. `Rel`) into one `namespace Codec` accepting the
+  `Codec.Codec` prefix. Do this **before** the README/downstream hard-code names. (The
+  `sepBy`-`[]` docstrings are **done**.)
+- [ ] 10.1a **Code organization: lay out the files first-principles, bottom-up.** Each
+  `Codec/*.lean` module already has section headers, but the *within-section ordering and
+  nesting* should be audited: (i) `Codec/Codec.lean` — `Rel_*` lemmas should follow the
+  **constructor order** `iso, seq, alt, empty, pure, byte` (currently iso, alt, pure, byte
+  after the seq/empty lemmas were deleted; either restore `Rel_seq`/`Rel_empty` or reorder +
+  document the gap), and `single`, `Inhabited`, `Rel`, then `relRepeat`/`Productive`/their
+  lemmas should each sit in one `/-!` section with a top-of-file outline; (ii) `Codec/Iso.lean`
+  — split the mixed "Structural isomorphisms" section so `associate`/`commute`/`unit` (pure
+  structure) come before the `Decidable`-carrying `element`/`subset`, and `inverse`/`optionSome`
+  move to a "combinators" section; order `nil`/`cons` alphabetically/dually; (iii) the fold
+  block (`MeasureDecreases`/`foldApply`/`foldUnapply`/…/ `foldl`, then the `R` duals) should
+  be a self-contained, header-annotated region readable top-to-bottom as "measure → apply →
+  unfold → soundness → completeness → the Iso"; (iv) `Sound.lean` is already well-ordered
+  (encode_rel → decode_seq_mem → decode_spec → bidir → decode_encode → roundtrip → repetition
+  → decode→encode) — preserve it, and add a one-line `/-!`-level map at the top of each file
+  so a porter can navigate the proof tree.
+- [ ] 10.1b **Naming normalization + alphabetization (idiomatic Lean, mathlib style).**
+  Functions named like their return type; theorems `snake_case`; alphabetize sibling groups.
+  Concrete fixes: (i) delete the unused `app`/`unapp` wrappers in `Iso.lean` (dead, like
+  `isoMap`/`fail` were); (ii) reconcile `comp` vs `trans` (both exist for category composition
+  — keep one idiomatic name, e.g. `comp` or `∘`-notation only); (iii) drop the ad-hoc prime on
+  `foldrApply'` and rename the apply-direction family consistently (`foldlApply` vs `foldrApply'
+  → `foldlApply`/`foldrApply` with the terminal-seed restriction named explicitly, e.g.
+  `foldlApplyTerminal` or fold the restriction into the Iso's `apply` with a doc note); (iv)
+  `MeasureDecreases`/`MeasureDecreasesR` — consider a single parameterized name or document
+  the `R` suffix as the left/right step-type marker; (v) `Rel_*` lemma names should be a single
+  convention (`Rel_iso`/`Rel_seq`/`Rel_alt`/`Rel_empty`/`Rel_pure`/`Rel_byte`) matching the
+  constructors, with any *missing* one either restored or documented as intentionally-absent.
+- [ ] 10.1c **Code documentation to standards.** Audit every public declaration for: a
+  one-line doc-comment (`/-- … -/`) stating *what* and *why* (not just "the X of Y");
+  `/-! … -/` section headers with a clear outline; cross-references to the paper's § and to
+  the README `[D#]`/`[S#]` anchors where a departure/strengthening is involved; and the
+  `mathlib` convention that a `Prop`-valued def (e.g. `Rel`, `Productive`, `ConsumesByte`,
+  `Unambiguous`, `Functional`) is freshly documented as a *relation/predicate*, not a lemma.
+  Ensure the module `-!` doc comes *after* `import` (per the Lean skill) and that no `-/` byte
+  pair appears inside prose (Lexer terminates the block). Verify docstrings do not reference
+  the deleted `many`/`sepBy`/`some`/`many1` symbols as if they exist.
+- [ ] 10.2 **`README.md` rewrite** (§7.4) — after 10.1/10.1a/10.1b/10.1c (names/organization
+  may change): combinator table → the semantic-repetition split (`relRepeat`/`decodeRepeat`/
+  `encodeRepeat` + `sepBy`/`chainl1` triples), the downstream split (`lean-binary`/`lean-text`),
+  and the corrected decode→encode scoping (encode→decode unconditional roundtrip; converse
+  under `Functional`). The canonical `[D#]`/`[S#]` table and "Why these choices?" section
+  already reflect the *semantics*; only the symbol/namespace names must be re-checked against
+  the 10.1 rename.
+- [ ] 10.3 **Theorem-coverage cleanups** (review #3/#6/#7): (a) `relRepeat` "least fixpoint"
+  — **done**: `relRepeat_induction` proved (axioms `[propext]`); (b) `foldl`/`foldr` share
+  ~380 lines of near-duplicate well-founded machinery — factor a common `unfoldBy` (this is
+  now partly covered by 10.1a's fold-block rework; do them together); (c) dead code — **done**
+  for `foldrApply_append`/`cons_head_tail`/`isoMap`/`seq`/`alt`/`fail`; remaining `app`/`unapp`
+  are ticketed in 10.1b.
 - [ ] 10.3a **Chain-combinator decode→encode / injectivity companions** (review CODE-1).
   The primitives gained `encode_ne_none`/`encode_of_decode`/`encode_injective_of_unambiguous`,
   but the chain combinators (`decodeChainl1`/`decodeChainr1`/`encodeChainl1`/`encodeChainr1`)
