@@ -338,4 +338,33 @@ theorem not_productive_pure {α : Type} [DecidableEq α] (x : α) :
   have h := hp x [] hrel
   exact (h rfl)
 
+/-- Encoder soundness for repetition: any list the repetition-encoder prints is
+in the repetition denotation `relRepeat (Rel p)`. The `encode` counterpart to
+`decodeRepeat_spec` (which is the decoder's analogue); here no productivity
+witness is needed, because `encodeRepeat` recurses on the *value* list rather
+than the input bytes. Structural induction on `xs`. -/
+theorem encodeRepeat_rel {α : Type} (p : Codec α) :
+    ∀ (xs : List α) {s : List UInt8}, encodeRepeat p xs = some s → relRepeat (Rel p) xs s := by
+  intro xs
+  induction xs with
+  | nil =>
+      intro s he
+      have hs : s = [] := by simpa [encodeRepeat] using he
+      subst s
+      simp [relRepeat]
+  | cons x rest ih =>
+      intro s he
+      rw [encodeRepeat] at he
+      cases hx : encode p x with
+      | none => simp [hx] at he
+      | some sx =>
+          rw [hx] at he
+          cases hr : encodeRepeat p rest with
+          | none => simp [hr] at he
+          | some sr =>
+              rw [hr] at he
+              cases he
+              rw [relRepeat_cons]
+              refine ⟨sx, sr, rfl, encode_rel p x hx, ih hr⟩
+
 end Codec

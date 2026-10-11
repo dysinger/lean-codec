@@ -40,4 +40,24 @@ def encode {α : Type} (d : Codec α) (x : α) : Option (List UInt8) :=
   | Codec.pure x₀ => if x = x₀ then some [] else none
   | Codec.byte => some (single x)
 
+/-! ## The total encoder for repetition -/
+
+/-- The total encoder for unbounded repetition: encode each element of `xs` with
+`p` and concatenate. This is the `encode` counterpart to `decodeRepeat` (and the
+denotation `relRepeat (Rel p)` in `Codec.Codec`). Recursion is structural on the
+*value* list `xs`, so it is total for **every** `p` — encoding needs no
+productivity witness (unlike `decodeRepeat`, which takes `h : ConsumesByte p`).
+
+Its soundness law is `Codec.Sound.encodeRepeat_rel`. -/
+def encodeRepeat {α : Type} (p : Codec α) (xs : List α) : Option (List UInt8) :=
+  match xs with
+  | [] => some []
+  | x :: rest =>
+      match encode p x with
+      | none => none
+      | some s =>
+          match encodeRepeat p rest with
+          | none => none
+          | some t => some (s ++ t)
+
 end Codec
