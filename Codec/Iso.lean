@@ -571,26 +571,6 @@ theorem foldrUnapply_eq {α β : Type} (measure : α → Nat) (i : Iso (β × α
   unfold foldrUnapply
   rw [WellFounded.fix_eq]
 
-/-- `foldrApply` is associative over list append (in the right-fold sense:
-folding over `bs ++ cs` folds `cs` first (innermost), then folds `bs` over the
-result). This is exactly the monad associativity of `Option.bind`. -/
-theorem foldrApply_append {α β : Type} (i : Iso (β × α) α) (a : α) (bs cs : List β) :
-    foldrApply i a (bs ++ cs) =
-      Option.bind (foldrApply i a cs) fun x => foldrApply i x bs := by
-  induction bs generalizing a with
-  | nil => simp [foldrApply]
-  | cons b bs' ih =>
-      simp [foldrApply, ih]
-      -- goal: (Option.bind (foldrApply i a cs) fun x => foldrApply i x bs').bind
-      --        (fun acc => i.apply (b, acc))
-      --     = Option.bind (foldrApply i a cs) fun x =>
-      --        (foldrApply i x bs').bind (fun acc => i.apply (b, acc))
-      cases h : foldrApply i a cs with
-      | none => simp
-      | some acc => simp
-/-- A nonempty list is its head and tail. -/
-theorem cons_head_tail {α : Type} {b : α} {bs : List α} : b :: bs = [b] ++ bs := rfl
-
 /-- Soundness of the maximal unfold: `foldrUnapply a = (seed, ops)` gives a right
 fold that reproduces `a` from a terminal `seed`. -/
 theorem foldrUnapply_sound {α β : Type} (i : Iso (β × α) α) (measure : α → Nat)

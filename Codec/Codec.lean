@@ -48,22 +48,6 @@ inductive Codec : Type → Type 1
   | /-- The primitive byte description (`token`, re-based onto `UInt8`). -/
     byte : Codec UInt8
 
-/-- Apply a partial isomorphism to a description. -/
-def isoMap {α β : Type} (i : Iso α β) (d : Codec α) : Codec β :=
-  Codec.iso i d
-
-/-- Sequential/product composition. -/
-def seq {α β : Type} (d₁ : Codec α) (d₂ : Codec β) : Codec (α × β) :=
-  Codec.seq d₁ d₂
-
-/-- Backtracking union: `decode (d₁ | d₂) s = decode d₁ s ++ decode d₂ s`. -/
-def alt {α : Type} (d₁ d₂ : Codec α) : Codec α :=
-  Codec.alt d₁ d₂
-
-/-- The always-failing description. -/
-def fail {α : Type} : Codec α :=
-  Codec.empty
-
 /-! ## Denotational semantics: `Rel` -/
 
 /-- A single-byte sequence containing exactly `b`. -/
@@ -92,13 +76,6 @@ theorem Rel_iso {α β : Type} (i : Iso α β) (d : Codec α) (x : β) (s : List
     Rel (Codec.iso i d) x s ↔ ∃ a, i.apply a = some x ∧ Rel d a s :=
   Iff.rfl
 
-/-- `seq` relates a pair iff the components relate with a compatible split. -/
-theorem Rel_seq {α β : Type} (d₁ : Codec α) (d₂ : Codec β) (x : α) (y : β)
-    (s : List UInt8) :
-    Rel (Codec.seq d₁ d₂) (x, y) s ↔
-      ∃ s₁ s₂, s = s₁ ++ s₂ ∧ Rel d₁ x s₁ ∧ Rel d₂ y s₂ :=
-  Iff.rfl
-
 /-- `alt` is the union of the two relations. -/
 theorem Rel_alt {α : Type} (d₁ d₂ : Codec α) (x : α) (s : List UInt8) :
     Rel (Codec.alt d₁ d₂) x s ↔ Rel d₁ x s ∨ Rel d₂ x s :=
@@ -112,11 +89,6 @@ theorem Rel_pure {α : Type} [DecidableEq α] (x₀ x : α) (s : List UInt8) :
 /-- `byte` relates `b` to `[b]` exactly. -/
 theorem Rel_byte (b : UInt8) (s : List UInt8) :
     Rel Codec.byte b s ↔ s = single b :=
-  Iff.rfl
-
-/-- `empty` never relates. -/
-theorem Rel_empty {α : Type} (x : α) (s : List UInt8) :
-    Rel (Codec.empty : Codec α) x s ↔ False :=
   Iff.rfl
 
 /-! ## Repetition: the least fixpoint relation -/
@@ -152,3 +124,25 @@ theorem relRepeat_cons {α : Type} (R : α → List UInt8 → Prop) (x : α)
     relRepeat R (x :: xs) s ↔
       ∃ s₁ s₂, s = s₁ ++ s₂ ∧ R x s₁ ∧ relRepeat R xs s₂ :=
   Iff.rfl
+
+/-- **Least-fixpoint induction** for `relRepeat`: any predicate `P` closed under
+the `nil`/`cons` rules holds for every `(xs, s)` related by `relRepeat R`. This is
+what makes `relRepeat R` the *least* relation closed under those rules (the title
+"least fixpoint" is proved here, not just asserted in the docstring). -/
+theorem relRepeat_induction {α : Type} (R : α → List UInt8 → Prop)
+    (P : List α → List UInt8 → Prop)
+    (hnil : P [] [])
+    (hcons : ∀ (x : α) (xs : List α) (s₁ s₂ : List UInt8),
+        R x s₁ → relRepeat R xs s₂ → P xs s₂ → P (x :: xs) (s₁ ++ s₂)) :
+    ∀ (xs : List α) (s : List UInt8), relRepeat R xs s → P xs s := by
+  intro xs s h
+  induction xs generalizing s with
+  | nil =>
+      rw [relRepeat_nil] at h
+      subst s
+      exact hnil
+  | cons x xs ih =>
+      rw [relRepeat_cons] at h
+      rcases h with ⟨s₁, s₂, hs, hx, hxs⟩
+      subst s
+      exact hcons x xs s₁ s₂ hx hxs (ih s₂ hxs)
