@@ -18,7 +18,6 @@ _: {
   programs.nixfmt.enable = true;
   programs.deadnix.enable = true; # scan .nix files for dead code
   programs.statix.enable = true; # lint .nix files
-
   programs.prettier.enable = true; # format markdown
 
   settings.excludes = [
