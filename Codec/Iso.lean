@@ -54,12 +54,6 @@ theorem ite_some_eq_some {α : Type u} {p : Prop} [Decidable p] (x y : α) :
     (if p then some x else none) = some y ↔ p ∧ x = y := by
   by_cases h : p <;> simp [h]
 
-/-- The forward direction. -/
-def app (i : Iso α β) (a : α) : Option β := i.apply a
-
-/-- The backward direction. -/
-def unapp (i : Iso α β) (b : β) : Option α := i.unapply b
-
 /-- Apply the inverse law left-to-right. -/
 theorem apply_eq_some_of_unapply (i : Iso α β) {a : α} {b : β}
     (h : i.unapply b = some a) : i.apply a = some b :=
@@ -80,8 +74,8 @@ def id (α : Type u) : Iso α α where
     intro a b
     constructor <;> intro h <;> simpa using h.symm
 
-/-- Kleisli composition of partial isomorphisms. -/
-def comp {α : Type u} {β : Type v} {γ : Type w} (g : Iso β γ) (f : Iso α β) :
+/-- Kleisli composition `f ≫ g` (apply `f` then `g`). -/
+def trans {α : Type u} {β : Type v} {γ : Type w} (f : Iso α β) (g : Iso β γ) :
     Iso α γ where
   apply a := Option.bind (f.apply a) g.apply
   unapply c := Option.bind (g.unapply c) f.unapply
@@ -98,11 +92,6 @@ def comp {α : Type u} {β : Type v} {γ : Type w} (g : Iso β γ) (f : Iso α �
       have hga : g.apply b = some c := g.apply_eq_some_of_unapply hg
       have hfa : f.apply a = some b := f.apply_eq_some_of_unapply hf
       exact (bind_eq_some (f.apply a) g.apply c).2 ⟨b, hfa, hga⟩
-
-/-- Composition as a notation-friendly function. -/
-def trans {α : Type u} {β : Type v} {γ : Type w} (f : Iso α β) (g : Iso β γ) :
-    Iso α γ :=
-  comp g f
 
 @[inherit_doc Iso.trans]
 infixr:80 " ≫ " => Iso.trans
@@ -138,7 +127,7 @@ def prod {α : Type u} {β : Type v} {γ : Type u} {δ : Type v}
       exact (bind_eq_some (i.apply a) (fun b => Option.bind (j.apply c) (fun d => some (b, d))) q).2
         ⟨q.1, hi, (bind_eq_some (j.apply c) (fun d => some (q.1, d)) q).2 ⟨q.2, hj, rfl⟩⟩
 
-/-! ## Structural isomorphisms -/
+/-! ## Structural isomorphisms: products -/
 
 /-- Products associate: `α × (β × γ) ↔ (α × β) × γ`. -/
 def associate {α : Type u} {β : Type u} {γ : Type u} :
@@ -205,6 +194,8 @@ def unit {α : Type u} : Iso α (α × Unit) where
       subst b
       rfl
 
+/-! ## Structural isomorphisms: predicates and singletons -/
+
 /-- `element x` is the partial iso between `Unit` and the singleton `{x}`. -/
 def element {α : Type u} [DecidableEq α] (x : α) : Iso Unit α where
   apply _ := some x
@@ -246,6 +237,8 @@ def subset {α : Type u} {p : α → Prop} [DecidablePred p] : Iso α α where
       · rcases (ite_some_eq_some b a).1 h with ⟨hpb, hba⟩
         subst a
         contradiction
+
+/-! ## Combinators -/
 
 /-- `inverse` swaps the two directions. -/
 def inverse {α : Type u} {β : Type v} (i : Iso α β) : Iso β α where
@@ -360,12 +353,11 @@ def foldUnapply {α β : Type} (measure : α → Nat) (i : Iso (α × β) α)
         | some (seed, bs) => some (seed, bs ++ [b])
   ) a
 
-set_option linter.unusedVariables false in
 /- The recursion equation for `foldUnapply` (derived from `WellFounded.fix_eq`). -/
 theorem foldUnapply_eq {α β : Type} (measure : α → Nat) (i : Iso (α × β) α)
     (h : MeasureDecreases measure i) (a : α) :
     foldUnapply measure i h a =
-      match hua : i.unapply a with
+      match _ : i.unapply a with
       | none => some (a, [])
       | some (a', b) =>
           match foldUnapply measure i h a' with
@@ -482,13 +474,6 @@ theorem foldUnapply_of_foldApply {α β : Type} (i : Iso (α × β) α) (measure
                 -- foldUnapply a' = some (a, bs.dropLast ++ [getLast]) = some (a, bs)
                 rw [← hsplit]
 
-/-- The `apply` direction of `foldl`: folds the step over the list, restricted to
-terminal seeds. -/
-def foldlApply {α β : Type} (i : Iso (α × β) α) (a : α) (bs : List β) : Option α :=
-  match i.unapply a with
-  | none => foldApply i a bs
-  | some _ => none
-
 /-- Left-associative folding as a partial isomorphism (paper §5.3 `foldl`).
 
 `foldl i` maps a seed `a : α` and a list `bs : List β` to the left fold of the step
@@ -502,7 +487,10 @@ inverse law holds *unconditionally* (no "modulo equivalence classes").
 the honest domain on which the fold/unfold is a genuine bijection. -/
 def foldl {α β : Type} (i : Iso (α × β) α) (measure : α → Nat)
     (h : MeasureDecreases measure i) : Iso (α × List β) α where
-  apply x := match x with | (a, bs) => foldlApply i a bs
+  apply x := match x with
+    | (a, bs) => match i.unapply a with
+      | none => foldApply i a bs
+      | some _ => none
   unapply a := foldUnapply measure i h a
   law := by
     intro x y
@@ -511,14 +499,14 @@ def foldl {α β : Type} (i : Iso (α × β) α) (measure : α → Nat)
     · intro hap
       cases hua : i.unapply a with
       | none =>
-          simp [foldlApply, hua] at hap
+          simp [hua] at hap
           exact foldUnapply_of_foldApply i measure h a bs y hua hap
       | some va =>
-          simp [foldlApply, hua] at hap
+          simp [hua] at hap
     · intro hun
       have hsnd := foldUnapply_sound i measure h y a bs hun
       rcases hsnd with ⟨ht, hfoo⟩
-      simp [foldlApply, ht, hfoo]
+      simp [ht, hfoo]
 
 /-! ## Right-associative folding as an isomorphism (the dual of `foldl`) -/
 
@@ -557,12 +545,11 @@ def foldrUnapply {α β : Type} (measure : α → Nat) (i : Iso (β × α) α)
         | some (seed, bs) => some (seed, b :: bs)
   ) a
 
-set_option linter.unusedVariables false in
 /- The recursion equation for `foldrUnapply` (derived from `WellFounded.fix_eq`). -/
 theorem foldrUnapply_eq {α β : Type} (measure : α → Nat) (i : Iso (β × α) α)
     (h : MeasureDecreasesR measure i) (a : α) :
     foldrUnapply measure i h a =
-      match hua : i.unapply a with
+      match _ : i.unapply a with
       | none => some (a, [])
       | some (b, a') =>
           match foldrUnapply measure i h a' with
@@ -647,13 +634,6 @@ theorem foldrUnapply_of_foldrApply {α β : Type} (i : Iso (β × α) α) (measu
                   have hrec := ih acc hlt a bs' ht htail
                   rw [hrec]
 
-/-- The `apply` direction of `foldr`: right-folds the step over the list,
-restricted to terminal seeds. -/
-def foldrApply' {α β : Type} (i : Iso (β × α) α) (a : α) (bs : List β) : Option α :=
-  match i.unapply a with
-  | none => foldrApply i a bs
-  | some _ => none
-
 /-- Right-associative folding as a partial isomorphism (the dual of §5.3 `foldl`).
 
 `foldr i` maps a seed `a : α` and a list `bs : List β` to the right fold of the
@@ -667,7 +647,10 @@ has the element on the left (`Iso (β × α) α`), so `foldr` is a *fresh* deriv
 — not `inverse ∘ foldl ∘ inverse`, which is type-incoherent. -/
 def foldr {α β : Type} (i : Iso (β × α) α) (measure : α → Nat)
     (h : MeasureDecreasesR measure i) : Iso (α × List β) α where
-  apply x := match x with | (a, bs) => foldrApply' i a bs
+  apply x := match x with
+    | (a, bs) => match i.unapply a with
+      | none => foldrApply i a bs
+      | some _ => none
   unapply a := foldrUnapply measure i h a
   law := by
     intro x y
@@ -676,14 +659,14 @@ def foldr {α β : Type} (i : Iso (β × α) α) (measure : α → Nat)
     · intro hap
       cases hua : i.unapply a with
       | none =>
-          simp [foldrApply', hua] at hap
+          simp [hua] at hap
           exact foldrUnapply_of_foldrApply i measure h a bs y hua hap
       | some va =>
-          simp [foldrApply', hua] at hap
+          simp [hua] at hap
     · intro hun
       have hsnd := foldrUnapply_sound i measure h y a bs hun
       rcases hsnd with ⟨ht, hfoo⟩
-      simp [foldrApply', ht, hfoo]
+      simp [ht, hfoo]
 
 /- `iterate` (paper §5.3) is *not* provided as an `Iso`: the paper's definition
 (`apply` iterated via a `driver` until failure, and dually `unapply`) carries its
