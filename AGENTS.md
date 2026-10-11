@@ -12,6 +12,7 @@ Stdlib-only (no mathlib). Build with `lake build`; the proof gate is the same
 build with zero `sorry`.
 
 Source of truth:
+
 - Task ledger: `openspec/changes/invertible-binary-core/tasks.md`.
 - Reference paper: `PAPER.md`.
 - Design rationale: `openspec/changes/invertible-binary-core/{proposal,design}.md` and `README.md`.
@@ -20,8 +21,8 @@ Source of truth:
 
 > What's done, what's open, and the decisions to resolve before coding. Read first.
 
-**Done** (compiles clean: zero sorries, zero warnings; `#print axioms
-Codec.roundtrip` ⇒ `[propext, Quot.sound]`):
+**Done** (compiles clean: zero sorries, zero warnings; `#print axioms Codec.roundtrip` ⇒ `[propext, Quot.sound]`):
+
 - `Codec/Iso.lean` — `Iso` + folded combinators: `foldl` (§5.3), `foldr` (the
   right-fold dual, a *fresh* well-founded recursion with step `Iso (β × α) α`,
   **not** `inverse ∘ foldl ∘ inverse` which is type-incoherent), `optionSome`,
@@ -59,18 +60,19 @@ Codec.roundtrip` ⇒ `[propext, Quot.sound]`):
   (under `relUnambiguous`).
 
 **Decisions already made** (read before continuing):
+
 1. `Bytes` (= `List UInt8`) for the provable core; `Buffer` (a `ByteArray`-backed
    newtype) is the separate, later executable transport surface — *not* the proof
    substrate.
-2. **`|` is the paper's backtracking union, not committed choice** (restored;
+1. **`|` is the paper's backtracking union, not committed choice** (restored;
    `NonNull`/`Disjoint`/`PrefixDisjoint` deleted). Do not reintroduce a
    deterministic/committed decoder.
-3. `foldl`/`foldr` are done and proved; `chainl1`/`chainr1` are re-derived as
+1. `foldl`/`foldr` are done and proved; `chainl1`/`chainr1` are re-derived as
    semantic decoders/encoders over `decodeRepeat`/`encodeRepeat` (not `Codec` values).
-4. `Codec` is an inductive description AST, not the paper's §3.4 typeclass.
-5. `iterate` (paper §5.3) is deliberately omitted (no field law; forward/backward
+1. `Codec` is an inductive description AST, not the paper's §3.4 typeclass.
+1. `iterate` (paper §5.3) is deliberately omitted (no field law; forward/backward
    fixpoints can differ).
-6. **Unbounded `many`/`some`/`sepBy`/`chainl1` are *semantic*, not `Codec`.** An
+1. **Unbounded `many`/`some`/`sepBy`/`chainl1` are *semantic*, not `Codec`.** An
    infinite AST cannot be a finite `Codec`, and a `partial def` is proof-opaque;
    repetition lives as `relRepeat`/`decodeRepeat`/`encodeRepeat` (cf. §9).
 

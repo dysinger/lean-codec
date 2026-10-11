@@ -2,8 +2,7 @@
 
 ## Context
 
-`PAPER.md` §4.1: the parser is `String → [(α, String)]`; §3.4: `many p = nil $
-pure () | cons $ p * many p` is a *derived* combinator; §4.4: unlimited
+`PAPER.md` §4.1: the parser is `String → [(α, String)]`; §3.4: `many p = nil $ pure () | cons $ p * many p` is a *derived* combinator; §4.4: unlimited
 backtracking costs exponential time/space and is the paper's own open problem.
 The library is stdlib-only (`Init`), no `Std`, no mathlib.
 
@@ -80,9 +79,9 @@ opt-in change (future work, alongside §4.4 efficiency).
   `Rel p x s₁` step shrinks it. Mitigation: proven by induction on `s.length`
   with the `p`-consumes-a-byte hypothesis stated explicitly as an *argument*,
   not a global predicate.
-- **[Empty-matching `many` is partial]** → accepted and stated; no wrong results
+- **\[Empty-matching `many` is partial\]** → accepted and stated; no wrong results
   are produced. Mitigation: a gate `grep 'partial def' Codec/` is *expected* to
   be non-empty for exactly this one def, and is documented as such.
-- **[`alt` over an infinite branch]** → unchanged from today (structural list
+- **\[`alt` over an infinite branch\]** → unchanged from today (structural list
   append is fine because branches are finite except the `many` case, which is
   handled by the well-founded recursion, not by generic append).

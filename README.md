@@ -24,8 +24,7 @@ and the two directions are *provably* inverse, not just documented as such.
 Where the paper *states* that inverse law in prose (and notes, almost as an
 aside in §7.5, that it "would be interesting to see" it encoded dependently),
 `codec` makes it a **field of the type**: you cannot construct an isomorphism
-without its proof, and the roundtrip — `encode d x = some s → (x, []) ∈
-decode d s` — is a **closed theorem**, holding **unconditionally** for every
+without its proof, and the roundtrip — `encode d x = some s → (x, []) ∈ decode d s` — is a **closed theorem**, holding **unconditionally** for every
 description. Invertibility is enforced by the type system, not by a comment.
 
 `codec` also re-bases the idea from text (`String`/`Char`) onto **bytes**
@@ -65,8 +64,7 @@ of `(value, remaining)` pairs — a relation (§4.1 `Parser (String → [(α, St
 `(value, remainder)` pairs, and `|` is list concatenation.
 
 **[D3] `|` is the paper's *backtracking union*, not committed choice.**
-`decode (d₁ | d₂) s = decode d₁ s ++ decode d₂ s`, matching `Rel (d₁ | d₂) =
-Rel d₁ ∨ Rel d₂` by construction.
+`decode (d₁ | d₂) s = decode d₁ s ++ decode d₂ s`, matching `Rel (d₁ | d₂) = Rel d₁ ∨ Rel d₂` by construction.
 
 **[D4] Lossless capture — "allowed" bytes are *kept*, not discarded (no
 `ignore`).** The paper (§3.1, §6.3) deliberately *discards* optional bytes
@@ -125,8 +123,7 @@ every concrete format (`u8`/`varint`/`utf8`/…) lives downstream (`lean-binary`
 `lean-text`). Nothing in core can silently bake in a text- or machine-specific
 assumption.
 
-**[S4] `foldl`/`foldr` are *fresh* well-founded derivations, not `inverse ∘ foldl ∘
-inverse`.** The right-fold dual is a distinct definition (the obvious
+**[S4] `foldl`/`foldr` are *fresh* well-founded derivations, not `inverse ∘ foldl ∘ inverse`.** The right-fold dual is a distinct definition (the obvious
 `inverse ∘ foldl ∘ inverse` is type-incoherent for the step type). Both take a
 decreasing-measure witness — a *precondition*, not an unconditional law like the
 structural isos.
@@ -182,6 +179,7 @@ is a separate packed form. "The model you prove on" and "the model you run
 at speed" are deliberately two things.)
 
 ### `[D2]` + `[D3]` the decoder returns a *list*, and `|` means "try both, keep
+
 all" — why backtracking is non-negotiable
 
 A parser answers "does this input match, and what value does it produce?". A
@@ -226,6 +224,7 @@ string). With `|` as backtracking union, the branches are tried independently an
 concatenated, so there is nothing to keep disjoint.
 
 ### `[D6]` a description is a *value* — why the paper's typeclass hides the thing
+
 we need to prove about
 
 In the paper, a description lives *inside the type system*: a typeclass, with "a
@@ -276,8 +275,7 @@ test that the framework is genuinely general.
 
 ### `[S4]` `foldl`/`foldr` are fresh, and need a termination witness
 
-`foldr` is not `foldl` with the arrows flipped — the obvious `inverse ∘ foldl ∘
-inverse` does not even typecheck, because the step's types swap order. So it is a
+`foldr` is not `foldl` with the arrows flipped — the obvious `inverse ∘ foldl ∘ inverse` does not even typecheck, because the step's types swap order. So it is a
 separate definition. Both folds take a measure plus a proof that each step
 *strictly decreases* it — the honest termination guarantee, a precondition the
 caller supplies, unlike the *unconditional* laws of the structural isos. A porter
@@ -285,6 +283,7 @@ knows exactly what their language's `foldl` must also require: a decreasing
 measure, not just a recursive function.
 
 ### `[S5]` + `[S6]` repetition is *semantic*, and its least-fixpoint status is
+
 proved
 
 "Zero or more" is the one place a description would have to be *infinite*. A
@@ -298,7 +297,7 @@ the naming consequence — there is no `sepBy`/`sepBy1`/`some`/`many1` symbol, a
 the `sepBy` triple has "one or more" (non-empty) semantics. A porter should look
 for these three readings, not for a `many` object.
 
----
+______________________________________________________________________
 
 **Bottom line for a porter.** The paper gives the idea; `codec` makes it *honest*
 by (1) enforcing the inverse law as a type, (2) resting on bytes, (3) keeping the

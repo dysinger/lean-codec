@@ -37,8 +37,7 @@
 ## 5. Rel (denotational semantics) + roundtrip theorems
 
 - [x] 5.1 `Rel` over whole byte sequences (remaining-bytes is private to `decode`).
-- [x] 5.2 Bidirectional law, **unconditional**: `(x, r) ∈ decode d s ↔
-  ∃ s₀, s = s₀ ++ r ∧ Rel d x s₀` (`decode_spec`); whole-string case `bidir`:
+- [x] 5.2 Bidirectional law, **unconditional**: `(x, r) ∈ decode d s ↔ ∃ s₀, s = s₀ ++ r ∧ Rel d x s₀` (`decode_spec`); whole-string case `bidir`:
   `Rel d x s ↔ (x, []) ∈ decode d s`.
 - [x] 5.3 Roundtrip, **unconditional**: `encode d x = some s → (x, []) ∈ decode d s`;
   strong invariant `decode_encode`: `encode d x = some s → (x, r) ∈ decode d (s ++ r)`.
@@ -49,12 +48,12 @@
 - [x] 6.1 `many`, `*>`, `<*`, `between`; `chainl1` built on §2.5 `Iso.foldl`.
 - [x] 6.2 `chainr1` (dual of `chainl1`), `optional`/`maybe`/`choice` — now
   *unblocked* (no prefix-disjointness gate): these are ordinary definitions over
-the backtracking `|`, and their soundness falls out of the unconditional laws in
-§5. (Note: the paper's `some`/`many1`/`sepBy`/`sepBy1` are **not** exposed as
-symbols; unbounded repetition is the `relRepeat`/`decodeRepeat`/`encodeRepeat`
-triple, and `sepBy` is the `relSepBy`/`decodeSepBy`/`encodeSepBy` triple with
-sepBy1 semantics — see §9 and §10 below.) Caveat: `many` is a *semantic* reading
-(not a finite description, see §9), so it is provable but not evaluable as a `Codec` node.
+  the backtracking `|`, and their soundness falls out of the unconditional laws in
+  §5. (Note: the paper's `some`/`many1`/`sepBy`/`sepBy1` are **not** exposed as
+  symbols; unbounded repetition is the `relRepeat`/`decodeRepeat`/`encodeRepeat`
+  triple, and `sepBy` is the `relSepBy`/`decodeSepBy`/`encodeSepBy` triple with
+  sepBy1 semantics — see §9 and §10 below.) Caveat: `many` is a *semantic* reading
+  (not a finite description, see §9), so it is provable but not evaluable as a `Codec` node.
 
 ## 7. Benchmark, extraction, docs
 
@@ -77,8 +76,7 @@ This entire section is **obsolete** and the once-blocking work in it
 and the `Disjoint`-gated laws) has been **deleted**. The reason it was needed at
 all was the committed-`|` narrowing (`[D2]`/`[D3]` in `README.md`: deterministic
 single-result decoder). Restoring the paper's *backtracking-union* `|`
-(`decode (d₁ | d₂) s = decode d₁ s ++ decode d₂ s`, §4.1) makes `Rel (d₁ | d₂) =
-Rel d₁ ∨ Rel d₂` and `decode` agree **by construction**, so the bidirectional and
+(`decode (d₁ | d₂) s = decode d₁ s ++ decode d₂ s`, §4.1) makes `Rel (d₁ | d₂) = Rel d₁ ∨ Rel d₂` and `decode` agree **by construction**, so the bidirectional and
 roundtrip laws became unconditional again and no prefix condition is required —
 and no prefix condition *can* work for repetition anyway (`[]` is a proper prefix
 of every non-empty string, so `nil | cons` in `many` is never prefix-disjoint).
@@ -123,8 +121,7 @@ is unchanged and reused.
   (productivity only as the `h` argument). **Done:** `decodeSepBy_spec`,
   `decodeChainl1_spec`, `decodeChainr1_spec` (bidirectional) plus `encodeSepBy_rel`,
   `encodeChainl1_rel`, `encodeChainr1_rel` (encoder soundness).
-- [x] 9.5 Gate: `lake build` clean, zero `sorry`/warnings; `#print axioms` = `[propext,
-  Quot.sound]`; update `README.md` + `AGENTS.md`. **Done** (the chain laws carry
+- [x] 9.5 Gate: `lake build` clean, zero `sorry`/warnings; `#print axioms` = `[propext, Quot.sound]`; update `README.md` + `AGENTS.md`. **Done** (the chain laws carry
   `[propext, Quot.sound]` via `foldl`/`foldr`'s well-founded recursion; `decodeRepeat`/
   `encodeRepeat` are axiom-free).
 
@@ -143,12 +140,10 @@ post-core deliverables (the paper's §4.4 open problem and the §7 transport tar
   `foldl`/`foldr` and the four chain combinators were **spurious**: `WellFounded.fix`
   over a computable `measure : α → Nat` is already computable. Dropped; the entire
   chain family is now computable with no change to the laws or axiom footprint.
-  **Note (closes review finding #1):** `Iso.foldl`/`Codec.decodeChainl1` now `#print
-  axioms` ⇒ `[propext, Quot.sound]`, same baseline.
+  **Note (closes review finding #1):** `Iso.foldl`/`Codec.decodeChainl1` now `#print axioms` ⇒ `[propext, Quot.sound]`, same baseline.
 - [x] 10.0b **Stale `alt` docstrings** (3 sites: `Codec.lean` §3.3 list, `alt`
   constructor, `alt` alias) still said "committed choice"; corrected to "backtracking
-  union" to match the implemented `Rel (d₁ | d₂) = Rel d₁ ∨ Rel d₂` / `decode (d₁ | d₂)
-  = decode d₁ ++ decode d₂` semantics (closes review finding #2).
+  union" to match the implemented `Rel (d₁ | d₂) = Rel d₁ ∨ Rel d₂` / `decode (d₁ | d₂) = decode d₁ ++ decode d₂` semantics (closes review finding #2).
 - [x] 10.0c **Missing decode→encode / injectivity half of "byte-exact bidirectional"**
   (review finding #4). Added to `Codec/Sound.lean`: `Unambiguous` (value-directed),
   `Functional` (string-directed), `encode_ne_none` (Rel → encode ≠ none, induction on
@@ -172,6 +167,7 @@ post-core deliverables (the paper's §4.4 open problem and the §7 transport tar
   name `Codec` and move *everything* (incl. `Rel`) into one `namespace Codec` accepting the
   `Codec.Codec` prefix. Do this **before** the README/downstream hard-code names. (The
   `sepBy`-`[]` docstrings are **done**.)
+
 - [ ] 10.1a **Code organization: lay out the files first-principles, bottom-up.** Each
   `Codec/*.lean` module already has section headers, but the *within-section ordering and
   nesting* should be audited: (i) `Codec/Codec.lean` — `Rel_*` lemmas should follow the
@@ -188,18 +184,15 @@ post-core deliverables (the paper's §4.4 open problem and the §7 transport tar
   (encode_rel → decode_seq_mem → decode_spec → bidir → decode_encode → roundtrip → repetition
   → decode→encode) — preserve it, and add a one-line `/-!`-level map at the top of each file
   so a porter can navigate the proof tree.
+
 - [ ] 10.1b **Naming normalization + alphabetization (idiomatic Lean, mathlib style).**
   Functions named like their return type; theorems `snake_case`; alphabetize sibling groups.
   Concrete fixes: (i) delete the unused `app`/`unapp` wrappers in `Iso.lean` (dead, like
   `isoMap`/`fail` were); (ii) reconcile `comp` vs `trans` (both exist for category composition
   — keep one idiomatic name, e.g. `comp` or `∘`-notation only); (iii) drop the ad-hoc prime on
-  `foldrApply'` and rename the apply-direction family consistently (`foldlApply` vs `foldrApply'
-  → `foldlApply`/`foldrApply` with the terminal-seed restriction named explicitly, e.g.
-  `foldlApplyTerminal` or fold the restriction into the Iso's `apply` with a doc note); (iv)
-  `MeasureDecreases`/`MeasureDecreasesR` — consider a single parameterized name or document
-  the `R` suffix as the left/right step-type marker; (v) `Rel_*` lemma names should be a single
-  convention (`Rel_iso`/`Rel_seq`/`Rel_alt`/`Rel_empty`/`Rel_pure`/`Rel_byte`) matching the
+  `foldrApply'` and rename the apply-direction family consistently (`foldlApply` vs `foldrApply' → `foldlApply`/`foldrApply`with the terminal-seed restriction named explicitly, e.g.`foldlApplyTerminal`or fold the restriction into the Iso's`apply`with a doc note); (iv)`MeasureDecreases`/`MeasureDecreasesR`— consider a single parameterized name or document the`R`suffix as the left/right step-type marker; (v)`Rel\_\*` lemma names should be a single convention (`Rel_iso`/`Rel_seq`/`Rel_alt`/`Rel_empty`/`Rel_pure`/`Rel_byte\`) matching the
   constructors, with any *missing* one either restored or documented as intentionally-absent.
+
 - [ ] 10.1c **Code documentation to standards.** Audit every public declaration for: a
   one-line doc-comment (`/-- … -/`) stating *what* and *why* (not just "the X of Y");
   `/-! … -/` section headers with a clear outline; cross-references to the paper's § and to
@@ -209,6 +202,7 @@ post-core deliverables (the paper's §4.4 open problem and the §7 transport tar
   Ensure the module `-!` doc comes *after* `import` (per the Lean skill) and that no `-/` byte
   pair appears inside prose (Lexer terminates the block). Verify docstrings do not reference
   the deleted `many`/`sepBy`/`some`/`many1` symbols as if they exist.
+
 - [ ] 10.2 **`README.md` rewrite** (§7.4) — after 10.1/10.1a/10.1b/10.1c (names/organization
   may change): combinator table → the semantic-repetition split (`relRepeat`/`decodeRepeat`/
   `encodeRepeat` + `sepBy`/`chainl1` triples), the downstream split (`lean-binary`/`lean-text`),
@@ -216,17 +210,18 @@ post-core deliverables (the paper's §4.4 open problem and the §7 transport tar
   under `Functional`). The canonical `[D#]`/`[S#]` table and "Why these choices?" section
   already reflect the *semantics*; only the symbol/namespace names must be re-checked against
   the 10.1 rename.
+
 - [ ] 10.3 **Theorem-coverage cleanups** (review #3/#6/#7): (a) `relRepeat` "least fixpoint"
   — **done**: `relRepeat_induction` proved (axioms `[propext]`); (b) `foldl`/`foldr` share
   ~380 lines of near-duplicate well-founded machinery — factor a common `unfoldBy` (this is
   now partly covered by 10.1a's fold-block rework; do them together); (c) dead code — **done**
   for `foldrApply_append`/`cons_head_tail`/`isoMap`/`seq`/`alt`/`fail`; remaining `app`/`unapp`
   are ticketed in 10.1b.
+
 - [x] 10.3a **Chain-combinator decode→encode / injectivity companions** (review CODE-1).
   The primitives gained `encode_ne_none`/`encode_of_decode`/`encode_injective_of_unambiguous`,
   but the chain combinators (`decodeChainl1`/`decodeChainr1`/`encodeChainl1`/`encodeChainr1`)
-  have only the soundness direction (`_rel`) and the decoder `_spec` — no `Functional
-  (relChain* …)`-style completeness, no decode→encode law, no injectivity. **Done:** the
+  have only the soundness direction (`_rel`) and the decoder `_spec` — no `Functional (relChain* …)`-style completeness, no decode→encode law, no injectivity. **Done:** the
   chain combinators are *relations* not `Codec` values, so the converse laws are stated over
   two new relation-level predicates `relFunctional`/`relUnambiguous` (the generic forms of
   which `Functional`/`Unambiguous` are the `Rel d` special cases), plus `encodeRepeat_ne_none`
@@ -236,6 +231,7 @@ post-core deliverables (the paper's §4.4 open problem and the §7 transport tar
   `encodeChainl1_injective_of_unambiguous`/`encodeChainr1_injective_of_unambiguous` (under
   `relUnambiguous`). Axioms `[propext, Quot.sound]` throughout (`encodeRepeat_ne_none` is
   `[propext]`-only).
+
 - [x] 10.4 **`Buffer` transport surface** (§7.1 partial / review #10; formerly the
   *`ByteArray` wrapper*) — transport the provable `Bytes` (= `List UInt8`) core to a
   packed, `ByteArray`-backed executable surface. **Done** in `Codec/Buffer.lean`: a
@@ -246,12 +242,12 @@ post-core deliverables (the paper's §4.4 open problem and the §7 transport tar
   `roundtripBuffer` (composed from `decode_spec`/`roundtrip`, `[propext, Quot.sound]`,
   no new induction). The `getElem`-with-proof hot-path audit (extraction-level) remains
   part of 10.5.
+
 - [x] 10.5 **Extraction + benchmark** (§7.2/§7.3) — extract the `decode`/`encode` hot
   path to C/LLVM; benchmark a multi-MB roundtrip (`byte`/`many`), record linear time.
   Covers task 1.6 too. (Now unblocked for the chain combinators by 10.0a.)
   **Done.** Tooling decision: the pinned `lean4` 4.34.1 reports `--features []` and
-  `-b` (LLVM bitcode) hits a build-time assertion (`Please build a version of Lean4
-  with -DLLVM=ON`), so the **C backend** (`lake env lean -c`, and lake's own
+  `-b` (LLVM bitcode) hits a build-time assertion (`Please build a version of Lean4 with -DLLVM=ON`), so the **C backend** (`lake env lean -c`, and lake's own
   `lean_exe` link which produces the `.c`/`.c.o` under `.lake/build/ir/`) is the
   extraction path — not an LLVM-provisioned toolchain. Deliverable: a `bench`
   `lean_exe` (`Bench.lean`, root-level `main`, imported by nothing else) that drives
@@ -262,12 +258,12 @@ post-core deliverables (the paper's §4.4 open problem and the §7 transport tar
 
   **Measured (arm64, `nix build .#bench`; reps=20):**
 
-  | op                   | 512 KiB   | 1 MiB     | 2 MiB     | scaling |
+  | op | 512 KiB | 1 MiB | 2 MiB | scaling |
   |----------------------|-----------|-----------|-----------|---------|
-  | `decode byte`        | 100–122 ns| 79–108 ns | 108–164 ns| O(1)    |
-  | `encodeRepeat byte`  | 13.2 ms   | 31.9 ms   | 64.2 ms   | linear  |
-  | `Buffer.ofBytes`     | 2.1 ms    | 5.3 ms    | 8.2 ms    | linear  |
-  | `Buffer.toBytes`     | 3.7 ms    | 8.8 ms    | 14.4 ms   | linear  |
+  | `decode byte` | 100–122 ns| 79–108 ns | 108–164 ns| O(1) |
+  | `encodeRepeat byte` | 13.2 ms | 31.9 ms | 64.2 ms | linear |
+  | `Buffer.ofBytes` | 2.1 ms | 5.3 ms | 8.2 ms | linear |
+  | `Buffer.toBytes` | 3.7 ms | 8.8 ms | 14.4 ms | linear |
 
   The backward "many" decoder is **quadratic** as the paper §4.4 warns:
   `decodeRepeat byte [8192]` ≈ 2.45 s and `[16384]` ≈ 13.8 s (~2× input → ~5.6×
@@ -283,6 +279,7 @@ post-core deliverables (the paper's §4.4 open problem and the §7 transport tar
   no-boxing representation is `Buffer` (ByteArray), measured by `Buffer.ofBytes`/
   `Buffer.toBytes`. The benchmark home per handoff is downstream `lean-binary`;
   this harness is the *core* extraction/link vehicle.
+
 - [ ] 10.6 **Efficiency spike (the paper's §4.4 open problem — *last*)** — memoization/DP
   over the *same* denotation, separate from correctness. Does **not** change semantics.
   Likely a *new* change (`efficient-backtracking-decoder`), not a §10 task.

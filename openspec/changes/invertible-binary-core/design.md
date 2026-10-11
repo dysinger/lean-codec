@@ -45,8 +45,7 @@ proof. The authoritative reference is `PAPER.md`.
   This is what makes the roundtrip byte-exact and the `Iso.law` unconditional.
   (Alternative rejected: a "coarse law" relaxation.)
 - **The decoder is the paper's nondeterministic list decoder (backtracking union).**
-  `decode (d₁ | d₂) s = decode d₁ s ++ decode d₂ s`, matching `Rel (d₁ | d₂) =
-  Rel d₁ ∨ Rel d₂` by construction. This makes the bidirectional law
+  `decode (d₁ | d₂) s = decode d₁ s ++ decode d₂ s`, matching `Rel (d₁ | d₂) = Rel d₁ ∨ Rel d₂` by construction. This makes the bidirectional law
   (`decode_spec`) and roundtrip hold **unconditionally** — no `NoAlt` gate, no
   prefix-disjointness. (A past committed-choice deviation and its
   `NonNull`/`PrefixDisjoint`/`Disjoint` machinery were deleted; see `[D5]` in
@@ -84,7 +83,7 @@ proof. The authoritative reference is `PAPER.md`.
   exactly the paper's (§4.1/§4.4); efficiency is the paper's own named open
   problem, deferred to a separate DP re-implementation of the *same* denotation
   (not a change to the semantics).
-- [`ByteArray` ops may resist `simp`] → Mitigation: model the provable core as
+- \[`ByteArray` ops may resist `simp`\] → Mitigation: model the provable core as
   `Bytes` (a reducible `abbrev` for `List UInt8`); reserve `Buffer` (a packed
   `ByteArray`-backed newtype in `Codec.Buffer`) for the executable transport
   transported on afterwards (proof ergonomics only).

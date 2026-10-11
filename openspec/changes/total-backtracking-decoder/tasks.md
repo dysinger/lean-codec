@@ -5,8 +5,7 @@
 - [x] 1.1 Change `decode`'s `many` handling to well-founded recursion on
   `s.length` (productive corecursion: empty result, then each `cons` step on a
   strictly shorter remaining string via `decode p`).
-- [x] 1.2 The `many` fixpoint: `decode (many p) s = ([], s) :: (decode p
-  s).flatMap (fun (x, s₁) => (decode (many p) s₁).map (fun (xs, r) => (x::xs, r)))`,
+- [x] 1.2 The `many` fixpoint: `decode (many p) s = ([], s) :: (decode p s).flatMap (fun (x, s₁) => (decode (many p) s₁).map (fun (xs, r) => (x::xs, r)))`,
   with the recursive call structurally guarded by `s₁` being a proper suffix
   (established by the `p`-consumes-a-byte witness, passed as an argument — not a
   global predicate).
