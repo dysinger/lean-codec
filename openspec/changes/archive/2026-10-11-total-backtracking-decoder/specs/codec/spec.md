@@ -1,6 +1,6 @@
 # codec — spec delta
 
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: correct, productive repetition decoder
 
