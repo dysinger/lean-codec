@@ -348,7 +348,7 @@ def foldApply {α β : Type} (i : Iso (α × β) α) (a0 : α) (bs : List β) : 
 /-- Maximal unfold (the `unapply` direction of `foldl`), by well-founded recursion
 on `measure a`. Peels `i.unapply` until it returns `none`, collecting operands and
 backing them out to fold order. -/
-noncomputable def foldUnapply {α β : Type} (measure : α → Nat) (i : Iso (α × β) α)
+def foldUnapply {α β : Type} (measure : α → Nat) (i : Iso (α × β) α)
     (h : MeasureDecreases measure i) (a : α) : Option (α × List β) :=
   WellFounded.fix (InvImage.wf measure Nat.lt_wfRel.wf) (fun a ih =>
     match hua : i.unapply a with
@@ -500,7 +500,7 @@ inverse law holds *unconditionally* (no "modulo equivalence classes").
 
 `apply` is restricted to *terminal* seeds (those with `i.unapply a = none`): this is
 the honest domain on which the fold/unfold is a genuine bijection. -/
-noncomputable def foldl {α β : Type} (i : Iso (α × β) α) (measure : α → Nat)
+def foldl {α β : Type} (i : Iso (α × β) α) (measure : α → Nat)
     (h : MeasureDecreases measure i) : Iso (α × List β) α where
   apply x := match x with | (a, bs) => foldlApply i a bs
   unapply a := foldUnapply measure i h a
@@ -545,7 +545,7 @@ def foldrApply {α β : Type} (i : Iso (β × α) α) (a0 : α) (bs : List β) :
 /-- Maximal unfold (the `unapply` direction of `foldr`), by well-founded recursion
 on `measure a`. Peels `i.unapply a = some (b, a')` (element first), recursing on
 `a'` and *prepending* `b` — the dual of `foldl`'s `foldUnapply` (which appends). -/
-noncomputable def foldrUnapply {α β : Type} (measure : α → Nat) (i : Iso (β × α) α)
+def foldrUnapply {α β : Type} (measure : α → Nat) (i : Iso (β × α) α)
     (h : MeasureDecreasesR measure i) (a : α) : Option (α × List β) :=
   WellFounded.fix (InvImage.wf measure Nat.lt_wfRel.wf) (fun a ih =>
     match hua : i.unapply a with
@@ -685,7 +685,7 @@ well-foundedness witness: unfolding via `i.unapply` must strictly decrease
 `apply` is restricted to *terminal* seeds, exactly as `foldl`. The right-fold step
 has the element on the left (`Iso (β × α) α`), so `foldr` is a *fresh* derivation
 — not `inverse ∘ foldl ∘ inverse`, which is type-incoherent. -/
-noncomputable def foldr {α β : Type} (i : Iso (β × α) α) (measure : α → Nat)
+def foldr {α β : Type} (i : Iso (β × α) α) (measure : α → Nat)
     (h : MeasureDecreasesR measure i) : Iso (α × List β) α where
   apply x := match x with | (a, bs) => foldrApply' i a bs
   unapply a := foldrUnapply measure i h a

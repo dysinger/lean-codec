@@ -232,7 +232,7 @@ def relChainr1 {α β : Type} (f : Iso ((α × β) × α) α) (measure : α → 
 /-- The decoder for a left-associative chain: decode the seed `arg`, decode the
 operand list via `decodeRepeat`, then fold. Total for a productive `op`-step
 (`hsep : ConsumesByte (seq op arg)`). -/
-noncomputable def decodeChainl1 {α β : Type} (f : Iso (α × (β × α)) α) (measure : α → Nat)
+def decodeChainl1 {α β : Type} (f : Iso (α × (β × α)) α) (measure : α → Nat)
     (h : MeasureDecreases measure f) (arg : Codec α) (op : Codec β)
     (hsep : ConsumesByte (Codec.seq op arg)) (s : List UInt8) :
     List (α × List UInt8) :=
@@ -241,7 +241,7 @@ noncomputable def decodeChainl1 {α β : Type} (f : Iso (α × (β × α)) α) (
       ((foldl f measure h).apply (a₀, ops)).map fun a => (a, r)
 
 /-- The decoder for a right-associative chain. -/
-noncomputable def decodeChainr1 {α β : Type} (f : Iso ((α × β) × α) α) (measure : α → Nat)
+def decodeChainr1 {α β : Type} (f : Iso ((α × β) × α) α) (measure : α → Nat)
     (h : MeasureDecreasesR measure f) (arg : Codec α) (op : Codec β)
     (hsep : ConsumesByte (Codec.seq arg op)) (s : List UInt8) :
     List (α × List UInt8) :=
@@ -251,7 +251,7 @@ noncomputable def decodeChainr1 {α β : Type} (f : Iso ((α × β) × α) α) (
 
 /-- The encoder for a left-associative chain: maximally unfold `a` via `foldl`,
 then encode the seed and the operand list. -/
-noncomputable def encodeChainl1 {α β : Type} (f : Iso (α × (β × α)) α)
+def encodeChainl1 {α β : Type} (f : Iso (α × (β × α)) α)
     (measure : α → Nat) (h : MeasureDecreases measure f) (arg : Codec α)
     (op : Codec β) (a : α) : Option (List UInt8) :=
   match (foldl f measure h).unapply a with
@@ -265,7 +265,7 @@ noncomputable def encodeChainl1 {α β : Type} (f : Iso (α × (β × α)) α)
           | some s' => some (s₀ ++ s')
 
 /-- The encoder for a right-associative chain. -/
-noncomputable def encodeChainr1 {α β : Type} (f : Iso ((α × β) × α) α)
+def encodeChainr1 {α β : Type} (f : Iso ((α × β) × α) α)
     (measure : α → Nat) (h : MeasureDecreasesR measure f) (arg : Codec α)
     (op : Codec β) (a : α) : Option (List UInt8) :=
   match (foldr f measure h).unapply a with
