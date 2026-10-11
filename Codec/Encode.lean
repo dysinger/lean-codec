@@ -48,7 +48,7 @@ denotation `relRepeat (Rel p)` in `Codec.Codec`). Recursion is structural on the
 *value* list `xs`, so it is total for **every** `p` — encoding needs no
 productivity witness (unlike `decodeRepeat`, which takes `h : ConsumesByte p`).
 
-Its soundness law is `Codec.Sound.encodeRepeat_rel`. -/
+Its soundness law is `Codec.encodeRepeat_rel`. -/
 def encodeRepeat {α : Type} (p : Codec α) (xs : List α) : Option (List UInt8) :=
   match xs with
   | [] => some []
