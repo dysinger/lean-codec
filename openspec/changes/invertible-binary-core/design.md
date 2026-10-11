@@ -85,5 +85,6 @@ proof. The authoritative reference is `PAPER.md`.
   problem, deferred to a separate DP re-implementation of the *same* denotation
   (not a change to the semantics).
 - [`ByteArray` ops may resist `simp`] → Mitigation: model the provable core as
-  `List UInt8`; reserve `ByteArray` for the executable wrapper transported on
-  afterwards (proof ergonomics only).
+  `Bytes` (a reducible `abbrev` for `List UInt8`); reserve `Buffer` (a packed
+  `ByteArray`-backed newtype in `Codec.Buffer`) for the executable transport
+  transported on afterwards (proof ergonomics only).
