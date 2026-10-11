@@ -50,21 +50,27 @@ Codec.roundtrip` ⇒ `[propext, Quot.sound]`):
 
 **Open, in order:**
 
-1. **Total, correct repetition decoder** — change
-   `openspec/changes/total-backtracking-decoder/` (proposal/design/spec/tasks),
-   **already planned and decided: go with its Option 1.** Make `decode`'s
-   repetition case **well-founded recursion on the consumed byte string
-   (`s.length`)** instead of the current `partial def many` — no fuel counter,
-   no `Productive`/`AllProductive` predicate, no `Codec.many` constructor. Prove
-   the **totality theorem** (
-   `decode (many p)` terminates iff ∀ x s₁, `Rel p x s₁ → s₁ ≠ []`) rather than
-   faking a finite result for the empty-matching (`pure ()`) case. **Key caveat
-   (do not repeat last session's mistake):** a fuel + productivity hack produced
-   *wrong* results (`decode (many (pure ())) []` returned `([()], [])`); the
-   correct answer is (a) productive `many` is total by `s.length` recursion, and
-   (b) empty-matching `many` is *genuinely* non-total (infinitely many `[]`
-   results), stated as a theorem, never faked. `Rel` stays unchanged; laws stay
-   unconditional.
+1. **Total, correct repetition decoder** — **DONE** (change
+   `openspec/changes/total-backtracking-decoder/`, Option 1). `decode`'s
+   repetition is now **well-founded recursion on `s.length`** (`decodeRepeat`,
+   `Codec/Decode.lean`), with no fuel, no `Productive`/`AllProductive` predicate,
+   no `Codec.many` constructor. The denotation is the total least fixpoint
+   `relRepeat (Rel p)` (`Codec/Codec.lean`), and the laws are:
+   `productive_iff_consumesByte` (totality iff productive), `decodeRepeat_spec`
+   (the `many`-case bidirectional law), `relRepeat_unbounded_of_empty` +
+   `not_productive_pure` (the empty-matching contrapositive). `Rel` is unchanged;
+   laws stay unconditional; `[propext, Quot.sound]`, zero `sorry`/warnings.
+   `#eval byteRepeat [1,2,3]` = `[([],[1,2,3]),([1],[2,3]),([1,2],[3]),([1,2,3],[])]`.
+
+   **Residual decision (surface before further work):** `many` is still a
+   `partial def Codec` (the *infinite* AST), so `Rel (many p)` is *opaque* — the
+   `Rel_many` equality `Rel (many p) xs s ↔ relRepeat (Rel p) xs s` is
+   **unprovable** with the current `partial def`. The honest reading of the
+   design's "`many` is a total `def` in denotational reading" is: `relRepeat`
+   *is* `many`'s denotation, and the list combinators (`some`/`sepBy`/`sepBy1`/
+   `chainl1`/`chainr1`, which embed `many p` as a `Codec` value) should be
+   re-derived over `relRepeat`/`decodeRepeat` directly. That rewrite is **not**
+   done here — it is the next step, gated on the reviewer's call.
 2. **Efficiency (the paper's §4.4 open problem)** — memoization/DP over the same
    denotation, separate from correctness. (This also subsumes the future
    "lazy-stream carrier" migration if a *total* `decode (many (pure ()))` is ever
@@ -91,3 +97,10 @@ are created before implementation; see `.pi/prompts/opsx-*.md`.
 - Global Lean theorem-proving skill: `lean4` (official).
 - Our supplement (project-layout, proving-over-primitives, `partial`/coinduction
   lessons): global skill `lean`. Keep it generic — no project-specific details.
+- Lean PR/convention/proof/MWE skills: `lean-pr`, `lean-bisect`, `lean-proof`,
+  `lean-mwe`, `mathlib-build`, `mathlib-pr`, `mathlib-review`, `nightly-testing`,
+  `lean4-setup` (all under the `leanprover` skill family).
+- Nix tooling: **multiple Nix skills exist** — the repo is a Nix flake
+  (`flake.nix`/`default.nix`); use `devenv` / `devenv-migration` only when actually
+  migrating to devenv, never for this flake's own `devShells.default` (which is
+  plain `pkgs.mkShellNoCC`).
