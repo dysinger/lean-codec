@@ -253,6 +253,33 @@ post-core deliverables (the paper's §4.4 open problem and the §7 transport tar
   over the *same* denotation, separate from correctness. Does **not** change semantics.
   Likely a *new* change (`efficient-backtracking-decoder`), not a §10 task.
 
+## 11. Next session — remaining §10 plan (10.2 / 10.5 / 10.6)
+
+Ordered, with the decisions to resolve **before** coding each:
+
+- [ ] **10.2 README rewrite.** Names are now final (`Bytes`, `Buffer`, no type
+  rename), so this is unblocked. Deliverables: (i) the combinator table split into
+  finite `Codec` combinators vs. the semantic-repetition triples (`relRepeat`/
+  `decodeRepeat`/`encodeRepeat` + the `sepBy`/`chainl1` `rel*`/`decode*`/`encode*`
+  triples); (ii) the downstream split (`lean-binary`/`lean-text`); (iii) the corrected
+  decode→encode scoping (encode→decode `roundtrip` unconditional; converse under
+  `Functional`/`relFunctional`); (iv) a `Bytes`-vs-`Buffer` subsection (proof substrate
+  vs. `ByteArray` transport); (v) the axiom record (`[propext, Quot.sound]`, never
+  `Classical.choice`). Cross-check symbol/namespace names against `Codec/*.lean`.
+- [ ] **10.5 Extraction + benchmark.** Tooling check first: `lake env lean --features`
+  currently reports `[]` (no LLVM/C backend provisioned in the pinned `lean4` 4.34.1
+  Nix build). **Decision before coding:** (a) use `lake env lean file.lean -c file.c`
+  (the `-c` C backend, which the build already exercises — cf. the `-c …/Combinators.c`
+  in the build trace) to extract the hot path to C, or (b) provision an LLVM-enabled
+  toolchain via the flake. Deliverables: a `bench` executable or script extracting
+  `decode`/`encode` (and `decodeRepeat`/`encodeRepeat`) to C/LLVM; a multi-MB
+  roundtrip on `byte`/`many` proving linear time and **no per-byte boxing**; the
+  hot-path audit that `get!`/remaining-bytes/`Buffer.data` don't leak `getElem`-with-proof.
+  Accepts task 1.6. Note the benchmark home is downstream `lean-binary`, not core.
+- [ ] **10.6 Efficiency spike (paper §4.4).** **Separate change**
+  (`efficient-backtracking-decoder`), **last**, and does **not** change the denotation:
+  memoization/DP over the *same* `Rel`/`decode` semantics. No spec delta in this change.
+
 **Planning-vs-build note:** the `proposal.md`/`design.md`/`specs/codec/spec.md` in this
 change were **updated this session** to the *implemented* reality (backtracking-union
 `|`, nondeterministic `List` decoder, unconditional laws, semantic `relRepeat`/
