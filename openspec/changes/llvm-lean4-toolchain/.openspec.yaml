@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-10-11
+goal: Pin a LLVM-enabled lean4 derivation so Array/ByteArray are O(1) contiguous buffers in the extracted C, unlocking the buffer+cursor run-model (F* two-tier) without FFI or a compiler
+skip_specs: true
