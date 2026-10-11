@@ -6,10 +6,11 @@
 # Takes the Lean 4 toolchain (the `lean4` derivation) as a concrete input — no
 # `pkgs` blob, no overlay assumption — and returns:
 #   - `native` — the `lake build` library (`.olean` artifacts + `libcodec.a`),
-#   - `check`  — the Lean proof-validation gate (`lake build` with no `sorry`).
+#   - `check`  — the Lean proof-validation gate (`lake build` with no `sorry`),
+#   - `bench`  — the §10.5 extraction + benchmark executable (`lake build bench`).
 #
-# Both are the SAME `lake build`; `check` is the derivations' proof gate,
-# `native` is the installable artifact.
+# `native`/`check` are the SAME `lake build`; `check` is the proof gate,
+# `native` is the installable library, `bench` is the extraction vehicle.
 
 {
   lean4,
@@ -34,24 +35,32 @@ let
     platforms = lib.platforms.all;
   };
 
-  # The single build action: `lake build` compiles + verifies (no `sorry`).
+  # One build action: `lake build <targets>` (empty targets = the library +
+  # proof-verify, no `sorry`). `targets` selects the explicit build target(s).
   mkLakeBuild =
     {
       name,
       description,
       install,
+      targets ? "",
+      mainProgram ? null,
     }:
     mkDerivation {
       pname = "${pname}-${name}";
       version = "0.1.0";
       src = ./.;
       nativeBuildInputs = [ lean4 ];
-      meta = meta // {
-        inherit description;
-      };
+      meta =
+        meta
+        // {
+          inherit description;
+        }
+        // lib.optionalAttrs (mainProgram != null) {
+          inherit mainProgram;
+        };
       buildPhase = ''
         runHook preBuild
-        lake build
+        lake build ${targets}
         runHook postBuild
       '';
       installPhase = install;
@@ -75,10 +84,34 @@ in
     '';
   };
 
-  # `check` — the Lean proof-validation gate (same `lake build`, proof-only).
+  # `check` — the Lean proof-validation gate (the same `lake build`, zero `sorry`).
   check = mkLakeBuild {
     name = "check";
     description = "${meta.description} (proof-validation gate)";
-    install = "true";
+    install = ''
+      runHook preInstall
+      # The check is the build itself (zero `sorry`); produce an (empty) `$out`
+      # so the derivation satisfies Nix's output requirement.
+      mkdir -p "$out"
+      runHook postInstall
+    '';
+  };
+
+  # `bench` — the §10.5 extraction + benchmark executable. Builds the `bench`
+  # lean_exe (extracting the `decode`/`encode`/`decodeRepeat`/`encodeRepeat`
+  # hot path to C, then linking against the Lean runtime) and installs it.
+  bench = mkLakeBuild {
+    name = "bench";
+    description = "${meta.description} (extraction + benchmark executable)";
+    targets = "bench";
+    mainProgram = "bench";
+    install = ''
+      runHook preInstall
+      mkdir -p "$out/bin"
+      if [ -e ".lake/build/bin/bench" ]; then
+        cp ".lake/build/bin/bench" "$out/bin/bench"
+      fi
+      runHook postInstall
+    '';
   };
 }

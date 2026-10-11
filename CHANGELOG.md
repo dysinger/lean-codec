@@ -25,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`decodeBuffer_eq`/`encodeBuffer_eq`/`decodeBuffer_spec`/`roundtripBuffer`).
 - `Bytes` (`abbrev Bytes := List UInt8`) as the named proof substrate, used
   throughout the core in place of the bare `List UInt8`.
+- A `bench` `lean_exe` (`Bench.lean`) and the `default.nix#bench`/`flake.nix`
+  `bench` package: extracts the `decode`/`encodeRepeat`/`decodeRepeat`/`Buffer`
+  transport hot path to C and links it against the Lean runtime (`§10.5`).
 
 ### Changed
 

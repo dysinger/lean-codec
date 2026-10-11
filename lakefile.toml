@@ -7,3 +7,9 @@ defaultTargets = ["codec"]
 [[lean_lib]]
 name = "codec"
 roots = ["Codec"]
+
+# The benchmark (§10.5) imports only the proven core (`Codec`), never the
+# proof lemmas; it is the extraction/benchmark vehicle, not a proof gate.
+[[lean_exe]]
+name = "bench"
+root = "Bench"

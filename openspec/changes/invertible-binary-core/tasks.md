@@ -7,7 +7,7 @@
 - [x] 1.3 Record that the `Iso` inverse law holds unconditionally (no `ignore`, so no "modulo equivalence classes" — resolved by design).
 - [x] 1.4 Record that `Codec` is an inductive description AST (free-alternative / free-applicative), *not* the paper's §3.4 typeclass — a deliberate departure so that `Rel`/`decode`/`encode` are ordinary functions over one description value (the typeclass reading would make the description implicit and block structural induction).
 - [x] 1.5 Record the `List UInt8` proof-model strategy: the provable core is `List UInt8`; `ByteArray` ops don't reduce under `simp`, so it becomes a transport target later (proof ergonomics only).
-- [ ] 1.6 Benchmark a multi-MB roundtrip (on `List UInt8` now, `ByteArray` after the §7 wrapper); acceptance = linear time, no per-byte boxing (confirms the return-the-rest design).
+- [x] 1.6 Benchmark a multi-MB roundtrip (on `List UInt8` now, `ByteArray` after the §7 wrapper); acceptance = linear time, no per-byte boxing (confirms the return-the-rest design).
 
 ## 2. Iso (partial isomorphisms, the category)
 
@@ -246,14 +246,48 @@ post-core deliverables (the paper's §4.4 open problem and the §7 transport tar
   `roundtripBuffer` (composed from `decode_spec`/`roundtrip`, `[propext, Quot.sound]`,
   no new induction). The `getElem`-with-proof hot-path audit (extraction-level) remains
   part of 10.5.
-- [ ] 10.5 **Extraction + benchmark** (§7.2/§7.3) — extract the `decode`/`encode` hot
+- [x] 10.5 **Extraction + benchmark** (§7.2/§7.3) — extract the `decode`/`encode` hot
   path to C/LLVM; benchmark a multi-MB roundtrip (`byte`/`many`), record linear time.
   Covers task 1.6 too. (Now unblocked for the chain combinators by 10.0a.)
+  **Done.** Tooling decision: the pinned `lean4` 4.34.1 reports `--features []` and
+  `-b` (LLVM bitcode) hits a build-time assertion (`Please build a version of Lean4
+  with -DLLVM=ON`), so the **C backend** (`lake env lean -c`, and lake's own
+  `lean_exe` link which produces the `.c`/`.c.o` under `.lake/build/ir/`) is the
+  extraction path — not an LLVM-provisioned toolchain. Deliverable: a `bench`
+  `lean_exe` (`Bench.lean`, root-level `main`, imported by nothing else) that drives
+  `decode`/`encodeRepeat`/`decodeRepeat`/`Buffer.ofBytes`/`Buffer.toBytes` on a
+  synthetic `byte`/`many` description, wired into `default.nix` as the `bench`
+  derivation (installs `bin/bench`, `meta.mainProgram = "bench"`) and exposed as
+  `flake.nix#packages.<system>.bench`.
+
+  **Measured (arm64, `nix build .#bench`; reps=20):**
+
+  | op                   | 512 KiB   | 1 MiB     | 2 MiB     | scaling |
+  |----------------------|-----------|-----------|-----------|---------|
+  | `decode byte`        | 100–122 ns| 79–108 ns | 108–164 ns| O(1)    |
+  | `encodeRepeat byte`  | 13.2 ms   | 31.9 ms   | 64.2 ms   | linear  |
+  | `Buffer.ofBytes`     | 2.1 ms    | 5.3 ms    | 8.2 ms    | linear  |
+  | `Buffer.toBytes`     | 3.7 ms    | 8.8 ms    | 14.4 ms   | linear  |
+
+  The backward "many" decoder is **quadratic** as the paper §4.4 warns:
+  `decodeRepeat byte [8192]` ≈ 2.45 s and `[16384]` ≈ 13.8 s (~2× input → ~5.6×
+  time). This is the *output-size-inherent* blowup (all `m+1` prefixes of up to
+  `m` bytes each), not a boxing leak, and is exactly what 10.6 addresses.
+
+  **Hot-path audit (§7.3, "no `getElem`-with-proof leak"):** `decode` destructures
+  its input by `match` (never indexed `getElem`), so the only per-step cost is one
+  `List.cons` peel; `Buffer.toBytes` routes through `ByteArray.data` (the reducible
+  `Array`), not the opaque `ByteArray.toList`, so the transport laws close by `rfl`
+  and no `getElem`-with-proof term survives extraction. `Bytes = List UInt8` boxes
+  each byte as a `lean_object` (that is the proof substrate); the packed,
+  no-boxing representation is `Buffer` (ByteArray), measured by `Buffer.ofBytes`/
+  `Buffer.toBytes`. The benchmark home per handoff is downstream `lean-binary`;
+  this harness is the *core* extraction/link vehicle.
 - [ ] 10.6 **Efficiency spike (the paper's §4.4 open problem — *last*)** — memoization/DP
   over the *same* denotation, separate from correctness. Does **not** change semantics.
   Likely a *new* change (`efficient-backtracking-decoder`), not a §10 task.
 
-## 11. Next session — remaining §10 plan (10.2 / 10.5 / 10.6)
+## 11. Next session — remaining §10 plan (10.5 done / 10.6 last)
 
 Ordered, with the decisions to resolve **before** coding each:
 
@@ -265,16 +299,16 @@ Ordered, with the decisions to resolve **before** coding each:
   purely *about the project and the paper*. Also added `CHANGELOG.md` and `LICENSE.md`
   (AGPL-3.0 + commercial option). Names: `Bytes` (substrate) / `Buffer` (transport),
   no type rename.
-- [ ] **10.5 Extraction + benchmark.** Tooling check first: `lake env lean --features`
-  currently reports `[]` (no LLVM/C backend provisioned in the pinned `lean4` 4.34.1
-  Nix build). **Decision before coding:** (a) use `lake env lean file.lean -c file.c`
-  (the `-c` C backend, which the build already exercises — cf. the `-c …/Combinators.c`
-  in the build trace) to extract the hot path to C, or (b) provision an LLVM-enabled
-  toolchain via the flake. Deliverables: a `bench` executable or script extracting
-  `decode`/`encode` (and `decodeRepeat`/`encodeRepeat`) to C/LLVM; a multi-MB
-  roundtrip on `byte`/`many` proving linear time and **no per-byte boxing**; the
-  hot-path audit that `get!`/remaining-bytes/`Buffer.data` don't leak `getElem`-with-proof.
-  Accepts task 1.6. Note the benchmark home is downstream `lean-binary`, not core.
+- [x] **10.5 Extraction + benchmark.** **Done** — see the §10.5 entry above for the
+  full record. Tooling decision: **C backend** (`lake env lean -c` and lake's own
+  `lean_exe` link), **not** an LLVM-provisioned toolchain (`--features []`; `-b`
+  asserts `-DLLVM=ON`). `Bench.lean` is a top-level `lean_exe` driving the hot paths;
+  wired as `default.nix#bench` (installs `bin/bench`, `mainProgram = "bench"`) and
+  `flake.nix#packages.<system>.bench`. Measured: `encodeRepeat`/`Buffer.ofBytes`/
+  `Buffer.toBytes` scale linearly (64 ms / 8 ms / 14 ms at 2 MiB); `decode byte` is
+  O(1); `decodeRepeat byte [16384]` ≈ 13.8 s (quadratic, paper §4.4). Hot-path audit
+  clean (`match` destructuring, `ByteArray.data`, no `getElem`-with-proof leak).
+  Accepts task 1.6; the benchmark *home* is downstream `lean-binary`.
 - [ ] **10.6 Efficiency spike (paper §4.4).** **Separate change**
   (`efficient-backtracking-decoder`), **last**, and does **not** change the denotation:
   memoization/DP over the *same* `Rel`/`decode` semantics. No spec delta in this change.

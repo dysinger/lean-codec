@@ -76,27 +76,34 @@ Codec.roundtrip` ⇒ `[propext, Quot.sound]`):
 
 **Open, in order** (full detail in `tasks.md` §11):
 
-1. **Extraction + benchmark** (task §10.5) — extract the `decode`/`encode` hot
-   path (and `decodeRepeat`/`encodeRepeat`) to C/LLVM, benchmark a multi-MB
-   roundtrip (`byte`/`many`) proving **linear time, no per-byte boxing**, and
-   audit `get!`/remaining-bytes/`Buffer.data` for `getElem`-with-proof leaks.
-   **Decision first (blocking):** the pinned `lean4` 4.34.1 Nix build reports
-   `--features []` (no LLVM/C backend provisioned). Either use `lake env lean
-   file.lean -c file.c` (the C backend the build already exercises) or provision
-   an LLVM toolchain via the flake. Benchmark home is downstream `lean-binary`.
-   Covers task 1.6.
-2. **Efficiency (paper §4.4 open problem)** — **last**, a **separate**
+1. **Efficiency (paper §4.4 open problem)** — **last**, a **separate**
    `efficient-backtracking-decoder` change (memoization/DP over the *same*
    denotation; never changes semantics).
 
 > Resolved this session: §10.1 (namespace — no type rename; `Rel`/`relRepeat`/`Productive`
 > now live at `Codec.*`), §10.1a/10.1b/10.1c (organization/naming/docs), §10.2
-> (README/CHANGELOG/LICENSE), §10.3a (chain converse laws), §10.4 (`Buffer` transport).
-> The `Codec` type was **not** renamed — Lean lets the type `Codec` and namespace
-> `Codec` coexist; the fix was to restore the uniform `namespace Codec` in
-> `Codec/Codec.lean`. New substrate/transport naming: `Bytes` = `abbrev Bytes :=
-> List UInt8` (proof substrate, reducible), `Buffer` = packed `ByteArray` newtype
-> (`Codec.Buffer`, transport via `ByteArray.data`).
+> (README/CHANGELOG/LICENSE), §10.3a (chain converse laws), §10.4 (`Buffer` transport),
+> §10.5 (extraction + benchmark, see below). The `Codec` type was **not** renamed —
+> Lean lets the type `Codec` and namespace `Codec` coexist; the fix was to restore the
+> uniform `namespace Codec` in `Codec/Codec.lean`. New substrate/transport naming:
+> `Bytes` = `abbrev Bytes := List UInt8` (proof substrate, reducible), `Buffer` = packed
+> `ByteArray` newtype (`Codec.Buffer`, transport via `ByteArray.data`).
+
+> **Extraction + benchmark (§10.5, task 1.6) — DONE this session.** Tooling decision:
+> the pinned `lean4` 4.34.1 reports `--features []` and `-b` (LLVM) asserts
+> `-DLLVM=ON`, so extraction is the **C backend** (`lake env lean -c`, and lake's own
+> `lean_exe` link emitting `.c`/`.c.o` under `.lake/build/ir/`) — no LLVM toolchain
+> provisioned. Deliverable: `Bench.lean`, a top-level `lean_exe` (root-level `main`) that
+> drives `decode`/`encodeRepeat`/`decodeRepeat`/`Buffer.ofBytes`/`Buffer.toBytes` on a
+> synthetic `byte`/`many` description; wired as `default.nix#bench` (installs `bin/bench`,
+> `meta.mainProgram = "bench"`) and `flake.nix#packages.<system>.bench`. **Measured
+> (arm64, reps=20):** `encodeRepeat`/`Buffer.ofBytes`/`Buffer.toBytes` scale linearly
+> (64 ms / 8 ms / 14 ms at 2 MiB); `decode byte` is O(1) (~100 ns); the backtracking
+> `decodeRepeat byte [16384]` ≈ 13.8 s (quadratic, paper §4.4 — the §10.6 target).
+> Hot-path audit clean: `decode` uses `match` (no `getElem`-with-proof leak),
+> `Buffer.toBytes` uses `ByteArray.data` (reducible `Array`), not the opaque
+> `ByteArray.toList`. `lake build` (proof gate) stays `defaultTargets = ["codec"]`;
+> the `bench` exe is built only via `lake build bench` / the Nix `bench` derivation.
 
 > **Documentation conventions (this session):** the README is the **full
 > architecture statement** — *about the project and the paper only*. It carries the

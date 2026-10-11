@@ -11,7 +11,8 @@ build/
 # Lake dependency lockfile (library: consumers resolve their own deps)
 lake-manifest.json
 
-# Reference paper is tracked as markdown only; the PDF is deliberately ignored.
-docs/*.pdf
+# Nix build output symlinks (`nix build`/`nix run` default to `result`/`result-*`).
+result
+result-*
 
 # Openspec planning artifacts are tracked; nothing extra to ignore here.

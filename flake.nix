@@ -54,6 +54,8 @@
         # The default target builds the native library (`lake build` → `.olean`).
         packages.default = _pkg.native;
         packages.native = _pkg.native;
+        # The §10.5 extraction + benchmark executable.
+        packages.bench = _pkg.bench;
 
         # Lean proof validation: the same `lake build`, no `sorry` (the gate).
         checks.lean = _pkg.check;
