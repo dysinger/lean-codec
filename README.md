@@ -209,5 +209,48 @@ The core is implemented and proven (see the task ledger
 `decode`/`encode` (nondeterministic/backtracking `|`), `foldl`/`chainl1`, and the
 **unconditional** bidirectional/roundtrip laws. `iterate` is deliberately omitted
 (its forward/backward fixpoints need not coincide, so no field law — see
-`Codec/Iso.lean`). Remaining: the derived repetition/sum combinators (§6.2, now
-unblocked) and efficiency (a future `ByteArray` wrapper + benchmark).
+`Codec/Iso.lean`). Bounded repetition (`count`/`manyUpTo`) is total; unbounded
+repetition is realized by `relRepeat` (the total least-fixpoint denotation of
+`many`) and `decodeRepeat` (the productive repetition decoder). The efficient
+`ByteArray` wrapper + benchmark remain future work.
+
+### The `many` totality note
+
+`many` (paper §3.4) is an *infinite* description, so a strict-`List` value cannot
+represent it as a finite `Codec`. Its **semantics** is the total least fixpoint
+`relRepeat (Rel p)` (in `Codec.Codec`); its **decoder** is `decodeRepeat` (in
+`Codec.Decode`), well-founded on `s.length` — total exactly for *productive* `p`
+(`productive_iff_consumesByte`, each step consumes ≥1 byte), and genuinely
+non-total only for empty-matching `p` like `pure ()`, which has infinitely many
+results (stated as `relRepeat_unbounded_of_empty`, never faked with a finite
+result). The `many`-case law is `decodeRepeat_spec`.
+
+```lean
+-- total, #eval-able: productive (each byte consumes 1 byte)
+#eval (byteRepeat [1,2,3]).map (fun (xs, r) => (xs, r))
+  -- [([], [1,2,3]), ([1], [2,3]), ([1,2], [3]), ([1,2,3], [])]
+```
+
+______________________________________________________________________
+
+## Working on the project
+
+The build toolchain — the Lean 4 toolchain (`lean`, `lake`) plus the
+spec-driven-development CLI (`openspec`) — is provided by the Nix flake's
+`devShells.default` (see `flake.nix`), not installed globally. Enter it first:
+
+```bash
+nix develop          # from the repo root (or any subdirectory)
+```
+
+Inside the shell, the usual commands are available:
+
+```bash
+lake build           # compile + verify (the proof gate: zero `sorry`, zero warnings)
+lake build --help
+openspec status --change "<name>" --json   # OpenSpec change workflow
+```
+
+The shell also runs the flake checks (`nix flake check`), which validate Lean (the
+same `lake build` with no `sorry`), the OpenSpec planning artifacts
+(`openspec validate --all`), and formatting (`treefmt`).
