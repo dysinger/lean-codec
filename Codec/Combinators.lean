@@ -12,12 +12,15 @@ Generic, byte-agnostic combinators built from the primitives (the paper §6.1):
   * `p *> q`, `p <* q` — pair variants that ignore a side (the paper's `*>`, `<*`)
   * `between open close p` — `open *> p <* close`
 
-`many` is recursive and hence `partial`. Under the nondeterministic (backtracking)
-decoder it is sound *unconditionally* — exactly the paper's `many` (§3.4): `decode
-(many p) s` returns the empty-list result *and* every one-or-more result, so the
-bidirectional law holds without any prefix-disjointness gate. `chainl1` (below) is
-built on the proved `Iso.foldl` (paper §5.2/§5.3); its `law` is part of
-`Iso.foldl`'s law field, not a separate proof.
+`many` is recursive and hence an *infinite AST* (`partial def`), but its
+**semantics is total**: the denotation is the least fixpoint `relRepeat (Rel p)`
+(`Codec.Codec`), total for every `p`, and its decoder is `decodeRepeat`
+(`Codec.Decode`), well-founded on `s.length`. The strict-list decoder is total
+exactly for *productive* `p` (`productive_iff_consumesByte`), and genuinely
+non-total only for the empty-matching (provably-infinite) case — never faked
+with a finite result. `chainl1` (below) is built on the proved `Iso.foldl`
+(paper §5.2/§5.3); its `law` is part of `Iso.foldl`'s law field, not a separate
+proof.
 -/
 
 namespace Codec
@@ -39,7 +42,11 @@ def between {α : Type} (l r : Codec Unit) (p : Codec α) : Codec α :=
   seqRight l (seqLeft p r)
 
 /-- `many p` describes a list: either empty, or one `p` followed by `many p`
-(the paper's `many`, §3.4). Recursive, hence `partial`. -/
+(the paper's `many`, §3.4). As a `Codec` value this is an infinite AST, hence
+`partial`; its **semantics** is the total least fixpoint `relRepeat (Rel p)`
+(`Codec.Codec`), and its decoder is `decodeRepeat` (`Codec.Decode`) — well-founded
+on `s.length`, total exactly for productive `p` (`productive_iff_consumesByte`),
+and non-total only for the provably-infinite empty-matching case. -/
 partial def many {α : Type} (p : Codec α) : Codec (List α) :=
   Codec.alt (Codec.iso (Iso.nil) (Codec.pure ()))
     (Codec.iso (Iso.cons) (Codec.seq p (many p)))
