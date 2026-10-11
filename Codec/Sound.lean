@@ -23,8 +23,8 @@ paper's **nondeterministic** decoding relation (see `Codec.Decode`):
 All of these hold **unconditionally** (no `NoAlt`, no `Disjoint`, no
 prefix-disjointness). They are the point of the backtracking-union semantics:
 `Rel (d₁ | d₂) = Rel d₁ ∨ Rel d₂` and `decode (d₁ | d₂) = decode d₁ ++ decode d₂`
-agree by construction, so the committed-choice `alt` gate — and the
-prefix-disjointness machinery it required — is unnecessary and has been dropped.
+agree by construction, so the old committed-choice `alt` gate — and the
+prefix-disjointness machinery it once required — is unnecessary and has been dropped.
 -/
 
 namespace Codec
@@ -366,5 +366,131 @@ theorem encodeRepeat_rel {α : Type} (p : Codec α) :
               cases he
               rw [relRepeat_cons]
               refine ⟨sx, sr, rfl, encode_rel p x hx, ih hr⟩
+
+/-! ## The decode→encode direction, and *why* it is only conditional
+
+The laws above (`encode_rel`, `decode_spec`, `bidir`, `decode_encode`,
+`roundtrip`) pin down the **encode→decode** direction: anything the encoder
+prints decodes back to the same value, byte-for-byte (`roundtrip`). They say
+nothing about the **decode→encode** direction — that a value the decoder
+accepts re-encodes to exactly the same bytes. And for good reason: it is
+**false** in general, and only holds for *functional* descriptions.
+
+The obstruction is the backtracking-union `|`, which can relate **one value to
+several byte strings**. Consider `alt (pure 0) byte : Codec UInt8`: it relates
+`0` to `[]` (via `pure 0`) *and* to `[0]` (via `byte`). The encoder,
+`encode (alt (pure 0) byte) 0 = encode (pure 0) 0 <|> encode byte 0 = some []`,
+prefers the left branch, so it prints `[]`. Yet on input `[0]` the decoder
+accepts `0` with `[]` remaining via the *byte* branch:
+
+    (0, []) ∈ decode (alt (pure 0) byte) [0]
+
+while `encode (alt (pure 0) byte) 0 = some [] ≠ some [0]`. So the two
+directions do **not** commute byte-for-byte without a further hypothesis. Note
+this is a **string**-non-uniqueness (`0` ↦ `[]` and `0` ↦ `[0]`), *not* a
+value-non-uniqueness: on any *fixed* string `alt (pure 0) byte` relates at most
+one value (`Unambiguous` below still holds for it). The precise condition for
+the decode→encode half is therefore **functionality in the string direction**:
+`Rel d x s ∧ Rel d x s' → s = s'`. This is the *content* of the "lossless
+capture" claim (departure #4): it is a property of the **encode→decode**
+roundtrip (which holds unconditionally), *not* a claim that every decode result
+re-encodes — the latter needs the string-directed functionality that an
+ambiguous/overlapping `alt` cannot provide. -/
+
+/-- A description is **unambiguous** when it relates at most one value per byte
+string: `Rel d x s` and `Rel d y s` force `x = y`. (This is the *value*-directed
+half; the string-directed half — `Rel d x s ∧ Rel d x s' → s = s'` — is needed for
+the decode→encode direction, see `Functional`/`encode_of_decode`. Ambiguity here
+is *not* a gate on the unconditional laws; it is a precisely-named hypothesis.) -/
+def Unambiguous {α : Type} (d : Codec α) : Prop :=
+  ∀ ⦃x y⦄ s, Rel d x s → Rel d y s → x = y
+
+/-- A description is **functional** (string-directional) when each value relates
+to at most one byte string: `Rel d x s` and `Rel d x s'` force `s = s'`. This is
+the exact extra condition under which the decode→encode direction (`encode_of_decode`)
+and full bijectivity hold; the backtracking-union `|` does *not* preserve it in
+general (cf. `alt (pure 0) byte`, where `0` maps to both `[]` and `[0]`). -/
+def Functional {α : Type} (d : Codec α) : Prop :=
+  ∀ x ⦃s s'⦄, Rel d x s → Rel d x s' → s = s'
+
+/-- **Encoder completeness**: every value in the denotation encodes successfully
+(possibly to a different byte string than the witness — pinning the exact string
+requires `Functional`, see `encode_of_decode`). This is the missing `Rel → encode`
+soundness half; proved by induction on `d`. -/
+theorem encode_ne_none {α : Type} (d : Codec α) (x : α) (s : List UInt8) :
+    Rel d x s → encode d x ≠ none := by
+  induction d generalizing s with
+  | iso i d ih =>
+      intro hrel
+      rcases hrel with ⟨a, hia, hda⟩
+      rw [encode]
+      have hua : i.unapply x = some a := (i.law a x).1 hia
+      rw [hua]
+      exact ih a s hda
+  | seq d₁ d₂ ih₁ ih₂ =>
+      rcases x with ⟨x₁, x₂⟩
+      intro hrel
+      rcases hrel with ⟨s₁, s₂, hs, hr₁, hr₂⟩
+      rw [encode]
+      have hne₁ : encode d₁ x₁ ≠ none := ih₁ x₁ s₁ hr₁
+      cases h₁ : encode d₁ x₁ with
+      | none => exact False.elim (hne₁ h₁)
+      | some e₁ =>
+          have hne₂ : encode d₂ x₂ ≠ none := ih₂ x₂ s₂ hr₂
+          cases h₂ : encode d₂ x₂ with
+          | none => exact False.elim (hne₂ h₂)
+          | some e₂ => simp
+  | alt d₁ d₂ ih₁ ih₂ =>
+      intro hrel
+      rw [encode]
+      rcases hrel with hr | hr
+      · have hne : encode d₁ x ≠ none := ih₁ x s hr
+        cases h₁ : encode d₁ x with
+        | none => exact False.elim (hne h₁)
+        | some e₁ => simp
+      · have hne : encode d₂ x ≠ none := ih₂ x s hr
+        cases h₂ : encode d₂ x with
+        | none => exact False.elim (hne h₂)
+        | some e₂ => simp
+  | empty =>
+      intro hrel
+      simp [Rel] at hrel
+  | pure x₀ =>
+      intro hrel
+      rw [encode]
+      rcases hrel with ⟨hx, hs⟩
+      simp [hx]
+  | byte =>
+      intro hrel
+      rw [encode]
+      rw [Rel_byte] at hrel
+      subst s
+      simp
+
+/-- Under functionality, a value the decoder accepts (with no remainder) re-encodes
+to exactly the same bytes. Paired with `roundtrip` (encode→decode) this makes
+`encode d x = some s ↔ (x, []) ∈ decode d s` a genuine bijection for functional `d`.
+This is the missing **decode→encode** half. -/
+theorem encode_of_decode {α : Type} (d : Codec α) (hd : Functional d) (x : α)
+    {s : List UInt8} (hdcd : (x, []) ∈ decode d s) : encode d x = some s := by
+  rcases (decode_spec d x).1 hdcd with ⟨s₀, hsplit, hrel⟩
+  have hs₀ : s = s₀ := by simpa using hsplit
+  subst s₀
+  have hne : encode d x ≠ none := encode_ne_none d x s hrel
+  cases he : encode d x with
+  | none => exact False.elim (hne he)
+  | some s' =>
+      have hrel' : Rel d x s' := encode_rel d x he
+      have hs' : s' = s := hd x hrel' hrel
+      rw [hs']
+
+/-- `encode` is injective on the bytes it prints, for **unambiguous**
+descriptions: a single byte string cannot encode two distinct values. -/
+theorem encode_injective_of_unambiguous {α : Type} (d : Codec α) (hd : Unambiguous d)
+    {x y : α} {s : List UInt8} (hx : encode d x = some s) (hy : encode d y = some s) :
+    x = y := by
+  have hrelx : Rel d x s := encode_rel d x hx
+  have hrely : Rel d y s := encode_rel d y hy
+  exact hd s hrelx hrely
 
 end Codec

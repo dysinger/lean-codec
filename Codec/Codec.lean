@@ -15,7 +15,7 @@ The combinators are:
 
   * `iso i $ d`   — apply a partial isomorphism (§3.1 `IsoFunctor`)
   * `d₁ * d₂`     — sequential/product composition (§3.2 `ProductFunctor`)
-  * `d₁ | d₂`     — committed choice (§3.3 `Alternative`), `empty` its unit
+  * `d₁ | d₂`     — backtracking union (§3.3 `Alternative`), `empty` its unit
   * `pure x`      — the description relating `x` to the empty byte string
   * `byte`        — the description relating each byte to itself (`token`)
 
@@ -36,7 +36,9 @@ inductive Codec : Type → Type 1
     iso {α β : Type} : Iso α β → Codec α → Codec β
   | /-- Sequential/product: `d₁ * d₂` pairs results. -/
     seq {α β : Type} : Codec α → Codec β → Codec (α × β)
-  | /-- Committed choice: `d₁ | d₂` tries the left, then the right. -/
+  | /-- Backtracking union: `d₁ | d₂` returns both alternatives
+    (`decode (d₁ | d₂) s = decode d₁ s ++ decode d₂ s`, `Rel (d₁ | d₂) =
+    Rel d₁ ∨ Rel d₂`). -/
     alt {α : Type} : Codec α → Codec α → Codec α
   | /-- The always-failing description (`Alternative.empty`). -/
     empty {α : Type} : Codec α
@@ -54,7 +56,7 @@ def isoMap {α β : Type} (i : Iso α β) (d : Codec α) : Codec β :=
 def seq {α β : Type} (d₁ : Codec α) (d₂ : Codec β) : Codec (α × β) :=
   Codec.seq d₁ d₂
 
-/-- Committed choice. -/
+/-- Backtracking union: `decode (d₁ | d₂) s = decode d₁ s ++ decode d₂ s`. -/
 def alt {α : Type} (d₁ d₂ : Codec α) : Codec α :=
   Codec.alt d₁ d₂
 
