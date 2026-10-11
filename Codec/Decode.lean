@@ -14,8 +14,10 @@ It returns *all* (value, remaining-bytes) pairs — a relation, not a single
 result. Choice (`alt`) is the full backtracking union `decode d₁ s ++ decode d₂ s`,
 exactly as in the paper. This is why the bidirectional law (`decode_spec`) holds
 **unconditionally** for every description, with no prefix-disjointness or
-unambiguity gate: `Rel (alt d₁ d₂) = Rel d₁ ∨ Rel d₂` and `decode (alt d₁ d₂) =
-decode d₁ ++ decode d₂` agree by construction.
+unambiguity gate *on `decode_spec` itself*: `Rel (alt d₁ d₂) = Rel d₁ ∨ Rel d₂`
+and `decode (alt d₁ d₂) = decode d₁ ++ decode d₂` agree by construction. (The
+*encode-side* converse laws do need `Functional`/`Unambiguous`, see `Codec.Sound`;
+those hypotheses qualify the decode→encode direction, not the decoder's own law.)
 
 The paper notes (§4.4) that this proof-of-concept decoder has exponential
 worst-case complexity and a space leak under unlimited backtracking; replacing it
@@ -93,10 +95,10 @@ theorem byte_consumesByte : ConsumesByte Codec.byte := by
       rcases hmem with ⟨rfl, rfl⟩
       simp
 
-/-- `decodeOnce`-free concrete repetition decoder over bytes: `decode (many byte)`
-realized as a *total* well-founded function. `#eval byteRepeat [1,2,3]` yields
-the four results `([], [1,2,3])`, `([1], [2,3])`, `([1,2], [3])`, `([1,2,3], [])`.
--/
+/-- `decodeOnce`-free concrete repetition decoder over bytes: the paper's
+`many byte` (a *semantic* reading, not a `Codec` node) realized as a *total*
+well-founded function. `#eval byteRepeat [1,2,3]` yields the four results
+`([], [1,2,3])`, `([1], [2,3])`, `([1,2], [3])`, `([1,2,3], [])`. -/
 def byteRepeat (s : List UInt8) : List (List UInt8 × List UInt8) :=
   decodeRepeat Codec.byte byte_consumesByte s
 

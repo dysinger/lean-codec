@@ -15,10 +15,12 @@ Generic, byte-agnostic combinators built from the primitives (paper §6.1):
   * `optional`/`maybe`/`choice` — zero-or-one and n-ary alternation (§6.2)
   * `count n p` / `manyUpTo n p` — bounded repetition (total, `#eval`-able)
 
-Unbounded repetition (`many`, and its `some`/`sepBy`/`chainl1` derivations) is
-**not** a finite `Codec` value: it is an *infinite* description, which this
-strict language cannot represent as an AST node. Its semantics lives in three
-already-separate places instead:
+Unbounded repetition (`many`, and its `sepBy`/`chainl1` derivations — realized here
+as the `relSepBy`/`decodeSepBy`/`encodeSepBy` and `relChain*`/`decodeChain*`/
+`encodeChain*` triples, there being **no** bare `sepBy`/`chainl1`/`some`/`many1`
+symbol) is **not** a finite `Codec` value: it is an *infinite* description, which
+this strict language cannot represent as an AST node. Its semantics lives in
+three already-separate places instead:
 
   * `relRepeat (Rel p)` (`Codec.Codec`) — the total least-fixpoint denotation.
   * `decodeRepeat p h` (`Codec.Decode`) — the productive decoder, well-founded on
@@ -26,7 +28,8 @@ already-separate places instead:
   * `encodeRepeat p` (`Codec.Encode`) — the total encoder, structural on the value
     list (no productivity witness needed).
 
-The `many`-shaped *list* combinators (`sepBy`, `chainl1`, …) are re-derived at the
+The `many`-shaped *list* combinators (`sepBy`, `chainl1`; see the explicit symbol
+names above) are re-derived at the
 end of this file **over these three**, not over an opaque `many p` value — a
 former `partial def many` was irreducibly opaque at the `Rel` level (a `partial
 def` produces no equational lemma), making `Rel (many p) ↔ relRepeat (Rel p)`
