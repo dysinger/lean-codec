@@ -13,9 +13,12 @@ proof. The authoritative reference is `PAPER.md`.
 - A three-layer core: `Iso` (with the inverse law as a field), `Codec` (the
   description interface, an inductive AST), `Rel` (the denotational relation over
   `List UInt8`).
-- Byte-exact `decode (encode x) = x`, with the strict `Iso` law holding
+- Byte-exact roundtrip, encode→decode direction **unconditional**
+  (`encode d x = some s → (x, []) ∈ decode d s`), with the strict `Iso` law holding
   *unconditionally* (no "modulo equivalence classes" escape hatch) — for **every**
-  description, including `alt` and repetition.
+  description, including `alt` and repetition. The decode→encode converse is
+  byte-exact only for `Functional` descriptions (see `README.md` `[D4]`/
+  `Codec.Sound.encode_of_decode`).
 - The paper's nondeterministic (backtracking) list decoder:
   `decode : Codec α → List UInt8 → List (α × List UInt8)`, with `|` as union;
   and partial encoding (`α → Option (List UInt8)`).
@@ -46,12 +49,12 @@ proof. The authoritative reference is `PAPER.md`.
   Rel d₁ ∨ Rel d₂` by construction. This makes the bidirectional law
   (`decode_spec`) and roundtrip hold **unconditionally** — no `NoAlt` gate, no
   prefix-disjointness. (A past committed-choice deviation and its
-  `NonNull`/`PrefixDisjoint`/`Disjoint` machinery were deleted; see departure #5 in
+  `NonNull`/`PrefixDisjoint`/`Disjoint` machinery were deleted; see `[D5]` in
   `README.md`.)
 - **`Codec` is an inductive description AST**, a deliberate departure from the
   paper's §3.4 typeclass. The typeclass reading (one `Codec` per use site, two
   *instances* for parsing/printing) would make the description implicit, so
-  `Rel : Codec α → α → …`, `decode : Codec α → ByteArray → …`, and
+  `Rel : Codec α → α → …`, `decode : Codec α → List UInt8 → …`, and
   `encode : Codec α → α → …` could not be ordinary functions *of* a description
   value, and structural induction over a single description would not typecheck.
   The free-alternative / free-applicative encoding makes `Codec` an explicit value

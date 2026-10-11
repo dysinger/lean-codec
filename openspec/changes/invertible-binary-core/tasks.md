@@ -47,12 +47,14 @@
 ## 6. Derived combinators (generic, byte-agnostic)
 
 - [x] 6.1 `many`, `*>`, `<*`, `between`; `chainl1` built on §2.5 `Iso.foldl`.
-- [x] 6.2 `chainr1` (dual of `chainl1`), `some`/`many1`, `sepBy`/`sepBy1`,
-  `optional`/`maybe`/`choice` — now *unblocked* (no prefix-disjointness gate): these
-  are ordinary definitions over the backtracking `|`, and their soundness falls out
-  of the unconditional laws in §5. Implement them (§6.1 style). Caveat: `many` is a
-  `partial` description (an infinite AST), so it is *provable* but not `#eval`-able
-  in its current recursive form; making it evaluable is part of this work.
+- [x] 6.2 `chainr1` (dual of `chainl1`), `optional`/`maybe`/`choice` — now
+  *unblocked* (no prefix-disjointness gate): these are ordinary definitions over
+the backtracking `|`, and their soundness falls out of the unconditional laws in
+§5. (Note: the paper's `some`/`many1`/`sepBy`/`sepBy1` are **not** exposed as
+symbols; unbounded repetition is the `relRepeat`/`decodeRepeat`/`encodeRepeat`
+triple, and `sepBy` is the `relSepBy`/`decodeSepBy`/`encodeSepBy` triple with
+sepBy1 semantics — see §9 and §10 below.) Caveat: `many` is a *semantic* reading
+(not a finite description, see §9), so it is provable but not evaluable as a `Codec` node.
 
 ## 7. Benchmark, extraction, docs
 
@@ -60,7 +62,10 @@
 - [ ] 7.2 Benchmark `decode`/`encode` on a synthetic `byte`/`many` description — linear time, no per-byte boxing; record the number.
 - [ ] 7.3 Confirm `get!`/remaining-bytes (not `getElem`-with-proof) actually runs post-extraction.
 - [ ] 7.4 `README.md`: guarantee, `Iso`/`Codec`/`Rel` model, pure-framework scope, combinator table, usage.
-- [x] 7.5 Zero-`sorry` + `#print axioms` = stdlib only (`propext`, `Classical.choice`, `Quot.sound`).
+- [x] 7.5 Zero-`sorry` + `#print axioms` = stdlib only `[propext, Quot.sound]`
+  (the `Classical.choice` listed in an earlier draft is **superseded** — see §9.5
+  and §10.0a; the chain laws are `[propext, Quot.sound]`, `relRepeat_induction` is
+  `[propext]`).
 - [x] 7.6 Document the deliberate departures (byte core, backtracking-union
   `|`, lossless capture) and why; note `lean-binary`/`lean-text` as downstream
   consumers.
@@ -70,7 +75,7 @@
 This entire section is **obsolete** and the once-blocking work in it
 (`NonNull`, `PrefixDisjoint`, `Disjoint`, `Unambiguous`, the prefix trichotomy,
 and the `Disjoint`-gated laws) has been **deleted**. The reason it was needed at
-all was the committed-`|` narrowing (departure #2/#3: deterministic
+all was the committed-`|` narrowing (`[D2]`/`[D3]` in `README.md`: deterministic
 single-result decoder). Restoring the paper's *backtracking-union* `|`
 (`decode (d₁ | d₂) s = decode d₁ s ++ decode d₂ s`, §4.1) makes `Rel (d₁ | d₂) =
 Rel d₁ ∨ Rel d₂` and `decode` agree **by construction**, so the bidirectional and
@@ -174,6 +179,13 @@ post-core deliverables (the paper's §4.4 open problem and the §7 transport tar
   `cons_head_tail`/unused `Rel_*` rfl lemmas/`isoMap`/`seq`/`alt`/`fail` wrappers; the
   `Rel_optional_some`/`Rel_count_zero`/`Rel_choice` characterization lemmas are kept
   (they document the derived combinators' `Rel`). Remaining: the `foldl`/`foldr` dedup.
+- [ ] 10.3a **Chain-combinator decode→encode / injectivity companions** (review CODE-1).
+  The primitives gained `encode_ne_none`/`encode_of_decode`/`encode_injective_of_unambiguous`,
+  but the chain combinators (`decodeChainl1`/`decodeChainr1`/`encodeChainl1`/`encodeChainr1`)
+  have only the soundness direction (`_rel`) and the decoder `_spec` — no `Functional
+  (relChain* …)`-style completeness, no decode→encode law, no injectivity. Either prove a
+  `Functional`/`Unambiguous`-parameterized chain converse (mirroring the primitives) or
+  record explicitly that the decode→encode half is *not* proved for chains.
 - [ ] 10.4 **`ByteArray` wrapper** (§7.1 partial / review #10) — transport the provable
   `List UInt8` core to a `ByteArray`-backed executable surface. Sub-task per review: define
   `Iso (List UInt8) ByteArray` (or a newtype) and re-prove `decode_spec`/`roundtrip` through
@@ -190,5 +202,5 @@ post-core deliverables (the paper's §4.4 open problem and the §7 transport tar
 change were **updated this session** to the *implemented* reality (backtracking-union
 `|`, nondeterministic `List` decoder, unconditional laws, semantic `relRepeat`/
 `decodeRepeat`/`encodeRepeat`), replacing the earlier superseded deterministic/`NoAlt`
-/committed-`|` plan that predated the reversed departure #5. No new spec delta is
+/committed-`|` plan that predated the reversed `[D5]`. No new spec delta is
 required for the remaining §10 work unless 10.1 is spun into its own change.

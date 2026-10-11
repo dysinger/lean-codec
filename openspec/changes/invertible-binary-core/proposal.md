@@ -17,9 +17,11 @@ covers binary, variable-binary, and structured data.
   denotational relation), and two interpreters `decode`/`encode`.
 - **Byte concrete syntax** (`List UInt8` as the provable core, `ByteArray` as the
   later executable wrapper), with `byte` and `pure` as the only primitive descriptions.
-- A **byte-exact roundtrip guarantee** (`decode (encode x) = x`) with no
-  "modulo equivalence classes" weakening — achieved by **lossless capture** of
-  skippable/optional bytes (no `ignore` primitive).
+- A **byte-exact roundtrip guarantee**, encode→decode direction unconditional
+  (`encode d x = some s → (x, []) ∈ decode d s`), with no "modulo equivalence
+  classes" weakening — achieved by **lossless capture** of skippable/optional bytes
+  (no `ignore` primitive). The decode→encode converse is byte-exact only for
+  `Functional` descriptions.
 - **Nondeterministic (backtracking) decoding** — `decode : Codec α → List UInt8 →
   List (α × List UInt8)` returns *all* `(value, remaining)` pairs; `|` is the
   paper's backtracking union. The bidirectional and roundtrip laws hold
