@@ -23,3 +23,4 @@ import Codec.Decode
 import Codec.Encode
 import Codec.Sound
 import Codec.Combinators
+import Codec.Buffer
