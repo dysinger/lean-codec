@@ -116,3 +116,37 @@ theorem Rel_byte (b : UInt8) (s : List UInt8) :
 theorem Rel_empty {α : Type} (x : α) (s : List UInt8) :
     Rel (Codec.empty : Codec α) x s ↔ False :=
   Iff.rfl
+
+/-! ## Repetition: the least fixpoint relation -/
+
+/-- The least `nil`/`cons` fixpoint relation for repetition, given a *step*
+relation `R : α → List UInt8 → Prop`. This is the well-founded (structural-on-
+the-list) reading of `Rel (many p)` — total for *every* `R`, independent of
+whether the step itself matches the empty string. It is the constructive
+denotation of the derived `many` combinator; the decoder law is
+`Codec.Decode.decodeRepeat_spec`. -/
+def relRepeat {α : Type} (R : α → List UInt8 → Prop) :
+    List α → List UInt8 → Prop
+  | [], s => s = []
+  | x :: xs, s => ∃ s₁ s₂, s = s₁ ++ s₂ ∧ R x s₁ ∧ relRepeat R xs s₂
+
+/-- A description `p` is *productive* (consumes at least one byte per step) when
+every value it relates sits on a non-empty string. This is the paper's
+guard under which unbounded `many` decoding terminates: each `cons` step recurses
+on a strictly shorter remaining string. -/
+def Productive {α : Type} (p : Codec α) : Prop :=
+  ∀ x s, Rel p x s → s ≠ []
+
+/-- `relRepeat`'s empty case: the empty list relates only to the empty string. -/
+theorem relRepeat_nil {α : Type} (R : α → List UInt8 → Prop) (s : List UInt8) :
+    relRepeat R [] s ↔ s = [] :=
+  Iff.rfl
+
+/-- `relRepeat`'s `cons` case: a non-empty list relates to a string iff its head
+relates via the step `R` and its tail relates via `relRepeat`, with a compatible
+split. -/
+theorem relRepeat_cons {α : Type} (R : α → List UInt8 → Prop) (x : α)
+    (xs : List α) (s : List UInt8) :
+    relRepeat R (x :: xs) s ↔
+      ∃ s₁ s₂, s = s₁ ++ s₂ ∧ R x s₁ ∧ relRepeat R xs s₂ :=
+  Iff.rfl
