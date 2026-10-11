@@ -74,23 +74,33 @@ Codec.roundtrip` ⇒ `[propext, Quot.sound]`):
    infinite AST cannot be a finite `Codec`, and a `partial def` is proof-opaque;
    repetition lives as `relRepeat`/`decodeRepeat`/`encodeRepeat` (cf. §9).
 
-**Open, in order** (full detail in `tasks.md` §10):
+**Open, in order** (full detail in `tasks.md` §11):
 
 1. **README rewrite** (task §10.2) — the `[D#]`/`[S#]` canonical table and
    "Why these choices?" section are written and names are now finalized
-   (`Bytes`/`Buffer`, no type rename); re-check symbol/namespace names and the
-   `Buffer`-vs-`Bytes` split.
-2. **Extraction + benchmark** (tasks §10.5) — extract the `decode`/`encode` hot
-   path to C/LLVM, benchmark a multi-MB roundtrip (`byte`/`many`), and audit that
-   `get!`/remaining-bytes don't leak per-byte `getElem`-with-proof into the hot
-   path (the `Buffer` surface is the target).
-3. **Efficiency (paper §4.4 open problem)** — **last**, a separate `efficient-` change.
+   (`Bytes`/`Buffer`, no type rename); re-check the combinator table split
+   (finite `Codec` vs. semantic-repetition triples), the downstream split, and
+   the decode→encode scoping.
+2. **Extraction + benchmark** (task §10.5) — extract the `decode`/`encode` hot
+   path (and `decodeRepeat`/`encodeRepeat`) to C/LLVM, benchmark a multi-MB
+   roundtrip (`byte`/`many`) proving **linear time, no per-byte boxing**, and
+   audit `get!`/remaining-bytes/`Buffer.data` for `getElem`-with-proof leaks.
+   **Decision first (blocking):** the pinned `lean4` 4.34.1 Nix build reports
+   `--features []` (no LLVM/C backend provisioned). Either use `lake env lean
+   file.lean -c file.c` (the C backend the build already exercises) or provision
+   an LLVM toolchain via the flake. Benchmark home is downstream `lean-binary`.
+   Covers task 1.6.
+3. **Efficiency (paper §4.4 open problem)** — **last**, a **separate**
+   `efficient-backtracking-decoder` change (memoization/DP over the *same*
+   denotation; never changes semantics).
 
 > Resolved this session: §10.1 (namespace — no type rename; `Rel`/`relRepeat`/`Productive`
 > now live at `Codec.*`), §10.1a/10.1b/10.1c (organization/naming/docs), §10.3a (chain
 > converse laws), §10.4 (`Buffer` transport). The `Codec` type was **not** renamed —
 > Lean lets the type `Codec` and namespace `Codec` coexist; the fix was to restore the
-> uniform `namespace Codec` in `Codec/Codec.lean`.
+> uniform `namespace Codec` in `Codec/Codec.lean`. New substrate/transport naming:
+> `Bytes` = `abbrev Bytes := List UInt8` (proof substrate, reducible), `Buffer` =
+> packed `ByteArray` newtype (`Codec.Buffer`, transport via `ByteArray.data`).
 
 > **Documentation record (this session):** the README now carries a canonical,
 > anchored departure/strengthening table `[D1]`–`[D8]`/`[S1]`–`[S6]` plus a layered
