@@ -282,7 +282,8 @@ post-core deliverables (the paper's §4.4 open problem and the §7 transport tar
 
 - [ ] 10.6 **Efficiency spike (the paper's §4.4 open problem — *last*)** — memoization/DP
   over the *same* denotation, separate from correctness. Does **not** change semantics.
-  Likely a *new* change (`efficient-backtracking-decoder`), not a §10 task.
+  **Planned as the new change `efficient-backtracking-decoder`** (see its `proposal.md`/
+  `design.md`/`tasks.md`); tracked there, not as a §10 task.
 
 ## 11. Next session — remaining §10 plan (10.5 done / 10.6 last)
 
@@ -308,7 +309,11 @@ Ordered, with the decisions to resolve **before** coding each:
   Accepts task 1.6; the benchmark *home* is downstream `lean-binary`.
 - [ ] **10.6 Efficiency spike (paper §4.4).** **Separate change**
   (`efficient-backtracking-decoder`), **last**, and does **not** change the denotation:
-  memoization/DP over the *same* `Rel`/`decode` semantics. No spec delta in this change.
+  memoization/DP over the *same* `Rel`/`decode` semantics. **Now planned as its own
+  OpenSpec change** — `openspec/changes/efficient-backtracking-decoder/` with
+  `proposal.md`/`design.md`/`tasks.md` (Tier A: fusion + full-consumption specialization,
+  proved denotationally equal; Tier B: memoizing chart, deferred). No spec delta
+  (`skip_specs: true` — behavior unchanged by construction).
 
 **Planning-vs-build note:** the `proposal.md`/`design.md`/`specs/codec/spec.md` in this
 change were **updated this session** to the *implemented* reality (backtracking-union

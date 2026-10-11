@@ -78,9 +78,13 @@ Source of truth:
 
 **Open, in order** (full detail in `tasks.md` §11):
 
-1. **Efficiency (paper §4.4 open problem)** — **last**, a **separate**
-   `efficient-backtracking-decoder` change (memoization/DP over the *same*
-   denotation; never changes semantics).
+1. **Efficiency (paper §4.4 open problem)** — **last**, now planned as its **own
+   OpenSpec change**: `openspec/changes/efficient-backtracking-decoder/` (proposal/
+   design/tasks). It adds a *provably denotationally-equal* fast decoder over the
+   same `Rel`/`decode` semantics (Tier A: list-fusion + full-consumption
+   specialization; Tier B: memoizing chart, deferred), `skip_specs: true` — no
+   behavior change. Read its `design.md` before coding; the next session starts
+   there (not §10).
 
 > Resolved this session: §10.1 (namespace — no type rename; `Rel`/`relRepeat`/`Productive`
 > now live at `Codec.*`), §10.1a/10.1b/10.1c (organization/naming/docs), §10.2
