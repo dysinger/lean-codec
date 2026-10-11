@@ -8,7 +8,7 @@ import Codec.Codec
 
 This file gives `encode`, the partial encoder:
 
-    encode : Codec α → α → Option (List UInt8)
+    encode : Codec α → α → Option (Bytes)
 
 Encoding is partial by design: an out-of-domain value (e.g. `pure x₀` given
 `x ≠ x₀`, or `subset p` given `¬ p x` through an applied iso) returns `none`.
@@ -20,7 +20,7 @@ namespace Codec
 
 /-- The partial encoder: produce bytes for a value, or `none` when the value is
 outside the description's domain. -/
-def encode {α : Type} (d : Codec α) (x : α) : Option (List UInt8) :=
+def encode {α : Type} (d : Codec α) (x : α) : Option (Bytes) :=
   match d with
   | Codec.iso i d =>
       match i.unapply x with
@@ -49,7 +49,7 @@ denotation `relRepeat (Rel p)` in `Codec.Codec`). Recursion is structural on the
 productivity witness (unlike `decodeRepeat`, which takes `h : ConsumesByte p`).
 
 Its soundness law is `Codec.encodeRepeat_rel`. -/
-def encodeRepeat {α : Type} (p : Codec α) (xs : List α) : Option (List UInt8) :=
+def encodeRepeat {α : Type} (p : Codec α) (xs : List α) : Option (Bytes) :=
   match xs with
   | [] => some []
   | x :: rest =>

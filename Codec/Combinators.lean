@@ -97,7 +97,7 @@ representative lemmas pin down that claim; the full laws (`decode_spec`, `bidir`
 /-- `optional p` relates `Option.some x` iff `p` relates `x` (the `none` case
 is `pure none`). -/
 theorem Rel_optional_some {α : Type} [DecidableEq α] (p : Codec α) (x : α)
-    (s : List UInt8) :
+    (s : Bytes) :
     Rel (optional p) (Option.some x) s ↔ Rel p x s := by
   unfold optional
   rw [Rel_alt]
@@ -119,7 +119,7 @@ theorem Rel_optional_some {α : Type} [DecidableEq α] (p : Codec α) (x : α)
     exact ⟨x, rfl, hp⟩
 
 /-- `count 0 p` relates only the empty list to the empty bytes. -/
-theorem Rel_count_zero {α : Type} (p : Codec α) (xs : List α) (s : List UInt8) :
+theorem Rel_count_zero {α : Type} (p : Codec α) (xs : List α) (s : Bytes) :
     Rel (count 0 p) xs s ↔ xs = [] ∧ s = [] := by
   unfold count
   rw [Rel_iso]
@@ -140,7 +140,7 @@ theorem Rel_count_zero {α : Type} (p : Codec α) (xs : List α) (s : List UInt8
     exact ⟨(), rfl, by simp [Rel_pure]⟩
 
 /-- `choice ps` relates iff some description in `ps` relates. -/
-theorem Rel_choice {α : Type} (ps : List (Codec α)) (x : α) (s : List UInt8) :
+theorem Rel_choice {α : Type} (ps : List (Codec α)) (x : α) (s : Bytes) :
     Rel (choice ps) x s ↔ ∃ d ∈ ps, Rel d x s := by
   induction ps generalizing x s with
   | nil =>
@@ -183,7 +183,7 @@ and `encodeSepBy [] = none`), so this combinator is semantically the paper's
 `optional (sepBy p sep)`. This is the `many`-case denotation statement,
 specialized to a non-empty head. -/
 def relSepBy {α : Type} (p : Codec α) (sep : Codec Unit) :
-    List α → List UInt8 → Prop
+    List α → Bytes → Prop
   | x₀ :: rest, s => ∃ s₀ s', s = s₀ ++ s' ∧ Rel p x₀ s₀ ∧ relRepeat (Rel (seqRight sep p)) rest s'
   | [], _ => False
 
@@ -192,15 +192,15 @@ def relSepBy {α : Type} (p : Codec α) (sep : Codec Unit) :
 not produced (separation is one-or-more). Total for a productive `sep`
 (`hsep : ConsumesByte (seqRight sep p)`). -/
 def decodeSepBy {α : Type} (p : Codec α) (sep : Codec Unit)
-    (hsep : ConsumesByte (seqRight sep p)) (s : List UInt8) :
-    List (List α × List UInt8) :=
+    (hsep : ConsumesByte (seqRight sep p)) (s : Bytes) :
+    List (List α × Bytes) :=
   (decode p s).flatMap fun (x₀, t) =>
     (decodeRepeat (seqRight sep p) hsep t).map fun (rest, r) => (x₀ :: rest, r)
 
 /-- The total encoder for `sepBy p sep`: encode the head with `p` and the tail
 with `encodeRepeat (seqRight sep p)`. -/
 def encodeSepBy {α : Type} (p : Codec α) (sep : Codec Unit) :
-    List α → Option (List UInt8)
+    List α → Option (Bytes)
   | x₀ :: rest =>
       match encode p x₀ with
       | none => none
@@ -224,7 +224,7 @@ unchanged.
 list `ops` from the shifted step `seq op arg`, folded by `Iso.foldl f`. -/
 def relChainl1 {α β : Type} (f : Iso (α × (β × α)) α) (measure : α → Nat)
     (h : MeasureDecreases measure f) (arg : Codec α) (op : Codec β) :
-    α → List UInt8 → Prop :=
+    α → Bytes → Prop :=
   fun a s => ∃ a₀ ops s₀ s', s = s₀ ++ s' ∧ Rel arg a₀ s₀ ∧
     relRepeat (Rel (Codec.seq op arg)) ops s' ∧ (foldl f measure h).apply (a₀, ops) = some a
 
@@ -232,7 +232,7 @@ def relChainl1 {α β : Type} (f : Iso (α × (β × α)) α) (measure : α → 
 list `ops` from the shifted step `seq arg op`, folded by `Iso.foldr f`. -/
 def relChainr1 {α β : Type} (f : Iso ((α × β) × α) α) (measure : α → Nat)
     (h : MeasureDecreasesR measure f) (arg : Codec α) (op : Codec β) :
-    α → List UInt8 → Prop :=
+    α → Bytes → Prop :=
   fun a s => ∃ a₀ ops s₀ s', s = s₀ ++ s' ∧ Rel arg a₀ s₀ ∧
     relRepeat (Rel (Codec.seq arg op)) ops s' ∧ (foldr f measure h).apply (a₀, ops) = some a
 
@@ -241,8 +241,8 @@ operand list via `decodeRepeat`, then fold. Total for a productive `op`-step
 (`hsep : ConsumesByte (seq op arg)`). -/
 def decodeChainl1 {α β : Type} (f : Iso (α × (β × α)) α) (measure : α → Nat)
     (h : MeasureDecreases measure f) (arg : Codec α) (op : Codec β)
-    (hsep : ConsumesByte (Codec.seq op arg)) (s : List UInt8) :
-    List (α × List UInt8) :=
+    (hsep : ConsumesByte (Codec.seq op arg)) (s : Bytes) :
+    List (α × Bytes) :=
   (decode arg s).flatMap fun (a₀, t) =>
     (decodeRepeat (Codec.seq op arg) hsep t).filterMap fun (ops, r) =>
       ((foldl f measure h).apply (a₀, ops)).map fun a => (a, r)
@@ -250,8 +250,8 @@ def decodeChainl1 {α β : Type} (f : Iso (α × (β × α)) α) (measure : α �
 /-- The decoder for a right-associative chain. -/
 def decodeChainr1 {α β : Type} (f : Iso ((α × β) × α) α) (measure : α → Nat)
     (h : MeasureDecreasesR measure f) (arg : Codec α) (op : Codec β)
-    (hsep : ConsumesByte (Codec.seq arg op)) (s : List UInt8) :
-    List (α × List UInt8) :=
+    (hsep : ConsumesByte (Codec.seq arg op)) (s : Bytes) :
+    List (α × Bytes) :=
   (decode arg s).flatMap fun (a₀, t) =>
     (decodeRepeat (Codec.seq arg op) hsep t).filterMap fun (ops, r) =>
       ((foldr f measure h).apply (a₀, ops)).map fun a => (a, r)
@@ -260,7 +260,7 @@ def decodeChainr1 {α β : Type} (f : Iso ((α × β) × α) α) (measure : α �
 then encode the seed and the operand list. -/
 def encodeChainl1 {α β : Type} (f : Iso (α × (β × α)) α)
     (measure : α → Nat) (h : MeasureDecreases measure f) (arg : Codec α)
-    (op : Codec β) (a : α) : Option (List UInt8) :=
+    (op : Codec β) (a : α) : Option (Bytes) :=
   match (foldl f measure h).unapply a with
   | none => none
   | some (a₀, ops) =>
@@ -274,7 +274,7 @@ def encodeChainl1 {α β : Type} (f : Iso (α × (β × α)) α)
 /-- The encoder for a right-associative chain. -/
 def encodeChainr1 {α β : Type} (f : Iso ((α × β) × α) α)
     (measure : α → Nat) (h : MeasureDecreasesR measure f) (arg : Codec α)
-    (op : Codec β) (a : α) : Option (List UInt8) :=
+    (op : Codec β) (a : α) : Option (Bytes) :=
   match (foldr f measure h).unapply a with
   | none => none
   | some (a₀, ops) =>
@@ -298,7 +298,7 @@ iff the input splits as a `relSepBy`-prefix plus `r`. Unconditional; productivit
 is carried only as `hsep`. -/
 theorem decodeSepBy_spec {α : Type} (p : Codec α) (sep : Codec Unit)
     (hsep : ConsumesByte (seqRight sep p)) :
-    ∀ (xs : List α) {s r : List UInt8},
+    ∀ (xs : List α) {s r : Bytes},
       (xs, r) ∈ decodeSepBy p sep hsep s ↔
         ∃ s₀, s = s₀ ++ r ∧ relSepBy p sep xs s₀ := by
   intro xs s r
@@ -351,7 +351,7 @@ theorem decodeSepBy_spec {α : Type} (p : Codec α) (sep : Codec Unit)
 /-- Encoder soundness for `sepBy`: any list the `sepBy`-encoder prints is in
 `relSepBy`. Structural on the value list; no productivity witness needed. -/
 theorem encodeSepBy_rel {α : Type} (p : Codec α) (sep : Codec Unit) :
-    ∀ (xs : List α) {s : List UInt8}, encodeSepBy p sep xs = some s → relSepBy p sep xs s := by
+    ∀ (xs : List α) {s : Bytes}, encodeSepBy p sep xs = some s → relSepBy p sep xs s := by
   intro xs
   cases xs with
   | nil =>
@@ -378,7 +378,7 @@ The fold step `foldl` (and its `MeasureDecreases` witness `h`) is unchanged. -/
 theorem decodeChainl1_spec {α β : Type} (f : Iso (α × (β × α)) α) (measure : α → Nat)
     (h : MeasureDecreases measure f) (arg : Codec α) (op : Codec β)
     (hsep : ConsumesByte (Codec.seq op arg)) :
-    ∀ (a : α) {s r : List UInt8}, (a, r) ∈ decodeChainl1 f measure h arg op hsep s ↔
+    ∀ (a : α) {s r : Bytes}, (a, r) ∈ decodeChainl1 f measure h arg op hsep s ↔
       ∃ s₀, s = s₀ ++ r ∧ relChainl1 f measure h arg op a s₀ := by
   intro a s r
   rw [decodeChainl1, List.mem_flatMap]
@@ -423,7 +423,7 @@ theorem decodeChainl1_spec {α β : Type} (f : Iso (α × (β × α)) α) (measu
 original value. -/
 theorem encodeChainl1_rel {α β : Type} (f : Iso (α × (β × α)) α) (measure : α → Nat)
     (h : MeasureDecreases measure f) (arg : Codec α) (op : Codec β) :
-    ∀ (a : α) {s : List UInt8}, encodeChainl1 f measure h arg op a = some s →
+    ∀ (a : α) {s : Bytes}, encodeChainl1 f measure h arg op a = some s →
       relChainl1 f measure h arg op a s := by
   intro a s he
   rw [encodeChainl1] at he
@@ -451,7 +451,7 @@ theorem encodeChainl1_rel {α β : Type} (f : Iso (α × (β × α)) α) (measur
 theorem decodeChainr1_spec {α β : Type} (f : Iso ((α × β) × α) α) (measure : α → Nat)
     (h : MeasureDecreasesR measure f) (arg : Codec α) (op : Codec β)
     (hsep : ConsumesByte (Codec.seq arg op)) :
-    ∀ (a : α) {s r : List UInt8}, (a, r) ∈ decodeChainr1 f measure h arg op hsep s ↔
+    ∀ (a : α) {s r : Bytes}, (a, r) ∈ decodeChainr1 f measure h arg op hsep s ↔
       ∃ s₀, s = s₀ ++ r ∧ relChainr1 f measure h arg op a s₀ := by
   intro a s r
   rw [decodeChainr1, List.mem_flatMap]
@@ -493,7 +493,7 @@ theorem decodeChainr1_spec {α β : Type} (f : Iso ((α × β) × α) α) (measu
 /-- Encoder soundness for `chainr1` (the right-fold dual of `encodeChainl1_rel`). -/
 theorem encodeChainr1_rel {α β : Type} (f : Iso ((α × β) × α) α) (measure : α → Nat)
     (h : MeasureDecreasesR measure f) (arg : Codec α) (op : Codec β) :
-    ∀ (a : α) {s : List UInt8}, encodeChainr1 f measure h arg op a = some s →
+    ∀ (a : α) {s : Bytes}, encodeChainr1 f measure h arg op a = some s →
       relChainr1 f measure h arg op a s := by
   intro a s he
   rw [encodeChainr1] at he
@@ -534,7 +534,7 @@ the `Iso.law` field, so the relation's seed/operands are recovered and each part
 encodes (seed via `encode_ne_none`, operands via `encodeRepeat_ne_none`). -/
 theorem encodeChainl1_ne_none {α β : Type} (f : Iso (α × (β × α)) α) (measure : α → Nat)
     (h : MeasureDecreases measure f) (arg : Codec α) (op : Codec β) :
-    ∀ (a : α) (s : List UInt8), relChainl1 f measure h arg op a s →
+    ∀ (a : α) (s : Bytes), relChainl1 f measure h arg op a s →
       encodeChainl1 f measure h arg op a ≠ none := by
   intro a s hrel
   rw [relChainl1] at hrel
@@ -556,7 +556,7 @@ theorem encodeChainl1_ne_none {α β : Type} (f : Iso (α × (β × α)) α) (me
 /-- **Encoder completeness for a right chain** (the dual of `encodeChainl1_ne_none`). -/
 theorem encodeChainr1_ne_none {α β : Type} (f : Iso ((α × β) × α) α) (measure : α → Nat)
     (h : MeasureDecreasesR measure f) (arg : Codec α) (op : Codec β) :
-    ∀ (a : α) (s : List UInt8), relChainr1 f measure h arg op a s →
+    ∀ (a : α) (s : Bytes), relChainr1 f measure h arg op a s →
       encodeChainr1 f measure h arg op a ≠ none := by
   intro a s hrel
   rw [relChainr1] at hrel
@@ -583,7 +583,7 @@ theorem encodeChainl1_of_decode {α β : Type} (f : Iso (α × (β × α)) α)
     (measure : α → Nat) (h : MeasureDecreases measure f) (arg : Codec α) (op : Codec β)
     (hsep : ConsumesByte (Codec.seq op arg))
     (hd : relFunctional (relChainl1 f measure h arg op)) (a : α)
-    {s : List UInt8} (hdcd : (a, []) ∈ decodeChainl1 f measure h arg op hsep s) :
+    {s : Bytes} (hdcd : (a, []) ∈ decodeChainl1 f measure h arg op hsep s) :
     encodeChainl1 f measure h arg op a = some s := by
   rcases (decodeChainl1_spec f measure h arg op hsep a (s := s) (r := [])).1 hdcd with
     ⟨s₀, hsplit, hrel⟩
@@ -605,7 +605,7 @@ theorem encodeChainr1_of_decode {α β : Type} (f : Iso ((α × β) × α) α)
     (measure : α → Nat) (h : MeasureDecreasesR measure f) (arg : Codec α) (op : Codec β)
     (hsep : ConsumesByte (Codec.seq arg op))
     (hd : relFunctional (relChainr1 f measure h arg op)) (a : α)
-    {s : List UInt8} (hdcd : (a, []) ∈ decodeChainr1 f measure h arg op hsep s) :
+    {s : Bytes} (hdcd : (a, []) ∈ decodeChainr1 f measure h arg op hsep s) :
     encodeChainr1 f measure h arg op a = some s := by
   rcases (decodeChainr1_spec f measure h arg op hsep a (s := s) (r := [])).1 hdcd with
     ⟨s₀, hsplit, hrel⟩
@@ -625,7 +625,7 @@ theorem encodeChainr1_of_decode {α β : Type} (f : Iso ((α × β) × α) α)
 descriptions (the chain mirror of `encode_injective_of_unambiguous`). -/
 theorem encodeChainl1_injective_of_unambiguous {α β : Type} (f : Iso (α × (β × α)) α)
     (measure : α → Nat) (h : MeasureDecreases measure f) (arg : Codec α) (op : Codec β)
-    (hd : relUnambiguous (relChainl1 f measure h arg op)) {x y : α} {s : List UInt8}
+    (hd : relUnambiguous (relChainl1 f measure h arg op)) {x y : α} {s : Bytes}
     (hx : encodeChainl1 f measure h arg op x = some s)
     (hy : encodeChainl1 f measure h arg op y = some s) : x = y := by
   have hrelx : relChainl1 f measure h arg op x s := encodeChainl1_rel f measure h arg op x hx
@@ -636,7 +636,7 @@ theorem encodeChainl1_injective_of_unambiguous {α β : Type} (f : Iso (α × (�
 descriptions (the dual of `encodeChainl1_injective_of_unambiguous`). -/
 theorem encodeChainr1_injective_of_unambiguous {α β : Type} (f : Iso ((α × β) × α) α)
     (measure : α → Nat) (h : MeasureDecreasesR measure f) (arg : Codec α) (op : Codec β)
-    (hd : relUnambiguous (relChainr1 f measure h arg op)) {x y : α} {s : List UInt8}
+    (hd : relUnambiguous (relChainr1 f measure h arg op)) {x y : α} {s : Bytes}
     (hx : encodeChainr1 f measure h arg op x = some s)
     (hy : encodeChainr1 f measure h arg op y = some s) : x = y := by
   have hrelx : relChainr1 f measure h arg op x s := encodeChainr1_rel f measure h arg op x hx

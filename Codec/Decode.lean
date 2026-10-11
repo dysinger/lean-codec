@@ -8,7 +8,7 @@ import Codec.Codec
 
 This file gives `decode`, the paper's list-monad decoder (§4.1):
 
-    decode : Codec α → List UInt8 → List (α × List UInt8)
+    decode : Codec α → Bytes → List (α × Bytes)
 
 It returns *all* (value, remaining-bytes) pairs — a relation, not a single
 result. Choice (`alt`) is the full backtracking union `decode d₁ s ++ decode d₂ s`,
@@ -29,8 +29,8 @@ namespace Codec
 
 /-- The nondeterministic decoder: every `(value, remaining)` pair derivable from
 the description against the input. This is the paper's `Parser` (§4.1) re-based
-onto `List UInt8`, with `|` as list concatenation (unlimited backtracking). -/
-def decode {α : Type} (d : Codec α) (s : List UInt8) : List (α × List UInt8) :=
+onto `Bytes`, with `|` as list concatenation (unlimited backtracking). -/
+def decode {α : Type} (d : Codec α) (s : Bytes) : List (α × Bytes) :=
   match d with
   | Codec.iso i d =>
       (decode d s).filterMap fun (a, s') => (i.apply a).map fun x => (x, s')
@@ -63,9 +63,9 @@ predicate). Total and `#eval`-able for every productive `p`.
 
 This is the *computable* reading of the §3.4 derived `many`; its denotation
 is `relRepeat (Rel p)`, and the decoder satisfies `decodeRepeat_spec`. -/
-def decodeRepeat {α : Type} (p : Codec α) (h : ConsumesByte p) (s : List UInt8) :
-    List (List α × List UInt8) :=
-  WellFounded.fix (InvImage.wf (fun s : List UInt8 => s.length) Nat.lt_wfRel.wf)
+def decodeRepeat {α : Type} (p : Codec α) (h : ConsumesByte p) (s : Bytes) :
+    List (List α × Bytes) :=
+  WellFounded.fix (InvImage.wf (fun s : Bytes => s.length) Nat.lt_wfRel.wf)
     (fun s ih =>
       ([], s) :: (decode p s).attach.flatMap fun a =>
         match a with
@@ -74,7 +74,7 @@ def decodeRepeat {α : Type} (p : Codec α) (h : ConsumesByte p) (s : List UInt8
 
 /-- The recursion equation for `decodeRepeat`: the empty result plus every
 `cons` step on a strictly-shorter remainder. Derived from `WellFounded.fix_eq`. -/
-theorem decodeRepeat_eq {α : Type} (p : Codec α) (h : ConsumesByte p) (s : List UInt8) :
+theorem decodeRepeat_eq {α : Type} (p : Codec α) (h : ConsumesByte p) (s : Bytes) :
     decodeRepeat p h s =
       ([], s) :: (decode p s).attach.flatMap fun a =>
         match a with
@@ -99,7 +99,7 @@ theorem byte_consumesByte : ConsumesByte Codec.byte := by
 `many byte` (a *semantic* reading, not a `Codec` node) realized as a *total*
 well-founded function. `#eval byteRepeat [1,2,3]` yields the four results
 `([], [1,2,3])`, `([1], [2,3])`, `([1,2], [3])`, `([1,2,3], [])`. -/
-def byteRepeat (s : List UInt8) : List (List UInt8 × List UInt8) :=
+def byteRepeat (s : Bytes) : List (Bytes × Bytes) :=
   decodeRepeat Codec.byte byte_consumesByte s
 
 end Codec

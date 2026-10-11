@@ -52,17 +52,23 @@ namespace Codec
 
 /-! ## Denotational semantics: `Rel` -/
 
+/-- The byte-sequence type: a `Bytes` is the provable substrate, a `List UInt8` by
+name (a *reducible* alias, so every `List`-level lemma applies unchanged). The
+packed, extraction-facing representation is `Buffer` (see `Codec.Buffer`), not
+this alias. -/
+abbrev Bytes : Type := List UInt8
+
 /-- A single-byte sequence containing exactly `b`. -/
-def single (b : UInt8) : List UInt8 := [b]
+def single (b : UInt8) : Bytes := [b]
 
 /-- `Codec α` is inhabited by the always-failing description. -/
 instance {α : Type} : Inhabited (Codec α) := ⟨Codec.empty⟩
 
 /-- The denotational relation `Rel d x s`: the description `d` relates the value `x` to
 the *whole* byte string `s`. Defined by structural recursion on `d`; this is the
-paper's §4.3 graph semantics re-based onto `List UInt8` (there is no "remaining
+paper's §4.3 graph semantics re-based onto `Bytes` (there is no "remaining
 bytes" here — that is internal to the decoder). -/
-def Rel {α : Type} (d : Codec α) (x : α) (s : List UInt8) : Prop :=
+def Rel {α : Type} (d : Codec α) (x : α) (s : Bytes) : Prop :=
   match d with
   | Codec.iso i d => ∃ a, i.apply a = some x ∧ Rel d a s
   | Codec.seq d₁ d₂ =>
@@ -74,48 +80,48 @@ def Rel {α : Type} (d : Codec α) (x : α) (s : List UInt8) : Prop :=
   | Codec.byte => s = single x
 
 /-- An `iso`-description is a relation only when the iso applies without loss. -/
-theorem Rel_iso {α β : Type} (i : Iso α β) (d : Codec α) (x : β) (s : List UInt8) :
+theorem Rel_iso {α β : Type} (i : Iso α β) (d : Codec α) (x : β) (s : Bytes) :
     Rel (Codec.iso i d) x s ↔ ∃ a, i.apply a = some x ∧ Rel d a s :=
   Iff.rfl
 
 /-- A `seq`-description relates a pair to a string that splits compatibly between
 the two components. -/
 theorem Rel_seq {α β : Type} (d₁ : Codec α) (d₂ : Codec β) (x₁ : α) (x₂ : β)
-    (s : List UInt8) :
+    (s : Bytes) :
     Rel (Codec.seq d₁ d₂) (x₁, x₂) s ↔
       ∃ s₁ s₂, s = s₁ ++ s₂ ∧ Rel d₁ x₁ s₁ ∧ Rel d₂ x₂ s₂ :=
   Iff.rfl
 
 /-- `alt` is the union of the two relations. -/
-theorem Rel_alt {α : Type} (d₁ d₂ : Codec α) (x : α) (s : List UInt8) :
+theorem Rel_alt {α : Type} (d₁ d₂ : Codec α) (x : α) (s : Bytes) :
     Rel (Codec.alt d₁ d₂) x s ↔ Rel d₁ x s ∨ Rel d₂ x s :=
   Iff.rfl
 
 /-- `empty` relates nothing. -/
-theorem Rel_empty {α : Type} (x : α) (s : List UInt8) :
+theorem Rel_empty {α : Type} (x : α) (s : Bytes) :
     Rel (Codec.empty : Codec α) x s ↔ False :=
   Iff.rfl
 
 /-- `pure x₀` relates exactly `x₀` to the empty string. -/
-theorem Rel_pure {α : Type} [DecidableEq α] (x₀ x : α) (s : List UInt8) :
+theorem Rel_pure {α : Type} [DecidableEq α] (x₀ x : α) (s : Bytes) :
     Rel (Codec.pure x₀) x s ↔ x = x₀ ∧ s = [] :=
   Iff.rfl
 
 /-- `byte` relates `b` to `[b]` exactly. -/
-theorem Rel_byte (b : UInt8) (s : List UInt8) :
+theorem Rel_byte (b : UInt8) (s : Bytes) :
     Rel Codec.byte b s ↔ s = single b :=
   Iff.rfl
 
 /-! ## Repetition: the least fixpoint relation -/
 
 /-- The least `nil`/`cons` fixpoint relation for repetition, given a *step*
-relation `R : α → List UInt8 → Prop`. This is the well-founded (structural-on-
+relation `R : α → Bytes → Prop`. This is the well-founded (structural-on-
 the-list) reading of `Rel (many p)` — total for *every* `R`, independent of
 whether the step itself matches the empty string. It is the constructive
 denotation of the derived `many` combinator; the decoder law is
 `Codec.decodeRepeat_spec`. -/
-def relRepeat {α : Type} (R : α → List UInt8 → Prop) :
-    List α → List UInt8 → Prop
+def relRepeat {α : Type} (R : α → Bytes → Prop) :
+    List α → Bytes → Prop
   | [], s => s = []
   | x :: xs, s => ∃ s₁ s₂, s = s₁ ++ s₂ ∧ R x s₁ ∧ relRepeat R xs s₂
 
@@ -127,15 +133,15 @@ def Productive {α : Type} (p : Codec α) : Prop :=
   ∀ x s, Rel p x s → s ≠ []
 
 /-- `relRepeat`'s empty case: the empty list relates only to the empty string. -/
-theorem relRepeat_nil {α : Type} (R : α → List UInt8 → Prop) (s : List UInt8) :
+theorem relRepeat_nil {α : Type} (R : α → Bytes → Prop) (s : Bytes) :
     relRepeat R [] s ↔ s = [] :=
   Iff.rfl
 
 /-- `relRepeat`'s `cons` case: a non-empty list relates to a string iff its head
 relates via the step `R` and its tail relates via `relRepeat`, with a compatible
 split. -/
-theorem relRepeat_cons {α : Type} (R : α → List UInt8 → Prop) (x : α)
-    (xs : List α) (s : List UInt8) :
+theorem relRepeat_cons {α : Type} (R : α → Bytes → Prop) (x : α)
+    (xs : List α) (s : Bytes) :
     relRepeat R (x :: xs) s ↔
       ∃ s₁ s₂, s = s₁ ++ s₂ ∧ R x s₁ ∧ relRepeat R xs s₂ :=
   Iff.rfl
@@ -144,12 +150,12 @@ theorem relRepeat_cons {α : Type} (R : α → List UInt8 → Prop) (x : α)
 the `nil`/`cons` rules holds for every `(xs, s)` related by `relRepeat R`. This is
 what makes `relRepeat R` the *least* relation closed under those rules (the title
 "least fixpoint" is proved here, not just asserted in the docstring). -/
-theorem relRepeat_induction {α : Type} (R : α → List UInt8 → Prop)
-    (P : List α → List UInt8 → Prop)
+theorem relRepeat_induction {α : Type} (R : α → Bytes → Prop)
+    (P : List α → Bytes → Prop)
     (hnil : P [] [])
-    (hcons : ∀ (x : α) (xs : List α) (s₁ s₂ : List UInt8),
+    (hcons : ∀ (x : α) (xs : List α) (s₁ s₂ : Bytes),
         R x s₁ → relRepeat R xs s₂ → P xs s₂ → P (x :: xs) (s₁ ++ s₂)) :
-    ∀ (xs : List α) (s : List UInt8), relRepeat R xs s → P xs s := by
+    ∀ (xs : List α) (s : Bytes), relRepeat R xs s → P xs s := by
   intro xs s h
   induction xs generalizing s with
   | nil =>

@@ -32,7 +32,7 @@ namespace Codec
 /-- Encoder soundness: any value the encoder prints is in the description's
 denotational domain (`Rel d x s`). Inductive on `d`, no hypothesis. -/
 theorem encode_rel {α : Type} (d : Codec α) (x : α) :
-    ∀ {s : List UInt8}, encode d x = some s → Rel d x s := by
+    ∀ {s : Bytes}, encode d x = some s → Rel d x s := by
   induction d with
   | iso i d ih =>
       intro s he
@@ -85,7 +85,7 @@ theorem encode_rel {α : Type} (d : Codec α) (x : α) :
 of `seq d₁ d₂` exactly when `(x, t)` is a result of `d₁` and `(y, r)` of `d₂`
 on the leftover `t`. (Membership lemma for the `seq` case of `decode_spec`.) -/
 theorem decode_seq_mem {α β : Type} (d₁ : Codec α) (d₂ : Codec β) (x : α × β)
-    (s r : List UInt8) :
+    (s r : Bytes) :
     (x, r) ∈ decode (Codec.seq d₁ d₂) s ↔
       ∃ t, (x.1, t) ∈ decode d₁ s ∧ (x.2, r) ∈ decode d₂ t := by
   rcases x with ⟨x₁, x₂⟩
@@ -113,7 +113,7 @@ input splits as a relating prefix plus `r`. Unconditional — soundness and
 completeness of the *nondeterministic* decoder against `Rel`, for every
 description. -/
 theorem decode_spec {α : Type} (d : Codec α) (x : α) :
-    ∀ {s r : List UInt8}, (x, r) ∈ decode d s ↔
+    ∀ {s r : Bytes}, (x, r) ∈ decode d s ↔
       ∃ s₀, s = s₀ ++ r ∧ Rel d x s₀ := by
   induction d with
   | iso i d ih =>
@@ -190,7 +190,7 @@ theorem decode_spec {α : Type} (d : Codec α) (x : α) :
 /-- The bidirectional law over whole strings (the `r = []` case of
 `decode_spec`): `Rel d x s` holds exactly when the nondeterministic decoder
 accepts `s` fully as `x`. Unconditional. -/
-theorem bidir {α : Type} (d : Codec α) (x : α) (s : List UInt8) :
+theorem bidir {α : Type} (d : Codec α) (x : α) (s : Bytes) :
     Rel d x s ↔ (x, []) ∈ decode d s := by
   have hspec := decode_spec d x (s := s) (r := [])
   constructor
@@ -204,14 +204,14 @@ theorem bidir {α : Type} (d : Codec α) (x : α) (s : List UInt8) :
 `(x, r)` (with `x` fully consumed and `r` left over) from any suffixing input
 `s ++ r`. Unconditional. -/
 theorem decode_encode {α : Type} (d : Codec α) (x : α) :
-    ∀ {s : List UInt8}, encode d x = some s → ∀ r, (x, r) ∈ decode d (s ++ r) := by
+    ∀ {s : Bytes}, encode d x = some s → ∀ r, (x, r) ∈ decode d (s ++ r) := by
   intro s he r
   have hrel : Rel d x s := encode_rel d x he
   exact (decode_spec d x (s := s ++ r) (r := r)).2 ⟨s, rfl, hrel⟩
 
 /-- The byte-exact roundtrip: a value encoded to `s` decodes back to `x` with
 no remainder. Unconditional. -/
-theorem roundtrip {α : Type} (d : Codec α) (x : α) (s : List UInt8) :
+theorem roundtrip {α : Type} (d : Codec α) (x : α) (s : Bytes) :
     encode d x = some s → (x, []) ∈ decode d s := by
   intro he
   simpa using (decode_encode d x he [])
@@ -251,10 +251,10 @@ the derived repetition combinator): `(xs, r) ∈ decodeRepeat p h s` exactly whe
 the input splits as a `relRepeat`-prefix plus `r`. Proved by well-founded
 induction on `s.length` — the same measure that makes `decodeRepeat` terminate. -/
 theorem decodeRepeat_spec {α : Type} (p : Codec α) (h : ConsumesByte p) :
-    ∀ (xs : List α) (s r : List UInt8), (xs, r) ∈ decodeRepeat p h s ↔
+    ∀ (xs : List α) (s r : Bytes), (xs, r) ∈ decodeRepeat p h s ↔
       ∃ s₀, s = s₀ ++ r ∧ relRepeat (Rel p) xs s₀ := by
-  have hwf : WellFounded (InvImage (· < ·) (fun s : List UInt8 => s.length)) :=
-    InvImage.wf (fun s : List UInt8 => s.length) Nat.lt_wfRel.wf
+  have hwf : WellFounded (InvImage (· < ·) (fun s : Bytes => s.length)) :=
+    InvImage.wf (fun s : Bytes => s.length) Nat.lt_wfRel.wf
   intro xs s r
   revert xs r
   induction s using WellFounded.induction (hwf := hwf) with
@@ -277,7 +277,7 @@ theorem decodeRepeat_spec {α : Type} (p : Codec α) (h : ConsumesByte p) :
           rcases hm_in_map with ⟨pr, hpr, hprmap⟩
           rcases pr with ⟨xs', r'⟩
           cases hprmap
-          have hlt : InvImage (· < ·) (fun s : List UInt8 => s.length) s₁ s := h x s₁ s hmem
+          have hlt : InvImage (· < ·) (fun s : Bytes => s.length) s₁ s := h x s₁ s hmem
           rcases (ih s₁ hlt xs' r).1 hpr with ⟨s₀', hs₁, hrel'⟩
           rcases (decode_spec p x).1 hmem with ⟨s₀'', hs, hrelx⟩
           refine ⟨s₀'' ++ s₀', ?_, ?_⟩
@@ -306,7 +306,7 @@ theorem decodeRepeat_spec {α : Type} (p : Codec α) (h : ConsumesByte p) :
             · simp [List.mem_attach]
             · rw [List.mem_map]
               refine ⟨(xs', r), ?_, by rfl⟩
-              have hlt : InvImage (· < ·) (fun s : List UInt8 => s.length) (sb ++ r) s :=
+              have hlt : InvImage (· < ·) (fun s : Bytes => s.length) (sb ++ r) s :=
                 h x (sb ++ r) s hmem
               exact (ih (sb ++ r) hlt xs' r).2 ⟨sb, rfl, hrel'⟩
 
@@ -344,7 +344,7 @@ in the repetition denotation `relRepeat (Rel p)`. The `encode` counterpart to
 witness is needed, because `encodeRepeat` recurses on the *value* list rather
 than the input bytes. Structural induction on `xs`. -/
 theorem encodeRepeat_rel {α : Type} (p : Codec α) :
-    ∀ (xs : List α) {s : List UInt8}, encodeRepeat p xs = some s → relRepeat (Rel p) xs s := by
+    ∀ (xs : List α) {s : Bytes}, encodeRepeat p xs = some s → relRepeat (Rel p) xs s := by
   intro xs
   induction xs with
   | nil =>
@@ -417,7 +417,7 @@ def Functional {α : Type} (d : Codec α) : Prop :=
 (possibly to a different byte string than the witness — pinning the exact string
 requires `Functional`, see `encode_of_decode`). This is the missing `Rel → encode`
 soundness half; proved by induction on `d`. -/
-theorem encode_ne_none {α : Type} (d : Codec α) (x : α) (s : List UInt8) :
+theorem encode_ne_none {α : Type} (d : Codec α) (x : α) (s : Bytes) :
     Rel d x s → encode d x ≠ none := by
   induction d generalizing s with
   | iso i d ih =>
@@ -472,7 +472,7 @@ to exactly the same bytes. Paired with `roundtrip` (encode→decode) this makes
 `encode d x = some s ↔ (x, []) ∈ decode d s` a genuine bijection for functional `d`.
 This is the missing **decode→encode** half. -/
 theorem encode_of_decode {α : Type} (d : Codec α) (hd : Functional d) (x : α)
-    {s : List UInt8} (hdcd : (x, []) ∈ decode d s) : encode d x = some s := by
+    {s : Bytes} (hdcd : (x, []) ∈ decode d s) : encode d x = some s := by
   rcases (decode_spec d x).1 hdcd with ⟨s₀, hsplit, hrel⟩
   have hs₀ : s = s₀ := by simpa using hsplit
   subst s₀
@@ -487,7 +487,7 @@ theorem encode_of_decode {α : Type} (d : Codec α) (hd : Functional d) (x : α)
 /-- `encode` is injective on the bytes it prints, for **unambiguous**
 descriptions: a single byte string cannot encode two distinct values. -/
 theorem encode_injective_of_unambiguous {α : Type} (d : Codec α) (hd : Unambiguous d)
-    {x y : α} {s : List UInt8} (hx : encode d x = some s) (hy : encode d y = some s) :
+    {x y : α} {s : Bytes} (hx : encode d x = some s) (hy : encode d y = some s) :
     x = y := by
   have hrelx : Rel d x s := encode_rel d x hx
   have hrely : Rel d y s := encode_rel d y hy
@@ -497,19 +497,19 @@ theorem encode_injective_of_unambiguous {α : Type} (d : Codec α) (hd : Unambig
 
 `Functional` and `Unambiguous` are stated over a `Codec` (quantifying over
 `Rel d`). The repetition and chain combinators are *relations*
-`α → List UInt8 → Prop` (not `Codec` values), so their decode→encode and
+`α → Bytes → Prop` (not `Codec` values), so their decode→encode and
 injectivity laws take the same notions over an arbitrary relation. This section
 collects the relation-level forms and the `encodeRepeat` completeness mirror of
 `encode_ne_none`. -/
 
 /-- A relation is **functional** (string-directional) when each value relates to
 at most one byte string. -/
-def relFunctional {α : Type} (R : α → List UInt8 → Prop) : Prop :=
+def relFunctional {α : Type} (R : α → Bytes → Prop) : Prop :=
   ∀ a ⦃s s'⦄, R a s → R a s' → s = s'
 
 /-- A relation is **unambiguous** (value-directional) when each byte string
 relates to at most one value. -/
-def relUnambiguous {α : Type} (R : α → List UInt8 → Prop) : Prop :=
+def relUnambiguous {α : Type} (R : α → Bytes → Prop) : Prop :=
   ∀ ⦃a b⦄ s, R a s → R b s → a = b
 
 /-- **Encoder completeness for repetition**: every list in the repetition
@@ -518,7 +518,7 @@ witness — pinning the exact string requires functionality of the step). This i
 the `relRepeat`-level mirror of `encode_ne_none`; structural induction on `xs`,
 with the head step via `encode_ne_none p`. -/
 theorem encodeRepeat_ne_none {α : Type} (p : Codec α) :
-    ∀ (xs : List α) (s : List UInt8), relRepeat (Rel p) xs s → encodeRepeat p xs ≠ none := by
+    ∀ (xs : List α) (s : Bytes), relRepeat (Rel p) xs s → encodeRepeat p xs ≠ none := by
   intro xs
   induction xs with
   | nil =>
