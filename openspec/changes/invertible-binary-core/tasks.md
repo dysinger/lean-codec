@@ -335,17 +335,28 @@ Ordered, with the decisions to resolve **before** coding each:
       _membership_-form refinement over `drop` is **wrong** for `pure`/empty-remainder
       (index info lost): the correct form is the function-level
       `decodeArray d a i = (decode d (drop i)).map (fun (x,r) => (x, i + (drop i).length
-    - r.length))`. And `Array` here reduces to its `toList` field (no `a.data`; run the
-      proofs over `a.toList`, reach `ByteArray` only through `ByteArray.data`).
-      `Bench.lean` gained `decodeArray`/`encodeArray`/`decodeFullArray` legs (5.1);
-      measured (arm64, reps=20): `decodeFullArray byte [16384]` = 731 µs (≈ `decodeFull`'s
-      1017 µs — it is the composition, same list cost); `decodeArray byte [1048576]` =
-      16.8 µs and `encodeArray byte` = 914 ns. **Caveat:** the carrier swap **does not**
-      deliver the design's hoped ~5–20× here, because stdlib `Array.size = a.toList.length`
-      is _structural_ O(n) (no cached length field) — so `decodeArray`'s `i < a.size` guard
-      walks the whole list each call. The native-array index recursion is correct and
-      proved-equal, but the `size` cost is the ceiling; the FFI/`@[extern]`/compiler tier
-      (a separate deferred change) is where that ceiling is actually lifted.
+  - r.length))`. And `Array`here reduces to its`toList`field (no`a.data`; run the
+proofs over `a.toList`, reach `ByteArray`only through`ByteArray.data`).
+`Bench.lean`gained`decodeArray`/`encodeArray`/`decodeFullArray`legs (5.1);
+measured (arm64, reps=20):`decodeFullArray byte [16384]`= 731 µs (≈`decodeFull`'s
+1017 µs — it is the composition, same list cost); `decodeArray byte [1048576]`=
+16.8 µs and`encodeArray byte`= 914 ns. **Caveat:** the carrier swap **does not**
+deliver the design's hoped ~5–20× here, because stdlib`Array.size = a.toList.length`is _structural_ O(n) (no cached length field) — so`decodeArray`'s `i < a.size`guard
+walks the whole list each call. The native-array index recursion is correct and
+proved-equal, but the`size` cost is the ceiling; the FFI/`@[extern]`/compiler tier
+    (a separate deferred change) is where that ceiling is actually lifted.
+- [x] **§10.6 LLVM toolchain (the `size`-cost ceiling, lifted without FFI/compiler).**
+      **Done** in `llvm-lean4-toolchain` — the pin `lean4` was built _without LLVM_, so
+      `Array`/`ByteArray` fell back to pure-`List` (`Array.size = List.length` O(n), no
+      `@[extern]` C++ primops) and `lake build bench` failed to link (`ld: library 'c++'
+    not found`). Fixed by building `lean4` with `LLVM=ON` and the _consistent_ LLVM 19
+      toolchain (`llvmPackages_19.stdenv`), wired into every path. Now
+      `lean --features` ⇒ `[LLVM]`; `lake build bench` links; the extracted
+      `decodeArray byte` lowers to `lean_array_get_size`/`lean_array_fget_borrowed` (O(1),
+      flat ~73–188 ns over a 1024× size range) — the O(n) `size` walk is gone.
+      Proof gate green, axioms unchanged (`[propext, Quot.sound]`). The author-FFI/compiler
+      tier remains deferred; this is only the stock Lean build configuration flipped on.
+      See `openspec/changes/llvm-lean4-toolchain/`.
 
 **Planning-vs-build note:** the `proposal.md`/`design.md`/`specs/codec/spec.md` in this
 change were **updated this session** to the _implemented_ reality (backtracking-union

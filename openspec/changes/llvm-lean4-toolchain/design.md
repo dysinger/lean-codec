@@ -102,3 +102,24 @@ Concrete facts established this session (all verified against the pinned `lean4`
   during implementation by trying `override` first; documented in tasks.
 - Whether a nixpkgs bump (to a rev where `lean4` already has an `enableLLVM` toggle)
   is simpler than a local override — assessed as a fallback, not a requirement.
+
+## Resolved during implementation
+
+Two findings refined the design (the original decisions were close but incomplete):
+
+1. **`-DLLVM=ON` must be a _raw_ string flag, not `lib.cmakeBool`.** Lean's top-level
+   `CMakeLists.txt` forwards cache vars to the stage0/stage1 `ExternalProject`
+   sub-builds only when their cache TYPE is `UNINITIALIZED` (or via a `STAGE0_*`
+   prefix). `lib.cmakeBool "LLVM" true` emits `-DLLVM:BOOL=TRUE` — a `BOOL`-typed var
+   that is **not** forwarded, so every stage silently `Disabling LLVM support`. The fix
+   is the raw `"-DLLVM=ON"` (untyped, `UNINITIALIZED`), which matches the `LLVM*`
+   forwarding rule and reaches every stage.
+2. **The _whole toolchain_ must be LLVM 19, not just the `llvm` libraries.** Adding
+   `llvmPackages_19.llvm` to a clang-21 stdenv builds a `lean` binary whose LLVM reader
+   is 19 but whose bitcode producer is 21; upstream `lean_llvm_parse_bitcode` aborts on
+   the cross-major bitcode (`Unknown attribute kind (102) (Producer: 'LLVM21.1.8'
+Reader: 'LLVM 19.1.7')`) during the stage1 stdlib build. The fix is
+   `lean4.override { stdenv = llvmPackages_19.stdenv; }` (clang 19.1.7 + libc++ 19.1.7
+   - llvm 19.1.7 consistently), plus `llvmPackages_19.llvm` in `nativeBuildInputs` (so
+     `llvm-config` is on PATH for the configure phase) and `buildInputs` (the `-lLLVM-19`
+     link libs).

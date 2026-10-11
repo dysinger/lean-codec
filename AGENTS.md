@@ -34,6 +34,18 @@ Do **not**:
 - fall back to hand-editing `openspec/` artifacts when `openspec` is unavailable
   on the host — get it from `nix develop`.
 
+**Long builds (HARD RULE):** never run a long `nix build` (toolchain, bench, or
+proof gate) in the foreground of a tool call, and never set a huge tool timeout
+(`600000`/`900000` seconds = days-to-weeks — absurd and forbidden). Long-running
+Nix builds cost real calendar time:
+
+- launch them detached with `nohup … > /tmp/<name>.log 2>&1 &` and **poll** the
+  log with short `bash` calls (seconds, not minutes) to check progress;
+- keep the `bash` tool `timeout` small (≤ ~120s) for polling; keep blocking work
+  tiny. If a command will exceed that, it must go detached;
+- never `sleep` for minutes inside a single foreground call to "wait out" a
+  build.
+
 (For Nix usage details see the `nix` skill; this note is the project-specific
 reminder that the toolchain is _flake-scoped_, not host-global.)
 
@@ -122,11 +134,14 @@ Source of truth:
    is **wrong** for non-consuming `pure` (and empty remainders), because `drop` discards the
    index — use the function-level form `decodeArray d a i = (decode d (drop i)).map
 (fun (x,r) => (x, i + (drop i).length - r.length))`, which is correct for every `d`.
-   **Lesson 2:** the measured carrier win is _not_ the design's hoped ~5–20× — stdlib
-   `Array.size = a.toList.length` is structural O(n) (no cached length), so
-   `decodeArray`'s `i < a.size` guard walks the list each call. Correct and proved-equal,
-   but the `size` cost is the ceiling; lifting it is the FFI/`@[extern]`/compiler tier.
-   The FFI/`@[extern]`/compiler tier stays a _separate, deferred_ change.
+   **Lesson 2:** the measured carrier win on the _non-LLVM_ toolchain is _not_ the
+   design's hoped ~5–20× — stdlib `Array.size = a.toList.length` is structural O(n)
+   (no cached length) when LLVM is compiled out, so `decodeArray`'s `i < a.size` guard
+   walked the list each call. **Resolved by the `llvm-lean4-toolchain` change** (below):
+   with LLVM enabled, `a.size` lowers to the `@[extern]` `lean_array_get_size` (O(1))
+   and `a[i]` to `lean_array_fget_borrowed` (O(1)).
+   The FFI/`@[extern]`/compiler tier stays a _separate, deferred_ change
+   (authoring new `@[extern]` FFI and a custom compiler is still out of scope).
    **No FFI, no codegen, no `HashMap`, no chart parser in this change.**
 
 > Resolved this session: §10.1 (namespace — no type rename; `Rel`/`relRepeat`/`Productive`
@@ -165,6 +180,31 @@ Source of truth:
 > `decodeFull`/`decodeRepeatFull`/`decodeFast` legs; measured **~20,000× faster**
 > (`decodeFull byte [16384]` = 545 µs vs `decodeRepeat` = 11.2 s). **Tier B
 > (memoizing chart) is a separate, deferred change.**
+
+> **LLVM toolchain (Tier B carrier speedup) — DONE this session**
+> (`llvm-lean4-toolchain`). The `buffer-carrier-decoders` run-model was _correct but
+> slow_ because the pinned `lean4` was built **without LLVM**, so `Array`/`ByteArray`
+> fell back to pure-`List` (`Array.size = List.length` O(n), no `@[extern]` C++
+> primops), and `lake build bench` even failed to link (`ld: library 'c++' not found`).
+> **Fix (no FFI, no compiler authored — a stock build-configuration change):**
+> build `lean4` with `LLVM=ON` and the _consistent_ LLVM 19 toolchain
+> (`llvmPackages_19.stdenv` — clang 19.1.7 + libc++ 19.1.7 + llvm 19.1.7), wiring it
+> into every path (`default.nix`'s `lean4` input, `flake.nix`'s dev shell + packages).
+> Two non-obvious findings (see `openspec/changes/llvm-lean4-toolchain/design.md`):
+>
+> - `-DLLVM=ON` must be a **raw** string flag (`:BOOL=` typing makes it a `BOOL` cache
+>   var that Lean's top-level `CMakeLists.txt` does not forward to the stage0/stage1
+>   `ExternalProject` sub-builds, silently disabling LLVM in every stage).
+> - The **whole toolchain** must be LLVM 19, not just `llvm` libs: upstream
+>   `lean_llvm_parse_bitcode` aborts on cross-major bitcode (`Unknown attribute kind
+(102) (Producer: 'LLVM21.1.8' Reader: 'LLVM 19.1.7')`), so mixing the host stdenv's
+>   clang 21 with `llvmPackages_19.llvm` fails at stage1 stdlib build.
+>   **Result:** `lean --features` ⇒ `[LLVM]`; `lake build bench` links (libc++ present);
+>   the extracted `decodeArray byte` lowers to `lean_array_get_size`/`lean_array_fget_borrowed`
+>   (O(1), confirmed flat ~73–188 ns over a 1024× size range) vs the O(n) `List.length`
+>   baseline. Proof gate green, axiom record unchanged (`[propext, Quot.sound]`).
+>   The author-FFI/compiler tier remains deferred; this is only the standard Lean build
+>   configuration flipped on.
 
 > **Documentation conventions (this session):** the README is the **full
 > architecture statement** — _about the project and the paper only_. It carries the

@@ -14,12 +14,51 @@
 
 {
   lean4,
+  llvmPackages_19,
   lib,
   stdenv,
 }:
 
 let
   inherit (stdenv) mkDerivation;
+
+  # The LLVM-enabled `lean4` override: builds the pinned `lean4` with LLVM 19
+  # enabled so the `Array`/`ByteArray` primops (`get`/`push`/`size`/`get!`)
+  # lower to the `@[extern]` O(1) C++ implementations rather than pure-`List`
+  # fallbacks. See `openspec/changes/llvm-lean4-toolchain/`.
+  #
+  # Two things are required, and both are necessary:
+  #
+  #  1. `stdenv = llvmPackages_19.stdenv` — the *whole toolchain* must be LLVM 19
+  #     (clang 19.1.7 + libc++ 19.1.7 + llvm 19.1.7). Upstream's `lean_llvm_parse_bitcode`
+  #     refuses to read bitcode produced by a *different* LLVM major (`Unknown attribute
+  #     kind (102) (Producer: 'LLVM21.1.8' Reader: 'LLVM 19.1.7')`); mixing the host
+  #     stdenv's clang 21 with `llvmPackages_19.llvm` libs reproduces exactly that.
+  #     The consistent `llvmPackages_19.stdenv` also puts llvm 19's `llvm-config` on PATH
+  #     and `libc++` in the closure.
+  #
+  #  2. `-DLLVM=ON` as a *raw* string (no `:BOOL=` type annotation): Lean's top-level
+  #     `CMakeLists.txt` only forwards cache vars to the stage0/stage1/stage2 sub-builds
+  #     when their type is `UNINITIALIZED` (or via a `STAGE0_*` prefix). `lib.cmakeBool`
+  #     emits `-DLLVM:BOOL=TRUE`, a `BOOL`-typed cache var that is *not* forwarded, so every
+  #     stage silently disables LLVM.
+  lean4-llvm =
+    (lean4.override {
+      inherit (llvmPackages_19) stdenv;
+    }).overrideAttrs
+      (old: {
+        # `llvm` in `nativeBuildInputs` puts `llvm-config` (dev output) on PATH for
+        # the CMake configure phase (with the derivation's `strictDeps = true`,
+        # `buildInputs` bins are not on PATH). It also provides the LLVM static
+        # libs (`-lLLVM-19`) for the link.
+        nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [
+          llvmPackages_19.llvm
+        ];
+        buildInputs = (old.buildInputs or [ ]) ++ [
+          llvmPackages_19.llvm
+        ];
+        cmakeFlags = (old.cmakeFlags or [ ]) ++ [ "-DLLVM=ON" ];
+      });
 
   pname = "codec";
 
@@ -49,7 +88,7 @@ let
       pname = "${pname}-${name}";
       version = "0.1.0";
       src = ./.;
-      nativeBuildInputs = [ lean4 ];
+      nativeBuildInputs = [ lean4-llvm ];
       meta =
         meta
         // {
@@ -68,6 +107,10 @@ let
 
 in
 {
+  # The LLVM-enabled toolchain shared by every path (dev shell, proof gate,
+  # bench): one source of truth for the `lean4` build configuration.
+  lean4 = lean4-llvm;
+
   # `native` — the installable library artifact.
   native = mkLakeBuild {
     name = "native";

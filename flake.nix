@@ -25,7 +25,7 @@
 
         # Lean package: the `default.nix` native derivation + proof check.
         _pkg = import ./default.nix {
-          inherit (pkgs) lean4;
+          inherit (pkgs) lean4 llvmPackages_19;
           inherit (pkgs) lib;
           inherit (pkgs) stdenv;
         };
@@ -69,7 +69,8 @@
         devShells.default = pkgs.mkShellNoCC {
           name = "codec";
           packages = [
-            pkgs.lean4 # lean, lake, leanc, and the Lean 4 LSP (lean --server)
+            _pkg.lean4 # lean, lake, leanc, and the Lean 4 LSP (lean --server)
+            pkgs.llvmPackages_19.clang # cc/clang with libc++, so `leanc`'s `-lc++` links
             pkgs.elan # toolchain manager (matches ../workflow)
             pkgs.openspec # spec-driven development CLI
             pkgs.git
