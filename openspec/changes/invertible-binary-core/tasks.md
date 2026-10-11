@@ -236,11 +236,16 @@ post-core deliverables (the paper's §4.4 open problem and the §7 transport tar
   `encodeChainl1_injective_of_unambiguous`/`encodeChainr1_injective_of_unambiguous` (under
   `relUnambiguous`). Axioms `[propext, Quot.sound]` throughout (`encodeRepeat_ne_none` is
   `[propext]`-only).
-- [ ] 10.4 **`ByteArray` wrapper** (§7.1 partial / review #10) — transport the provable
-  `List UInt8` core to a `ByteArray`-backed executable surface. Sub-task per review: define
-  `Iso (List UInt8) ByteArray` (or a newtype) and re-prove `decode_spec`/`roundtrip` through
-  an explicit abstraction barrier, then audit that `simp`-reduction-dependent proofs and
-  `get!`/remaining-bytes don't leak per-byte `getElem`-with-proof into the hot path.
+- [x] 10.4 **`Buffer` transport surface** (§7.1 partial / review #10; formerly the
+  *`ByteArray` wrapper*) — transport the provable `Bytes` (= `List UInt8`) core to a
+  packed, `ByteArray`-backed executable surface. **Done** in `Codec/Buffer.lean`: a
+  `Buffer` newtype over `ByteArray`, `toBytes`/`ofBytes` routed through `ByteArray.data`
+  (the reducible `Array`) rather than the opaque `ByteArray.toList` so the transport laws
+  close by `rfl`; the transported interpreters `decodeBuffer`/`encodeBuffer`; and the
+  bar-transferred laws `decodeBuffer_eq`/`encodeBuffer_eq`/`decodeBuffer_spec`/
+  `roundtripBuffer` (composed from `decode_spec`/`roundtrip`, `[propext, Quot.sound]`,
+  no new induction). The `getElem`-with-proof hot-path audit (extraction-level) remains
+  part of 10.5.
 - [ ] 10.5 **Extraction + benchmark** (§7.2/§7.3) — extract the `decode`/`encode` hot
   path to C/LLVM; benchmark a multi-MB roundtrip (`byte`/`many`), record linear time.
   Covers task 1.6 too. (Now unblocked for the chain combinators by 10.0a.)
