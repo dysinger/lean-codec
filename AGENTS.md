@@ -11,6 +11,32 @@ Descriptions* (2010) and makes it dependently typed, provable, and binary.
 Stdlib-only (no mathlib). Build with `lake build`; the proof gate is the same
 build with zero `sorry`.
 
+## Toolchain / environment: read first
+
+**This is a Nix flake project. Every tool is in the flake `devShells.default`, not
+on the host PATH.** Before doing anything, enter the dev shell:
+
+```bash
+nix develop
+```
+
+That shell provides the pinned `lean`/`lake` (Lean 4.34.1), `elan`, and the
+**`openspec` CLI** (spec-driven workflow tool) — none of which are guaranteed to be
+on the host. Then run the same commands (e.g. `openspec list --json`,
+`openspec status --change … --json`, `lake build`, `nix build '.#bench'`).
+
+Do **not**:
+
+- search the host filesystem to locate tools (e.g. `find / -name openspec …`) —
+  they live in the Nix store, reached via `nix develop`;
+- assume `openspec`/`lake`/`lean` are already on PATH — check with `nix develop`
+  first;
+- fall back to hand-editing `openspec/` artifacts when `openspec` is unavailable
+  on the host — get it from `nix develop`.
+
+(For Nix usage details see the `nix` skill; this note is the project-specific
+reminder that the toolchain is *flake-scoped*, not host-global.)
+
 Source of truth:
 
 - Task ledger: `openspec/changes/invertible-binary-core/tasks.md`.
@@ -78,13 +104,20 @@ Source of truth:
 
 **Open, in order** (full detail in `tasks.md` §11):
 
-1. **Efficiency (paper §4.4 open problem)** — **last**, now planned as its **own
-   OpenSpec change**: `openspec/changes/efficient-backtracking-decoder/` (proposal/
-   design/tasks). It adds a *provably denotationally-equal* fast decoder over the
-   same `Rel`/`decode` semantics (Tier A: list-fusion + full-consumption
-   specialization; Tier B: memoizing chart, deferred), `skip_specs: true` — no
-   behavior change. Read its `design.md` before coding; the next session starts
-   there (not §10).
+1. **Efficiency — the F*-style carrier refinement (Paper §4.4, "work faster").**
+   **Tier A done** (`efficient-backtracking-decoder`, archived): `decodeFull`/
+   `decodeRepeatFull`/`decodeFast` proved denotationally equal, `[propext, Quot.sound]`,
+   ~20,000× on the full-consumption ask. **Next step is the buffer-carrier tier** — the
+   new OpenSpec change **`openspec/changes/buffer-carrier-decoders/`** (proposal/design/
+   tasks, `skip_specs: true`). It is the F* two-tier move (spec over `List`, run-model
+   over `Array UInt8` + index, proved-equal) *without* FFI or a compiler: `decodeArray d a i
+   : List (α × Nat)` / `encodeArray d x : Option (Array UInt8)` native on the array, plus
+   `decodeArray_eq`/`encodeArray_eq` (the single refinement lemma) and transferred laws.
+   **Read `design.md` before coding; the next session starts there.** The sequencing is
+   deliberate: see it work → work faster (this change) → later, after real use, work
+   the fastest possible (FFI/`@[extern]`/compiler — explicitly a *separate, deferred*
+   change, not part of this one). **No FFI, no codegen, no `HashMap`, no chart parser
+   in this change.**
 
 > Resolved this session: §10.1 (namespace — no type rename; `Rel`/`relRepeat`/`Productive`
 > now live at `Codec.*`), §10.1a/10.1b/10.1c (organization/naming/docs), §10.2
@@ -110,6 +143,18 @@ Source of truth:
 > `Buffer.toBytes` uses `ByteArray.data` (reducible `Array`), not the opaque
 > `ByteArray.toList`. `lake build` (proof gate) stays `defaultTargets = ["codec"]`;
 > the `bench` exe is built only via `lake build bench` / the Nix `bench` derivation.
+
+> **Efficiency (Tier A) — DONE this session** (`efficient-backtracking-decoder`).
+> `decodeFull`/`decodeRepeatFull` (`Codec/Decode.lean`, `Option (List α)` full-consumption
+> "many", `WellFounded.fix` on `s.length`, no `partial`) and `decodeFast` (list-fused
+> `decode`, `map` replacing `flatMap`-over-singleton in `seq`) are proved
+> denotationally equal (`decodeFull_spec` under a full-consumption-uniqueness
+> hypothesis `huniq`; `decodeFast_eq` via `List.map_eq_flatMap`; transfer laws
+> `decodeFast_spec`/`bidir_decodeFast`/`roundtrip_decodeFast`/`decodeRepeatFull_spec`
+> in `Sound.lean`), all `[propext, Quot.sound]`-only. `Bench.lean` gained
+> `decodeFull`/`decodeRepeatFull`/`decodeFast` legs; measured **~20,000× faster**
+> (`decodeFull byte [16384]` = 545 µs vs `decodeRepeat` = 11.2 s). **Tier B
+> (memoizing chart) is a separate, deferred change.**
 
 > **Documentation conventions (this session):** the README is the **full
 > architecture statement** — *about the project and the paper only*. It carries the

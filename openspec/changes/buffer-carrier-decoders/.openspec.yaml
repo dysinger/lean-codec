@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-10-11
+goal: "Tier B like F*: native Array/ByteArray-carrier interpreters proved equal to the List spec (no FFI, no compiler)"
+skip_specs: true
