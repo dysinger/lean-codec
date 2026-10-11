@@ -59,18 +59,14 @@ binary, so the base unit is `UInt8`, the base string is a byte sequence, and
 list; a packed `ByteArray`-backed form is a later, *separate* transport concern,
 not the thing we prove about.
 
-**[D2] The nondeterministic list decoder is *kept*, not narrowed.** The paper's
-decoder already returns a *list* of `(value, remaining)` pairs — a relation
-(§4.1 `Parser (String → [(α, String)])`, §4.3 "decoding … the graph"). An earlier
-version of `codec` narrowed this to a deterministic single result for speed, but
-that forced `|` into *committed* choice, which is **incompatible with the paper's
-`|` and `many`**. We **restored** the paper's semantics: `decode` returns all
+**[D2] The nondeterministic list decoder.** The paper's decoder returns a *list*
+of `(value, remaining)` pairs — a relation (§4.1 `Parser (String → [(α, String)])`,
+§4.3 "decoding … the graph"). `codec` keeps it that way: `decode` returns all
 `(value, remainder)` pairs, and `|` is list concatenation.
 
 **[D3] `|` is the paper's *backtracking union*, not committed choice.**
 `decode (d₁ | d₂) s = decode d₁ s ++ decode d₂ s`, matching `Rel (d₁ | d₂) =
-Rel d₁ ∨ Rel d₂` by construction. (An earlier committed-choice deviation and its
-prefix-disjointness gate were reversed — see `[D5]`.)
+Rel d₁ ∨ Rel d₂` by construction.
 
 **[D4] Lossless capture — "allowed" bytes are *kept*, not discarded (no
 `ignore`).** The paper (§3.1, §6.3) deliberately *discards* optional bytes
@@ -81,9 +77,11 @@ and re-emitted verbatim (realized by repetition over a `subset p byte` step, not
 new primitive). There is therefore **no `ignore` combinator in core**, and the
 strict inverse law holds unconditionally.
 
-**[D5] `|` needs no prefix-disjointness condition.** This is the *absence* of
-the pre-reversal departure. With `|` as backtracking union, no prefix condition
-is required — and none *can* work for repetition (`[]` is a proper prefix of every
+**[D5] `|` needs no prefix-disjointness condition.** Some deterministic-parser
+designs require `|`'s branches to be *prefix-disjoint* so at most one can match a
+given input. `codec` requires none — and admits none: with `|` as backtracking
+union, the branches are tried independently and concatenated, and no prefix
+condition could work for repetition anyway (`[]` is a proper prefix of every
 non-empty string, so `nil | cons` is never prefix-disjoint).
 
 **[D6] `Codec` is a description *value*, not the §3.4 typeclass.** The paper
@@ -150,28 +148,6 @@ and partial encoding is preserved.
 
 ______________________________________________________________________
 
-## The committed-choice detour, and why it reversed
-
-The committed-choice `|` (and the prefix-disjointness machinery it required —
-`NonNull`, `PrefixDisjoint`, `Disjoint`) came from trying to make the decoder
-deterministic for speed. It turned out to be *incompatible* with the paper's
-`|` and `many`, for two reasons, both **proved**, not merely observed:
-
-  * `decode (nil $ pure ()) s` always succeeds consuming 0 bytes, so a committed
-    `many p = nil | cons $ p * many p` always returns `[]` and never reaches `cons`.
-  * even reordered, `nil` and `cons` are never prefix-disjoint, because `[]` is a
-    proper prefix of every non-empty string — so no prefix condition can gate
-    repetition, regardless of `NonNull p`.
-
-The fix was to restore the paper's semantics (`[D2]`/`[D3]`): `decode` returns
-the full list and `|` concatenates. Then `Rel (d₁ | d₂) = Rel d₁ ∨ Rel d₂` and
-`decode` agree by construction, the laws became unconditional, and the whole
-prefix-disjointness section was deleted. Efficiency — the paper's own §4.4 open
-problem — is a *separate, later* question of re-implementing the same semantics
-foo faster, never a change to the semantics.
-
-______________________________________________________________________
-
 ## Why these choices — the reasoning in lay terms
 
 This section explains the *reasoning*, for a reader who does not write Lean (or
@@ -207,24 +183,24 @@ at speed" are deliberately two things.)
 ### `[D2]` + `[D3]` the decoder returns a *list*, and `|` means "try both, keep
 all" — why backtracking is non-negotiable
 
-A parser answers "does this input match, and what value does it produce?". There
-are two ways: **committed choice** (try the left branch of `|`, and if it grabs
-something, commit and never look back — fast, but lossy) and **backtracking
-union** (try *both*, return *all* the possible results — the paper's semantics).
-The paper's `|` is literally a *union* of result lists, and the parser returns
-*every* way to read the input.
+A parser answers "does this input match, and what value does it produce?". A
+**committed-choice** `|` tries the left branch and, if it grabs something, stops
+— quick, but it throws away the other branch's answers. A **backtracking-union**
+`|` tries *both* and returns *all* the possible results. The paper's `|` is the
+second kind: it is literally the *union* of two result lists (§4.3), and the
+parser returns *every* way to read the input.
 
-Committed choice was a tempting optimization, but it is **mathematically
-incompatible** with the paper's `many`: `many p` is "zero or more `p`s", naturally
-`empty | (p then many p)`. Under committed choice the "match nothing" branch
-always succeeds immediately (it consumes zero input), so the parser always stops
-there and returns `[]`, never reading even one `p`. The empty string is a prefix
-of *every* string, so no reordering or "disjointness" bookkeeping can fix it.
-So `codec` keeps the paper's semantics exactly, and the roundtrip laws hold
-**unconditionally** — because the decoder and the denotation agree *by
-construction*. The cost is the paper's own admitted cost (§4.4): naive
-backtracking is exponential in the worst case; making it fast without changing
-what it means is a separate, later problem.
+Backtracking is not merely the paper's choice — it is the *only* choice that is
+compatible with repetition. `many p` is "zero or more `p`s", naturally
+`empty | (p then many p)`: "match nothing, or match one `p` and recurse". Under
+committed choice the "match nothing" branch always succeeds immediately (it
+consumes zero input), so the parser always stops there and returns `[]`, never
+reading even one `p`. The empty string is a prefix of *every* string, so no
+reordering or "disjointness" bookkeeping can fix it. So `codec` keeps the paper's
+semantics exactly, and the roundtrip laws hold **unconditionally** — because the
+decoder and the denotation agree *by construction*. The cost is the paper's own
+admitted cost (§4.4): naive backtracking is exponential in the worst case; making
+it fast without changing what it means is a separate, later problem.
 
 ### `[D4]` lossless capture — why we refuse to throw bytes away
 
@@ -238,16 +214,15 @@ so parse and print are a genuine byte-for-byte two-way street. Where the paper
 relaxes the law to keep `ignore`, `codec` relaxes nothing and drops `ignore`
 instead.
 
-### `[D5]` no prefix-disjointness gate — a condition we *removed*
+### `[D5]` no prefix-disjointness gate
 
 Some deterministic parsers require `|`'s branches to be *prefix-disjoint* — to
 never both match strings where one is a prefix of the other — so "commit to the
-first success" stays deterministic. `codec` had this requirement once, and it is
-gone. It had to go because it is incompatible with the paper's repetition: the
-two branches of `many p` are **never** prefix-disjoint (`[]` is a prefix of every
-non-empty string), so a disjointness gate makes `many` unexpressible. With `|` as
-backtracking union, the gate is simply not needed — the branches are tried
-independently and concatenated, and there is nothing to keep disjoint.
+first success" stays deterministic. `codec` needs no such gate, and could not have
+one: it is incompatible with the paper's repetition, because the two branches of
+`many p` are **never** prefix-disjoint (`[]` is a prefix of every non-empty
+string). With `|` as backtracking union, the branches are tried independently and
+concatenated, so there is nothing to keep disjoint.
 
 ### `[D6]` a description is a *value* — why the paper's typeclass hides the thing
 we need to prove about
