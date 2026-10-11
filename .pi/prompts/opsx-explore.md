@@ -1,4 +1,4 @@
-______________________________________________________________________
+---
 
 ## description: "Enter explore mode - think through ideas, investigate problems, clarify requirements"
 
@@ -30,7 +30,7 @@ In both branches, never create the root as a side effect: do not run `openspec i
 - A comparison: "postgres vs sqlite for this"
 - Nothing (just enter explore mode)
 
-______________________________________________________________________
+---
 
 ## The Stance
 
@@ -41,7 +41,7 @@ ______________________________________________________________________
 - **Patient** - Don't rush to conclusions, let the shape of the problem emerge
 - **Grounded** - Explore the actual codebase when relevant, don't just theorize
 
-______________________________________________________________________
+---
 
 ## Planning a Change
 
@@ -65,7 +65,7 @@ If this stays a single-device tool, I recommend keeping SQLite to avoid
 adding a service to operate; shared state would need a separate sync design.
 ```
 
-______________________________________________________________________
+---
 
 ## What You Might Do
 
@@ -120,7 +120,7 @@ Unicode diagram glyphs can render at different widths across terminals, fonts, a
 - Find gaps in understanding
 - Suggest spikes or investigations
 
-______________________________________________________________________
+---
 
 ## OpenSpec Awareness
 
@@ -140,7 +140,7 @@ This tells you:
 - Their names, schemas, and status
 - What the user might be working on
 
-That is the *change* list - work in flight. It does not include the project's durable capabilities, so list those too:
+That is the _change_ list - work in flight. It does not include the project's durable capabilities, so list those too:
 
 ```bash
 openspec list --specs
@@ -194,14 +194,14 @@ If the user mentions a change or you detect one is relevant:
 
    `<capability-path>` is the spec directory relative to `specs/` (for example, `user-auth` or `identity/user-auth`). Preserve an existing capability's full path and follow the project's established organization for new capabilities.
 
-   | Insight Type | Where to Capture |
-   |----------------------------|-------------------------------------|
+   | Insight Type               | Where to Capture                  |
+   | -------------------------- | --------------------------------- |
    | New requirement discovered | `specs/<capability-path>/spec.md` |
-   | Requirement changed | `specs/<capability-path>/spec.md` |
-   | Design decision made | `design.md` |
-   | Scope changed | `proposal.md` |
-   | New work identified | `tasks.md` |
-   | Assumption invalidated | Relevant artifact |
+   | Requirement changed        | `specs/<capability-path>/spec.md` |
+   | Design decision made       | `design.md`                       |
+   | Scope changed              | `proposal.md`                     |
+   | New work identified        | `tasks.md`                        |
+   | Assumption invalidated     | Relevant artifact                 |
 
    Example offers:
 
@@ -211,7 +211,7 @@ If the user mentions a change or you detect one is relevant:
 
 1. **The user decides** - Offer and move on. Don't pressure. Don't auto-capture.
 
-______________________________________________________________________
+---
 
 ## What You Don't Have To Do
 
@@ -222,7 +222,7 @@ ______________________________________________________________________
 - Stay on topic if a tangent is valuable
 - Be brief (this is thinking time)
 
-______________________________________________________________________
+---
 
 ## Ending Discovery
 
@@ -235,7 +235,7 @@ There's no required ending. Discovery might:
 
 When things crystallize, you might offer a summary - but it's optional. Sometimes the thinking IS the value.
 
-______________________________________________________________________
+---
 
 ## Guardrails
 

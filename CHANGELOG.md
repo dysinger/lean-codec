@@ -33,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Wrapped the denotation (`Rel`/`relRepeat`/`Productive`/`single`) in
   `namespace Codec`, so they live at `Codec.*` uniformly beside `Codec.decode`/
-  `Codec.encode`/`Codec.roundtrip` (the `Codec` *type* is unchanged — a type and
+  `Codec.encode`/`Codec.roundtrip` (the `Codec` _type_ is unchanged — a type and
   a same-named namespace coexist).
 - `Codec.Iso`: deleted the dead `app`/`unapp` wrappers and the redundant `comp`
   (kept `trans` + `≫`); inlined `foldlApply`/`foldrApply'` into `foldl`/`foldr`'s
@@ -45,7 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `Codec.Iso` — partial isomorphisms with the inverse law as a *field*, plus the
+- `Codec.Iso` — partial isomorphisms with the inverse law as a _field_, plus the
   category structure, the product bifunctor, the structural isos (`nil`/`cons`/
   `unit`/`commute`/`associate`/`element`/`subset`/`inverse`/`optionSome`), and the
   well-founded `foldl`/`foldr` folded isos.

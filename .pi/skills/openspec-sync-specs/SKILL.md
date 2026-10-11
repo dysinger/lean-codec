@@ -1,4 +1,4 @@
-______________________________________________________________________
+---
 
 ## name: openspec-sync-specs description: Sync delta specs from an OpenSpec change to main specs. Use when the user wants to update main specs with changes from a delta spec, without archiving the change. Also use when the user says "openspec sync" or "opsx sync". allowed-tools: Bash(openspec:\*) license: MIT compatibility: Requires openspec CLI. metadata: author: openspec version: "1.0" generatedBy: "1.13.1"
 
@@ -131,7 +131,7 @@ In both branches, never create the root as a side effect: do not run `openspec i
    - Remove the entire requirement block from main spec
    - Retiring the capability. Delete the whole `spec.md` - and the directory once
      nothing else is left in it - only when ALL of these hold:
-     1. removing the requirements *this run* left no requirement blocks;
+     1. removing the requirements _this run_ left no requirement blocks;
      1. the rest of the spec is well-formed (it still has a `## Purpose`);
      1. the main spec was not already empty before this sync - if you removed
         nothing, change nothing;
@@ -205,22 +205,27 @@ Only on a delta that introduces a brand-new capability. Seeds the new main spec.
 ## ADDED Requirements
 
 ### Requirement: New Feature
+
 The system SHALL do something new.
 
 #### Scenario: Basic case
+
 - **WHEN** user does X
 - **THEN** system does Y
 
 ## MODIFIED Requirements
 
 ### Requirement: Existing Feature
+
 The system SHALL keep doing the existing thing, now also handling A.
 
 #### Scenario: Scenario the main spec already has
+
 - **WHEN** user does X
 - **THEN** system does Y
 
 #### Scenario: New scenario to add
+
 - **WHEN** user does A
 - **THEN** system does B
 
@@ -242,14 +247,17 @@ Main specs are what the delta merges INTO. They must never contain delta operati
 # <capability> Specification
 
 ## Purpose
+
 Short description of what this capability does and why it exists.
 
 ## Requirements
 
 ### Requirement: New Feature
+
 The system SHALL do something new.
 
 #### Scenario: Basic case
+
 - **WHEN** user does X
 - **THEN** system does Y
 ```
@@ -270,10 +278,12 @@ Unlike programmatic merging, you merge rather than overwrite:
 Updated main specs:
 
 **<capability-1>**:
+
 - Added requirement: "New Feature"
 - Modified requirement: "Existing Feature" (added 1 scenario)
 
 **<capability-2>**:
+
 - Created new spec file
 - Added requirement: "Another Feature"
 

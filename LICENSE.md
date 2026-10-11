@@ -4,7 +4,7 @@
   serialization framework written in Lean 4.</p>
 </div>
 
-______________________________________________________________________
+---
 
 ## Prefer a commercial license?
 
@@ -18,7 +18,7 @@ Unless you hold a signed commercial license agreement, your use of this
 software is governed **only** by the GNU Affero General Public License v3.0
 (or later), printed verbatim below.
 
-______________________________________________________________________
+---
 
 ## GNU Affero General Public License v3.0 (or later)
 
@@ -26,7 +26,7 @@ Copyright © 2026 Department of Code LLC
 
 The complete, legally-binding text follows.
 
-______________________________________________________________________
+---
 
 ```
                 GNU AFFERO GENERAL PUBLIC LICENSE

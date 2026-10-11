@@ -3,7 +3,7 @@
 ## Context
 
 See `proposal.md` for the motivation. This library re-bases Rendel & Ostermann's
-*syntax descriptions* onto a byte core and makes their invertibility a machine
+_syntax descriptions_ onto a byte core and makes their invertibility a machine
 proof. The authoritative reference is `PAPER.md`.
 
 ## Goals / Non-Goals
@@ -15,7 +15,7 @@ proof. The authoritative reference is `PAPER.md`.
   `List UInt8`).
 - Byte-exact roundtrip, encode→decode direction **unconditional**
   (`encode d x = some s → (x, []) ∈ decode d s`), with the strict `Iso` law holding
-  *unconditionally* (no "modulo equivalence classes" escape hatch) — for **every**
+  _unconditionally_ (no "modulo equivalence classes" escape hatch) — for **every**
   description, including `alt` and repetition. The decode→encode converse is
   byte-exact only for `Functional` descriptions (see `README.md` `[D4]`/
   `Codec.Sound.encode_of_decode`).
@@ -26,11 +26,11 @@ proof. The authoritative reference is `PAPER.md`.
 **Non-Goals:**
 
 - No leaf codecs in core (no `u8`/endianness/`varint`/`bytes n`/`utf8`/`text`).
-- No cursor, no committed-choice narrowing, no peeking/backtracking *cut*.
+- No cursor, no committed-choice narrowing, no peeking/backtracking _cut_.
 - No mathlib; stdlib only.
 - Efficiency is deferred (the paper's §4.4 open problem): the proof-of-concept
   backtracking decoder is exponential in the worst case; an efficient DP
-  re-implementation of the *same* semantics is future work, not a change to the
+  re-implementation of the _same_ semantics is future work, not a change to the
   semantics.
 
 ## Decisions
@@ -52,9 +52,9 @@ proof. The authoritative reference is `PAPER.md`.
   `README.md`.)
 - **`Codec` is an inductive description AST**, a deliberate departure from the
   paper's §3.4 typeclass. The typeclass reading (one `Codec` per use site, two
-  *instances* for parsing/printing) would make the description implicit, so
+  _instances_ for parsing/printing) would make the description implicit, so
   `Rel : Codec α → α → …`, `decode : Codec α → List UInt8 → …`, and
-  `encode : Codec α → α → …` could not be ordinary functions *of* a description
+  `encode : Codec α → α → …` could not be ordinary functions _of_ a description
   value, and structural induction over a single description would not typecheck.
   The free-alternative / free-applicative encoding makes `Codec` an explicit value
   the interpreters consume. (Alternative rejected: the paper's typeclass, and a
@@ -64,7 +64,7 @@ proof. The authoritative reference is `PAPER.md`.
   `decode` returns the **full list** of `(value, remaining)` results (backtracking,
   as in the paper §4.1) rather than a single result or an error.
 - **Unbounded repetition is semantic, not a finite `Codec`.** `many` (§3.4) is an
-  *infinite* description, which a strict language cannot represent as an AST node;
+  _infinite_ description, which a strict language cannot represent as an AST node;
   a former `partial def many` was irreducibly opaque at the `Rel` level (a
   `partial def` yields no equational lemma). Its semantics is split into
   `relRepeat (Rel p)` (denotation), `decodeRepeat p h` (decoder, well-founded on
@@ -81,7 +81,7 @@ proof. The authoritative reference is `PAPER.md`.
 
 - [Backtracking is exponential in the worst case] → Mitigation: the semantics is
   exactly the paper's (§4.1/§4.4); efficiency is the paper's own named open
-  problem, deferred to a separate DP re-implementation of the *same* denotation
+  problem, deferred to a separate DP re-implementation of the _same_ denotation
   (not a change to the semantics).
 - \[`ByteArray` ops may resist `simp`\] → Mitigation: model the provable core as
   `Bytes` (a reducible `abbrev` for `List UInt8`); reserve `Buffer` (a packed

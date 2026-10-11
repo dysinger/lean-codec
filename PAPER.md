@@ -97,7 +97,7 @@ putation, parser combinators, pretty printing
    for download at http://www.informatik.uni-marburg.de/
    ~rendel/unparse/.
 
-______________________________________________________________________
+---
 
 2. Parsing versus Pretty-Printing
    EDSLs for parsing such as Parsec tend to be structured as parser
@@ -221,7 +221,7 @@ ______________________________________________________________________
    a data type constructor Iso so that Iso α β is the type of isomor-
    phisms between α and β . More precisely, the type Iso α β captures
 
-______________________________________________________________________
+---
 
 what we call partial isomorphisms. A partial isomorphism between
 α and β is represented as a pair of functions f of type α → Maybe β
@@ -340,7 +340,7 @@ Unfortunately, this version of ∗ cannot be implemented by
 Printer. Expanding the definition of Printer, we see that we would
 have to implement the following function.
 
-______________________________________________________________________
+---
 
 ( ∗ ) :: (Iso α β → Doc) → (α → Doc) → (β → Doc)
 ( ∗ ) p q b = ...
@@ -457,7 +457,7 @@ tions twice: First for parsing and then for printing.
 An implementation of the language of syntax descriptions con-
 sists of a parametric data type with instances for IsoFunctor,
 
-______________________________________________________________________
+---
 
 ProductFunctor, Alternative and Syntax. In this paper, we present
 rather inefficient proof-of-concept implementations for both pars-
@@ -584,7 +584,7 @@ guage interface of syntax descriptions with printers. We have
 shown that it is possible to implement syntax descriptions with
 both parsers and printers.
 
-______________________________________________________________________
+---
 
 4.3 What syntax descriptions mean
 A syntax description denotes a relation between abstract and con-
@@ -726,7 +726,7 @@ isomorpisms is practical. The abstractions developed in this section
 are reused in the next section as the basis for some derived syntax
 combinators.
 
-______________________________________________________________________
+---
 
 Every partial isomorphism expressible in Haskell can be writ-
 ten by implementing both directions of the isomorphism indepen-
@@ -848,7 +848,7 @@ foldl f = fst ◦ driver step where
 step (z, [ ]) = Nothing
 step (z, x : xs) = Just (f (z, x), xs)
 
-______________________________________________________________________
+---
 
 We have transformed foldl into a small-step abstract machine to
 break its monolithic computation into a series of smaller steps. The
@@ -974,7 +974,7 @@ $ (inverse (element c) $ token)
 The following two operators are variants of ∗ that ignore their
 left or right result. In contrast to their counterparts derived from the
 
-______________________________________________________________________
+---
 
 Applicative class, the ignored parts have type δ () rather than δ β
 because otherwise information relevant for pretty-printing would
@@ -1094,7 +1094,7 @@ exp 0 = literal $ integer
 | ifZero $ ifzero
 | parens (skipSpace ∗ expression ∗ skipSpace)
 
-______________________________________________________________________
+---
 
 exp 1 = chainl1 (exp 0) spacedOps (binOpPrio 1)
 exp 2 = chainl1 (exp 1) spacedOps (binOpPrio 2)
@@ -1221,7 +1221,7 @@ spected while parsing.
    and continuation passing style (CPS). The use of CPS allows Danvy
    to circumvent the fact that Printer is contravariant. However, in
 
-______________________________________________________________________
+---
 
 Danvy’s approach, it is not obvious how to define an abstraction
 like Printer as a parametric type constructor. More recently, Kise-
@@ -1348,7 +1348,7 @@ program. We have shown that sophisticated languages with key-
 words and operator priorities can be described in this style, result-
 ing in useful parsers and pretty-printers. Finally, we have seen that
 
-______________________________________________________________________
+---
 
 partial isomorphisms are a promising abstraction that goes beyond
 parsing and pretty-printing; functions such as fold/unfold can be

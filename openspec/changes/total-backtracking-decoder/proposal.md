@@ -2,14 +2,14 @@
 
 ## Why
 
-Rendel & Ostermann's *Invertible Syntax Descriptions* (§3.4, §4.1) defines the
-parser as a nondeterministic list monad with `many` a *derived* combinator.
+Rendel & Ostermann's _Invertible Syntax Descriptions_ (§3.4, §4.1) defines the
+parser as a nondeterministic list monad with `many` a _derived_ combinator.
 This library re-bases that on bytes and proves the two directions agree with the
 denotational relation `Rel`.
 
 The core is proven (unconditional laws, `[propext, Quot.sound]`, zero `sorry`).
-The one non-total construct is `many` (currently `partial def`): its *meaning*
-(`Rel`) is total and proven; its *execution* into a strict `List` is not, because
+The one non-total construct is `many` (currently `partial def`): its _meaning_
+(`Rel`) is total and proven; its _execution_ into a strict `List` is not, because
 `many (pure ())` has infinitely many results.
 
 A prior attempt "solved" this with a fuel counter plus a `Productive`
@@ -21,7 +21,7 @@ This change replaces it with the correct constructive realization: `decode`'s
 repetition case is **well-founded recursion on the consumed byte string** — the
 paper's own productive guard — with no fuel, no `Productive`, no new constructor.
 The totality boundary (empty-matching `many` is genuinely infinite) is stated as
-a *theorem*, not patched with a wrong result.
+a _theorem_, not patched with a wrong result.
 
 ## What Changes
 

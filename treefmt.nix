@@ -19,11 +19,7 @@ _: {
   programs.deadnix.enable = true; # scan .nix files for dead code
   programs.statix.enable = true; # lint .nix files
 
-  # TEMPORARY: mdformat (programs.mdformat) currently crashes with a false-positive
-  # HTML-diff error on some Markdown ("Formatted Markdown renders to different HTML"),
-  # blocking `nix fmt`. Use prettier for Markdown until the mdformat plugin bug is
-  # resolved; switch back to `programs.mdformat.enable = true` afterwards.
-  programs.prettier.enable = true; # format markdown (temporary stand-in for mdformat)
+  programs.prettier.enable = true; # format markdown
 
   settings.excludes = [
     ".git/**"

@@ -1,4 +1,4 @@
-______________________________________________________________________
+---
 
 ## name: openspec-explore description: Enter OpenSpec explore mode - a thinking partner for exploring ideas, investigating problems, and clarifying requirements in a project that uses OpenSpec. Use when the user wants to think through something before or during an OpenSpec change. Also use when the user says "openspec explore" or "opsx explore". allowed-tools: Bash(openspec:\*) license: MIT compatibility: Requires openspec CLI. metadata: author: openspec version: "1.0" generatedBy: "1.13.1"
 
@@ -21,7 +21,7 @@ Otherwise, with no root, what happens next depends on how this workflow was reac
 
 In both branches, never create the root as a side effect: do not run `openspec init` until the user asks for it, do not hand-create `openspec/` files, and do not let a command create it.
 
-______________________________________________________________________
+---
 
 ## The Stance
 
@@ -32,7 +32,7 @@ ______________________________________________________________________
 - **Patient** - Don't rush to conclusions, let the shape of the problem emerge
 - **Grounded** - Explore the actual codebase when relevant, don't just theorize
 
-______________________________________________________________________
+---
 
 ## Planning a Change
 
@@ -56,7 +56,7 @@ If this stays a single-device tool, I recommend keeping SQLite to avoid
 adding a service to operate; shared state would need a separate sync design.
 ```
 
-______________________________________________________________________
+---
 
 ## What You Might Do
 
@@ -111,7 +111,7 @@ Unicode diagram glyphs can render at different widths across terminals, fonts, a
 - Find gaps in understanding
 - Suggest spikes or investigations
 
-______________________________________________________________________
+---
 
 ## OpenSpec Awareness
 
@@ -131,7 +131,7 @@ This tells you:
 - Their names, schemas, and status
 - What the user might be working on
 
-That is the *change* list - work in flight. It does not include the project's durable capabilities, so list those too:
+That is the _change_ list - work in flight. It does not include the project's durable capabilities, so list those too:
 
 ```bash
 openspec list --specs
@@ -183,14 +183,14 @@ If the user mentions a change or you detect one is relevant:
 
    `<capability-path>` is the spec directory relative to `specs/` (for example, `user-auth` or `identity/user-auth`). Preserve an existing capability's full path and follow the project's established organization for new capabilities.
 
-   | Insight Type | Where to Capture |
-   |----------------------------|-------------------------------------|
+   | Insight Type               | Where to Capture                  |
+   | -------------------------- | --------------------------------- |
    | New requirement discovered | `specs/<capability-path>/spec.md` |
-   | Requirement changed | `specs/<capability-path>/spec.md` |
-   | Design decision made | `design.md` |
-   | Scope changed | `proposal.md` |
-   | New work identified | `tasks.md` |
-   | Assumption invalidated | Relevant artifact |
+   | Requirement changed        | `specs/<capability-path>/spec.md` |
+   | Design decision made       | `design.md`                       |
+   | Scope changed              | `proposal.md`                     |
+   | New work identified        | `tasks.md`                        |
+   | Assumption invalidated     | Relevant artifact                 |
 
    Example offers:
 
@@ -200,7 +200,7 @@ If the user mentions a change or you detect one is relevant:
 
 1. **The user decides** - Offer and move on. Don't pressure. Don't auto-capture.
 
-______________________________________________________________________
+---
 
 ## What You Don't Have To Do
 
@@ -211,7 +211,7 @@ ______________________________________________________________________
 - Stay on topic if a tangent is valuable
 - Be brief (this is thinking time)
 
-______________________________________________________________________
+---
 
 ## Handling Different Entry Points
 
@@ -319,7 +319,7 @@ You: That changes everything.
      Unless... is there a sync component?
 ```
 
-______________________________________________________________________
+---
 
 ## Ending Discovery
 
@@ -348,7 +348,7 @@ When it feels like things are crystallizing, you might summarize:
 
 But this summary is optional. Sometimes the thinking IS the value.
 
-______________________________________________________________________
+---
 
 ## Guardrails
 
