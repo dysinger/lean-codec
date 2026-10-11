@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-10-11
+goal: ByteArray-packed run-model interpreters (decode/encode varint over ByteArray + Nat cursor) proved equal to the List spec; the densest stdlib carrier, no FFI/compiler
+skip_specs: true
