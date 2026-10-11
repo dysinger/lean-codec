@@ -9,7 +9,7 @@ import Codec.Iso
 This file defines `Codec`, the *description* language re-based onto bytes from
 Rendel & Ostermann's `Syntax` (§3.4). A `Codec α` is a syntax description
 producing values of type `α`; one description gives both a decoder and an
-encoder (the two interpreters live in `Codec.Decode` and `Codec.Encode`).
+encoder (the two interpreters are `Codec.decode` and `Codec.encode`).
 
 The combinators are:
 
@@ -78,9 +78,22 @@ theorem Rel_iso {α β : Type} (i : Iso α β) (d : Codec α) (x : β) (s : List
     Rel (Codec.iso i d) x s ↔ ∃ a, i.apply a = some x ∧ Rel d a s :=
   Iff.rfl
 
+/-- A `seq`-description relates a pair to a string that splits compatibly between
+the two components. -/
+theorem Rel_seq {α β : Type} (d₁ : Codec α) (d₂ : Codec β) (x₁ : α) (x₂ : β)
+    (s : List UInt8) :
+    Rel (Codec.seq d₁ d₂) (x₁, x₂) s ↔
+      ∃ s₁ s₂, s = s₁ ++ s₂ ∧ Rel d₁ x₁ s₁ ∧ Rel d₂ x₂ s₂ :=
+  Iff.rfl
+
 /-- `alt` is the union of the two relations. -/
 theorem Rel_alt {α : Type} (d₁ d₂ : Codec α) (x : α) (s : List UInt8) :
     Rel (Codec.alt d₁ d₂) x s ↔ Rel d₁ x s ∨ Rel d₂ x s :=
+  Iff.rfl
+
+/-- `empty` relates nothing. -/
+theorem Rel_empty {α : Type} (x : α) (s : List UInt8) :
+    Rel (Codec.empty : Codec α) x s ↔ False :=
   Iff.rfl
 
 /-- `pure x₀` relates exactly `x₀` to the empty string. -/
@@ -100,7 +113,7 @@ relation `R : α → List UInt8 → Prop`. This is the well-founded (structural-
 the-list) reading of `Rel (many p)` — total for *every* `R`, independent of
 whether the step itself matches the empty string. It is the constructive
 denotation of the derived `many` combinator; the decoder law is
-`Codec.Decode.decodeRepeat_spec`. -/
+`Codec.decodeRepeat_spec`. -/
 def relRepeat {α : Type} (R : α → List UInt8 → Prop) :
     List α → List UInt8 → Prop
   | [], s => s = []
