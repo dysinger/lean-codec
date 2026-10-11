@@ -257,11 +257,13 @@ post-core deliverables (the paper's §4.4 open problem and the §7 transport tar
 
 Ordered, with the decisions to resolve **before** coding each:
 
-- [x] **10.2 README rewrite.** **Done** — rewritten as a high-level orientation
-  (intent, paper TL;DR, a compact `[D1]`–`[D8]`/`[S1]`–`[S6]` summary table, scope,
-  `status`, `building`); Lean specifics and the per-item rationale now live in the
-  `Codec/*.lean` doc-comments and `openspec/` (design.md), not the README. Names:
-  `Bytes` (substrate) / `Buffer` (transport), no type rename.
+- [x] **10.2 README rewrite.** **Done** — written as the **full architecture
+  statement**: intent, the paper TL;DR, the **complete** `[D1]`–`[D8]`/`[S1]`–`[S6]`
+  departures/strengthenings with a layman "why these choices" section, the
+  committed-choice detour narrative, scope, and getting-started. **No** status/issues
+  section (that is `openspec/`/`AGENTS.md`); the README is *about the project and the
+  paper*. Also added `CHANGELOG.md` and `LICENSE.md` (AGPL-3.0 + commercial option).
+  Names: `Bytes` (substrate) / `Buffer` (transport), no type rename.
 - [ ] **10.5 Extraction + benchmark.** Tooling check first: `lake env lean --features`
   currently reports `[]` (no LLVM/C backend provisioned in the pinned `lean4` 4.34.1
   Nix build). **Decision before coding:** (a) use `lake env lean file.lean -c file.c`
