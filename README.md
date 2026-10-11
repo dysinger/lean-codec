@@ -64,7 +64,8 @@ t ← characters]` (§4.3). Our core targets binary (fixed-width integers, endia
 image files, LEB128 framing); the base unit is `UInt8`, the base string is
 `List UInt8`, and `byte : Codec UInt8` is the `token` analogue. Text/Unicode is
 rebuilt downstream in `lean-text` on top of bytes, not in core. The provable core
-is the `List UInt8` model; `ByteArray` is the later executable wrapper (§7),
+is the `Bytes` model (an `abbrev` for `List UInt8`); `Buffer` (a `ByteArray`-backed
+newtype in `Codec.Buffer`) is the later executable transport surface (§7),
 *not* the proof substrate, because `ByteArray`'s FFI ops do not reduce under
 `simp` (the proofs are over `List` reduction, e.g. `s = s₁ ++ s₂`).
 
@@ -252,14 +253,14 @@ downstream concern (`lean-text` maps `String` onto bytes via `utf8`) — on *top
 of bytes, not underneath them. Nothing about the framework changes; only the
 ground floor does.
 
-**Why `List UInt8` and not `ByteArray`?** A `ByteArray` is the *fast*
+**Why `Bytes` (i.e. `List UInt8`) and not `ByteArray`?** A `ByteArray` is the *fast*
 representation (raw memory), but its operations are opaque to Lean's `simp`: the
 proof assistant cannot see inside them, so equations like `s = s₁ ++ s₂` (which
 the entire proof lives on) would not reduce and every proof would get stuck. A
-`List UInt8` is a plain linked list that `simp` *can* unfold step by step — it
-is a *proof-friendly* model. So we prove everything on `List UInt8`, and later
-(*not* in core) swap in a `ByteArray` wrapper whose `List ↔ ByteArray`
-relationship is itself proved once. This is the difference between "the model
+`Bytes` (= `List UInt8`) is a plain linked list that `simp` *can* unfold step by step — it
+is a *proof-friendly* model. So we prove everything on `Bytes`, and later
+(*not* in core) swap in a `Buffer` (a `ByteArray`-backed transport, `Codec.Buffer`) whose
+`Bytes ↔ Buffer` relationship is itself proved once. This is the difference between "the model
 you prove on" and "the model you run at speed" — `[D1]`'s second sentence is
 deliberately that separation.
 
@@ -484,8 +485,9 @@ Every `Codec` is a composition of `Iso`s via `$`/`*`/`|`/`pure`/`byte`; the
 inverse guarantee is **structural**: the `Iso` law is a field, and the two
 `Rel` theorems above hold **unconditionally** (for every description, including
 `alt`/`many`) — no solver, no per-combinator lemma, no prefix-disjointness gate.
-The provable core is `List UInt8`; `ByteArray` (whose FFI-backed ops do not
-reduce under `simp`) is the later executable wrapper transported on top.
+The provable core is `Bytes` (= `List UInt8`); `Buffer` (a `ByteArray`-backed
+newtype, whose FFI-backed ops do not reduce under `simp`) is the later executable
+transport surface in `Codec.Buffer`, transported on top.
 
 ______________________________________________________________________
 
@@ -520,7 +522,8 @@ semantics lives in three already-separate places (see below): `relRepeat` (the
 total least-fixpoint denotation), `decodeRepeat` (the productive decoder),
 `encodeRepeat` (the total encoder). The `many`-shaped *list* combinators
 (`sepBy`, `chainl1`/`chainr1`) are re-derived over these three, with their own
-`_spec`/`_rel` laws. The efficient `ByteArray` wrapper + benchmark remain future
+`_spec`/`_rel` laws. The efficient `Buffer` transport (`Codec.Buffer`) is done;
+the extraction + benchmark remain future
 work.
 
 ### The `many` totality note
