@@ -5,8 +5,8 @@ Guidance for AI coding agents working in this repository.
 ## Project
 
 `codec` — a verified, byte-exact, bidirectional codec library in Lean 4
-(repo directory `lean-codec`). Takes Rendel & Ostermann's *Invertible Syntax
-Descriptions* (2010) and makes it dependently typed, provable, and binary.
+(repo directory `lean-codec`). Takes Rendel & Ostermann's _Invertible Syntax
+Descriptions_ (2010) and makes it dependently typed, provable, and binary.
 
 Stdlib-only (no mathlib). Build with `lake build`; the proof gate is the same
 build with zero `sorry`.
@@ -35,7 +35,7 @@ Do **not**:
   on the host — get it from `nix develop`.
 
 (For Nix usage details see the `nix` skill; this note is the project-specific
-reminder that the toolchain is *flake-scoped*, not host-global.)
+reminder that the toolchain is _flake-scoped_, not host-global.)
 
 Source of truth:
 
@@ -50,7 +50,7 @@ Source of truth:
 **Done** (compiles clean: zero sorries, zero warnings; `#print axioms Codec.roundtrip` ⇒ `[propext, Quot.sound]`):
 
 - `Codec/Iso.lean` — `Iso` + folded combinators: `foldl` (§5.3), `foldr` (the
-  right-fold dual, a *fresh* well-founded recursion with step `Iso (β × α) α`,
+  right-fold dual, a _fresh_ well-founded recursion with step `Iso (β × α) α`,
   **not** `inverse ∘ foldl ∘ inverse` which is type-incoherent), `optionSome`,
   plus the structural isos (`nil`/`cons`/`unit`/`commute`/`associate`/`element`/
   `subset`/`inverse`). `[propext, Quot.sound]` only.
@@ -70,11 +70,11 @@ Source of truth:
   unconditional `_spec`/`_rel` law. Finite combinators unchanged: `seqRight`/
   `seqLeft`/`between`, `optional`/`maybe`, `choice`, `count`/`manyUpTo`.
 - `Codec/Codec.lean` also defines `abbrev Bytes := List UInt8` (the provable
-  substrate, used everywhere the core wrote `List UInt8`; *reducible*, so every
+  substrate, used everywhere the core wrote `List UInt8`; _reducible_, so every
   `List` lemma applies unchanged).
 - `Codec/Buffer.lean` — the packed, `ByteArray`-backed **transport surface** (§10.4):
   `Buffer` (newtype over `ByteArray`), `toBytes`/`ofBytes` (routed through
-  `ByteArray.data`, the reducible `Array`, *not* the opaque `ByteArray.toList`),
+  `ByteArray.data`, the reducible `Array`, _not_ the opaque `ByteArray.toList`),
   and the transported interpreters `decodeBuffer`/`encodeBuffer` with the
   bar-transferred laws `decodeBuffer_eq`/`encodeBuffer_eq`/`decodeBuffer_spec`/
   `roundtripBuffer`.
@@ -88,7 +88,7 @@ Source of truth:
 **Decisions already made** (read before continuing):
 
 1. `Bytes` (= `List UInt8`) for the provable core; `Buffer` (a `ByteArray`-backed
-   newtype) is the separate, later executable transport surface — *not* the proof
+   newtype) is the separate, later executable transport surface — _not_ the proof
    substrate.
 1. **`|` is the paper's backtracking union, not committed choice** (restored;
    `NonNull`/`Disjoint`/`PrefixDisjoint` deleted). Do not reintroduce a
@@ -98,24 +98,24 @@ Source of truth:
 1. `Codec` is an inductive description AST, not the paper's §3.4 typeclass.
 1. `iterate` (paper §5.3) is deliberately omitted (no field law; forward/backward
    fixpoints can differ).
-1. **Unbounded `many`/`some`/`sepBy`/`chainl1` are *semantic*, not `Codec`.** An
+1. **Unbounded `many`/`some`/`sepBy`/`chainl1` are _semantic_, not `Codec`.** An
    infinite AST cannot be a finite `Codec`, and a `partial def` is proof-opaque;
    repetition lives as `relRepeat`/`decodeRepeat`/`encodeRepeat` (cf. §9).
 
 **Open, in order** (full detail in `tasks.md` §11):
 
-1. **Efficiency — the F*-style carrier refinement (Paper §4.4, "work faster").**
+1. _*Efficiency — the F*-style carrier refinement (Paper §4.4, "work faster")._*
    **Tier A done** (`efficient-backtracking-decoder`, archived): `decodeFull`/
    `decodeRepeatFull`/`decodeFast` proved denotationally equal, `[propext, Quot.sound]`,
    ~20,000× on the full-consumption ask. **Next step is the buffer-carrier tier** — the
    new OpenSpec change **`openspec/changes/buffer-carrier-decoders/`** (proposal/design/
    tasks, `skip_specs: true`). It is the F* two-tier move (spec over `List`, run-model
-   over `Array UInt8` + index, proved-equal) *without* FFI or a compiler: `decodeArray d a i
-   : List (α × Nat)` / `encodeArray d x : Option (Array UInt8)` native on the array, plus
+   over `Array UInt8` + index, proved-equal) _without_ FFI or a compiler: `decodeArray d a i
+: List (α × Nat)` / `encodeArray d x : Option (Array UInt8)` native on the array, plus
    `decodeArray_eq`/`encodeArray_eq` (the single refinement lemma) and transferred laws.
    **Read `design.md` before coding; the next session starts there.** The sequencing is
    deliberate: see it work → work faster (this change) → later, after real use, work
-   the fastest possible (FFI/`@[extern]`/compiler — explicitly a *separate, deferred*
+   the fastest possible (FFI/`@[extern]`/compiler — explicitly a _separate, deferred_
    change, not part of this one). **No FFI, no codegen, no `HashMap`, no chart parser
    in this change.**
 
@@ -157,7 +157,7 @@ Source of truth:
 > (memoizing chart) is a separate, deferred change.**
 
 > **Documentation conventions (this session):** the README is the **full
-> architecture statement** — *about the project and the paper only*. It carries the
+> architecture statement** — _about the project and the paper only_. It carries the
 > complete `[D1]`–`[D8]`/`[S1]`–`[S6]` departures/strengthenings (each with a layman
 > "why"), and a short getting-started at the bottom. It has **no** status/issues
 > section and **no** process/history narrative (the project is greenfield/unreleased;
@@ -179,7 +179,7 @@ are created before implementation; see `.pi/prompts/opsx-*.md`.
 - Commit **individual files**, never `git add -A` or broad globs. Print the exact
   staged set before committing.
 - `lake-manifest.json` and `flake.lock`: `lake-manifest.json` is gitignored
-  (library shouldn't pin deps); `flake.lock` (Nix) *is* tracked for reproducibility.
+  (library shouldn't pin deps); `flake.lock` (Nix) _is_ tracked for reproducibility.
 
 ## Skills
 

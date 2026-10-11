@@ -4,8 +4,8 @@
 
 The backtracking decoder `Codec.decode` is the paper's proof-of-concept
 "list-monad" parser: `decode (p | q) s = decode p s ++ decode q s` and unbounded
-repetition `decodeRepeat p h s` enumerate **all** results. This is *semantically
-necessary* (it is what makes the bidirectional law unconditional, and `decodeRepeat`
+repetition `decodeRepeat p h s` enumerate **all** results. This is _semantically
+necessary_ (it is what makes the bidirectional law unconditional, and `decodeRepeat`
 handles the empty-match `[]` prefix that a committed choice cannot), but it is the
 paper's own §4.4 caveat: **exponential worst-case complexity and a space leak from
 unlimited backtracking**. The §10.5 benchmark made the cost concrete — `decodeRepeat Codec.byte [16384]` ≈ 13.8 s (quadratic in output; the all-prefixes enumeration is
@@ -22,11 +22,11 @@ naive interpreter with an efficient implementation of the **same** denotation.
   denotation, addressing the Θ(n²) all-prefixes blowup when only the full-consumption
   (or a single) prefix is wanted.
 - **Laws**: `decodeFast d s = decode d s`, `decodeRepeatFast p h s = decodeRepeat p h s`
-  (denotational equality — the new interpreters are *proved equal* to the proven ones,
+  (denotational equality — the new interpreters are _proved equal_ to the proven ones,
   so every existing `decode_spec`/`bdirection`/`roundtrip`/`decodeRepeat_spec` law
   transfers by rewrite, **no new semantics**).
 - **No change** to `Rel`, `decode`, `encode`, the combinators, or any existing theorem
-  statement. This is a pure refactor of the *interpreter's runtime*, not the language.
+  statement. This is a pure refactor of the _interpreter's runtime_, not the language.
 
 ## Capabilities
 
