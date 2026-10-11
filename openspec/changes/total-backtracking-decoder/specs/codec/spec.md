@@ -1,6 +1,6 @@
 # codec — spec delta
 
-## FIXED Requirements
+## MODIFIED Requirements
 
 ### Requirement: correct, productive repetition decoder
 
@@ -45,3 +45,11 @@ terminates.
 The laws (`decode_spec`, `bidir`, `encode_rel`, `decode_encode`, `roundtrip`)
 SHALL remain unconditional and SHALL be re-proved over the unchanged `Rel`, with
 `#print axioms` = `[propext, Quot.sound]` and zero `sorry`.
+
+#### Scenario: the `many` case is the least-fixpoint law, over unchanged `Rel`
+
+- **WHEN** the change lands
+- **THEN** the core `Rel` (the six constructors) is unchanged; the `many` case
+  is realized by `relRepeat` (the least fixpoint) and `decodeRepeat_spec` (the
+  `many`-case bidirectional law), and `#print axioms` on each law reports
+  `[propext, Quot.sound]` with zero `sorry`.
