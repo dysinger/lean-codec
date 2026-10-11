@@ -2,7 +2,9 @@
    SPDX-License-Identifier: AGPL-3.0-or-later -/
 
 import Codec.Decode
+import Codec.DecodeArray
 import Codec.Encode
+import Codec.EncodeArray
 
 /-!
 # Soundness: the roundtrip and bidirectional laws
@@ -584,5 +586,72 @@ theorem decodeRepeatFull_spec {α : Type} (p : Codec α) (h : ConsumesByte p)
     (xs : List α) (s : Bytes) :
     decodeRepeatFull p h s = some xs ↔ (xs, []) ∈ decodeRepeat p h s :=
   decodeFull_spec p h huniq xs s
+
+/-! ## The array-carrier interpreters: transferred laws (buffer tier)
+
+`decodeArray`/`encodeArray` (`Codec.DecodeArray`/`Codec.EncodeArray`) are the
+F\*-style run-models over the `Array UInt8` carrier, *proved equal* to the list
+specs (`decodeArray_eq`/`encodeArray_eq`), so every law above transfers by a
+one-line rewrite — **no new semantics**, no new induction. Each lemma below is a
+definitional rerouting into the already-proven `Bytes`-level law. -/
+
+/-- The bidirectional law for the array-carrier decoder: `(x, j) ∈ decodeArray d a i`
+iff the dropped input splits as a `Rel`-prefix `s₀` plus the dropped remainder, with
+`j` exactly the position `i + s₀.length` (the canonical index; the explicit arithmetic
+pins down `j`, which `drop` alone does not when the remainder is empty). Transferred
+from `decode_spec` through `decodeArray_eq` and `List.mem_map`. -/
+theorem decodeArray_spec {α : Type} (d : Codec α) (a : Array UInt8) (i : Nat) (x : α) (j : Nat) :
+    (x, j) ∈ decodeArray d a i ↔
+      ∃ s₀, a.toList.drop i = s₀ ++ a.toList.drop j ∧ Rel d x s₀ ∧ j = i + s₀.length := by
+  rw [decodeArray_eq, List.mem_map]
+  constructor
+  · intro h
+    rcases h with ⟨pr, hpr, heq⟩
+    rcases pr with ⟨x₀, r⟩
+    have hx : x₀ = x := congrArg Prod.fst heq
+    have hjidx : i + ((a.toList.drop i).length - r.length) = j := congrArg Prod.snd heq
+    subst x₀
+    rcases (decode_spec d x (s := a.toList.drop i) (r := r)).1 hpr with ⟨s₀, hs, hrel⟩
+    refine ⟨s₀, ?_, hrel, ?_⟩
+    · have hlen : (a.toList.drop i).length = s₀.length + r.length := by rw [hs, List.length_append]
+      have hj' : j = i + s₀.length := by rw [hjidx.symm, hlen, Nat.add_sub_cancel_right]
+      rw [hj']
+      rw [drop_add_length_of_append hs.symm]
+      exact hs
+    · have hlen := congrArg List.length hs
+      rw [List.length_append] at hlen
+      rw [hjidx.symm, hlen, Nat.add_sub_cancel_right]
+  · intro h
+    rcases h with ⟨s₀, hs, hrel, hj⟩
+    refine ⟨(x, a.toList.drop j), ?_, ?_⟩
+    · exact (decode_spec d x (s := a.toList.drop i) (r := a.toList.drop j)).2 ⟨s₀, hs, hrel⟩
+    · change (x, i + ((a.toList.drop i).length - (a.toList.drop j).length)) = (x, j)
+      congr 1
+      have hlen := congrArg List.length hs
+      rw [List.length_append] at hlen
+      rw [hlen, Nat.add_sub_cancel_right]
+      exact hj.symm
+
+/-- Encoder soundness for the array-carrier encoder: any value it prints to an
+`Array` is in the description's denotational domain over the array's bytes.
+Transferred from `encode_rel` through `encodeArray_eq`. -/
+theorem encodeArray_rel {α : Type} (d : Codec α) (x : α) :
+    ∀ {a : Array UInt8}, encodeArray d x = some a → Rel d x a.toList := by
+  intro a he
+  rw [encodeArray_eq] at he
+  exact encode_rel d x he
+
+/-- The byte-exact roundtrip for the array carriers: a value encoded to an `Array`
+decodes back, over `decodeArray` from index `0`, consuming the whole array. Transferred
+from `roundtrip` through `encodeArray_eq` and `decodeArray_eq`. -/
+theorem roundtripArray {α : Type} (d : Codec α) (x : α) (a : Array UInt8) :
+    encodeArray d x = some a → (x, a.toList.length) ∈ decodeArray d a 0 := by
+  intro he
+  rw [decodeArray_eq, List.mem_map]
+  rw [encodeArray_eq] at he
+  have hrt : (x, []) ∈ decode d (a.toList.drop 0) := roundtrip d x a.toList he
+  refine ⟨(x, []), ?_, ?_⟩
+  · simpa using hrt
+  · simp
 
 end Codec

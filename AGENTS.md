@@ -107,17 +107,27 @@ Source of truth:
 1. _*Efficiency — the F*-style carrier refinement (Paper §4.4, "work faster")._*
    **Tier A done** (`efficient-backtracking-decoder`, archived): `decodeFull`/
    `decodeRepeatFull`/`decodeFast` proved denotationally equal, `[propext, Quot.sound]`,
-   ~20,000× on the full-consumption ask. **Next step is the buffer-carrier tier** — the
-   new OpenSpec change **`openspec/changes/buffer-carrier-decoders/`** (proposal/design/
-   tasks, `skip_specs: true`). It is the F* two-tier move (spec over `List`, run-model
-   over `Array UInt8` + index, proved-equal) _without_ FFI or a compiler: `decodeArray d a i
-: List (α × Nat)` / `encodeArray d x : Option (Array UInt8)` native on the array, plus
-   `decodeArray_eq`/`encodeArray_eq` (the single refinement lemma) and transferred laws.
-   **Read `design.md` before coding; the next session starts there.** The sequencing is
-   deliberate: see it work → work faster (this change) → later, after real use, work
-   the fastest possible (FFI/`@[extern]`/compiler — explicitly a _separate, deferred_
-   change, not part of this one). **No FFI, no codegen, no `HashMap`, no chart parser
-   in this change.**
+   ~20,000× on the full-consumption ask. **Tier B (buffer carrier) done** — the
+   OpenSpec change **`openspec/changes/buffer-carrier-decoders/`** is implemented: the
+   F* two-tier move (spec over `List`, run-model over `Array UInt8` + index,
+   proved-equal) _without_ FFI or a compiler. Shipped: `Codec/DecodeArray.lean`
+   (`decodeArray d a i : List (α × Nat)`, the relative-consumed internal `decodeArrayRel`,
+   `decodeArray_eq`/`decodeArrayRel_eq`, the `decodeFull`-composed `decodeFullArray` +
+   `decodeFullArray_spec`, helpers `decode_suffix`/`drop_add_length_of_append`/
+   `flatMap_congr`), `Codec/EncodeArray.lean` (`encodeArray d x : Option (Array UInt8)`,
+   `encodeArray_eq`), and three transfer laws in `Codec/Sound.lean` (`decodeArray_spec`,
+   `encodeArray_rel`, `roundtripArray`) — all `[propext, Quot.sound]`-only. **Lesson 1:**
+   `Array` is the reducible `List`-backed structure (`a.toList`, not `a.data`); the
+   membership-form refinement `(x,j) ∈ decodeArray d a i ↔ (x, drop j) ∈ decode d (drop i)`
+   is **wrong** for non-consuming `pure` (and empty remainders), because `drop` discards the
+   index — use the function-level form `decodeArray d a i = (decode d (drop i)).map
+(fun (x,r) => (x, i + (drop i).length - r.length))`, which is correct for every `d`.
+   **Lesson 2:** the measured carrier win is _not_ the design's hoped ~5–20× — stdlib
+   `Array.size = a.toList.length` is structural O(n) (no cached length), so
+   `decodeArray`'s `i < a.size` guard walks the list each call. Correct and proved-equal,
+   but the `size` cost is the ceiling; lifting it is the FFI/`@[extern]`/compiler tier.
+   The FFI/`@[extern]`/compiler tier stays a _separate, deferred_ change.
+   **No FFI, no codegen, no `HashMap`, no chart parser in this change.**
 
 > Resolved this session: §10.1 (namespace — no type rename; `Rel`/`relRepeat`/`Productive`
 > now live at `Codec.*`), §10.1a/10.1b/10.1c (organization/naming/docs), §10.2

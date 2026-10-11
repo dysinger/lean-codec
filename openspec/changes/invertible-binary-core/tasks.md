@@ -324,6 +324,28 @@ Ordered, with the decisions to resolve **before** coding each:
       with transfer laws; measured **~20,000× faster** on the full-consumption ask
       (545 µs vs 11.2 s at `[16384]`). **Tier B (memoizing chart) deferred** to a
       separate change. See `openspec/changes/efficient-backtracking-decoder/`.
+- [x] **§10.6 buffer-carrier tier (F\* two-tier run-model, no FFI/compiler).** **Done** in
+      `buffer-carrier-decoders` — the `Array UInt8` + `Nat`-index run-model proved equal
+      to the `List` spec. New `Codec/DecodeArray.lean` (`decodeArray`, internal relative
+      `decodeArrayRel`, `decodeArray_eq`/`decodeArrayRel_eq`, `decodeFullArray`/
+      `decodeFullArray_spec`, helpers `decode_suffix`/`drop_add_length_of_append`/
+      `flatMap_congr`) and `Codec/EncodeArray.lean` (`encodeArray`/`encodeArray_eq`), plus
+      three transfer laws in `Codec/Sound.lean` (`decodeArray_spec`, `encodeArray_rel`,
+      `roundtripArray`) — all `[propext, Quot.sound]`-only. **Notable lesson:** the
+      _membership_-form refinement over `drop` is **wrong** for `pure`/empty-remainder
+      (index info lost): the correct form is the function-level
+      `decodeArray d a i = (decode d (drop i)).map (fun (x,r) => (x, i + (drop i).length
+    - r.length))`. And `Array` here reduces to its `toList` field (no `a.data`; run the
+      proofs over `a.toList`, reach `ByteArray` only through `ByteArray.data`).
+      `Bench.lean` gained `decodeArray`/`encodeArray`/`decodeFullArray` legs (5.1);
+      measured (arm64, reps=20): `decodeFullArray byte [16384]` = 731 µs (≈ `decodeFull`'s
+      1017 µs — it is the composition, same list cost); `decodeArray byte [1048576]` =
+      16.8 µs and `encodeArray byte` = 914 ns. **Caveat:** the carrier swap **does not**
+      deliver the design's hoped ~5–20× here, because stdlib `Array.size = a.toList.length`
+      is _structural_ O(n) (no cached length field) — so `decodeArray`'s `i < a.size` guard
+      walks the whole list each call. The native-array index recursion is correct and
+      proved-equal, but the `size` cost is the ceiling; the FFI/`@[extern]`/compiler tier
+      (a separate deferred change) is where that ceiling is actually lifted.
 
 **Planning-vs-build note:** the `proposal.md`/`design.md`/`specs/codec/spec.md` in this
 change were **updated this session** to the _implemented_ reality (backtracking-union

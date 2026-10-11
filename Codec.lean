@@ -20,7 +20,9 @@ library's components:
 import Codec.Iso
 import Codec.Codec
 import Codec.Decode
+import Codec.DecodeArray
 import Codec.Encode
+import Codec.EncodeArray
 import Codec.Sound
 import Codec.Combinators
 import Codec.Buffer

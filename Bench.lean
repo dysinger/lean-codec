@@ -137,6 +137,50 @@ unsafe def benchRoundtripBuffer (reps : Nat) : IO Unit := do
       IO.println s!"encodeBuffer byte: {dt1 / reps} ns/op"
       IO.println s!"decodeBuffer byte: {dt2 / reps} ns/op"
 
+/-! ## The array-carrier run-models (§10.6, buffer tier)
+
+`decodeArray`/`encodeArray`/`decodeFullArray` are the F\*-style run-models over the
+`Array UInt8` carrier (§10.6 / the `buffer-carrier-decoders` change), *proved equal*
+to the list specs. These legs measure the carrier swap against the §10.5 list-carrier
+baselines; the array decoder reads `a[i]` by index (no per-byte cons-peel). -/
+
+/-- The `n` bytes as an `Array UInt8` (the `List`-backed `Array.mk`, reducible to
+its `toList`; no `ByteArray` involved). -/
+unsafe def arrayBytesOf (n : Nat) : Array UInt8 :=
+  (bytesOf n).toArray
+
+/-- The array-carrier single-step decoder: `decodeArray Codec.byte a 0` peels one
+byte in O(1) by index. Confirms it yields `[(1, 1)]`. -/
+unsafe def benchDecodeArray (n : Nat) (reps : Nat) : IO Unit := do
+  let a : Array UInt8 := arrayBytesOf n
+  let (r, dt) ← timeBatch reps fun _ => decodeArray Codec.byte a 0
+  let expected : List (UInt8 × Nat) := [(1, 1)]
+  if r != expected then
+    throw (IO.userError s!"decodeArray byte: expected [(1,1)], got {r}")
+  IO.println s!"decodeArray byte [{n}]: {dt / reps} ns/op"
+
+/-- The array-accumulating single-step encoder: `encodeArray Codec.byte 1` yields
+`some #[1]`. -/
+unsafe def benchEncodeArray (reps : Nat) : IO Unit := do
+  let (r, dt) ← timeBatch reps fun _ => encodeArray Codec.byte (1 : UInt8)
+  match r with
+  | some a =>
+      if a != #[1] then throw (IO.userError "encodeArray byte: expected #[1]")
+  | none => throw (IO.userError "encodeArray byte: expected some")
+  IO.println s!"encodeArray byte: {dt / reps} ns/op"
+
+/-- The array-carrier full-consumption repetition decoder: `decodeFullArray` of
+`Codec.byte` over `n` bytes should return `some (replicate n 1, n)`. -/
+unsafe def benchDecodeFullArray (n : Nat) (reps : Nat) : IO Unit := do
+  let a : Array UInt8 := arrayBytesOf n
+  let (r, dt) ← timeBatch reps fun _ => decodeFullArray Codec.byte byte_consumesByte a 0
+  match r with
+  | some (xs, j) =>
+      if xs.length != n || j != n then
+        throw (IO.userError s!"decodeFullArray byte: expected ({n},{n}), got ({xs.length},{j})")
+  | none => throw (IO.userError "decodeFullArray byte: expected some")
+  IO.println s!"decodeFullArray byte [{n}]: {dt / reps} ns/op"
+
 end Codec.Bench
 
 open Codec.Bench in
@@ -162,4 +206,9 @@ unsafe def main (args : List String) : IO Unit := do
   Codec.Bench.benchDecodeFull m reps
   Codec.Bench.benchDecodeRepeatFull m reps
   Codec.Bench.benchDecodeFast n reps
+  -- Array-carrier run-models (§10.6, buffer tier): the array decoder/encoder/full
+  -- repetition, each a proved-equal carrier swap over the `Array UInt8` run-model.
+  Codec.Bench.benchDecodeArray n reps
+  Codec.Bench.benchEncodeArray reps
+  Codec.Bench.benchDecodeFullArray m reps
   IO.println "done"
