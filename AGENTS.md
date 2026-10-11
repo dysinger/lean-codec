@@ -62,15 +62,16 @@ Codec.roundtrip` ⇒ `[propext, Quot.sound]`):
    laws stay unconditional; `[propext, Quot.sound]`, zero `sorry`/warnings.
    `#eval byteRepeat [1,2,3]` = `[([],[1,2,3]),([1],[2,3]),([1,2],[3]),([1,2,3],[])]`.
 
-   **Residual decision (surface before further work):** `many` is still a
+   **Next step (planned in the existing ledger, §9 of
+   `openspec/changes/invertible-binary-core/tasks.md`):** `many` is still a
    `partial def Codec` (the *infinite* AST), so `Rel (many p)` is *opaque* — the
    `Rel_many` equality `Rel (many p) xs s ↔ relRepeat (Rel p) xs s` is
    **unprovable** with the current `partial def`. The honest reading of the
    design's "`many` is a total `def` in denotational reading" is: `relRepeat`
    *is* `many`'s denotation, and the list combinators (`some`/`sepBy`/`sepBy1`/
-   `chainl1`/`chainr1`, which embed `many p` as a `Codec` value) should be
-   re-derived over `relRepeat`/`decodeRepeat` directly. That rewrite is **not**
-   done here — it is the next step, gated on the reviewer's call.
+   `chainl1`/`chainr1`, which embed `many p` as a `Codec` value) must be
+   re-derived over `relRepeat`/`decodeRepeat` directly. **Do this as §9 of the
+   `invertible-binary-core` change — no new change.**
 2. **Efficiency (the paper's §4.4 open problem)** — memoization/DP over the same
    denotation, separate from correctness. (This also subsumes the future
    "lazy-stream carrier" migration if a *total* `decode (many (pure ()))` is ever
