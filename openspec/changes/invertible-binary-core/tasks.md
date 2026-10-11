@@ -222,13 +222,20 @@ post-core deliverables (the paper's §4.4 open problem and the §7 transport tar
   now partly covered by 10.1a's fold-block rework; do them together); (c) dead code — **done**
   for `foldrApply_append`/`cons_head_tail`/`isoMap`/`seq`/`alt`/`fail`; remaining `app`/`unapp`
   are ticketed in 10.1b.
-- [ ] 10.3a **Chain-combinator decode→encode / injectivity companions** (review CODE-1).
+- [x] 10.3a **Chain-combinator decode→encode / injectivity companions** (review CODE-1).
   The primitives gained `encode_ne_none`/`encode_of_decode`/`encode_injective_of_unambiguous`,
   but the chain combinators (`decodeChainl1`/`decodeChainr1`/`encodeChainl1`/`encodeChainr1`)
   have only the soundness direction (`_rel`) and the decoder `_spec` — no `Functional
-  (relChain* …)`-style completeness, no decode→encode law, no injectivity. Either prove a
-  `Functional`/`Unambiguous`-parameterized chain converse (mirroring the primitives) or
-  record explicitly that the decode→encode half is *not* proved for chains.
+  (relChain* …)`-style completeness, no decode→encode law, no injectivity. **Done:** the
+  chain combinators are *relations* not `Codec` values, so the converse laws are stated over
+  two new relation-level predicates `relFunctional`/`relUnambiguous` (the generic forms of
+  which `Functional`/`Unambiguous` are the `Rel d` special cases), plus `encodeRepeat_ne_none`
+  (the `relRepeat`-level `encode_ne_none`). New laws in `Combinators.lean`: `encodeChainl1_ne_none`/
+  `encodeChainr1_ne_none` (completeness), `encodeChainl1_of_decode`/`encodeChainr1_of_decode`
+  (decode→encode under `relFunctional (relChain* …)`), and
+  `encodeChainl1_injective_of_unambiguous`/`encodeChainr1_injective_of_unambiguous` (under
+  `relUnambiguous`). Axioms `[propext, Quot.sound]` throughout (`encodeRepeat_ne_none` is
+  `[propext]`-only).
 - [ ] 10.4 **`ByteArray` wrapper** (§7.1 partial / review #10) — transport the provable
   `List UInt8` core to a `ByteArray`-backed executable surface. Sub-task per review: define
   `Iso (List UInt8) ByteArray` (or a newtype) and re-prove `decode_spec`/`roundtrip` through
