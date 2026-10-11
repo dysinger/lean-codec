@@ -259,11 +259,12 @@ Ordered, with the decisions to resolve **before** coding each:
 
 - [x] **10.2 README rewrite.** **Done** — written as the **full architecture
   statement**: intent, the paper TL;DR, the **complete** `[D1]`–`[D8]`/`[S1]`–`[S6]`
-  departures/strengthenings with a layman "why these choices" section, the
-  committed-choice detour narrative, scope, and getting-started. **No** status/issues
-  section (that is `openspec/`/`AGENTS.md`); the README is *about the project and the
-  paper*. Also added `CHANGELOG.md` and `LICENSE.md` (AGPL-3.0 + commercial option).
-  Names: `Bytes` (substrate) / `Buffer` (transport), no type rename.
+  departures/strengthenings (each with a layman "why these choices" justification),
+  scope, and getting-started. Deliberately **no** status/issues section (that is
+  `openspec/`/`AGENTS.md`) and **no** process/history narrative — the README is then
+  purely *about the project and the paper*. Also added `CHANGELOG.md` and `LICENSE.md`
+  (AGPL-3.0 + commercial option). Names: `Bytes` (substrate) / `Buffer` (transport),
+  no type rename.
 - [ ] **10.5 Extraction + benchmark.** Tooling check first: `lake env lean --features`
   currently reports `[]` (no LLVM/C backend provisioned in the pinned `lean4` 4.34.1
   Nix build). **Decision before coding:** (a) use `lake env lean file.lean -c file.c`
