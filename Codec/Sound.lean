@@ -540,4 +540,49 @@ theorem encodeRepeat_ne_none {α : Type} (p : Codec α) :
           | none => exact False.elim (hne' h₂)
           | some e₂ => simp
 
+/-! ## The efficient interpreters: transferred laws (Tier A)
+
+`decodeFast` (list-fused) and `decodeFull`/`decodeRepeatFull` (full-consumption,
+`Option`-valued repetition) are *proved equal* to the spec interpreters
+(`decodeFast_eq`, `decodeFull_spec`), so every law above transfers by a one-line
+rewrite — **no new semantics**, no new induction. These lemmas are the API surface
+the efficient path exposes; each is a definitional rerouting into the already-proven
+law. -/
+
+/-- The bidirectional law for the fused decoder: `decodeFast d s` returns `x` with `r`
+remaining iff the input splits as a relating prefix plus `r`. Transferred from
+`decode_spec` through `decodeFast_eq`. -/
+theorem decodeFast_spec {α : Type} (d : Codec α) (x : α) (s r : Bytes) :
+    (x, r) ∈ decodeFast d s ↔ ∃ s₀, s = s₀ ++ r ∧ Rel d x s₀ := by
+  rw [decodeFast_eq]
+  exact decode_spec d x (s := s) (r := r)
+
+/-- The whole-string bidirectional law for the fused decoder (`decode_spec` at
+`r = []`): `Rel d x s` iff `decodeFast d s` accepts `s` fully as `x`. Transferred
+from `bidir` through `decodeFast_eq`. -/
+theorem bidir_decodeFast {α : Type} (d : Codec α) (x : α) (s : Bytes) :
+    Rel d x s ↔ (x, []) ∈ decodeFast d s := by
+  rw [decodeFast_eq]
+  exact bidir d x s
+
+/-- The byte-exact roundtrip for the fused decoder: a value encoded to `s` decodes
+back via `decodeFast` to `x` with no remainder. Transferred from `roundtrip` through
+`decodeFast_eq`. -/
+theorem roundtrip_decodeFast {α : Type} (d : Codec α) (x : α) (s : Bytes) :
+    encode d x = some s → (x, []) ∈ decodeFast d s := by
+  intro he
+  rw [decodeFast_eq]
+  exact roundtrip d x s he
+
+/-- The full-consumption repetition law, restated under the `decodeRepeatFull` name
+(the same `↔` as `decodeFull_spec`, already proved in `Codec.Decode`). Under the
+full-consumption-uniqueness hypothesis, the fused `Option`-valued "many" decoder returns
+`some xs` iff `xs` fully consumes the input. -/
+theorem decodeRepeatFull_spec {α : Type} (p : Codec α) (h : ConsumesByte p)
+    (huniq : ∀ {x y : List α} {s : Bytes},
+      (x, []) ∈ decodeRepeat p h s → (y, []) ∈ decodeRepeat p h s → x = y)
+    (xs : List α) (s : Bytes) :
+    decodeRepeatFull p h s = some xs ↔ (xs, []) ∈ decodeRepeat p h s :=
+  decodeFull_spec p h huniq xs s
+
 end Codec

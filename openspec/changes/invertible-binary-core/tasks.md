@@ -280,10 +280,20 @@ post-core deliverables (the paper's §4.4 open problem and the §7 transport tar
   `Buffer.toBytes`. The benchmark home per handoff is downstream `lean-binary`;
   this harness is the *core* extraction/link vehicle.
 
-- [ ] 10.6 **Efficiency spike (the paper's §4.4 open problem — *last*)** — memoization/DP
+  **§10.6 follow-up (Tier A landed in `efficient-backtracking-decoder`):** the
+  same `bench` harness gained `decodeFull`/`decodeRepeatFull`/`decodeFast` legs.
+  Measured (same machine, reps=20): `decodeRepeat byte [16384]` = 11.2 s (the
+  quadratic baseline above); `decodeFull byte [16384]` = 545 µs and
+  `decodeRepeatFull byte [16384]` = 632 µs (**~20,000× faster, sub-millisecond**);
+  `decodeFast byte` = O(1) (~31 ns, byte-exact equal to `decode byte`). The
+  full-consumption ask is now sub-second by ~4 orders of magnitude.
+
+- [x] 10.6 **Efficiency spike (the paper's §4.4 open problem — *last*)** — memoization/DP
   over the *same* denotation, separate from correctness. Does **not** change semantics.
-  **Planned as the new change `efficient-backtracking-decoder`** (see its `proposal.md`/
-  `design.md`/`tasks.md`); tracked there, not as a §10 task.
+  **Tier A landed** in `efficient-backtracking-decoder` (`decodeFull`/`decodeRepeatFull`/
+  `decodeFast`, all proved denotationally equal, `[propext, Quot.sound]`-only; measured
+  ~20,000× faster on the full-consumption ask — see the §10.5 follow-up note above).
+  **Tier B (memoizing chart) remains a separate change**, not part of §10.
 
 ## 11. Next session — remaining §10 plan (10.5 done / 10.6 last)
 
@@ -307,13 +317,13 @@ Ordered, with the decisions to resolve **before** coding each:
   O(1); `decodeRepeat byte [16384]` ≈ 13.8 s (quadratic, paper §4.4). Hot-path audit
   clean (`match` destructuring, `ByteArray.data`, no `getElem`-with-proof leak).
   Accepts task 1.6; the benchmark *home* is downstream `lean-binary`.
-- [ ] **10.6 Efficiency spike (paper §4.4).** **Separate change**
-  (`efficient-backtracking-decoder`), **last**, and does **not** change the denotation:
-  memoization/DP over the *same* `Rel`/`decode` semantics. **Now planned as its own
-  OpenSpec change** — `openspec/changes/efficient-backtracking-decoder/` with
-  `proposal.md`/`design.md`/`tasks.md` (Tier A: fusion + full-consumption specialization,
-  proved denotationally equal; Tier B: memoizing chart, deferred). No spec delta
-  (`skip_specs: true` — behavior unchanged by construction).
+- [x] **10.6 Efficiency spike (paper §4.4).** **Tier A done** in
+  (`efficient-backtracking-decoder`); no denotation change: `decodeFull`/
+  `decodeRepeatFull` (`Option`-valued full-consumption "many") + `decodeFast`
+  (list-fused `decode`) are proved equal to the spec (`[propext, Quot.sound]`-only),
+  with transfer laws; measured **~20,000× faster** on the full-consumption ask
+  (545 µs vs 11.2 s at `[16384]`). **Tier B (memoizing chart) deferred** to a
+  separate change. See `openspec/changes/efficient-backtracking-decoder/`.
 
 **Planning-vs-build note:** the `proposal.md`/`design.md`/`specs/codec/spec.md` in this
 change were **updated this session** to the *implemented* reality (backtracking-union

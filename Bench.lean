@@ -86,6 +86,41 @@ unsafe def benchDecodeRepeat (n : Nat) : IO Unit := do
     throw (IO.userError s!"decodeRepeat: expected {n+1} prefixes, got {out.length}")
   IO.println s!"decodeRepeat byte [{n}]: {dt} ns"
 
+/-- The Tier A full-consumption repetition decoder: the §4.4/§10.6 target. Unlike
+`decodeRepeat` (which materializes all `n+1` prefixes), this threads one `Option` and
+returns `some (replicate n byte)` for the whole input. At the `m`-scale this should be
+an order of magnitude faster than `decodeRepeat`. -/
+unsafe def benchDecodeFull (n : Nat) (reps : Nat) : IO Unit := do
+  let s : Bytes := bytesOf n
+  let (r, dt) ← timeBatch reps fun _ => decodeFull Codec.byte byte_consumesByte s
+  match r with
+  | some xs =>
+      if xs.length != n then
+        throw (IO.userError s!"decodeFull: expected {n} bytes, got {xs.length}")
+  | none => throw (IO.userError "decodeFull: expected some, got none")
+  IO.println s!"decodeFull byte [{n}]: {dt / reps} ns/op"
+
+/-- The `decodeRepeatFull` alias (same full-consumption decoder as `decodeFull`),
+measured to confirm it shares the fast path, with the same byte-exact assertion. -/
+unsafe def benchDecodeRepeatFull (n : Nat) (reps : Nat) : IO Unit := do
+  let s : Bytes := bytesOf n
+  let (r, dt) ← timeBatch reps fun _ => decodeRepeatFull Codec.byte byte_consumesByte s
+  match r with
+  | some xs =>
+      if xs != s then
+        throw (IO.userError "decodeRepeatFull: byte mismatch")
+  | none => throw (IO.userError "decodeRepeatFull: expected some, got none")
+  IO.println s!"decodeRepeatFull byte [{n}]: {dt / reps} ns/op"
+
+/-- The fused single-step decoder `decodeFast`: peels one `Codec.byte` in O(1),
+deny-re-traversing. Confirms `decodeFast` equals `decode` (one result). -/
+unsafe def benchDecodeFast (n : Nat) (reps : Nat) : IO Unit := do
+  let s : Bytes := bytesOf n
+  let (r, dt) ← timeBatch reps fun _ => decodeFast Codec.byte s
+  if r != decode Codec.byte s then
+    throw (IO.userError "decodeFast ≠ decode")
+  IO.println s!"decodeFast byte [{n}]: {dt / reps} ns/op"
+
 /-- The packed (`Buffer`-backed) single-byte roundtrip across the transport
 barrier (§10.4): `encodeBuffer`/`decodeBuffer` of `Codec.byte`, byte-exact. -/
 unsafe def benchRoundtripBuffer (reps : Nat) : IO Unit := do
@@ -122,4 +157,9 @@ unsafe def main (args : List String) : IO Unit := do
   Codec.Bench.benchRoundtripBuffer reps
   -- Quadratic backtracking "many" decoder (kept small, paper §4.4).
   Codec.Bench.benchDecodeRepeat m
+  -- Tier A efficient repeaters: the §4.4/§10.6 target (order-of-magnitude faster than
+  -- the all-prefix `decodeRepeat`), plus the fused single-step decoder.
+  Codec.Bench.benchDecodeFull m reps
+  Codec.Bench.benchDecodeRepeatFull m reps
+  Codec.Bench.benchDecodeFast n reps
   IO.println "done"
