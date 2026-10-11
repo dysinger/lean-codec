@@ -76,13 +76,7 @@ Codec.roundtrip` ⇒ `[propext, Quot.sound]`):
 
 **Open, in order** (full detail in `tasks.md` §11):
 
-1. **README rewrite** (task §10.2) — **done** this session: restored as the full
-   **architecture statement** (intent, the paper TL;DR, the complete `[D1]`–`[D8]`/
-   `[S1]`–`[S6]` departures/strengthenings with layman justification, scope,
-   getting-started; **no** "status"/"issues" section — that lives in `openspec/`
-   and this file). Remaining polish: verify the table rows and downstream split
-   still match the code exactly.
-2. **Extraction + benchmark** (task §10.5) — extract the `decode`/`encode` hot
+1. **Extraction + benchmark** (task §10.5) — extract the `decode`/`encode` hot
    path (and `decodeRepeat`/`encodeRepeat`) to C/LLVM, benchmark a multi-MB
    roundtrip (`byte`/`many`) proving **linear time, no per-byte boxing**, and
    audit `get!`/remaining-bytes/`Buffer.data` for `getElem`-with-proof leaks.
@@ -91,24 +85,27 @@ Codec.roundtrip` ⇒ `[propext, Quot.sound]`):
    file.lean -c file.c` (the C backend the build already exercises) or provision
    an LLVM toolchain via the flake. Benchmark home is downstream `lean-binary`.
    Covers task 1.6.
-3. **Efficiency (paper §4.4 open problem)** — **last**, a **separate**
+2. **Efficiency (paper §4.4 open problem)** — **last**, a **separate**
    `efficient-backtracking-decoder` change (memoization/DP over the *same*
    denotation; never changes semantics).
 
 > Resolved this session: §10.1 (namespace — no type rename; `Rel`/`relRepeat`/`Productive`
-> now live at `Codec.*`), §10.1a/10.1b/10.1c (organization/naming/docs), §10.3a (chain
-> converse laws), §10.4 (`Buffer` transport). The `Codec` type was **not** renamed —
-> Lean lets the type `Codec` and namespace `Codec` coexist; the fix was to restore the
-> uniform `namespace Codec` in `Codec/Codec.lean`. New substrate/transport naming:
-> `Bytes` = `abbrev Bytes := List UInt8` (proof substrate, reducible), `Buffer` =
-> packed `ByteArray` newtype (`Codec.Buffer`, transport via `ByteArray.data`).
+> now live at `Codec.*`), §10.1a/10.1b/10.1c (organization/naming/docs), §10.2
+> (README/CHANGELOG/LICENSE), §10.3a (chain converse laws), §10.4 (`Buffer` transport).
+> The `Codec` type was **not** renamed — Lean lets the type `Codec` and namespace
+> `Codec` coexist; the fix was to restore the uniform `namespace Codec` in
+> `Codec/Codec.lean`. New substrate/transport naming: `Bytes` = `abbrev Bytes :=
+> List UInt8` (proof substrate, reducible), `Buffer` = packed `ByteArray` newtype
+> (`Codec.Buffer`, transport via `ByteArray.data`).
 
-> **Documentation record (this session):** the README is the **full architecture
-> statement** — intent, the paper TL;DR, the **complete** `[D1]`–`[D8]`/`[S1]`–`[S6]`
-> departures/strengthenings (each with a layman "why"), scope, and getting-started.
-> It deliberately has **no** status/issues section — engineering state is `openspec/`
-> and this file; the README is *about the project and the paper*. When adding code,
-> keep every departure/
+> **Documentation conventions (this session):** the README is the **full
+> architecture statement** — *about the project and the paper only*. It carries the
+> complete `[D1]`–`[D8]`/`[S1]`–`[S6]` departures/strengthenings (each with a layman
+> "why"), and a short getting-started at the bottom. It has **no** status/issues
+> section and **no** process/history narrative (the project is greenfield/unreleased;
+> "we used to / reverted / formerly" belongs to `openspec/`'s task ledger, never the
+> README). Engineering state = `openspec/` + this file; user-facing docs = README +
+> `CHANGELOG.md` + `LICENSE.md`. When adding code, keep every departure/
 > strengthening cross-referenced to a `[D#]`/`[S#]` anchor in the README table, and
 > keep the axiom record consistent (`[propext, Quot.sound]`, never the stale
 > `Classical.choice`).
