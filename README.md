@@ -56,8 +56,8 @@ is `String → [(α, String)]`) and `token :: δ Char` (§4.3). `codec` targets
 binary, so the base unit is `UInt8`, the base string is a byte sequence, and
 `byte : Codec UInt8` is the `token` analogue. Text/Unicode is rebuilt downstream
 (`lean-text`) on top of bytes, not in core. The proof substrate is a plain byte
-list; a packed `ByteArray`-backed form is a later, *separate* transport concern,
-not the thing we prove about.
+list; a packed `ByteArray`-backed form is a *separate* transport concern, not the
+thing we prove about.
 
 **[D2] The nondeterministic list decoder.** The paper's decoder returns a *list*
 of `(value, remaining)` pairs — a relation (§4.1 `Parser (String → [(α, String)])`,
@@ -136,10 +136,11 @@ repetition denotation is the least relation closed under the `nil`/`cons` rules;
 an induction principle makes "least fixpoint" a theorem rather than a claim.
 
 **[S6] Unbounded `many` is *semantic*, not a `Codec` value.** An infinite
-description cannot be a finite AST node (a prior attempt was irreducibly opaque),
-so repetition lives as three separate artifacts — a denotation, a decoder, and an
-encoder — rather than a single `many` value. The paper's named repetition
-combinators (`sepBy`, `chainl1`/`chainr1`) are re-derived over those three; they
+description cannot be a finite AST node (a strict, finite tree cannot contain an
+endless repetition), so repetition lives as three separate artifacts — a
+denotation, a decoder, and an encoder — rather than a single `many` value. The
+paper's named repetition combinators (`sepBy`, `chainl1`/`chainr1`) are re-derived
+over those three; they
 do **not** exist as bare `Codec`-building symbols.
 
 Everything else is **kept**, and kept strongly: `Rel` is preserved as the
@@ -177,7 +178,7 @@ onto bytes) — on *top* of bytes, not underneath. Nothing about the framework
 changes; only the ground floor does. (A `ByteArray` — raw memory — is the *fast*
 representation, but it is opaque to the proof assistant, which cannot see inside
 it to reduce equations. So the *proof* model is a plain list, and the *run* model
-is a later, separate packed form. "The model you prove on" and "the model you run
+is a separate packed form. "The model you prove on" and "the model you run
 at speed" are deliberately two things.)
 
 ### `[D2]` + `[D3]` the decoder returns a *list*, and `|` means "try both, keep
