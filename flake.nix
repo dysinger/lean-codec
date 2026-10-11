@@ -77,6 +77,9 @@
           shellHook = ''
             echo "codec dev shell — lean $(lean --version | head -1 | awk '{print $2}')"
             echo "openspec $(openspec --version)"
+            # Activate the repo's pre-commit hook (runs `nix fmt` and fails if
+            # staged files would be reformatted). Stored under .githooks/.
+            git config core.hooksPath "$PWD/.githooks"
           '';
         };
       }

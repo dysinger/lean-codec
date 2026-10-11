@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+#
+# Pre-commit hook: run `nix fmt` (the treefmt wrapper that formats .nix with
+# nixfmt/deadnix/statix and .md with mdformat) and refuse to commit if the
+# formatter changed anything that is currently staged.
+#
+# Semantics: `nix fmt` rewrites files *in place* in the working tree. If, after
+# formatting, a file that is staged for this commit now differs from its staged
+# version, the staged content was not formatted. In that case the hook prints
+# the offending paths and aborts so you can `git add` them and re-commit.
+#
+# Activated via `core.hooksPath = .githooks` (see the flake devShell shellHook).
+set -euo pipefail
+
+# Snapshot the staged paths *before* formatting so we can attribute any
+# post-format diff to files that were actually part of this commit.
+# `--diff-filter=ACMR` = staged add/copy/modify/rename (what `git diff --cached`
+# reports); drop the diff filter and just take the names.
+staged_before="$(git diff --cached --name-only)"
+
+nix fmt
+
+# Files the formatter just touched (unstaged changes relative to the index).
+changed="$(git diff --name-only)"
+
+# Restrict to files that were staged for this commit.
+if [ -n "$changed" ] && [ -n "$staged_before" ]; then
+  offending="$(printf '%s\n' "$changed" | grep -F -x -f <(printf '%s\n' "$staged_before") || true)"
+  if [ -n "$offending" ]; then
+    printf 'nix fmt: the following staged files were reformatted:\n' >&2
+    printf '  %s\n' $offending >&2
+    printf 'Stage them (`git add <file>...`) and commit again.\n' >&2
+    exit 1
+  fi
+fi
+
+exit 0
