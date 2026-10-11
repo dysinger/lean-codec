@@ -48,6 +48,8 @@ inductive Codec : Type → Type 1
   | /-- The primitive byte description (`token`, re-based onto `UInt8`). -/
     byte : Codec UInt8
 
+namespace Codec
+
 /-! ## Denotational semantics: `Rel` -/
 
 /-- A single-byte sequence containing exactly `b`. -/
@@ -146,3 +148,5 @@ theorem relRepeat_induction {α : Type} (R : α → List UInt8 → Prop)
       rcases h with ⟨s₁, s₂, hs, hx, hxs⟩
       subst s
       exact hcons x xs s₁ s₂ hx hxs (ih s₂ hxs)
+
+end Codec
