@@ -25,6 +25,10 @@ the same idea, carried further in Lean, to completion:
 
 One description, two directions. `decode (encode x) = x`, *proved*, for every
 well-formed `x` — not tested, not asserted, and not discharged by a solver.
+(The encode→decode direction is the *unconditional* `roundtrip` law; the
+decode→encode converse holds byte-for-byte only for *functional* descriptions —
+see the `Functional` predicate in `Codec.Sound`, since backtracking `|` may map
+one value to several byte strings.)
 
 - **Pure framework.** `codec` ships `Iso`, `Codec`, `Rel`, the two
   interpreters, and the laws — **zero domain-specific leaf codecs** (not even
@@ -212,7 +216,9 @@ The core is implemented and proven (see the task ledger
 **unconditional** bidirectional/roundtrip laws. `iterate` is deliberately omitted
 (its forward/backward fixpoints need not coincide, so no field law — see
 `Codec/Iso.lean`). Bounded repetition (`count`/`manyUpTo`) is total and
-`#eval`-able. Unbounded repetition is **not** a finite `Codec` value; its
+`#eval`-able. The `chainl1`/`chainr1` combinators (and their `foldl`/`foldr`
+witnesses) are **computable** — the `WellFounded.fix` over a `Nat` measure needs no
+`noncomputable` — so the whole derived-combinator layer is extractable. Unbounded repetition is **not** a finite `Codec` value; its
 semantics lives in three already-separate places (see below): `relRepeat` (the
 total least-fixpoint denotation), `decodeRepeat` (the productive decoder),
 `encodeRepeat` (the total encoder). The `many`-shaped *list* combinators

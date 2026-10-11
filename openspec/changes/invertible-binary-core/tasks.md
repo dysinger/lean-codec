@@ -130,26 +130,60 @@ is unchanged and reused.
 **not** part of this change's proven core; efficiency and the `ByteArray` wrapper are
 post-core deliverables (the paper's §4.4 open problem and the §7 transport target).
 
-- [ ] 10.1 **Efficiency spike (the paper's §4.4 open problem)** — memoization/DP over
-  the *same* denotation (`Rel`/`relRepeat`), separate from correctness. Re-implements
-  `decode`'s semantics without the exponential worst case; does **not** change the
-  semantics. Acceptance: same `Rel`, `decode_spec`/`roundtrip` laws, linear time on a
-  synthetic `byte`/`many` description. Likely a *new* change (`openspec new change
-  efficient-backtracking-decoder`), not a §10 task — record the decision, then either
-  plan it here or spin it out.
-- [ ] 10.2 **`ByteArray` wrapper** (§7.1 partial) — transport the provable
-  `List UInt8` core to a `ByteArray`-backed executable surface; confirm `Prop` proofs
-  erase and no per-byte boxing in the hot path.
-- [ ] 10.3 **Extraction + benchmark** (§7.2/§7.3) — extract the `decode`/`encode` hot
-  path to C/LLVM; benchmark a multi-MB roundtrip (`byte`/`many`), record linear time;
-  confirm `get!`/remaining-bytes (not `getElem`-with-proof) actually runs post-extraction.
-  Covers task 1.6 too.
-- [ ] 10.4 **`README.md` rewrite** (§7.4) — update the combinator table to the
-  semantic-repetition split (`relRepeat`/`decodeRepeat`/`encodeRepeat` + `sepBy`/`chainl1`
-  triples), and the downstream split (`lean-binary`/`lean-text`).
-- [ ] 10.5 **Housekeeping** — resolve the `Codec`/`Codec.lean` type-vs-module name
-  collision; tidy the `relSepBy`/`optional` docstrings (empty `sepBy` value is
-  `none`, not `some []`).
+### Resolved this session (from the code-quality review)
+
+- [x] 10.0a **The `foldl`/`foldr`/`chainl1`/`chainr1` family was `noncomputable`** —
+  a review flagged this as making the chain combinators non-extractable/non-`#eval`-able.
+  Investigation showed the `noncomputable` annotations on `foldUnapply`/`foldrUnapply`/
+  `foldl`/`foldr` and the four chain combinators were **spurious**: `WellFounded.fix`
+  over a computable `measure : α → Nat` is already computable. Dropped; the entire
+  chain family is now computable with no change to the laws or axiom footprint.
+  **Note (closes review finding #1):** `Iso.foldl`/`Codec.decodeChainl1` now `#print
+  axioms` ⇒ `[propext, Quot.sound]`, same baseline.
+- [x] 10.0b **Stale `alt` docstrings** (3 sites: `Codec.lean` §3.3 list, `alt`
+  constructor, `alt` alias) still said "committed choice"; corrected to "backtracking
+  union" to match the implemented `Rel (d₁ | d₂) = Rel d₁ ∨ Rel d₂` / `decode (d₁ | d₂)
+  = decode d₁ ++ decode d₂` semantics (closes review finding #2).
+- [x] 10.0c **Missing decode→encode / injectivity half of "byte-exact bidirectional"**
+  (review finding #4). Added to `Codec/Sound.lean`: `Unambiguous` (value-directed),
+  `Functional` (string-directed), `encode_ne_none` (Rel → encode ≠ none, induction on
+  `d`), `encode_of_decode` (`Functional d ⇒ (x, []) ∈ decode d s → encode d x = some s`),
+  `encode_injective_of_unambiguous`. **The honest result:** the decode→encode byte-exact
+  converse is **false** in general (needs `Functional`); the unconditional law remains the
+  encode→decode `roundtrip`. This is a tightening of the claim, not a weakening of the core.
+
+### Remaining (reordered: rename before README/downstream)
+
+- [ ] 10.1 **Housekeeping: resolve the `Codec` type-vs-module collision** (neé 10.5).
+  The inductive `Codec` lives in `namespace Codec`/`Codec/Codec.lean`, forcing the
+  `Codec.iso`/`Codec.empty` prefix throughout and colliding the root file `Codec.lean`
+  with the `Codec/` directory. Rename the type (e.g. `Desc`/`Syntax`, matching paper
+  §3.4) **before** the README and downstream `lean-binary`/`lean-text` hard-code the
+  colliding names — cheap now, breaking later. Also tidy the `relSepBy`/`optional`
+  docstrings (empty `sepBy` value is `none`, not `some []` — currently `sepBy` *is*
+  non-empty `sepBy1`; decide whether to add a true zero-or-more `sepBy`, review #5).
+- [ ] 10.2 **`README.md` rewrite** (§7.4) — after 10.1 (names may change): combinator
+  table → the semantic-repetition split (`relRepeat`/`decodeRepeat`/`encodeRepeat` +
+  `sepBy`/`chainl1` triples), the downstream split (`lean-binary`/`lean-text`), and the
+  corrected decode→encode scoping (encode→decode unconditional roundtrip; converse under
+  `Functional`).
+- [ ] 10.3 **Theorem-coverage cleanups** (review #3/#6/#7): (a) `relRepeat` is called
+  "least fixpoint" but leastness (an induction/eliminator `relRepeat_induction`) is not
+  proved — either prove it or soften the docstrings; (b) `foldl`/`foldr` share ~380 lines
+  of near-duplicate well-founded machinery — factor a common `unfoldBy`; (c) dead code
+  (`foldrApply_append`, `cons_head_tail`, unused `Rel_*` rfl lemmas, `isoMap`/`seq`/`alt`/
+  `fail` wrappers).
+- [ ] 10.4 **`ByteArray` wrapper** (§7.1 partial / review #10) — transport the provable
+  `List UInt8` core to a `ByteArray`-backed executable surface. Sub-task per review: define
+  `Iso (List UInt8) ByteArray` (or a newtype) and re-prove `decode_spec`/`roundtrip` through
+  an explicit abstraction barrier, then audit that `simp`-reduction-dependent proofs and
+  `get!`/remaining-bytes don't leak per-byte `getElem`-with-proof into the hot path.
+- [ ] 10.5 **Extraction + benchmark** (§7.2/§7.3) — extract the `decode`/`encode` hot
+  path to C/LLVM; benchmark a multi-MB roundtrip (`byte`/`many`), record linear time.
+  Covers task 1.6 too. (Now unblocked for the chain combinators by 10.0a.)
+- [ ] 10.6 **Efficiency spike (the paper's §4.4 open problem — *last*)** — memoization/DP
+  over the *same* denotation, separate from correctness. Does **not** change semantics.
+  Likely a *new* change (`efficient-backtracking-decoder`), not a §10 task.
 
 **Planning-vs-build note:** the `proposal.md`/`design.md`/`specs/codec/spec.md` in this
 change were **updated this session** to the *implemented* reality (backtracking-union
