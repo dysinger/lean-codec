@@ -211,6 +211,248 @@ unlimited backtracking) and is future work — a separate spike to re-implement
 the *same* semantics more efficiently, not a change to the semantics. The
 type-level core (`Iso`, `Rel`, `foldl`, the laws) is unaffected and reused.
 
+______________________________________________________________________
+
+## Why these choices? — the reasoning in lay terms
+
+This section explains the *reasoning* behind `[D1]`–`[D8]` and `[S1]`–`[S6]`,
+for a reader who does not write Lean (or who is porting `codec` to another
+language). No claim here goes beyond the canonical table above; this is the
+"why", written so a non-Lean reader can judge the trade-offs rather than just
+copy the names.
+
+### The one big idea first
+
+The paper's core insight is that one *description* can drive **two directions**:
+turn a value into text (`encode`, the pretty-printer) and turn text back into a
+value (`decode`, the parser). It does this by making every building block a
+**partial isomorphism** — a box with two doors, `apply` and `unapply`, that are
+each other's inverse. If you know how to go *into* the box, you automatically
+know how to come back out, because the two doors are the same fact stated
+twice.
+
+The paper *says* the doors are inverses but never *checks* it — it's a promise
+written in a comment. `codec` turns that promise into a **field** (a required
+slot in the box's type): you literally cannot construct an `Iso` without
+supplying the proof that `apply` and `unapply` undo each other. That single
+move — from "documented in prose" to "enforced by the type" — is `[S1]`, and
+almost every other choice below is a consequence of making that move *honest*.
+
+### `[D1]` bytes instead of characters — why it matters
+
+The paper's smallest unit is `Char`; its concrete syntax is `String`. For its
+text-only examples (a tiny calculator language) that is fine. But a *binary*
+format — an image file, a network packet, a LEB128 varint — is not made of
+characters; many of its bytes are not printable text at all, and pretending
+everything is a `Char` forces you to smuggle binary data through a text type
+that will fight you at every step (encoding, endianness, bytes that aren't
+valid characters). So `codec` moves the *base unit* down one level, to a single
+byte (`UInt8`), and the *base string* to `List UInt8`. Text then becomes a
+downstream concern (`lean-text` maps `String` onto bytes via `utf8`) — on *top*
+of bytes, not underneath them. Nothing about the framework changes; only the
+ground floor does.
+
+**Why `List UInt8` and not `ByteArray`?** A `ByteArray` is the *fast*
+representation (raw memory), but its operations are opaque to Lean's `simp`: the
+proof assistant cannot see inside them, so equations like `s = s₁ ++ s₂` (which
+the entire proof lives on) would not reduce and every proof would get stuck. A
+`List UInt8` is a plain linked list that `simp` *can* unfold step by step — it
+is a *proof-friendly* model. So we prove everything on `List UInt8`, and later
+(*not* in core) swap in a `ByteArray` wrapper whose `List ↔ ByteArray`
+relationship is itself proved once. This is the difference between "the model
+you prove on" and "the model you run at speed" — `[D1]`'s second sentence is
+deliberately that separation.
+
+### `[D2]` + `[D3]` the decoder returns a *list* of results, and `|` means "try
+both, keep all" — why backtracking is non-negotiable
+
+A parser's job is to answer "does this input match, and what value does it
+produce?". There are two ways to answer:
+
+1. **Committed choice** (what a first attempt did): try the left branch of `|`;
+   if it grabs some input, *commit* to it and never look back. This is how many
+   hand-written parsers work, and it is fast.
+2. **Backtracking union** (what the paper specifies, `[D2]`/`[D3]`): try *both*
+   branches and return *all* the possible (value, leftover-input) pairs.
+
+The paper's own denotational semantics is the second kind: `|` is literally the
+*union* of the two result lists (§4.3), and the parser returns `[(α, String)]` —
+a list, i.e. *every* way to read the input. Committed choice was a tempting
+optimization, but it turns out to be **mathematically incompatible** with the
+paper's `many` (repetition). Here is the concrete failure: `many p` is "zero or
+more `p`s", and its natural description is `empty | (p then many p)` — "either
+match nothing, or match one `p` and recurse". Under committed choice, the
+"match nothing" branch *always* succeeds immediately (it consumes zero input),
+so the parser always stops at the left branch and returns the empty list, never
+even *trying* to read one `p`. The empty list is a prefix of *every* string, so
+no amount of reordering or "disjointness" bookkeeping can fix it — you cannot
+say "only use the empty branch when the other branch can't possibly start"
+because the other branch can start with *anything*. (Both these facts were
+proved, not just observed.)
+
+So `codec` keeps the paper's semantics *exactly* — the decoder is a list of all
+`(value, remaining)` pairs, and `|` concatenates the two lists. The payoff is
+huge: because `Rel (d₁ | d₂) = Rel d₁ ∨ Rel d₂` and `decode (d₁ | d₂) =
+decode d₁ ++ decode d₂` agree *by construction* (no cleverness needed), all the
+roundtrip laws hold **unconditionally** — no "this only works if your grammar is
+unambiguous" caveat. The cost is the paper's own admitted cost (§4.4): the
+naive decoder is exponential in the worst case. We accept that cost in core and
+treat "make it fast without changing what it means" as a *separate*, later, and
+explicitly-deferred problem — `[D5]` notes the prefix-disjointness machinery
+that committed choice needed is simply gone.
+
+### `[D4]` lossless capture — why we refuse to throw bytes away
+
+The paper has a combinator `ignore` (used for whitespace: `skipSpace`/`optSpace`)
+that maps *any* run of spaces, of *any* length, down to a single fixed value —
+and when printing, always outputs *one* space. That is a one-way loss: parse
+"   " (three spaces) and print it back and you get " " (one space). The paper
+accepts this and says the inverse law holds only "modulo equivalence classes" —
+i.e. "these are equal up to some ignored difference".
+
+The problem: `codec` wants the inverse law to be *literally* true (`[S1]`), as a
+checked theorem, not modulo anything. A lossy combinator makes that impossible
+— you cannot prove "unparse ∘ parse = identity" if parse collapses three spaces
+to one. So `codec` simply **does not have `ignore`**: a run of optional bytes is
+*captured* as a value (`relRepeat (Rel (subset p byte))` — "a list of every
+space you actually saw") and re-emitted *verbatim*, same length, same bytes.
+Parse and print are then a genuine two-way street, byte for byte.
+
+**The benefit is honesty to the type system.** If the inverse law is a field,
+it must be *true*; if it is true, nothing can be silently discarded; if nothing
+is discarded, no "modulo" hedge is needed. You give up `ignore`'s convenience
+(collapsing runs to a canonical form) and in exchange you get a library where
+"roundtrip" is a *theorem* rather than a guideline. Where the paper relaxes the
+law to keep `ignore`, `codec` relaxes nothing and drops `ignore` instead. One
+caveat, stated plainly: the roundtrip is trivially guaranteed in the
+**encode→decode** direction for every description; the **decode→encode**
+direction ("every parse re-encodes to the same bytes") needs the description to
+be *functional* — to map each value to at most one byte string — because the
+backtracking `|` can legitimately give one value two spellings.
+
+### `[D6]` `Codec` is a *value* (an AST), not a typeclass — why the paper's
+encoding hides the thing we need to prove about
+
+In the paper, syntax descriptions live *inside the type system*: `Syntax` is a
+Haskell typeclass, and `δ` is a type parameter that is secretly "a parser" or
+"a printer" depending on context. You never hold a description *in your hand*;
+it is implicit, baked into the type. That is elegant for Haskell, but it means
+you cannot write a function whose *argument* is a description and then do
+structural reasoning about it — there is no single object to look at.
+
+`codec` makes `Codec α` an explicit **inductive data type** (a tree built from
+six constructors: `iso`, `seq`, `alt`, `empty`, `pure`, `byte`). A description
+is now an ordinary *value* you can pass around, pattern-match on, and —
+critically — **structurally recurse over** to prove things by induction. Every
+roundtrip proof in `Codec.Sound` works by "if it is built from `iso`, then …;
+if from `seq`, then …", case by case. That induction is *the* thing that makes
+"proved for every description" mean something: with a typeclass there is no
+finite list of cases to exhaust. This is the free-alternative / free-applicative
+encoding the canonical table mentions, and it is the linchpin of `[S1]`
+actually being provable across the whole library.
+
+### `[D7]` why there is no `iterate`
+
+The paper builds `foldl` out of a primitive called `iterate` — "apply this step
+over and over until it fails" (and, reversed, unapply it). The subtle problem:
+applying a step forward until it stops and unapplying backward until it stops
+can land on *different* stopping points, because "apply succeeds ↔ unapply
+succeeds" does not mean "apply fails ↔ unapply fails". The forward fixpoint and
+the backward fixpoint need not agree. To ship `iterate` as an `Iso` you would
+have to *claim* they do — which is false in general — or burden every caller
+with a fragile "this chain is well-behaved in both directions" precondition.
+
+`codec` takes the third option: **omit `iterate` entirely** and define `foldl`/
+`foldr` *directly* by well-founded recursion (with a measure that strictly
+decreases each step, which *is* the honest guarantee). `foldl` is the only thing
+`chainl1` actually needs, so nothing is lost — and no subtly-unsound law is
+shipped. This is the same taste as `[D4]`: when a paper's nicety would require
+a false or unprovable claim, drop the nicety and keep the proof.
+
+### `[D8]` `DecidableEq`/`DecidablePred` instead of Haskell's `Eq`/`Bool`
+
+The paper's `pure` needs `Eq α` so the printer can ask "is this the value I'm
+supposed to match?"; its `element` does the same, and `subset p` takes a `p : α →
+Bool`. In Haskell those are free-form: `Eq` can be sham equality, and `Bool` is
+just a boolean with no proof behind it. Lean's proofs live in `Prop`, and to
+*branch on* a `Prop` (to compute "match or not") you need a `Decidable` witness
+— a procedure that, for every `x`, *proves* `x = y` or *proves* `x ≠ y`, never
+"maybe". So `codec` asks for `[DecidableEq α]` and `[DecidablePred p]`: the same
+*job* the paper's `Eq`/`Bool` do, but with a proof attached — `DecidableEq` is
+`Eq α` *plus* a decider, so it is strictly more information than the paper asks
+for, not less. The benefit is that this extra witness is exactly what lets the
+encoder's "compare and branch" step be a *theorem-provable* step rather than an
+unverifiable `if`. A port to a language without a `Prop`-based proof system can reproduce this
+with whatever its honest-equality-decider is; the point to carry over is "the
+equality check must be *decidable and proof-backed*, not just a bool."
+
+### `[S1]` the law is a field — why this is the whole point
+
+Covered in "The one big idea" above: the paper notes (§7.5) that encoding the
+inverse invariant dependently "would be interesting to see"; `codec` does it.
+The concrete benefit is that *soundness is impossible to forget* — you cannot
+accidentally construct a broken `Iso`, because the constructor will not typecheck
+without the proof. "Proved by construction" is not marketing; it is a statement
+about what the compiler accepts.
+
+### `[S2]` + `[S3]` renaming, and keeping the core empty of leaf codecs
+
+`[S2]` is cosmetic but load-bearing for clarity: `token` means "a character" in
+a text world but means nothing on bytes, so it becomes `byte`; `parse`/`print`
+become `decode`/`encode`. `[S3]` is a *scope* decision: the core ships only the
+building blocks (`byte`, `pure`) and no `u8`/`varint`/`utf8` — every concrete
+format lives downstream (`lean-binary`, `lean-text`). The benefit is that nothing
+in core can silently bake in a text- or machine-specific assumption; the first
+downstream leaf (`u8`, which is literally just `byte`) is simultaneously the
+smoke test that the framework is *actually* general enough to build on.
+
+### `[S4]` `foldl`/`foldr` are fresh, and need a termination witness
+
+The right fold `foldr` is not just `foldl` with the arrows reversed — the obvious
+"`inverse ∘ foldl ∘ inverse`" trick does not even typecheck, because the step
+function's types swap order (`α × β` becomes `β × α`). So `foldr` is a separate
+well-founded definition. Both folds take a `measure : α → Nat` plus a proof that
+every unfold step *strictly decreases* that measure — this is the
+*termination* guarantee (the recursion cannot loop forever), and it is a
+**precondition the caller supplies**, unlike the *unconditional* laws of the
+structural isos (`nil`/`cons`/`commute`/`associate`/…). The benefit of being
+honest that the folds are conditional on a witness (rather than pretending they
+are total like the rest) is that a porter knows exactly what their language's
+`foldl` must also require: a decreasing measure, not just a recursive function.
+(Lesson in passing: these folds were once marked `noncomputable` out of caution;
+`WellFounded.fix` over a `Nat` measure is actually perfectly computable, so the
+whole chain-combinator family is runnable.)
+
+### `[S5]` + `[S6]` unbounded repetition is *semantic*, and its least-fixpoint
+status is proved
+
+Repetition ("zero or more") is the one place a description would have to be
+*infinite* — an endless tree. A strict data type cannot contain an infinite
+description, so `codec` does not try: `many` is **not** a `Codec` node at all.
+Instead its three uses are spelled out directly: the *meaning*
+(`relRepeat (Rel p)` — a recursive relation that is the **least** thing closed
+under "empty, or one more element"), the *decoder* (`decodeRepeat`, which
+requires the step to consume at least one byte so it is guaranteed to terminate),
+and the *encoder* (`encodeRepeat`, which recurses on the *value* list so it
+needs no condition at all). `[S5]` adds the induction principle
+(`relRepeat_induction`) that proves "least fixpoint" rather than asserting it.
+`[S6]` spells out the naming consequence: there is **no** `sepBy`/`sepBy1`/
+`some`/`many1` symbol — what the paper calls `sepBy` is the
+`relSepBy`/`decodeSepBy`/`encodeSepBy` triple, and it has `sepBy1` (non-empty)
+semantics because an empty separated list is not a meaningful value. A porter
+should not go looking for a `many` object; they should recreate these three
+readings.
+
+---
+
+**Bottom line for a porter.** The paper gives the idea; `codec` makes it *honest*
+by (1) enforcing the inverse law as a type, (2) resting on bytes, (3) keeping
+the full backtracking semantics so the laws are unconditional, (4) refusing lossy
+combinators so nothing is silently dropped, and (5) making the description an
+ordinary value you can induct over. Everything else — naming, scoping, the
+`many` split, the fold termination witnesses — follows from those five. When you
+port, reproduce the *five* points first; the rest is bookkeeping you can re-derive.
+
 ## The abstraction, in brief
 
 ```lean
