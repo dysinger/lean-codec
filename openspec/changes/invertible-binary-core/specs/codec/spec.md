@@ -21,32 +21,49 @@ proof that they are inverses: `apply a = some b ↔ unapply b = some a`, for all
 - **THEN** it MUST include a proof of the inverse law; there is no way to build
   an `Iso` without it.
 
-### Requirement: Byte-exact roundtrip
+### Requirement: Nondeterministic (backtracking) decoding
 
-For every **`alt`-free** codec `c : Codec α` (i.e. `NoAlt c`, descriptions built
-from `$`, `*`, `empty`, `pure`, and `byte` only) and every value `x : α` in
-`c`'s domain, encoding then decoding SHALL reproduce the exact value and consume
+Decoding SHALL be a relation-valued function over a byte buffer, returning
+**all** `(value, remaining)` pairs the description admits:
+
+```
+decode : Codec α → List UInt8 → List (α × List UInt8)
+```
+
+Choice (`|`, the paper's `Alternative`) SHALL be the **backtracking union**:
+`decode (d₁ | d₂) s = decode d₁ s ++ decode d₂ s`, matching the denotation
+`Rel (d₁ | d₂) = Rel d₁ ∨ Rel d₂` by construction. There is no committed choice,
+no cursor, no peeking, and no narrowing to a single result.
+
+#### Scenario: Choice enumerates every branch
+
+- **WHEN** `decode (d₁ | d₂) s` is evaluated
+- **THEN** the result is the concatenation of `decode d₁ s` and `decode d₂ s` —
+  every `(value, remainder)` pair from either branch, including duplicate values.
+
+### Requirement: Byte-exact roundtrip, unconditional
+
+For every codec `c : Codec α` (with no `NoAlt` gate) and every value `x : α` in
+`c`'s domain, encoding then decoding SHALL reproduce the value and consume
 exactly the encoded bytes:
 
-`encode c x = some s → decode c s = .ok (x, [])`.
+`encode c x = some s → (x, []) ∈ decode c s`.
 
-`alt` (committed choice) is **out of scope** for this guarantee: the committed
-decoder's left-bias disagrees with the backtracking `Rel` relation whenever two
-branches accept competing prefixes of the same input. Soundness over `alt` is a
-separate, deferred requirement (`alt` prefix-disjointness, below).
+The laws SHALL hold **unconditionally** for every description (including `alt`),
+in the presence of full backtracking; no prefix-disjointness or unambiguity
+condition is required.
 
 #### Scenario: Encode-then-decode returns the value
 
 - **WHEN** `x` is in the codec's domain and `encode c x = some s`
-- **THEN** `decode c s` returns `(x, [])` — the value plus an empty remaining
-  buffer.
+- **THEN** `(x, [])` is among the results of `decode c s` — the value plus an
+  empty remaining buffer.
 
-#### Scenario: Committed choice is excluded from the guarantee
+#### Scenario: The laws hold over choice
 
-- **WHEN** a description contains `alt` (committed `|`)
-- **THEN** the unconditionally-proven roundtrip does **not** extend to it; the
-  decoder's single-result, left-biased semantics can disagree with `Rel` when
-  branches overlap on a prefix.
+- **WHEN** a description contains `alt` (backtracking union)
+- **THEN** the bidirectional law `decode_spec` and the roundtrip `roundtrip`
+  still hold for it; no prefix condition is imposed.
 
 ### Requirement: Lossless capture of allowable bytes
 
@@ -57,22 +74,10 @@ discarded.
 #### Scenario: Optional bytes are preserved
 
 - **WHEN** a description decodes a maximal run of bytes satisfying predicate `p`
-  via `many (subset p byte)`
+  via repetition over a `subset p byte` step (denotation `relRepeat`, decoders
+  `decodeRepeat`/`encodeRepeat`)
 - **THEN** that exact run is part of the decoded value and is re-emitted byte-for-
   byte on encode.
-
-### Requirement: Deterministic, positional decoding
-
-Decoding SHALL be a deterministic, single-result function over a byte buffer (a
-`List UInt8`) that returns the decoded value together with the (possibly empty)
-remaining bytes; on failure it SHALL return an error whose position is the
-length of the unconsumed prefix.
-
-#### Scenario: Failure reports a position
-
-- **WHEN** a decode fails
-- **THEN** the returned error carries the remaining unconsumed bytes, from which
-  the failure position is `whole.length - remaining.length`.
 
 ### Requirement: Partial encoding
 
@@ -87,26 +92,37 @@ domain.
 
 ### Requirement: Composition is inverse-preserving
 
-The combinators `$` (apply an iso), `*` (product/sequential), `|` (choice), and
-`empty` SHALL preserve invertibility: composing proven-inverse descriptions
-yields a proven-inverse description.
+The combinators `$` (apply an iso), `*` (product/sequential), `|` (backtracking
+choice), and `empty` SHALL preserve invertibility: composing proven-inverse
+descriptions yields a proven-inverse description.
 
 #### Scenario: Composition preserves the roundtrip
 
 - **WHEN** two codecs `c₁`, `c₂` are composed with `*`
-- **THEN** `encode (c₁ * c₂) (x₁, x₂)` roundtrips through `decode` to `((x₁, x₂), [])` whenever each component roundtrips.
+- **THEN** `encode (c₁ * c₂) (x₁, x₂)` roundtrips through `decode` to
+  `((x₁, x₂), [])` whenever each component roundtrips.
 
-### Requirement: `alt` prefix-disjointness (future)
+### Requirement: Unbounded repetition is a total denotation
 
-Soundness of the committed `|` decoder SHALL require the two branches to accept
-**prefix-disjoint** byte strings: no string accepted by the left branch SHALL be
-a (possibly improper) prefix of a string accepted by the right branch, and vice
-versa. This is a **named future condition**, not yet implemented; it shares its
-core with the deferred coinductive `iterate`/`foldl` combinators.
+Unbounded repetition (`many`, paper §3.4) SHALL be realized as a total
+least-fixpoint denotation with three separate interpretations, **not** as a
+finite description value:
 
-#### Scenario: Prefix overlap is rejected
+- `relRepeat (Rel p)` — the denotational relation (total for every step `p`);
+- `decodeRepeat p h` — the productive decoder, well-founded on the input's
+  length, taking `h : ConsumesByte p` (each step consumes ≥ 1 byte) as its
+  totality witness;
+- `encodeRepeat p` — the total encoder, structural on the value list.
 
-- **WHEN** two branches `d₁ | d₂` accept strings where one is a prefix of the
-  other (e.g. `byte | (byte * byte)`)
-- **THEN** the description does **not** satisfy the prefix-disjointness
-  condition, and no roundtrip claim is made for it.
+#### Scenario: Productive repetition decodes in bounded steps
+
+- **WHEN** `p` is productive (`Productive p`, equivalently `ConsumesByte p`)
+- **THEN** `decodeRepeat p h` is a total function enumerating exactly the
+  `relRepeat (Rel p)` results.
+
+#### Scenario: Empty-matching repetition is genuinely infinite
+
+- **WHEN** `p` matches the empty byte string (e.g. `pure ()`)
+- **THEN** no finite `List` decoder can enumerate all results (the value lists
+  are unbounded: `relRepeat_unbounded_of_empty`), so `decodeRepeat` is defined
+  only for productive `p` and never faked with a finite result.

@@ -102,14 +102,58 @@ is unchanged and reused.
 
 **Next session — resolve the residual `many` opacity inside this change:**
 
-- [ ] 9.1 Remove `partial def many` (its `Rel (many p)` is irreducibly opaque —
+- [x] 9.1 Remove `partial def many` (its `Rel (many p)` is irreducibly opaque —
   `partial def` yields no equation/unfold); `many`'s denotation is `relRepeat`, its
-  decoder `decodeRepeat`.
-- [ ] 9.2 Re-derive `some`/`many1`, `sepBy`/`sepBy1` over `relRepeat`; re-prove
-  `Rel_some` etc. against `relRepeat` (no opaque `Rel (many p)`).
-- [ ] 9.3 Re-express `chainl1`/`chainr1` operand lists via `decodeRepeat` (fold via
-  the existing `Iso.foldl`/`Iso.foldr`, unchanged).
-- [ ] 9.4 Add the list-combinator `_spec` decoder laws over `relRepeat`, unconditional
-  (productivity only as the `h` argument).
-- [ ] 9.5 Gate: `lake build` clean, zero `sorry`/warnings; `#print axioms` = `[propext,
-  Quot.sound]`; update `README.md` + `AGENTS.md`.
+  decoder `decodeRepeat`. **Done:** `many` removed; the three readings are
+  `relRepeat`/`decodeRepeat`/`encodeRepeat` (the latter newly added in
+  `Codec/Encode.lean` with law `encodeRepeat_rel`).
+- [x] 9.2 Re-derive `some`/`many1`, `sepBy`/`sepBy1` over `relRepeat`; re-prove
+  `Rel_some` etc. against `relRepeat` (no opaque `Rel (many p)`). **Done:**
+  `some`/`many1` collapse to `relRepeat` on a non-empty list; `sepBy`/`sepBy1` are
+  `relSepBy`/`decodeSepBy`/`encodeSepBy` with `decodeSepBy_spec`/`encodeSepBy_rel`.
+- [x] 9.3 Re-express `chainl1`/`chainr1` operand lists via `decodeRepeat` (fold via
+  the existing `Iso.foldl`/`Iso.foldr`, unchanged). **Done:** `relChainl1`/`relChainr1`,
+  `decodeChainl1`/`decodeChainr1` (taking `hsep`), `encodeChainl1`/`encodeChainr1`.
+- [x] 9.4 Add the list-combinator `_spec` decoder laws over `relRepeat`, unconditional
+  (productivity only as the `h` argument). **Done:** `decodeSepBy_spec`,
+  `decodeChainl1_spec`, `decodeChainr1_spec` (bidirectional) plus `encodeSepBy_rel`,
+  `encodeChainl1_rel`, `encodeChainr1_rel` (encoder soundness).
+- [x] 9.5 Gate: `lake build` clean, zero `sorry`/warnings; `#print axioms` = `[propext,
+  Quot.sound]`; update `README.md` + `AGENTS.md`. **Done** (the chain laws carry
+  `[propext, Quot.sound]` via `foldl`/`foldr`'s well-founded recursion; `decodeRepeat`/
+  `encodeRepeat` are axiom-free).
+
+## 10. Next session — remaining work (ledger)
+
+`invertible-binary-core` is **feature-complete and proven** (zero sorries/warnings,
+`[propext, Quot.sound]`). The following are the remaining items, in order. They are
+**not** part of this change's proven core; efficiency and the `ByteArray` wrapper are
+post-core deliverables (the paper's §4.4 open problem and the §7 transport target).
+
+- [ ] 10.1 **Efficiency spike (the paper's §4.4 open problem)** — memoization/DP over
+  the *same* denotation (`Rel`/`relRepeat`), separate from correctness. Re-implements
+  `decode`'s semantics without the exponential worst case; does **not** change the
+  semantics. Acceptance: same `Rel`, `decode_spec`/`roundtrip` laws, linear time on a
+  synthetic `byte`/`many` description. Likely a *new* change (`openspec new change
+  efficient-backtracking-decoder`), not a §10 task — record the decision, then either
+  plan it here or spin it out.
+- [ ] 10.2 **`ByteArray` wrapper** (§7.1 partial) — transport the provable
+  `List UInt8` core to a `ByteArray`-backed executable surface; confirm `Prop` proofs
+  erase and no per-byte boxing in the hot path.
+- [ ] 10.3 **Extraction + benchmark** (§7.2/§7.3) — extract the `decode`/`encode` hot
+  path to C/LLVM; benchmark a multi-MB roundtrip (`byte`/`many`), record linear time;
+  confirm `get!`/remaining-bytes (not `getElem`-with-proof) actually runs post-extraction.
+  Covers task 1.6 too.
+- [ ] 10.4 **`README.md` rewrite** (§7.4) — update the combinator table to the
+  semantic-repetition split (`relRepeat`/`decodeRepeat`/`encodeRepeat` + `sepBy`/`chainl1`
+  triples), and the downstream split (`lean-binary`/`lean-text`).
+- [ ] 10.5 **Housekeeping** — resolve the `Codec`/`Codec.lean` type-vs-module name
+  collision; tidy the `relSepBy`/`optional` docstrings (empty `sepBy` value is
+  `none`, not `some []`).
+
+**Planning-vs-build note:** the `proposal.md`/`design.md`/`specs/codec/spec.md` in this
+change were **updated this session** to the *implemented* reality (backtracking-union
+`|`, nondeterministic `List` decoder, unconditional laws, semantic `relRepeat`/
+`decodeRepeat`/`encodeRepeat`), replacing the earlier superseded deterministic/`NoAlt`
+/committed-`|` plan that predated the reversed departure #5. No new spec delta is
+required for the remaining §10 work unless 10.1 is spun into its own change.
