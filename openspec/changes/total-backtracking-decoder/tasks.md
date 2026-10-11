@@ -41,8 +41,8 @@
 
 ## 5. Proof gate & docs
 
-- [ ] 5.1 `lake build` clean; zero `sorry`, zero warnings.
-- [ ] 5.2 `#print axioms` on each law = `[propext, Quot.sound]`.
-- [ ] 5.3 Update `README.md` (decoder + `many` totality note) and `AGENTS.md`
+- [x] 5.1 `lake build` clean; zero `sorry`, zero warnings.
+- [x] 5.2 `#print axioms` on each law = `[propext, Quot.sound]`.
+- [x] 5.3 Update `README.md` (decoder + `many` totality note) and `AGENTS.md`
   handoff.
-- [ ] 5.4 Commit each file individually; print the staged set first.
+- [x] 5.4 Commit each file individually; print the staged set first.
