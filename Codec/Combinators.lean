@@ -517,4 +517,130 @@ theorem encodeChainr1_rel {α β : Type} (f : Iso ((α × β) × α) α) (measur
               exact ⟨a₀, ops, s₀, s', rfl, encode_rel arg a₀ ha,
                 encodeRepeat_rel (Codec.seq arg op) ops hr, haply⟩
 
+/-! ## The chain decode→encode direction, and chain injectivity
+
+The primitives carry `encode_ne_none`/`encode_of_decode`/`encode_injective_of_unambiguous`
+(see `Codec.Sound`), each conditional on value- and string-directionality. The chain
+combinators are *relations*, not `Codec` values, so their mirror laws take the
+relation-level predicates `relFunctional`/`relUnambiguous` over `relChainl1`/
+`relChainr1` (the same notions stated over the chain denotation rather than a
+`Rel d`). Together they extend the unconditional encode→decode half
+(`encodeChainl1_rel`) and the decoder law (`decodeChainl1_spec`) to a full
+decode→encode bijection and injectivity under those hypotheses. -/
+
+/-- **Encoder completeness for a left chain**: every value in `relChainl1` encodes
+successfully. The maximal unfold of `a` via `foldl` is tied to the fold's apply by
+the `Iso.law` field, so the relation's seed/operands are recovered and each part
+encodes (seed via `encode_ne_none`, operands via `encodeRepeat_ne_none`). -/
+theorem encodeChainl1_ne_none {α β : Type} (f : Iso (α × (β × α)) α) (measure : α → Nat)
+    (h : MeasureDecreases measure f) (arg : Codec α) (op : Codec β) :
+    ∀ (a : α) (s : List UInt8), relChainl1 f measure h arg op a s →
+      encodeChainl1 f measure h arg op a ≠ none := by
+  intro a s hrel
+  rw [relChainl1] at hrel
+  rcases hrel with ⟨a₀, ops, s₀, s', _hs, hrel₀, hrelops, haply⟩
+  rw [encodeChainl1]
+  have hu : (foldl f measure h).unapply a = some (a₀, ops) :=
+    ((foldl f measure h).law (a₀, ops) a).1 haply
+  rw [hu]
+  have hne₀ : encode arg a₀ ≠ none := encode_ne_none arg a₀ s₀ hrel₀
+  cases h₁ : encode arg a₀ with
+  | none => exact False.elim (hne₀ h₁)
+  | some e₀ =>
+      have hneops : encodeRepeat (Codec.seq op arg) ops ≠ none :=
+        encodeRepeat_ne_none (Codec.seq op arg) ops s' hrelops
+      cases h₂ : encodeRepeat (Codec.seq op arg) ops with
+      | none => exact False.elim (hneops h₂)
+      | some eops => simp [h₁, h₂]
+
+/-- **Encoder completeness for a right chain** (the dual of `encodeChainl1_ne_none`). -/
+theorem encodeChainr1_ne_none {α β : Type} (f : Iso ((α × β) × α) α) (measure : α → Nat)
+    (h : MeasureDecreasesR measure f) (arg : Codec α) (op : Codec β) :
+    ∀ (a : α) (s : List UInt8), relChainr1 f measure h arg op a s →
+      encodeChainr1 f measure h arg op a ≠ none := by
+  intro a s hrel
+  rw [relChainr1] at hrel
+  rcases hrel with ⟨a₀, ops, s₀, s', _hs, hrel₀, hrelops, haply⟩
+  rw [encodeChainr1]
+  have hu : (foldr f measure h).unapply a = some (a₀, ops) :=
+    ((foldr f measure h).law (a₀, ops) a).1 haply
+  rw [hu]
+  have hne₀ : encode arg a₀ ≠ none := encode_ne_none arg a₀ s₀ hrel₀
+  cases h₁ : encode arg a₀ with
+  | none => exact False.elim (hne₀ h₁)
+  | some e₀ =>
+      have hneops : encodeRepeat (Codec.seq arg op) ops ≠ none :=
+        encodeRepeat_ne_none (Codec.seq arg op) ops s' hrelops
+      cases h₂ : encodeRepeat (Codec.seq arg op) ops with
+      | none => exact False.elim (hneops h₂)
+      | some eops => simp [h₁, h₂]
+
+/-- Under chain functionality, a value the left-chain decoder accepts (with no
+remainder) re-encodes to exactly the same bytes — the chain mirror of
+`encode_of_decode`, making `encodeChainl1 … = some s ↔ (a, []) ∈ decodeChainl1 … s`
+a bijection for functional chains. -/
+theorem encodeChainl1_of_decode {α β : Type} (f : Iso (α × (β × α)) α)
+    (measure : α → Nat) (h : MeasureDecreases measure f) (arg : Codec α) (op : Codec β)
+    (hsep : ConsumesByte (Codec.seq op arg))
+    (hd : relFunctional (relChainl1 f measure h arg op)) (a : α)
+    {s : List UInt8} (hdcd : (a, []) ∈ decodeChainl1 f measure h arg op hsep s) :
+    encodeChainl1 f measure h arg op a = some s := by
+  rcases (decodeChainl1_spec f measure h arg op hsep a (s := s) (r := [])).1 hdcd with
+    ⟨s₀, hsplit, hrel⟩
+  have hs₀ : s = s₀ := by simpa using hsplit
+  subst s₀
+  have hne : encodeChainl1 f measure h arg op a ≠ none :=
+    encodeChainl1_ne_none f measure h arg op a s hrel
+  cases he : encodeChainl1 f measure h arg op a with
+  | none => exact False.elim (hne he)
+  | some s' =>
+      have hrel' : relChainl1 f measure h arg op a s' :=
+        encodeChainl1_rel f measure h arg op a he
+      have hs' : s' = s := hd a hrel' hrel
+      rw [hs']
+
+/-- Under chain functionality, a value the right-chain decoder accepts re-encodes
+to exactly the same bytes (the dual of `encodeChainl1_of_decode`). -/
+theorem encodeChainr1_of_decode {α β : Type} (f : Iso ((α × β) × α) α)
+    (measure : α → Nat) (h : MeasureDecreasesR measure f) (arg : Codec α) (op : Codec β)
+    (hsep : ConsumesByte (Codec.seq arg op))
+    (hd : relFunctional (relChainr1 f measure h arg op)) (a : α)
+    {s : List UInt8} (hdcd : (a, []) ∈ decodeChainr1 f measure h arg op hsep s) :
+    encodeChainr1 f measure h arg op a = some s := by
+  rcases (decodeChainr1_spec f measure h arg op hsep a (s := s) (r := [])).1 hdcd with
+    ⟨s₀, hsplit, hrel⟩
+  have hs₀ : s = s₀ := by simpa using hsplit
+  subst s₀
+  have hne : encodeChainr1 f measure h arg op a ≠ none :=
+    encodeChainr1_ne_none f measure h arg op a s hrel
+  cases he : encodeChainr1 f measure h arg op a with
+  | none => exact False.elim (hne he)
+  | some s' =>
+      have hrel' : relChainr1 f measure h arg op a s' :=
+        encodeChainr1_rel f measure h arg op a he
+      have hs' : s' = s := hd a hrel' hrel
+      rw [hs']
+
+/-- `encodeChainl1` is injective on the bytes it prints, for chain-unambiguous
+descriptions (the chain mirror of `encode_injective_of_unambiguous`). -/
+theorem encodeChainl1_injective_of_unambiguous {α β : Type} (f : Iso (α × (β × α)) α)
+    (measure : α → Nat) (h : MeasureDecreases measure f) (arg : Codec α) (op : Codec β)
+    (hd : relUnambiguous (relChainl1 f measure h arg op)) {x y : α} {s : List UInt8}
+    (hx : encodeChainl1 f measure h arg op x = some s)
+    (hy : encodeChainl1 f measure h arg op y = some s) : x = y := by
+  have hrelx : relChainl1 f measure h arg op x s := encodeChainl1_rel f measure h arg op x hx
+  have hrely : relChainl1 f measure h arg op y s := encodeChainl1_rel f measure h arg op y hy
+  exact hd s hrelx hrely
+
+/-- `encodeChainr1` is injective on the bytes it prints, for chain-unambiguous
+descriptions (the dual of `encodeChainl1_injective_of_unambiguous`). -/
+theorem encodeChainr1_injective_of_unambiguous {α β : Type} (f : Iso ((α × β) × α) α)
+    (measure : α → Nat) (h : MeasureDecreasesR measure f) (arg : Codec α) (op : Codec β)
+    (hd : relUnambiguous (relChainr1 f measure h arg op)) {x y : α} {s : List UInt8}
+    (hx : encodeChainr1 f measure h arg op x = some s)
+    (hy : encodeChainr1 f measure h arg op y = some s) : x = y := by
+  have hrelx : relChainr1 f measure h arg op x s := encodeChainr1_rel f measure h arg op x hx
+  have hrely : relChainr1 f measure h arg op y s := encodeChainr1_rel f measure h arg op y hy
+  exact hd s hrelx hrely
+
 end Codec
