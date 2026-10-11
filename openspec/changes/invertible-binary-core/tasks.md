@@ -155,24 +155,25 @@ post-core deliverables (the paper's §4.4 open problem and the §7 transport tar
 ### Remaining (reordered: rename before README/downstream)
 
 - [ ] 10.1 **Housekeeping: resolve the `Codec` type-vs-module collision** (neé 10.5).
-  The inductive `Codec` lives in `namespace Codec`/`Codec/Codec.lean`, forcing the
-  `Codec.iso`/`Codec.empty` prefix throughout and colliding the root file `Codec.lean`
-  with the `Codec/` directory. Rename the type (e.g. `Desc`/`Syntax`, matching paper
-  §3.4) **before** the README and downstream `lean-binary`/`lean-text` hard-code the
-  colliding names — cheap now, breaking later. Also tidy the `relSepBy`/`optional`
-  docstrings (empty `sepBy` value is `none`, not `some []` — currently `sepBy` *is*
-  non-empty `sepBy1`; decide whether to add a true zero-or-more `sepBy`, review #5).
+  The inductive `Codec` lives at top level in `Codec/Codec.lean` (no namespace), while
+  the other `Codec/*.lean` modules open `namespace Codec` — so the *type* `Codec` and the
+  *namespace* `Codec` collide (and the root file `Codec.lean` collides with the `Codec/`
+  directory). Rename the type (e.g. `Desc`/`Syntax`, matching paper §3.4) **before** the
+  README and downstream `lean-binary`/`lean-text` hard-code the colliding names — cheap
+  now, breaking later. (The `sepBy`-`[]` docstrings are **done**: `relSepBy` is documented
+  as non-empty `sepBy1`, with zero-or-more = `optional (sepBy p sep)`.)
 - [ ] 10.2 **`README.md` rewrite** (§7.4) — after 10.1 (names may change): combinator
   table → the semantic-repetition split (`relRepeat`/`decodeRepeat`/`encodeRepeat` +
   `sepBy`/`chainl1` triples), the downstream split (`lean-binary`/`lean-text`), and the
   corrected decode→encode scoping (encode→decode unconditional roundtrip; converse under
   `Functional`).
-- [ ] 10.3 **Theorem-coverage cleanups** (review #3/#6/#7): (a) `relRepeat` is called
-  "least fixpoint" but leastness (an induction/eliminator `relRepeat_induction`) is not
-  proved — either prove it or soften the docstrings; (b) `foldl`/`foldr` share ~380 lines
-  of near-duplicate well-founded machinery — factor a common `unfoldBy`; (c) dead code
-  (`foldrApply_append`, `cons_head_tail`, unused `Rel_*` rfl lemmas, `isoMap`/`seq`/`alt`/
-  `fail` wrappers).
+- [ ] 10.3 **Theorem-coverage cleanups** (review #3/#6/#7): (a) `relRepeat` "least
+  fixpoint" — **done**: `relRepeat_induction` proved (axioms `[propext]`), the leastness
+  is now a theorem; (b) `foldl`/`foldr` share ~380 lines of near-duplicate well-founded
+  machinery — factor a common `unfoldBy`; (c) dead code — **done** for `foldrApply_append`/
+  `cons_head_tail`/unused `Rel_*` rfl lemmas/`isoMap`/`seq`/`alt`/`fail` wrappers; the
+  `Rel_optional_some`/`Rel_count_zero`/`Rel_choice` characterization lemmas are kept
+  (they document the derived combinators' `Rel`). Remaining: the `foldl`/`foldr` dedup.
 - [ ] 10.4 **`ByteArray` wrapper** (§7.1 partial / review #10) — transport the provable
   `List UInt8` core to a `ByteArray`-backed executable surface. Sub-task per review: define
   `Iso (List UInt8) ByteArray` (or a newtype) and re-prove `decode_spec`/`roundtrip` through

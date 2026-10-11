@@ -243,12 +243,14 @@ exist as a `Codec`; its three readings are:
   * **encoder** — `encodeRepeat p` (in `Codec.Encode`), structural on the value
     list, total for every `p` (no productivity witness needed).
 
-The list combinators built *on* `many` — `sepBy`/`sepBy1`, `chainl1`/`chainr1` —
+The list combinators built *on* `many` — `sepBy`, `chainl1`/`chainr1` —
 are likewise re-derived as relations, decoders, and encoders (over
 `relRepeat`/`decodeRepeat`/`encodeRepeat`, keeping `Iso.foldl`/`Iso.foldr`
 unchanged), each with an unconditional `_spec` (bidirectional) and `_rel`
 (encoder-soundness) law; productivity appears only as the decoder's `hsep`
-argument.
+argument. Note that `sepBy` here is **non-empty** (`sepBy1` semantics: the empty
+list is not a valid value and `encodeSepBy [] = none`); zero-or-more separation is
+`optional (sepBy p sep)`.
 
 ```lean
 -- total, #eval-able: productive (each byte consumes 1 byte)

@@ -172,18 +172,22 @@ theorem Rel_choice {α : Type} (ps : List (Codec α)) (x : α) (s : List UInt8) 
 would embed the absent `many` node. See the module docstring for why.
 -/
 
-/-- The denotation of `sepBy p sep` (`p` then arbitrarily many `sep *> p`): the
-head value `x₀` relates via `p`, and the tail relates via `relRepeat` on the
-shifted step `seqRight sep p`. This is the `many`-case denotation statement,
-specialized to `sepBy`. -/
+/-- The denotation of `sepBy p sep`, specialized to **non-empty** separated lists:
+`p` (the head `x₀`), then arbitrarily many `sep *> p` (the tail, folded by
+`relRepeat`). The empty list is **not** a `sepBy` value (the `[]` case is `False`,
+and `encodeSepBy [] = none`), so this combinator is semantically the paper's
+`sepBy1` (one-or-more), *not* `sepBy` (zero-or-more); zero-or-more separation is
+`optional (sepBy p sep)`. This is the `many`-case denotation statement,
+specialized to a non-empty head. -/
 def relSepBy {α : Type} (p : Codec α) (sep : Codec Unit) :
     List α → List UInt8 → Prop
   | x₀ :: rest, s => ∃ s₀ s', s = s₀ ++ s' ∧ Rel p x₀ s₀ ∧ relRepeat (Rel (seqRight sep p)) rest s'
   | [], _ => False
 
 /-- `decodeRepeat` specialized to the `sepBy` tail step: enumerate the results of
-`p` then arbitrarily many `(sep *> p)`, threading the remainder. Total for a
-productive `sep` (`hsep : ConsumesByte (seqRight sep p)`). -/
+`p` then arbitrarily many `(sep *> p)`, threading the remainder. The empty list is
+not produced (separation is one-or-more). Total for a productive `sep`
+(`hsep : ConsumesByte (seqRight sep p)`). -/
 def decodeSepBy {α : Type} (p : Codec α) (sep : Codec Unit)
     (hsep : ConsumesByte (seqRight sep p)) (s : List UInt8) :
     List (List α × List UInt8) :=
