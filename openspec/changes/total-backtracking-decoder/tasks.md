@@ -2,42 +2,42 @@
 
 ## 1. Correct productive repetition decoder (`Codec/Decode.lean`)
 
-- [ ] 1.1 Change `decode`'s `many` handling to well-founded recursion on
+- [x] 1.1 Change `decode`'s `many` handling to well-founded recursion on
   `s.length` (productive corecursion: empty result, then each `cons` step on a
   strictly shorter remaining string via `decode p`).
-- [ ] 1.2 The `many` fixpoint: `decode (many p) s = ([], s) :: (decode p
+- [x] 1.2 The `many` fixpoint: `decode (many p) s = ([], s) :: (decode p
   s).flatMap (fun (x, s₁) => (decode (many p) s₁).map (fun (xs, r) => (x::xs, r)))`,
   with the recursive call structurally guarded by `s₁` being a proper suffix
   (established by the `p`-consumes-a-byte witness, passed as an argument — not a
   global predicate).
-- [ ] 1.3 `#eval decode (many Codec.byte) [1,2,3]` = the four results (empty
+- [x] 1.3 `#eval decode (many Codec.byte) [1,2,3]` = the four results (empty
   plus prefixes), then terminates.
-- [ ] 1.4 Confirm `decode (many (Codec.pure ())) []` does **not** fabricate
+- [x] 1.4 Confirm `decode (many (Codec.pure ())) []` does **not** fabricate
   `([()], [])`; it is the provably-infinite case (documented, not faked).
 
 ## 2. Proved totality boundary (`Codec/Sound.lean`)
 
-- [ ] 2.1 State and prove: `(∀ x s₁, Rel p x s₁ → s₁ ≠ []) →` the repetition
+- [x] 2.1 State and prove: `(∀ x s₁, Rel p x s₁ → s₁ ≠ []) →` the repetition
   decoder terminates (well-founded on `s.length`).
-- [ ] 2.2 State the contrapositive: if `Rel p x []` for some `x`, then
+- [x] 2.2 State the contrapositive: if `Rel p x []` for some `x`, then
   `decode (many p) []` yields infinitely many `[]` results (so no total
   strict-list decoder exists) — a lemma, not a gate.
 
 ## 3. Laws re-proved unconditionally (`Codec/Sound.lean`)
 
-- [ ] 3.1 `Rel` unchanged; verify the existing `decode_spec`, `bidir`,
+- [x] 3.1 `Rel` unchanged; verify the existing `decode_spec`, `bidir`,
   `encode_rel`, `decode_encode`, `roundtrip` still hold for every description,
   with the `many` case's `Rel` being the least fixpoint.
-- [ ] 3.2 Re-prove the `many` case of the laws via the least-fixpoint `Rel`,
+- [x] 3.2 Re-prove the `many` case of the laws via the least-fixpoint `Rel`,
   unconditional (no productivity hypothesis in the *statements*).
 
 ## 4. De-confuse `many` (`Codec/Combinators.lean`)
 
-- [ ] 4.1 `many` remains a derived combinator; the docstring states: "total as a
+- [x] 4.1 `many` remains a derived combinator; the docstring states: "total as a
   *semantics* (`Rel`); the strict-list decoder is total exactly for productive
   `p` (theorem), and partial only for the empty-matching (provably-infinite)
   case."
-- [ ] 4.2 Remove any stale "fuel"/"Productive" language.
+- [x] 4.2 Remove any stale "fuel"/"Productive" language.
 
 ## 5. Proof gate & docs
 
