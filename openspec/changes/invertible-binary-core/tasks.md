@@ -47,7 +47,7 @@
 ## 6. Derived combinators (generic, byte-agnostic)
 
 - [x] 6.1 `many`, `*>`, `<*`, `between`; `chainl1` built on §2.5 `Iso.foldl`.
-- [ ] 6.2 `chainr1` (dual of `chainl1`), `some`/`many1`, `sepBy`/`sepBy1`,
+- [x] 6.2 `chainr1` (dual of `chainl1`), `some`/`many1`, `sepBy`/`sepBy1`,
   `optional`/`maybe`/`choice` — now *unblocked* (no prefix-disjointness gate): these
   are ordinary definitions over the backtracking `|`, and their soundness falls out
   of the unconditional laws in §5. Implement them (§6.1 style). Caveat: `many` is a
@@ -81,7 +81,7 @@ of every non-empty string, so `nil | cons` in `many` is never prefix-disjoint).
 - [x] 8.1–8.3 Obsolete; the `NonNull`/`Disjoint`/`PrefixDisjoint` machinery is
   removed (file `Codec/NonNull.lean` deleted; `Codec/Sound.lean` rewritten to
   unconditional laws).
-- [ ] 8.4 Repetition/sum combinators (`some`/`many1`, `sepBy`/`sepBy1`,
+- [x] 8.4 Repetition/sum combinators (`some`/`many1`, `sepBy`/`sepBy1`,
   `optional`/`maybe`/`choice`, `chainr1`) are now **unblocked** — see §6.2.
 
 **Final recorded decision (replaces the old “no backtracking” note):** the decoder
@@ -91,3 +91,25 @@ exponential/space-leak under unlimited backtracking) is **future work** — a
 separate spike to re-implement the *same* semantics efficiently, not a change to
 the semantics. The type-level/denotational core (`Iso`, `Rel`, `foldl`, the laws)
 is unchanged and reused.
+
+## 9. Total repetition + re-derived list combinators (the `many` fork resolved)
+
+**Status:** the repetition core landed via `openspec/changes/total-backtracking-decoder/`
+(**complete**): `relRepeat` (least-fixpoint denotation, `Codec/Codec.lean`), `decodeRepeat`
+(productive decoder, well-founded on `s.length`, `Codec/Decode.lean`), and the laws
+(`productive_iff_consumesByte`, `decodeRepeat_spec`, `relRepeat_unbounded_of_empty`,
+`not_productive_pure`, `Codec/Sound.lean`). `Rel` unchanged; laws unconditional.
+
+**Next session — resolve the residual `many` opacity inside this change:**
+
+- [ ] 9.1 Remove `partial def many` (its `Rel (many p)` is irreducibly opaque —
+  `partial def` yields no equation/unfold); `many`'s denotation is `relRepeat`, its
+  decoder `decodeRepeat`.
+- [ ] 9.2 Re-derive `some`/`many1`, `sepBy`/`sepBy1` over `relRepeat`; re-prove
+  `Rel_some` etc. against `relRepeat` (no opaque `Rel (many p)`).
+- [ ] 9.3 Re-express `chainl1`/`chainr1` operand lists via `decodeRepeat` (fold via
+  the existing `Iso.foldl`/`Iso.foldr`, unchanged).
+- [ ] 9.4 Add the list-combinator `_spec` decoder laws over `relRepeat`, unconditional
+  (productivity only as the `h` argument).
+- [ ] 9.5 Gate: `lake build` clean, zero `sorry`/warnings; `#print axioms` = `[propext,
+  Quot.sound]`; update `README.md` + `AGENTS.md`.
