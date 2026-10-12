@@ -54,9 +54,11 @@ The paper's concrete syntax is textual: `Rel :: [(α, String)]` (§4.1 the decod
 is `String → [(α, String)]`) and `token :: δ Char` (§4.3). `codec` targets
 binary, so the base unit is `UInt8`, the base string is a byte sequence, and
 `byte : Codec UInt8` is the `token` analogue. Text/Unicode is rebuilt downstream
-(`lean-text`) on top of bytes, not in core. The proof substrate is a plain byte
-list; a packed `ByteArray`-backed form is a _separate_ transport concern, not the
-thing we prove about.
+(`lean-text`) on top of bytes, not in core. **Two byte representations, two jobs**
+(see [Representations](#representations-two-byte-types-two-jobs)): the _proof_
+substrate is the plain `Bytes = List UInt8` list, and the _run-model_ (the
+packed, extraction-facing surface) is `ByteArray`. They are not interchangeable;
+they are two layers of the same bytes.
 
 **[D2] The nondeterministic list decoder.** The paper's decoder returns a _list_
 of `(value, remaining)` pairs — a relation (§4.1 `Parser (String → [(α, String)])`,
@@ -146,6 +148,61 @@ and partial encoding is preserved.
 
 ---
 
+## Representations — two byte types, two jobs
+
+`codec` uses **two** byte types, and each does exactly one job. They are not two
+ways to spell the same thing; they are two _layers_ of the same bytes.
+
+|                    | **`Bytes`** (`= List UInt8`)                                               | **`ByteArray`**                                                                         |
+| ------------------ | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| **Job**            | the **proof substrate**                                                    | the **run-model**                                                                       |
+| **Shape**          | a `List.cons` cell per byte                                                | a contiguous `uint8_t*` (`LeanScalarArray`), no per-byte box                            |
+| **For the prover** | reducible under `simp`/`rfl`/`induction` — every law is a finite induction | opaque (`toList` is an FFI projection) — cannot be reasoned about directly              |
+| **At runtime**     | allocates one `lean_object` per byte                                       | `lean_byte_array_get`/`lean_sarray_size`/`lean_sarray_push` are O(1), `memcmp` equality |
+
+**The decision.** All laws (`Rel`, `decode_spec`, `bidir`, `roundtrip`, …) are
+stated and proved **over `Bytes`**, because that is the representation the proof
+assistant can reduce. The executable surface — the functions a program actually
+calls — is **committed to `ByteArray`**: `decodeByteArray`, `encodeByteArray`,
+`decodeFullByteArray`, and the varbinary `decodeVarint`/`encodeVarint` are the
+_native_ `ByteArray`-carrier interpreters, proved **equal** to the `Bytes` spec by
+one refinement lemma each (`decodeByteArray_eq`, `encodeByteArray_eq`,
+`decodeFullByteArray_spec`, …), all `[propext, Quot.sound]`-only. The `Buffer`
+newtype is the transport surface that moves bytes across the `Bytes ↔ ByteArray`
+seam (`Buffer.toBytes`/`Buffer.ofBytes`). There is **no** `Array UInt8` carrier in
+the committed surface: it is a strictly-dominated intermediate (a pointer array of
+boxed bytes) kept only as a historical stepping stone in the ledger, not a type a
+caller should choose.
+
+The two-tier shape is the F\*-style move: _spec over the list, run-model over the
+packed buffer, proved equal_. "The model you prove on" and "the model you run at
+speed" are two different types on purpose — compromising them into one would
+sacrifice either the proofs (if you prove over `ByteArray`, nothing reduces) or
+the speed (if you run over `Bytes`, every byte is a heap cell).
+
+### The `@[extern]` C fast path — a named trust seam at the buffer edge
+
+The `ByteArray` run-model is **proved equal** to the `Bytes` spec, but "proved
+right" is not "fast": Lean's single C generator boxes every value (`Nat` as a
+bignum `lean_object *`, each byte a cons cell), so the run-model's own _recursion_
+still pays that boxed cost. `Codec/ExternFastPath` splices hand-written, GC-less C
+into the hot path through Lean's `@[extern]` FFI — the same mechanism the stdlib
+itself uses for `ByteArray.get`/`size`/`push`, and the same posture F\* takes
+"trusted-primitive" stance toward KaRaMeL.
+
+The two primitives (`codec_byte_array_slice`, a `memcpy`-style suffix copy;
+`codec_encode_append`, an amortized append) are declared as **plain `def`s whose
+Lean body still elaborates** — `byteSlice a i = a.extract i a.size`,
+`encodeAppend a b = a.push b`. The proofs therefore keep seeing the _meaning_ and
+close `[propext, Quot.sound]`-only; the `@[extern]` tag only swaps the _emitted_
+code for trusted C. That C is a **named, isolated trust seam**: it is trusted to
+satisfy its declared contract (and the bench lane checks byte-exact output), but
+it introduces **no proof axiom** — the codec's laws are unchanged. The routed fast
+paths (`decodeFullByteArrayByte`, `encodeByteArrayBytes`) are proved equal to the
+generic run-model by one equality lemma each.
+
+---
+
 ## Why these choices — the reasoning in lay terms
 
 This section explains the _reasoning_, for a reader who does not write Lean (or
@@ -172,11 +229,15 @@ is a `Char` forces you to smuggle binary data through a text type that fights yo
 at every step. So `codec` moves the base unit down to a single byte and the base
 string to a byte list; text becomes a downstream concern (`utf8` maps `String`
 onto bytes) — on _top_ of bytes, not underneath. Nothing about the framework
-changes; only the ground floor does. (A `ByteArray` — raw memory — is the _fast_
-representation, but it is opaque to the proof assistant, which cannot see inside
-it to reduce equations. So the _proof_ model is a plain list, and the _run_ model
-is a separate packed form. "The model you prove on" and "the model you run
-at speed" are deliberately two things.)
+changes; only the ground floor does.
+
+The **run-model is committed to `ByteArray`** (a `ByteArray` is raw memory — the
+_fast_ representation), but it is opaque to the proof assistant, which cannot see
+inside it to reduce equations. So the two byte types are assigned one job each:
+**`Bytes = List UInt8` is the _proof_ substrate** (reducible, so every `List`
+lemma applies and every law is an induction), and **`ByteArray` is the _run-model_** (packed `uint8_t*`, no per-byte boxing, the only carrier the executable surface
+uses). "The model you prove on" and "the model you run at speed" are deliberately
+two things — see [Representations](#representations-two-byte-types-two-jobs).
 
 ### `[D2]` + `[D3]` the decoder returns a _list_, and `|` means "try both, keep
 
@@ -321,9 +382,20 @@ structure Iso (α β : Type) where
 --   | : Codec α → Codec α → Codec α      (backtracking union)
 --   empty / pure / byte                   (failure / fixed value / one byte)
 
--- one description, two interpreters (both over byte sequences)
+-- one description, two interpreters (the proof substrate is `Bytes = List UInt8`)
 --   decode : Codec α → List UInt8 → List (α × List UInt8)   -- all (value, rest) pairs
 --   encode : Codec α → α → Option (List UInt8)              -- partial
+
+-- the run-model (the executable surface, committed to `ByteArray`)
+--   decodeByteArray   : Codec α → ByteArray → Nat → List (α × Nat)
+--   encodeByteArray   : Codec α → α → Option ByteArray
+--   decodeFullByteArray : Codec α → ConsumesByte p → ByteArray → Nat → Option (List α × Nat)
+-- each proved equal to the `Bytes` spec by one refinement lemma
+
+-- the `@[extern]` C fast path (a named trust seam; bodies still elaborate)
+--   byteSlice         : ByteArray → Nat → ByteArray                 (memcpy-style copy)
+--   encodeAppend      : ByteArray → UInt8 → ByteArray               (amortized append)
+--   decodeFullByteArrayByte / encodeByteArrayBytes : routed fast paths, proved equal
 
 -- the laws that make it a codec
 --   Rel d x s ↔ (x, []) ∈ decode d s          (bidirectional)
@@ -337,7 +409,8 @@ description — no solver, no per-combinator gate, no prefix-disjointness condit
 ## Scope
 
 - **`codec`** (this package): the pure framework — `Iso`, `Codec`, `Rel`, the two
-  interpreters, and the laws. **No domain-specific leaf codecs** (not even `u8`).
+  interpreters (the `Bytes` spec + the `ByteArray` run-model), and the laws. **No
+  domain-specific leaf codecs** (not even `u8`).
 - **`lean-binary`** (downstream): `u8`, `u16le`/`u16be`, … , `varint`,
   `lengthPrefix`, image/Protobuf demos, and the speed benchmark.
 - **`lean-text`** (downstream): `utf8` plus `text`/`identifier`/`whitespace` —

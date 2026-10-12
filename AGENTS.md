@@ -116,6 +116,17 @@ Source of truth:
 
 **Open, in order** (full detail in `tasks.md` §11):
 
+> **Compiler-tier direction change (this session):** the FFI/compiler tier is now the
+> **active plan** — a real, _separate_
+> Lean code-generation target emitting **GC-less C** in the KaRaMeL/F\* mould
+> (studied: `../fstar` at `v2026.09.20` Pulse C library, and `../karamel`). It is
+> _not_ a post-pass over `EmitC`'s `.c` output and _not_ a `lake` library; it is a
+> new backend (new `EmitNoGC`/`EmitCStar` + representation/boxing pass + a minimal
+> `krmllib`-shaped runtime header + a driver flag), in its own repo (the
+> KaRaMeL-to-F\* relationship), wired into this repo via a Nix derivation. Plan of
+> record: `openspec/changes/compiler-tier-extraction/`. A lighter-weight `@[extern]`
+> trusted-C fast path is being considered as a stopgap (see the change's task 4.3).
+
 1. _*Efficiency — the F*-style carrier refinement (Paper §4.4, "work faster")._*
    **Tier A done** (`efficient-backtracking-decoder`, archived): `decodeFull`/
    `decodeRepeatFull`/`decodeFast` proved denotationally equal, `[propext, Quot.sound]`,
@@ -140,9 +151,11 @@ Source of truth:
    walked the list each call. **Resolved by the `llvm-lean4-toolchain` change** (below):
    with LLVM enabled, `a.size` lowers to the `@[extern]` `lean_array_get_size` (O(1))
    and `a[i]` to `lean_array_fget_borrowed` (O(1)).
-   The FFI/`@[extern]`/compiler tier stays a _separate, deferred_ change
-   (authoring new `@[extern]` FFI and a custom compiler is still out of scope).
-   **No FFI, no codegen, no `HashMap`, no chart parser in this change.**
+   **Tier B (densest carrier) also done** — the OpenSpec change
+   **`openspec/changes/bytearray-carrier-decoders/`** adds the `ByteArray` carrier
+   (packed `uint8_t*`, no per-byte boxing) plus the F\* LEB128 `varint : Iso Nat Bytes`
+   and its `ByteArray`-carrier run-model (`decodeVarint`/`encodeVarint`), all proved
+   equal to the `Bytes` spec `[propext, Quot.sound]`-only. See the handoff entry below.
 
 > Resolved this session: §10.1 (namespace — no type rename; `Rel`/`relRepeat`/`Productive`
 > now live at `Codec.*`), §10.1a/10.1b/10.1c (organization/naming/docs), §10.2
@@ -203,8 +216,101 @@ Source of truth:
 >   the extracted `decodeArray byte` lowers to `lean_array_get_size`/`lean_array_fget_borrowed`
 >   (O(1), confirmed flat ~73–188 ns over a 1024× size range) vs the O(n) `List.length`
 >   baseline. Proof gate green, axiom record unchanged (`[propext, Quot.sound]`).
->   The author-FFI/compiler tier remains deferred; this is only the standard Lean build
->   configuration flipped on.
+
+> **ByteArray carrier + LEB128 varint — DONE this session**
+> (`bytearray-carrier-decoders`). On top of the LLVM-enabled toolchain, the **densest
+> stdlib carrier** is added: `ByteArray` (`structure ByteArray where data : Array UInt8`,
+> the packed `LeanScalarArray` — a contiguous `uint8_t*` with cached size/capacity,
+> `lean_byte_array_get`/`lean_sarray_size`/`lean_sarray_push` primops, `memcmp` equality,
+> **no per-byte boxing**), where `Array UInt8` still boxes each byte. Shipped:
+>
+> - `Codec/DecodeByteArray.lean` — the **native** index recursion `decodeByteArrayRel`
+>   (structurally identical to `decode`, reading `a[i]` via the O(1) `lean_byte_array_get!`
+>   in the `byte` case, recursing `i + m` through `seq`; no `List` is materialized),
+>   the public `decodeByteArray d a i = (decodeByteArrayRel d a i).map (fun (x,n) => (x, i+n))`,
+>   and `decodeByteArrayRel_eq`/`decodeByteArray_eq`/`decodeByteArray_byte`. Plus the **native**
+>   full-consumption `decodeFullByteArray` (`WellFounded.fix` on `a.size - i`, reading `a[i]`)
+>   with its spec `decodeFullByteArray_spec` (membership form, mirrors `decodeFull_spec`, same
+>   `huniq`) and the step/candidate lemmas (`decodeFullByteArrayStep_some`/`_ne_none`,
+>   `mem_decodeByteArrayRel_to_decode`/`_of_decode`, `drop_of_mem_decode_byteArray`).
+>   **Native re-write (tasks 4.1–4.2):** an earlier draft defined `decodeByteArray d a i =
+decodeArray d a.data i` _by composition_, re-materializing `a.data.toList` — so no packed
+>   byte was ever read; the native recursion fixes that (the extracted C lowers to
+>   `lean_byte_array_fget`, no `.toList`).
+> - `Codec/DecodeArray.lean` — `decodeFullArray` is **now native too** (`WellFounded.fix` on
+>   `a.size - i` reading `a[i]`), proved by `decodeFullArray_spec` (task 4.3); removes the
+>   same `.toList` materialization the compositional draft had (extracted C uses
+>   `lean_array_fget_borrowed`).
+> - `Codec/EncodeByteArray.lean` — `encodeByteArray d x = (encodeArray d x).map ByteArray.mk`,
+>   `encodeByteArray_eq` (one `ByteArray.mk`/`ByteArray.data` rewrite).
+> - Three transfer laws in `Codec/Sound.lean` — `decodeByteArray_spec`,
+>   `encodeByteArray_rel`, `roundtripByteArray`.
+> - `Codec/VarBinary.lean` — the F\* LEB128 varint as the **spec** `varint : Iso Nat Bytes`
+>   (`varintBytes`/`varintDecodeStep`/`varintUnapply`, 7 data bits/byte + continuation
+>   high bit, `0 ↦ [0]`, `128 ↦ [0x80,0x01]`, `300 ↦ [0xAC,0x02]`), its roundtrip law
+>   (`dec_enc`/`enc_dec`, the **encode ∘ decode** direction rejecting overlong/non-canonical
+>   forms), **plus** the `ByteArray`-carrier run-model `decodeVarint`/`encodeVarint` and
+>   their `decodeVarint_eq`/`encodeVarint_eq`/`roundtripVarint` laws. All `[propext, Quot.sound]`-only.
+>
+> **Finding:** `ByteArray` is the densest stdlib carrier; the toolchain (LLVM) was the
+> blocker, now the carrier is the **last lever**. Measured packed-carrier legs (`Bench.lean`,
+> arm64 reps=20): `encodeVarint 12345678` ≈ 52 ns/op, `decodeVarint` ≈ 108 ns/op,
+> `encodeByteArray byte` ≈ 62 ns/op, **`decodeByteArray byte [1 MiB]` = 83 ns** (the native
+> re-write's win — was ≈ 0.4 ms when defined by composition and paying the one-time
+> `Array.toList` transport, so ~4800×), `decodeFullByteArray byte [8192]` ≈ 298 µs /
+> `decodeFullArray byte [8192]` ≈ 302 µs (native, but full-consumption is
+> result-list-construction-bound so ≈ `decodeFull` ~271 µs — the O(1)-index carrier win
+> is on the single/multi-byte _reads_, not the list-building path). This change _uses_
+> the now-enabled `@[extern]` primops (no new proof axioms, no `[D#]`/`[S#]` anchor
+> change).
+
+> **`@[extern]` C fast path (extern-c-fast-path) — DONE this session.** The
+> **stopgap** noted in `compiler-tier-extraction` task 4.3, landing _before_ the full
+> GC-less C backend: it splices hand-written, trusted C into the _already proved_
+> `ByteArray` run-model's hot path via Lean's `@[extern]` FFI (shape 2 — a `def` whose
+> **Lean body still elaborates** — the stdlib `ByteArray.get`/`size`/`push` pattern and
+> the F\*-trusts-KaRaMeL posture). **Shipped:**
+>
+> - `Codec/ExternFastPath.lean` — two primitives, each a plain `def` with an elaborating
+>   body + an `@[extern "codec_…"]` C symbol: `byteSlice a i : ByteArray` (body
+>   `a.extract i a.size`; C symbol `codec_byte_array_slice`, a `memcpy`-style suffix copy)
+>   and `encodeAppend a b : ByteArray` (body `a.push b`; C symbol `codec_encode_append`,
+>   an amortized `lean_byte_array_push`). Plus the **routed fast paths** with equality laws:
+>   `decodeFullByteArrayByte a i : Option (List UInt8 × Nat)` (one `codec_byte_array_slice` +
+>   a `List` materialization at the boundary; `decodeFullByteArrayByte_eq` replaces the
+>   `WellFounded.fix` per-byte recursion), and `encodeByteArrayBytes xs : ByteArray` (fold
+>   `codec_encode_append` into a pre-sized packed buffer; `encodeByteArrayBytes_eq` via a
+>   `foldl`-push `= List.toArray` lemma). Supporting lemmas: `byteSlice_data_toList`,
+>   `decodeRepeat_byte_full`/`decodeRepeat_byte_unique` (the `huniq` `decodeFull_spec` needs),
+>   `foldl_push_toArray`/`foldl_ba_push`, `encodeRepeat_byte`. All `[propext, Quot.sound]`-only.
+> - `Codec/ExternFastPath.c` — the hand-written C: `#include <lean/lean.h>`, libc `memcpy`,
+>   calling the runtime's inline sarray primitives (`lean_alloc_sarray`/`lean_sarray_cptr`/
+>   `lean_unbox`/`lean_byte_array_push`); no new `lean_rt` dependency.
+> - **Build wiring:** the TOML lakefile became a **`lakefile.lean`** script, adding
+>   `target externFastPathO : FilePath := … buildLeanO oFile (Job.pure srcFile) …` (the
+>   `leanc`-compiled object) and `lean_exe bench where moreLinkObjs := #[externFastPathO]`;
+>   `@[default_target]` on `lean_lib codec` replaces the TOML `defaultTargets`. Verified the
+>   emitted `.lake/build/ir/Codec/ExternFastPath.c` calls `codec_byte_array_slice`/
+>   `codec_encode_append` (not the Lean bodies). **Lake lesson:** `@[default_target]` is the
+>   attribute (the TOML `defaultTargets` field maps to `LakefileConfig`, not a `.lean`
+>   `PackageConfig.where` field); `buildLeanO`/`compileO` (from `Lake.Build.Common`/
+>   `Actions`) compile hand-written C with `leanc`'s include path (`lean.h`) and matching
+>   flags; `leanc` self-resolves its C compiler (clang 19) without `clang` on PATH.
+> - `Bench.lean` gained an **extern tier lane**: `benchByteSlice` (the raw `memcpy`-loop
+>   throughput ceiling), `benchDecodeFullByteArrayByte`, `benchEncodeByteArrayBytes`,
+>   `benchEncodeAppend` — against the `List` spec / boxed `ByteArray` lanes above.
+>
+> **The prove-vs-trust seam decision (named, isolated):** the two C symbols are **trusted**
+> to match their declared contract (the F\* stance toward KaRaMeL), and the `_eq` laws pin
+> the _Lean_ meaning, so the codec's laws stay `[propext, Quot.sound]`-only and no proof
+> axiom is introduced; the bench lane checks byte-exact output. **Measured (arm64, reps=20):**
+> `byteSlice byte [1 MiB]` = 14.1 µs (~74 GB/s, the `memcpy` ballpark); routed
+> `decodeFullByteArrayByte byte [8192]` = 47.2 µs vs `decodeFullByteArray` = 328.5 µs
+> (**~7×** — the `WellFounded.fix`-recursion win); `encodeByteArrayBytes byte [1 MiB]` =
+> 1.63 ms vs `encodeRepeat` = 20.5 ms (**~12.5×** — the `List`-append→`push` win);
+> `encodeAppend` = 52 ns/op. The remaining `List` materialization at the boundary is the
+> _spec_-interface cost (a zero-copy `decodeFullByteArraySlice : … → Option (ByteArray × Nat)`
+> entry point is the design's open question, deferred to the full backend).
 
 > **Documentation conventions (this session):** the README is the **full
 > architecture statement** — _about the project and the paper only_. It carries the

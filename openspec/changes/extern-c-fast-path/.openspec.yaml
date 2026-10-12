@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-10-12
+goal: Speed up encode/decode maximally with trusted @[extern] C patches, landing
+  before the full GC-less C extraction backend
+skip_specs: true

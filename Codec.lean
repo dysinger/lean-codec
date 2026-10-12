@@ -21,8 +21,12 @@ import Codec.Iso
 import Codec.Codec
 import Codec.Decode
 import Codec.DecodeArray
+import Codec.DecodeByteArray
 import Codec.Encode
 import Codec.EncodeArray
+import Codec.EncodeByteArray
+import Codec.ExternFastPath
 import Codec.Sound
 import Codec.Combinators
 import Codec.Buffer
+import Codec.VarBinary

@@ -181,6 +181,114 @@ unsafe def benchDecodeFullArray (n : Nat) (reps : Nat) : IO Unit := do
   | none => throw (IO.userError "decodeFullArray byte: expected some")
   IO.println s!"decodeFullArray byte [{n}]: {dt / reps} ns/op"
 
+/-! ## The packed `ByteArray`-carrier run-models (§10.6, densest tier)
+
+`decodeByteArray`/`encodeByteArray` (`Codec.DecodeByteArray`/`Codec.EncodeByteArray`)
+and the LEB128 `decodeVarint`/`encodeVarint` (`Codec.VarBinary`) are the *densest*
+stdlib-carrier run-models (packed `uint8_t*`, no per-byte boxing), proved equal to
+`varint : Iso Nat Bytes`. These legs measure the packed carrier and the varbinary
+hot path against the `List` and `Array UInt8` baselines above. -/
+
+/-- The `n` bytes as a packed `ByteArray` (`ByteArray.mk` over the reducible
+`Array`, no per-byte box). -/
+unsafe def byteArrayBytesOf (n : Nat) : ByteArray :=
+  ByteArray.mk (arrayBytesOf n)
+
+/-- The packed-carrier single-step decoder: `decodeByteArray Codec.byte a 0` peels
+one byte in O(1) by index (the `lean_byte_array_get` primop). Confirms `[(1, 1)]`. -/
+unsafe def benchDecodeByteArray (n : Nat) (reps : Nat) : IO Unit := do
+  let a : ByteArray := byteArrayBytesOf n
+  let (r, dt) ← timeBatch reps fun _ => decodeByteArray Codec.byte a 0
+  let expected : List (UInt8 × Nat) := [(1, 1)]
+  if r != expected then
+    throw (IO.userError s!"decodeByteArray byte: expected [(1,1)], got {r}")
+  IO.println s!"decodeByteArray byte [{n}]: {dt / reps} ns/op"
+
+/-- The packed-accumulating single-step encoder: `encodeByteArray Codec.byte 1`
+yields `some {data := #[1]}`. -/
+unsafe def benchEncodeByteArray (reps : Nat) : IO Unit := do
+  let (r, dt) ← timeBatch reps fun _ => encodeByteArray Codec.byte (1 : UInt8)
+  match r with
+  | some a =>
+      if a.data.toList != [1] then throw (IO.userError "encodeByteArray byte: expected [1]")
+  | none => throw (IO.userError "encodeByteArray byte: expected some")
+  IO.println s!"encodeByteArray byte: {dt / reps} ns/op"
+
+/-- The LEB128 varbinary roundtrip over the packed carrier: `decodeVarint
+(encodeVarint n) 0` must recover `n` at the canonical consumed length. -/
+unsafe def benchRoundtripVarint (reps : Nat) : IO Unit := do
+  let (encoded, dt1) ← timeBatch reps fun _ => encodeVarint 12345678
+  let (decoded, dt2) ← timeBatch reps fun _ => decodeVarint encoded 0
+  match decoded with
+  | [(n, j)] =>
+      if n != 12345678 || j != (encoded.data.toList.length) then
+        throw (IO.userError "roundtrip varint: mismatch")
+  | _ => throw (IO.userError "roundtrip varint: expected one result")
+  IO.println s!"encodeVarint 12345678: {dt1 / reps} ns/op"
+  IO.println s!"decodeVarint 12345678: {dt2 / reps} ns/op"
+
+/-- The packed-carrier full-consumption repetition decoder. -/
+unsafe def benchDecodeFullByteArray (n : Nat) (reps : Nat) : IO Unit := do
+  let a : ByteArray := byteArrayBytesOf n
+  let (r, dt) ← timeBatch reps fun _ => decodeFullByteArray Codec.byte byte_consumesByte a 0
+  match r with
+  | some (xs, j) =>
+      if xs.length != n || j != n then
+        throw (IO.userError s!"decodeFullByteArray byte: expected ({n},{n}), got ({xs.length},{j})")
+  | none => throw (IO.userError "decodeFullByteArray byte: expected some")
+  IO.println s!"decodeFullByteArray byte [{n}]: {dt / reps} ns/op"
+
+/-! ## The `@[extern]` C fast-path tier (the memchr-adjacent raw-byte loop)
+
+`Codec.ExternFastPath` splices hand-written, GC-less C into the `ByteArray`
+run-model's hot path. These legs drive the trusted primitives
+(`byteSlice`/`encodeAppend`) and the routed fast paths
+(`decodeFullByteArrayByte`/`encodeByteArrayBytes`) against the boxed
+`ByteArray`/`List` baselines above — the head-to-head the design's acceptance
+(within ~2× of a raw `memchr`/`memcpy` byte loop) is checked against. -/
+
+open Codec.ExternFastPath
+
+/-- The raw-byte slice loop: one `codec_byte_array_slice` call copies `a[0 .. n)`
+into a fresh packed `ByteArray` (a `memcpy`-style C loop). This is the
+memchr-adjacent *raw-byte throughput ceiling* the hot path is measured against. -/
+unsafe def benchByteSlice (n : Nat) (reps : Nat) : IO Unit := do
+  let a : ByteArray := byteArrayBytesOf n
+  let (r, dt) ← timeBatch reps fun _ => byteSlice a 0
+  if r.data.toList.length != n then
+    throw (IO.userError s!"byteSlice: expected {n} bytes, got {r.data.toList.length}")
+  IO.println s!"byteSlice byte [{n}]: {dt / reps} ns/op"
+
+/-- The routed full-consumption decode: `decodeFullByteArrayByte a 0` — one
+`codec_byte_array_slice` + one `List` materialization at the boundary, replacing
+the `WellFounded.fix` per-byte recursion. -/
+unsafe def benchDecodeFullByteArrayByte (n : Nat) (reps : Nat) : IO Unit := do
+  let a : ByteArray := byteArrayBytesOf n
+  let (r, dt) ← timeBatch reps fun _ => decodeFullByteArrayByte a 0
+  match r with
+  | some (xs, j) =>
+      if xs.length != n || j != n then
+        throw (IO.userError s!"decodeFullByteArrayByte: expected ({n},{n}), got ({xs.length},{j})")
+  | none => throw (IO.userError "decodeFullByteArrayByte: expected some")
+  IO.println s!"decodeFullByteArrayByte byte [{n}]: {dt / reps} ns/op"
+
+/-- The encode accumulator: `encodeByteArrayBytes` appends `n` bytes into one
+pre-grown packed `ByteArray` (amortized O(n) `push`), replacing the `List`-append
+fold. -/
+unsafe def benchEncodeByteArrayBytes (n : Nat) (reps : Nat) : IO Unit := do
+  let xs : List UInt8 := bytesOf n
+  let (r, dt) ← timeBatch reps fun _ => encodeByteArrayBytes xs
+  if r.data.toList.length != n then
+    throw (IO.userError s!"encodeByteArrayBytes: expected {n} bytes, got {r.data.toList.length}")
+  IO.println s!"encodeByteArrayBytes byte [{n}]: {dt / reps} ns/op"
+
+/-- The single-byte encode append primitive (`codec_encode_append`, the
+amortized-O(1) `lean_byte_array_push` path). -/
+unsafe def benchEncodeAppend (reps : Nat) : IO Unit := do
+  let (r, dt) ← timeBatch reps fun _ => encodeAppend ByteArray.empty (1 : UInt8)
+  if r.data.toList != [1] then throw (IO.userError "encodeAppend byte: expected [1]")
+  IO.println s!"encodeAppend byte: {dt / reps} ns/op"
+
 end Codec.Bench
 
 open Codec.Bench in
@@ -211,4 +319,16 @@ unsafe def main (args : List String) : IO Unit := do
   Codec.Bench.benchDecodeArray n reps
   Codec.Bench.benchEncodeArray reps
   Codec.Bench.benchDecodeFullArray m reps
+  -- Packed `ByteArray`-carrier run-models (§10.6, densest tier) + LEB128 varbinary.
+  Codec.Bench.benchDecodeByteArray n reps
+  Codec.Bench.benchEncodeByteArray reps
+  Codec.Bench.benchDecodeFullByteArray m reps
+  Codec.Bench.benchRoundtripVarint reps
+  -- `@[extern]` C fast-path tier: the trusted raw-byte slice loop + the routed
+  -- full-consumption decoder and encode accumulator (vs the boxed baselines above).
+  for size in [n / 4, n / 2, n] do
+    Codec.Bench.benchByteSlice size reps
+    Codec.Bench.benchEncodeByteArrayBytes size reps
+  Codec.Bench.benchDecodeFullByteArrayByte m reps
+  Codec.Bench.benchEncodeAppend reps
   IO.println "done"
