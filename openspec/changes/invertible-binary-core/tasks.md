@@ -349,7 +349,7 @@ proved-equal, but the`size` cost is the ceiling; the FFI/`@[extern]`/compiler ti
       **Done** in `llvm-lean4-toolchain` — the pin `lean4` was built _without LLVM_, so
       `Array`/`ByteArray` fell back to pure-`List` (`Array.size = List.length` O(n), no
       `@[extern]` C++ primops) and `lake build bench` failed to link (`ld: library 'c++'
-    not found`). Fixed by building `lean4` with `LLVM=ON` and the _consistent_ LLVM 19
+not found`). Fixed by building `lean4` with `LLVM=ON` and the _consistent_ LLVM 19
       toolchain (`llvmPackages_19.stdenv`), wired into every path. Now
       `lean --features` ⇒ `[LLVM]`; `lake build bench` links; the extracted
       `decodeArray byte` lowers to `lean_array_get_size`/`lean_array_fget_borrowed` (O(1),
@@ -357,6 +357,43 @@ proved-equal, but the`size` cost is the ceiling; the FFI/`@[extern]`/compiler ti
       Proof gate green, axioms unchanged (`[propext, Quot.sound]`). The author-FFI/compiler
       tier remains deferred; this is only the stock Lean build configuration flipped on.
       See `openspec/changes/llvm-lean4-toolchain/`.
+- [x] **§10.6 ByteArray carrier + LEB128 varint (the densest stdlib carrier — the last
+      lever).** **Done** in `bytearray-carrier-decoders` — on top of the LLVM-enabled
+      toolchain, the **packed `ByteArray` carrier** (`LeanScalarArray`, contiguous
+      `uint8_t*`, cached size, `lean_byte_array_get`/`lean_sarray_size`/`lean_sarray_push`,
+      **no per-byte boxing**, where `Array UInt8` still boxes each byte), proved equal to
+      the `Bytes` spec by the function-level refinement through the reducible
+      `ByteArray.data`. New `Codec/DecodeByteArray.lean` (`decodeByteArray d a i =
+decodeArray d a.data i`, `decodeByteArray_eq`, `decodeFullByteArray`/`_spec`) and
+      `Codec/EncodeByteArray.lean` (`encodeByteArray`/`encodeByteArray_eq`), three transfer
+      laws in `Codec/Sound.lean` (`decodeByteArray_spec`/`encodeByteArray_rel`/
+      `roundtripByteArray`), and `Codec/VarBinary.lean` — the F\* LEB128 `varint :
+Iso Nat Bytes` (7 data bits/byte + continuation high bit, `0 ↦ [0]`,
+      `128 ↦ [0x80,0x01]`, `300 ↦ [0xAC,0x02]`) with its roundtrip law (`dec_enc`/`enc_dec`,
+      rejecting overlong/non-canonical encodings) plus the `ByteArray`-carrier run-model
+      `decodeVarint`/`encodeVarint` + `decodeVarint_eq`/`encodeVarint_eq`/`roundtripVarint`.
+      All `[propext, Quot.sound]`-only. **Finding:** `ByteArray` is the densest stdlib
+      carrier; the toolchain (LLVM) was the blocker, now the carrier is the last lever.
+      **Native-index rewrite (tasks 4.1–4.3 of `bytearray-carrier-decoders`):** the
+      carriers were initially shipped by composition over `decodeArray`/`decodeFull`,
+      which re-materialized `a.toList` and ran the list decoder — no packed byte was
+      ever read. Re-opened as **native `WellFounded.fix` recursions** reading `a[i]`
+      (`decodeByteArrayRel`/`decodeFullByteArray` over `ByteArray`, `decodeFullArray`
+      over `Array UInt8`), proved equal to the `Bytes` spec via the membership-form
+      `decodeFullByteArray_spec`/`decodeFullArray_spec` (mirrors of `decodeFull_spec`,
+      same `huniq`), with candidate-correspondence + step lemmas
+      (`decodeFullByteArrayStep_some`/`_ne_none`, etc.). The extracted C now lowers to
+      `lean_byte_array_fget`/`lean_array_fget_borrowed` (O(1) packed read), no `.toList`.
+      `Bench.lean`gained`decodeByteArray`/`encodeByteArray`/`decodeFullByteArray`/
+      `decodeVarint`/`encodeVarint`legs: measured (arm64, reps=20)`encodeVarint 12345678`
+      ≈ 52 ns/op,`decodeVarint`≈ 108 ns/op,`encodeByteArray byte`≈ 62 ns/op;
+      `decodeByteArray byte [1 MiB]`= **83 ns** (was ≈ 0.4 ms compositional — ~4800×),
+      `decodeFullByteArray byte [8192]`≈ 298 µs / `decodeFullArray byte [8192]`≈ 302 µs
+      (native, but full-consumption is result-list-construction-bound so ≈ `decodeFull`
+      ~271 µs — the O(1)-index carrier win is on the single/multi-byte _reads_, not the
+      list-building path).
+      The author-FFI/compiler tier **remains deferred**; no `[D#]`/`[S#]` anchor change.
+      See `openspec/changes/bytearray-carrier-decoders/`.
 
 **Planning-vs-build note:** the `proposal.md`/`design.md`/`specs/codec/spec.md` in this
 change were **updated this session** to the _implemented_ reality (backtracking-union

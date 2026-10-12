@@ -158,11 +158,13 @@ Working on task 4/7: <task description>
 ...
 
 All tasks complete! You can archive this change with `/opsx-archive`.
+
 ```
 
 **Output On Pause (Issue Encountered)**
 
 ```
+
 ## Implementation Paused
 
 **Change:** <change-name>
@@ -170,14 +172,17 @@ All tasks complete! You can archive this change with `/opsx-archive`.
 **Progress:** 4/7 tasks complete
 
 ### Issue Encountered
+
 <description of the issue>
 
 **Options:**
+
 1. <option 1>
 2. <option 2>
 3. Other approach
 
 What would you like to do?
+
 ```
 
 **Guardrails**
@@ -204,3 +209,4 @@ This skill supports the "actions on a change" model:
 
 - **Can be invoked anytime**: Before all artifacts are done (if tasks exist), after partial implementation, interleaved with other actions
 - **Allows artifact updates**: If implementation reveals design issues, suggest updating artifacts - not phase-locked, work fluidly
+```
