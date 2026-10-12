@@ -215,54 +215,314 @@ theorem decodeArray_byte (a : Array UInt8) (i : Nat) :
   · simp
   · simp
 
-/-! ## The full-consumption array repetition decoder (Tier-B analogue)
+/-! ## The full-consumption array repetition decoder (native)
 
 The array-carrier analogue of `decodeFull` (`Codec.Decode`): a single `Option`
 thread over the *remaining length* `a.size - i`, returning `some (xs, j)` exactly
 when `many p` — realized as the full-consumption list `xs` — matches the whole
-remaining input and ends at absolute index `j` (necessarily `a.toList.length`).
-It is **defined by composition**: the proven, already-efficient `decodeFull` is run
-on `a.toList.drop i` (the `Array`'s stored `List`, reached without copying), and the
-single result is re-based onto the absolute index. Because `decodeFull` is total and
-`#eval`-able for every productive `p` (the same `ConsumesByte` guard), so is
-`decodeFullArray`; its equality law transfers from `decodeFull_spec` in one line. -/
+remaining input and ends at absolute index `j` (necessarily `a.size`). It is a
+**native `WellFounded.fix`** reading `a[i]` (the O(1) `Array.get!`) — *not*
+`decodeFull` over `a.toList.drop i` — so no full `List` is materialized from the
+array (decision #2 in the `bytearray-carrier-decoders` design: composition over
+`decodeFull` defeats the carrier). Its spec law closes by the same
+`WellFounded.induction` + candidate-correspondence machinery as
+`decodeFullByteArray_spec`, routed through `decodeArrayRel_eq`. -/
 
-/-- The full-consumption repetition decoder over the array carrier: `some (xs, j)`
-iff `decodeFull p h` fully consumes `a.toList.drop i` as `xs`, with `j = a.toList.length`
-the absolute index after full consumption. Total and `#eval`-able for productive `p`.
-(Defined by composition over the proven `decodeFull`; the run-model is the `Array`'s
-stored `List`, not a per-byte cons-peel re-derived here.) -/
+/-- A result `(x, m) ∈ decodeArrayRel p a i` consumes `0 < m` bytes. -/
+theorem decodeArrayRel_pos {α : Type} (p : Codec α) (h : ConsumesByte p) (a : Array UInt8) (i : Nat) (x : α) (m : Nat) :
+    (x, m) ∈ decodeArrayRel p a i → 0 < m := by
+  intro hmem
+  rw [decodeArrayRel_eq] at hmem
+  rw [List.mem_map] at hmem
+  rcases hmem with ⟨pr, hpr, heq⟩
+  rcases pr with ⟨x', r⟩
+  have hx : x' = x := congrArg Prod.fst heq
+  have hm : (a.toList.drop i).length - r.length = m := congrArg Prod.snd heq
+  subst x'
+  have hlt : r.length < (a.toList.drop i).length := h x r (a.toList.drop i) hpr
+  rw [← hm]
+  omega
+
+/-- A result `(x, m) ∈ decodeArrayRel p a i` never overruns: `m ≤ a.size - i`. -/
+theorem decodeArrayRel_le_size {α : Type} (p : Codec α) (a : Array UInt8) (i : Nat) (x : α) (m : Nat) :
+    (x, m) ∈ decodeArrayRel p a i → m ≤ a.size - i := by
+  intro hmem
+  rw [decodeArrayRel_eq] at hmem
+  rw [List.mem_map] at hmem
+  rcases hmem with ⟨pr, hpr, heq⟩
+  rcases pr with ⟨x', r⟩
+  have hm : (a.toList.drop i).length - r.length = m := congrArg Prod.snd heq
+  rw [← hm]
+  rw [List.length_drop]
+  have hsize : a.toList.length = a.size := rfl
+  rw [hsize]
+  omega
+
+/-- The conjunction: productivity + in-bounds. -/
+theorem decodeArrayRel_bounds {α : Type} (p : Codec α) (h : ConsumesByte p) (a : Array UInt8) (i : Nat) (x : α) (m : Nat) :
+    (x, m) ∈ decodeArrayRel p a i → 0 < m ∧ i + m ≤ a.size := by
+  intro hmem
+  exact ⟨decodeArrayRel_pos p h a i x m hmem, by
+      have hmle := decodeArrayRel_le_size p a i x m hmem
+      have hpos := decodeArrayRel_pos p h a i x m hmem
+      omega⟩
+
+/-- The well-foundedness witness for the recursion step. -/
+theorem decodeFullArray_lt {α : Type} (p : Codec α) (h : ConsumesByte p) (a : Array UInt8) (i : Nat)
+    (x : α) (m : Nat) (hm : (x, m) ∈ decodeArrayRel p a i) :
+    InvImage (· < ·) (fun j : Nat => a.size - j) (i + m) i := by
+  have hb := decodeArrayRel_bounds p h a i x m hm
+  rcases hb with ⟨_hm_pos, hm_le⟩
+  change a.size - (i + m) < a.size - i
+  omega
+
+/-- Forward candidate correspondence: `(x, m)` (relative) maps to the `Bytes`
+result `(x, drop (i + m))`. -/
+theorem mem_decodeArrayRel_to_decode {α : Type} (p : Codec α) (a : Array UInt8) (i m : Nat) (x : α)
+    (hm : (x, m) ∈ decodeArrayRel p a i) :
+    ((x, a.toList.drop (i + m)) ∈ decode p (a.toList.drop i)) := by
+  rw [decodeArrayRel_eq] at hm
+  rw [List.mem_map] at hm
+  rcases hm with ⟨pr, hpr, heq⟩
+  rcases pr with ⟨x', r⟩
+  have hx : x' = x := congrArg Prod.fst heq
+  have hm' : (a.toList.drop i).length - r.length = m := congrArg Prod.snd heq
+  subst x'
+  have hsuffix := decode_suffix p x (a.toList.drop i) r hpr
+  rcases hsuffix with ⟨q, hq⟩
+  have hqlen : q.length = m := by
+    have hlen := congrArg List.length hq
+    rw [List.length_append] at hlen
+    have : q.length = (a.toList.drop i).length - r.length := by omega
+    rw [this]
+    exact hm'
+  have hr : r = a.toList.drop (i + m) := by
+    have hdrop : a.toList.drop (i + q.length) = r := drop_add_length_of_append hq
+    rw [hqlen] at hdrop
+    exact hdrop.symm
+  rw [← hr]
+  exact hpr
+
+/-- Reverse candidate correspondence: `(x, s₁)` maps to `(x, (drop i).length - s₁.length)`. -/
+theorem mem_decodeArrayRel_of_decode {α : Type} (p : Codec α) (a : Array UInt8) (i : Nat)
+    (x : α) (s₁ : Bytes) (hm : (x, s₁) ∈ decode p (a.toList.drop i)) :
+    (x, (a.toList.drop i).length - s₁.length) ∈ decodeArrayRel p a i := by
+  rw [decodeArrayRel_eq]
+  rw [List.mem_map]
+  refine ⟨(x, s₁), hm, rfl⟩
+
+/-- The suffix `s₁` of `drop i` is `drop (i+m)` for `m = (drop i).length - s₁.length`. -/
+theorem drop_of_mem_decode {α : Type} (p : Codec α) (a : Array UInt8) (i : Nat)
+    (x : α) (s₁ : Bytes) (hm : (x, s₁) ∈ decode p (a.toList.drop i)) :
+    a.toList.drop (i + ((a.toList.drop i).length - s₁.length)) = s₁ := by
+  have hsuffix := decode_suffix p x (a.toList.drop i) s₁ hm
+  rcases hsuffix with ⟨q, hq⟩
+  have hqd : a.toList.drop (i + q.length) = s₁ := drop_add_length_of_append hq
+  have hqlen : q.length = (a.toList.drop i).length - s₁.length := by
+    have hlen := congrArg List.length hq
+    rw [List.length_append] at hlen
+    omega
+  rw [hqlen] at hqd
+  exact hqd
+
+/-- The native full-consumption step: thread the `attach`-ed candidate steps,
+picking the first whose strictly-shorter recursion yields a full consumption. -/
+def decodeFullArrayStep {α : Type} (p : Codec α) (h : ConsumesByte p) (a : Array UInt8) (i : Nat)
+    (ih : (j : Nat) → InvImage (· < ·) (fun j => a.size - j) j i → Option (List α × Nat)) :
+    List { pr : α × Nat // pr ∈ decodeArrayRel p a i } → Option (List α × Nat)
+  | [] => none
+  | ⟨(x, m), hm⟩ :: rest =>
+      match ih (i + m) (decodeFullArray_lt p h a i x m hm) with
+      | none => decodeFullArrayStep p h a i ih rest
+      | some (xs, j) => some (x :: xs, j)
+
+/-- The native full-consumption repetition decoder over the array carrier:
+`some (xs, j)` iff the productive `p` fully consumes the remaining bytes of `a`
+from index `i` as `xs`, ending at `j = a.size`. A `WellFounded.fix` on the
+remaining length `a.size - i`, reading `a[i]` — the index mirror of `decodeFull`,
+with no `List` materialized from the array. Total and `#eval`-able for productive
+`p`. -/
 def decodeFullArray {α : Type} (p : Codec α) (h : ConsumesByte p) (a : Array UInt8) (i : Nat) :
     Option (List α × Nat) :=
-  (decodeFull p h (a.toList.drop i)).map fun xs => (xs, a.toList.length)
+  WellFounded.fix (InvImage.wf (fun j : Nat => a.size - j) Nat.lt_wfRel.wf)
+    (fun i ih =>
+      if _hge : a.size ≤ i then some ([], a.size)
+      else decodeFullArrayStep p h a i ih (decodeArrayRel p a i).attach)
+    i
 
-/-- The full-consumption law for the array carrier: `decodeFullArray p h a i = some (xs, j)`
-iff `xs` is the (unique, under `huniq`) list that fully consumes `a.toList.drop i` via
-`decodeRepeat`, and `j = a.toList.length`. Transferred from `decodeFull_spec` through the
-compositional definition in one line; no new induction. -/
+/-- Forward soundness of the native step. -/
+theorem decodeFullArrayStep_some {α : Type} (p : Codec α) (h : ConsumesByte p)
+    (a : Array UInt8) (i : Nat)
+    (ih : (j : Nat) → InvImage (· < ·) (fun j => a.size - j) j i → Option (List α × Nat)) :
+    ∀ (l : List { pr : α × Nat // pr ∈ decodeArrayRel p a i }) (ys : List α) (j : Nat),
+      decodeFullArrayStep p h a i ih l = some (ys, j) →
+        ∃ (x : α) (xs : List α) (m : Nat) (hm : (x, m) ∈ decodeArrayRel p a i),
+          ⟨(x, m), hm⟩ ∈ l ∧
+            ih (i + m) (decodeFullArray_lt p h a i x m hm) = some (xs, j) ∧ ys = x :: xs := by
+  intro l ys j
+  induction l generalizing ys j with
+  | nil => simp [decodeFullArrayStep]
+  | cons hd tl ihL =>
+      rcases hd with ⟨⟨x, m⟩, hm⟩
+      rw [decodeFullArrayStep]
+      cases ho : ih (i + m) (decodeFullArray_lt p h a i x m hm) with
+      | none =>
+          intro h
+          rcases ihL _ _ h with ⟨x', xs', m', hm', hmem, hih', hys⟩
+          refine ⟨x', xs', m', hm', ?_, hih', hys⟩
+          rw [List.mem_cons]
+          right
+          exact hmem
+      | some pr =>
+          intro h
+          rcases pr with ⟨xs₀, j₀⟩
+          simp only at h
+          cases h
+          refine ⟨x, xs₀, m, hm, ?_, ho, rfl⟩
+          simp
+
+/-- **Forward soundness** of the native full-consumption array decoder. -/
+theorem decodeFullArray_some {α : Type} (p : Codec α) (h : ConsumesByte p) :
+    ∀ (xs : List α) (a : Array UInt8) (i : Nat) (j : Nat),
+      decodeFullArray p h a i = some (xs, j) →
+        (xs, []) ∈ decodeRepeat p h (a.toList.drop i) ∧ j = a.size := by
+  intro xs a i j
+  revert xs j
+  induction i using WellFounded.induction
+      (hwf := InvImage.wf (fun j : Nat => a.size - j) Nat.lt_wfRel.wf) with
+  | h i ih =>
+      intro xs j he
+      have hfix : decodeFullArray p h a i = some (xs, j) := he
+      unfold decodeFullArray at hfix
+      rw [WellFounded.fix_eq] at hfix
+      by_cases hge : a.size ≤ i
+      · have hdrop : a.toList.drop i = [] := List.drop_eq_nil_of_le (by simpa using hge)
+        simp [hge] at hfix
+        rcases hfix with ⟨rfl, rfl⟩
+        constructor
+        · rw [hdrop, decodeRepeat_eq]
+          simp
+        · rfl
+      · simp [hge] at hfix
+        rcases (decodeFullArrayStep_some p h a i (fun j _hlt => decodeFullArray p h a j)
+            (decodeArrayRel p a i).attach xs j hfix) with ⟨x, xs', m, hm, hmem, hih', hxs⟩
+        subst xs
+        constructor
+        · rw [decodeRepeat_eq, List.mem_cons]
+          right
+          have hcorr : (x, a.toList.drop (i + m)) ∈ decode p (a.toList.drop i) :=
+            mem_decodeArrayRel_to_decode p a i m x hm
+          rw [List.mem_flatMap]
+          refine ⟨⟨(x, a.toList.drop (i + m)), hcorr⟩, ?_, ?_⟩
+          · exact List.mem_attach (decode p (a.toList.drop i)) ⟨(x, a.toList.drop (i + m)), hcorr⟩
+          · rw [List.mem_map]
+            refine ⟨(xs', []), ?_, rfl⟩
+            exact (ih (i + m) (decodeFullArray_lt p h a i x m hm) xs' j hih').1
+        · exact (ih (i + m) (decodeFullArray_lt p h a i x m hm) xs' j hih').2
+
+/-- Completeness of the native step. -/
+theorem decodeFullArrayStep_ne_none {α : Type} (p : Codec α) (h : ConsumesByte p)
+    (a : Array UInt8) (i : Nat)
+    (ih : (j : Nat) → InvImage (· < ·) (fun j => a.size - j) j i → Option (List α × Nat)) :
+    ∀ (l : List { pr : α × Nat // pr ∈ decodeArrayRel p a i }),
+      (∃ (x : α) (pr : List α × Nat) (m : Nat) (hm : (x, m) ∈ decodeArrayRel p a i),
+        ⟨(x, m), hm⟩ ∈ l ∧ ih (i + m) (decodeFullArray_lt p h a i x m hm) = some pr) →
+      decodeFullArrayStep p h a i ih l ≠ none := by
+  intro l
+  induction l with
+  | nil =>
+      intro hnone
+      rcases hnone with ⟨x, pr, m, hm, hmem, _⟩
+      cases hmem
+  | cons hd tl ihL =>
+      rcases hd with ⟨⟨x, m⟩, hm⟩
+      intro hex
+      rw [decodeFullArrayStep]
+      cases ho : ih (i + m) (decodeFullArray_lt p h a i x m hm) with
+      | none =>
+          rcases hex with ⟨x', pr', m', hm', hmem, hih'⟩
+          rw [List.mem_cons] at hmem
+          rcases hmem with hmem | hmem
+          · cases hmem
+            rw [ho] at hih'
+            cases hih'
+          · exact ihL ⟨x', pr', m', hm', hmem, hih'⟩
+      | some pr =>
+          simp
+
+/-- **Completeness** of the native full-consumption array decoder. -/
+theorem decodeFullArray_ne_none {α : Type} (p : Codec α) (h : ConsumesByte p) :
+    ∀ (xs : List α) (a : Array UInt8) (i : Nat),
+      (xs, []) ∈ decodeRepeat p h (a.toList.drop i) → decodeFullArray p h a i ≠ none := by
+  intro xs a i
+  revert xs
+  induction i using WellFounded.induction
+      (hwf := InvImage.wf (fun j : Nat => a.size - j) Nat.lt_wfRel.wf) with
+  | h i ih =>
+      intro xs hmem
+      unfold decodeFullArray
+      rw [WellFounded.fix_eq]
+      by_cases hge : a.size ≤ i
+      · simp [hge]
+      · simp [hge]
+        rw [decodeRepeat_eq] at hmem
+        rw [List.mem_cons] at hmem
+        rcases hmem with hmem | hmem
+        · have hdr : a.toList.drop i = [] := (congrArg Prod.snd hmem).symm
+          have hlen0 : (a.toList.drop i).length = 0 := by rw [hdr]; rfl
+          have : a.size - i = 0 := by simpa using hlen0
+          omega
+        · rw [List.mem_flatMap] at hmem
+          rcases hmem with ⟨a', ha', hres⟩
+          rcases a' with ⟨⟨x, s₁⟩, hm⟩
+          rw [List.mem_map] at hres
+          rcases hres with ⟨pr, hpr, hprmap⟩
+          rcases pr with ⟨xs', r⟩
+          cases hprmap
+          let m := (a.toList.drop i).length - s₁.length
+          have hmba : (x, m) ∈ decodeArrayRel p a i := mem_decodeArrayRel_of_decode p a i x s₁ hm
+          have hsdrop : a.toList.drop (i + m) = s₁ := drop_of_mem_decode p a i x s₁ hm
+          have hltstep := decodeFullArray_lt p h a i x m hmba
+          have hne_s₁ : decodeFullArray p h a (i + m) ≠ none := by
+            have : (xs', []) ∈ decodeRepeat p h (a.toList.drop (i + m)) := by
+              rw [hsdrop]
+              exact hpr
+            exact ih (i + m) hltstep xs' this
+          cases ho : decodeFullArray p h a (i + m) with
+          | none => exact False.elim (hne_s₁ ho)
+          | some pr =>
+              apply decodeFullArrayStep_ne_none p h a i
+                (fun j _hlt => decodeFullArray p h a j) (decodeArrayRel p a i).attach
+              refine ⟨x, pr, m, hmba, ?_, ?_⟩
+              · exact List.mem_attach (decodeArrayRel p a i) ⟨(x, m), hmba⟩
+              · rw [ho]
+
+/-- The full-consumption law for the **native** array carrier: `decodeFullArray
+p h a i = some (xs, j)` iff `xs` is the (unique, under `huniq`) list that fully
+consumes `a.toList.drop i` via `decodeRepeat`, ending at `j = a.size`. The index
+mirror of `decodeFull_spec`, with the same uniqueness hypothesis. -/
 theorem decodeFullArray_spec {α : Type} (p : Codec α) (h : ConsumesByte p)
     (huniq : ∀ {x y : List α} {s : Bytes},
       (x, []) ∈ decodeRepeat p h s → (y, []) ∈ decodeRepeat p h s → x = y)
     (a : Array UInt8) (i : Nat) (xs : List α) (j : Nat) :
     decodeFullArray p h a i = some (xs, j) ↔
-      (xs, []) ∈ decodeRepeat p h (a.toList.drop i) ∧ j = a.toList.length := by
-  rw [decodeFullArray]
+      (xs, []) ∈ decodeRepeat p h (a.toList.drop i) ∧ j = a.size := by
   constructor
-  · intro hm
-    cases hf : decodeFull p h (a.toList.drop i) with
-    | none => rw [hf] at hm; cases hm
-    | some ys =>
-        rw [hf] at hm
-        simp at hm
-        rcases hm with ⟨hxs, hj⟩
-        subst xs
-        subst j
-        exact ⟨decodeFull_some p h ys (a.toList.drop i) hf, rfl⟩
-  · intro hm
-    rcases hm with ⟨hmem, hj⟩
+  · exact decodeFullArray_some p h xs a i j
+  · intro hmemj
+    rcases hmemj with ⟨hmem, hj⟩
     subst j
-    have hful : decodeFull p h (a.toList.drop i) = some xs := (decodeFull_spec p h huniq xs (a.toList.drop i)).2 hmem
-    rw [hful]
-    rfl
+    have hne : decodeFullArray p h a i ≠ none := decodeFullArray_ne_none p h xs a i hmem
+    cases ho : decodeFullArray p h a i with
+    | none => exact False.elim (hne ho)
+    | some pr =>
+        rcases pr with ⟨ys, j'⟩
+        have hys : (ys, []) ∈ decodeRepeat p h (a.toList.drop i) ∧ j' = a.size :=
+          decodeFullArray_some p h ys a i j' ho
+        have hxy : ys = xs := huniq hys.1 hmem
+        subst ys
+        have hj' : j' = a.size := hys.2
+        subst j'
+        rfl
 
 end Codec

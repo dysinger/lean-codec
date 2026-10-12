@@ -55,6 +55,10 @@ decode d (drop i)` was **wrong** for non-consuming `pure` and empty remainders
   bits/byte + continuation high bit) onto that carrier as the first real consumer and
   the motivating hot path, with the `Bytes`-level `varint : Iso Nat Bytes` kept as the
   provable spec the carrier functions are proved equal to.
+- **Record the standing representation decision** (and its README statement): the
+  run-model is committed to `ByteArray`, `Bytes` stays the proof-only substrate, and
+  `Array UInt8` is demoted to a non-canonical stepping stone. This change is the point
+  where that split stops being an incidental detail and becomes the stated rule.
 
 **Non-Goals:**
 
@@ -63,6 +67,10 @@ decode d (drop i)` was **wrong** for non-consuming `pure` and empty remainders
   primops.
 - No change to `Codec`/`Rel`/`decode`/`encode`/`Sound`, and no change to the
   `Bytes` substrate; `decodeArray`/`encodeArray` stay as the `Array` milestone.
+- **No deletion of the `Array UInt8` carrier in this change.** The decision (below)
+  commits the run-model to `ByteArray` and demotes `Array UInt8` to a non-canonical
+  stepping stone, but physically removing the module is a separate mechanical
+  cleanup — recorded here as a follow-up, not silently folded into the proof work.
 - No bit-level varbinary (packing across byte boundaries). The F\* varint is
   byte-aligned 7-bits/byte; true sub-byte packing would need a bit-offset threaded
   through decoder state, which is an explicit non-goal here (recorded as deferred,
@@ -77,12 +85,21 @@ decode d (drop i)` was **wrong** for non-consuming `pure` and empty remainders
    post-LLVM. _Alternative considered:_ reuse `Array UInt8` (the existing carrier) —
    rejected: it never removes the per-byte boxing, so it cannot deliver the packed-
    buffer win that is the whole point.
-2. **Mirror the `decodeArray`/`encodeArray` shape exactly.** The `ByteArray` carrier
-   is `decodeByteArray d a i : List (α × Nat)` / `encodeByteArray d x : Option ByteArray`,
-   the same structural recursion with `a[i]` in place of cons-peel and `push` in place
-   of `++`. This keeps the refinement proof structurally identical to
-   `decodeArray_eq`/`encodeArray_eq`. _Alternative:_ a fresh, untyped-builder-heavy
-   formulation — rejected, more proof surface for no gain.
+2. **The ByteArray carrier is a _native_ index recursion, not composition over the
+   `Array` carrier.** `decodeByteArray d a i : List (α × Nat)` recurses structurally on
+   `d`, reading `a[i]` (the O(1) `lean_byte_array_get!` / `uget` primop) in the `byte`
+   case and recursing `i+m` through `seq` — **never materializing a `List`**. The
+   composition `decodeByteArray d a i = decodeArray d a.data i` (the earlier draft)
+   _defeats the carrier_: it re-materializes `a.data.toList` and runs the list decoder,
+   so it never reads a packed byte. The refinement proof (`decodeByteArray_eq`) closes
+   via `a[i] = a.data[i]` (`ByteArray.getElem_eq_getElem_data`) against `decodeArray_eq`,
+   no new induction. Same for `decodeFullByteArray`: a native `WellFounded.fix` on
+   `a.size - i` threading one `Option (List α)` and reading `a[i]`, **not**
+   `decodeFull` over `a.data.toList.drop i`.
+   _Alternative considered (and rejected):_ composition over `decodeArray`/`decodeFull` —
+   fewer lines, but it ships the same `List`-materialization + list-walk cost the
+   carrier exists to remove, so the packed-`uint8_t*` win is never realized (measured:
+   `decodeFullByteArray` ≈ `decodeFull` ≈ the list cost, ~0 gain).
 3. **The refinement is the _function-level_ form over `a.data.toList.drop i`** (lesson
    1 + 2 above), proved through the reducible `ByteArray.data`, _never_ through the
    opaque `ByteArray.toList`. The transport law
@@ -98,6 +115,23 @@ Iso Nat Bytes` (encode via `varint_encode_go`, decode via `varint_decode_go`, th
 5. **`skip_specs: true`** — like the two prior infra changes, the codec's _observable_
    denotation is unchanged (a `ByteArray` carrier is a representation swap, not a new
    capability), so no spec delta exists and none is invented.
+6. **The run-model is committed to `ByteArray`; `Array UInt8` is demoted to a
+   non-canonical stepping stone.** Measured (arm64, reps=20): `decodeByteArray byte`
+   ~112 ns vs `decodeArray byte` ~14.7 µs (the array's `.toList` transport), and
+   `encodeByteArray byte` ~52 ns vs `encodeArray byte` ~441 ns. There is **no** axis
+   on which `Array UInt8` beats `ByteArray`: it is strictly dominated on both decode
+   (transport cost) and encode (boxed accumulation), and it is no more provable than
+   `ByteArray` (both reduce through `.data`/`.toList`). So the executable surface a
+   caller touches — `decodeByteArray`/`encodeByteArray`/`decodeFullByteArray` and the
+   varbinary `decodeVarint`/`encodeVarint` — is `ByteArray`, with `Bytes` kept as the
+   proof substrate and `Buffer` as the transport seam. This is recorded as the
+   README's `Representations — two byte types, two jobs` section, and is a _standing_
+   decision, not a one-off: a follow-up change removes the `Array UInt8` carrier
+   outright; this change only establishes the rule.
+   _Alternative considered (and rejected):_ a _single_ type that is both provable and
+   fast. Impossible: `ByteArray.toList` is opaque (nothing reduces), and `List UInt8`
+   boxes each byte (one heap cell per byte). The two-tier F\* shape — spec over the
+   list, run-model over the packed buffer, proved equal — is the only way to have both.
 
 ## Risks / Trade-offs
 

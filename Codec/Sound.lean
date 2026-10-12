@@ -3,8 +3,10 @@
 
 import Codec.Decode
 import Codec.DecodeArray
+import Codec.DecodeByteArray
 import Codec.Encode
 import Codec.EncodeArray
+import Codec.EncodeByteArray
 
 /-!
 # Soundness: the roundtrip and bidirectional laws
@@ -650,6 +652,74 @@ theorem roundtripArray {α : Type} (d : Codec α) (x : α) (a : Array UInt8) :
   rw [decodeArray_eq, List.mem_map]
   rw [encodeArray_eq] at he
   have hrt : (x, []) ∈ decode d (a.toList.drop 0) := roundtrip d x a.toList he
+  refine ⟨(x, []), ?_, ?_⟩
+  · simpa using hrt
+  · simp
+
+/-! ## The packed `ByteArray`-carrier interpreters: transferred laws (densest tier)
+
+`decodeByteArray`/`encodeByteArray` (`Codec.DecodeByteArray`/
+`Codec.EncodeByteArray`) are the F\*-style run-models over the **densest** stdlib
+carrier `ByteArray` (packed `uint8_t*`, no per-byte boxing), *proved equal* to the
+list specs (`decodeByteArray_eq`/`encodeByteArray_eq`), so every `Bytes`-level law
+transfers by a one-line rewrite — **no new semantics**, no new induction. Each
+lemma below is a definitional rerouting into the already-proven law. -/
+
+/-- The bidirectional law for the packed-carrier decoder: `(x, j) ∈ decodeByteArray d a i`
+iff the dropped input splits as a `Rel`-prefix `s₀` plus the dropped remainder, with
+`j` exactly `i + s₀.length`. Transferred from `decode_spec` through `decodeByteArray_eq`
+and `List.mem_map`. -/
+theorem decodeByteArray_spec {α : Type} (d : Codec α) (a : ByteArray) (i : Nat) (x : α) (j : Nat) :
+    (x, j) ∈ decodeByteArray d a i ↔
+      ∃ s₀, a.data.toList.drop i = s₀ ++ a.data.toList.drop j ∧ Rel d x s₀ ∧ j = i + s₀.length := by
+  rw [decodeByteArray_eq, List.mem_map]
+  constructor
+  · intro h
+    rcases h with ⟨pr, hpr, heq⟩
+    rcases pr with ⟨x₀, r⟩
+    have hx : x₀ = x := congrArg Prod.fst heq
+    have hjidx : i + ((a.data.toList.drop i).length - r.length) = j := congrArg Prod.snd heq
+    subst x₀
+    rcases (decode_spec d x (s := a.data.toList.drop i) (r := r)).1 hpr with ⟨s₀, hs, hrel⟩
+    refine ⟨s₀, ?_, hrel, ?_⟩
+    · have hlen : (a.data.toList.drop i).length = s₀.length + r.length := by rw [hs, List.length_append]
+      have hj' : j = i + s₀.length := by rw [hjidx.symm, hlen, Nat.add_sub_cancel_right]
+      rw [hj']
+      rw [drop_add_length_of_append hs.symm]
+      exact hs
+    · have hlen := congrArg List.length hs
+      rw [List.length_append] at hlen
+      rw [hjidx.symm, hlen, Nat.add_sub_cancel_right]
+  · intro h
+    rcases h with ⟨s₀, hs, hrel, hj⟩
+    refine ⟨(x, a.data.toList.drop j), ?_, ?_⟩
+    · exact (decode_spec d x (s := a.data.toList.drop i) (r := a.data.toList.drop j)).2 ⟨s₀, hs, hrel⟩
+    · change (x, i + ((a.data.toList.drop i).length - (a.data.toList.drop j).length)) = (x, j)
+      congr 1
+      have hlen := congrArg List.length hs
+      rw [List.length_append] at hlen
+      rw [hlen, Nat.add_sub_cancel_right]
+      exact hj.symm
+
+/-- Encoder soundness for the packed-carrier encoder: any value it prints to a
+`ByteArray` is in the description's denotational domain over the array's bytes.
+Transferred from `encode_rel` through `encodeByteArray_eq`. -/
+theorem encodeByteArray_rel {α : Type} (d : Codec α) (x : α) :
+    ∀ {a : ByteArray}, encodeByteArray d x = some a → Rel d x a.data.toList := by
+  intro a he
+  rw [encodeByteArray_eq] at he
+  exact encode_rel d x he
+
+/-- The byte-exact roundtrip for the packed carriers: a value encoded to a
+`ByteArray` decodes back, over `decodeByteArray` from index `0`, consuming the whole
+array. Transferred from `roundtrip` through `encodeByteArray_eq` and
+`decodeByteArray_eq`. -/
+theorem roundtripByteArray {α : Type} (d : Codec α) (x : α) (a : ByteArray) :
+    encodeByteArray d x = some a → (x, a.data.toList.length) ∈ decodeByteArray d a 0 := by
+  intro he
+  rw [decodeByteArray_eq, List.mem_map]
+  rw [encodeByteArray_eq] at he
+  have hrt : (x, []) ∈ decode d (a.data.toList.drop 0) := roundtrip d x a.data.toList he
   refine ⟨(x, []), ?_, ?_⟩
   · simpa using hrt
   · simp

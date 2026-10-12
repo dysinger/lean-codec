@@ -55,6 +55,12 @@ the buffer, plus its equality proof against `decode d (a.data.toList.drop i)`.
 - **No changes to the `Codec` AST, `Rel`, `decode`, or `encode`** — the proof
   substrate stays `Bytes = List UInt8` (decision #1), and the `ByteArray` carrier is
   a _separate_ run-model, exactly as `Array UInt8` is today.
+- **A standing representation decision, stated here and in the README** (see
+  `Representations — two byte types, two jobs`): the run-model is **committed to
+  `ByteArray`**, and `Array UInt8` is _not_ a type a caller should choose. The two
+  byte types are assigned one job each — `Bytes` = proof substrate, `ByteArray` =
+  run-model — and this change is where that split becomes the _standing_ rule rather
+  than an incidental detail.
 
 ## Capabilities
 
@@ -73,9 +79,12 @@ _(None.)_
 - New modules `Codec/DecodeByteArray.lean` / `Codec/EncodeByteArray.lean` (or one
   combined `Codec/ByteArrayCodec.lean`) with the `ByteArray`-carrier interpreters and
   their refinement laws, plus the varbinary combinator over them.
-- No change to `Codec`/`Rel`/`decode`/`encode`/`Sound`; the `Bytes` substrate and the
-  existing `Array UInt8` carrier (`decodeArray`/`encodeArray`) remain intact and are
-  left as the proof substrate and the Tier-B milestone respectively.
+- No change to `Codec`/`Rel`/`decode`/`encode`/`Sound`; the `Bytes` substrate stays
+  the proof substrate. The existing `Array UInt8` carrier (`decodeArray`/`encodeArray`)
+  **stays in the tree as a documented, non-canonical Tier-B stepping stone**, but the
+  committed run-model surface is `ByteArray`. A future change may remove `Array UInt8`
+  outright; this change records the decision but does not delete it (deleting a carrier
+  is a separate, mechanical cleanup outside this change's proof work).
 - `Bench.lean` (the §10.5/§10.6 extraction + benchmark harness) gains `ByteArray`
   carrier and `decodeVarint`/`encodeVarint` legs to measure the packed-buffer win
   against the `List` and `Array UInt8` baselines.
