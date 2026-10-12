@@ -14,7 +14,7 @@ as cons cells, higher-order values as `lean_alloc_closure`. There is **no
 F\* solved this with **KaRaMeL**, and the solution is understood and transferable
 (see the studied reference: `../fstar` at `v2026.09.20`, pulse C library
 `pulse/lib/pulse/c/Pulse.C.Types.*`, and `../karamel` — `DESIGN.md`, `include/krmllib/*`,
-`src/AstToCStar.ml`, `src/CStarToC.ml`, `src/CStar.ml`).
+`src/AstToCStar.ml`).
 
 This design plans the **separate Lean target** that brings the same idea to Lean:
 a _real, additional code-generation backend_ that lowers a proved subset of LCNF
@@ -26,16 +26,22 @@ C that `EmitC` already emits, and **not** a `lake` library in this repo.
 KaRaMeL's `DESIGN.md` pipeline, with the Lean 4.34.1 compiler counterpart for
 each stage:
 
-| KaRaMeL stage                                       | KaRaMeL module                     | Lean 4.34.1 counterpart (`src/lean`)                    |
-| --------------------------------------------------- | ---------------------------------- | ------------------------------------------------------- |
-| load typed input AST                                | `InputAst.ml` / `InputAstToAst.ml` | LCNF `Decl` (the IR already fed to codegen)             |
-| expand abbrevs                                      | `Inlining.ml`                      | LCNF mono/impure phases                                 |
-| monomorphize data types                             | `DataTypes.ml`                     | `LCNF/MonoTypes.lean`, `LCNF/Specialize.lean`           |
-| drop tuples; simplify to structs/enums/conditionals | `DataTypes.ml`                     | `LCNF/Simp/*`                                           |
-| expr→statement hoisting, casts, name munging        | `Simplify.ml`                      | `LCNF/InferType`, `LCNF/PullLetDecls`                   |
-| **C\* (typed, no-GC)**                              | `CStar.ml` / `AstToCStar.ml`       | **NEW: `EmitNoGC` / `EmitCStar`** (parallel to `EmitC`) |
-| C AST + pretty-print                                | `CStarToC.ml`, `PrintC.ml`         | **NEW: `PrintCStar`** (or emit C directly)              |
-| minimal runtime                                     | `include/krmllib/*.h`              | **NEW: a `krmllib`-shaped header**                      |
+| KaRaMeL stage                                       | KaRaMeL module                     | Lean 4.34.1 counterpart (`src/lean`)             |
+| --------------------------------------------------- | ---------------------------------- | ------------------------------------------------ |
+| load typed input AST                                | `InputAst.ml` / `InputAstToAst.ml` | LCNF `Decl` (the IR already fed to codegen)      |
+| expand abbrevs                                      | `Inlining.ml`                      | LCNF mono/impure phases                          |
+| monomorphize data types                             | `DataTypes.ml`                     | `LCNF/MonoTypes.lean`, `LCNF/Specialize.lean`    |
+| drop tuples; simplify to structs/enums/conditionals | `DataTypes.ml`                     | `LCNF/Simp/*`                                    |
+| expr→statement hoisting, casts, name munging        | `Simplify.ml`                      | `LCNF/InferType`, `LCNF/PullLetDecls`            |
+| typed, no-GC C surface                              | `AstToCStar.ml`                    | **NEW: `EmitNoGC`** (parallel to `EmitC`)        |
+| C pretty-print                                      | `PrintC.ml`                        | **NEW: emit C directly** (no separate AST stage) |
+| minimal runtime                                     | `include/krmllib/*.h`              | **NEW: a minimal no-GC runtime header**          |
+
+(Note: KaRaMeL's `CStar.ml`/`AstToCStar.ml`/`CStarToC.ml` are _file names tied to
+F★'s typed AST_ — "C★" is a pun on the F★ language. Lean has no such AST, so
+those stage names do **not** carry over; the Lean counterpart is one `EmitNoGC`
+emitter that prints C directly from LCNF. Only the _type map_ and the _no-GC
+header shape_ are reused, not the `CStar` vocabulary.)
 
 The two _essential_ new pieces (the "no-GC" core) are:
 
@@ -45,14 +51,15 @@ The two _essential_ new pieces (the "no-GC" core) are:
    maps:
    - `Nat` → `size_t` (loop indices, measures, lengths) — erasing the
      `WellFounded.fix` measure that exists only for Lean's termination proof;
-   - `List UInt8` / `Bytes` → the slice `(uint8_t *, size_t)` (KaRaMeL's
-     `FStar_Bytes_bytes`);
+   - `List UInt8` / `Bytes` → the slice `(uint8_t *, size_t)` (the
+     `FStar_Bytes_bytes` representation studied in `krmllib`);
    - `ByteArray` → `uint8_t *` + `size_t` (its `LeanScalarArray` data is already
      contiguous);
-   - `UInt8`/machine ints → `uint8_t`/`uint32_t`/… (KaRaMeL's `types.h`);
+   - `UInt8`/machine ints → `uint8_t`/`uint32_t`/… (the `size_t`/`uintN_t` map,
+     studied in `krmllib`'s `types.h`);
    - no closures: the subset must be first-order, so `WellFounded.fix`'s `ih`
      and `decodeFullByteArrayStep`'s `attach` are _loops_, not `lean_alloc_closure`.
-2. **A `CStar` emitter** (`EmitNoGC`/`EmitCStar`) that, given a `Decl` satisfying
+2. **An `EmitNoGC` emitter** that, given a `Decl` satisfying
    the subset, prints the unboxed C: `lean_object` → nothing, RC calls
    (`lean_inc_ref`/`lean_dec_ref`) → nothing, `Nat` arithmetic → `size_t`, list
    construction → destination-buffer writes + `(ptr, len)`.
@@ -94,7 +101,7 @@ size`; slice result `(ptr, len)`), proved where reachable, otherwise a
 
 1. **This is a separate target, not a source rewrite and not a C post-pass.**
    The lowering operates on LCNF `Decl`s (the IR `EmitC` already consumes), via a
-   _new_ `EmitNoGC`/`EmitCStar` module, selected by a new driver flag. The
+   _new_ `EmitNoGC` module, selected by a new driver flag. The
    existing `EmitC`/LLVM path is untouched.
 
 2. **This is a separate project (the KaRaMeL relationship).** The backend has
@@ -156,7 +163,7 @@ backend is `IR/EmitLLVM.lean`. A new target plugs in at the same seam. Two
 concrete wiring options, in order of fidelity to "a real separate target":
 
 - **A. Patch the Lean compiler toolchain** (what "a real target" means): add
-  `EmitNoGC`/`EmitCStar` + the representation/boxing pass + a driver flag
+  `EmitNoGC` + the representation/boxing pass + a driver flag
   (`lean --target=nogc` or a `leanc`-variant) to the pinned `lean4` (as the
   `llvm-lean4-toolchain` change already rebuilds `lean4` with `LLVM=ON`). The
   backend lives in the compiler, selected per-decl/module; this is the
@@ -194,7 +201,7 @@ lane alongside the existing §10.5 bench.
 
 ## Migration Plan
 
-1. Stand up the separate backend project (new repo) with the `EmitNoGC`/`EmitCStar`
+1. Stand up the separate backend project (new repo) with the `EmitNoGC`
    naming, the representation/boxing pass, the minimal no-GC runtime header, and
    the driver flag — wired into this repo's `flake.nix` as a Nix derivation.
 2. Lower `decodeByteArray`'s `byte` case and `decodeFullByteArray`'s

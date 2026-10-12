@@ -70,7 +70,7 @@ three properties, mirroring KaRaMeL:
 Concretely the change delivers:
 
 - A **design for a real separate target** (this is the primary plan artifact):
-  a new `EmitNoGC`/`EmitCStar` emitter parallel to `Lean.Compiler.LCNF.EmitC`,
+  a new `EmitNoGC` emitter parallel to `Lean.Compiler.LCNF.EmitC`,
   a **representation/boxing pass** (the KaRaMeL type-map: `Nat → size_t`,
   `List UInt8 → (uint8_t *, size_t)`, no closures), a **minimal no-GC runtime
   header** (`krmllib.h`-shaped), a **driver switch** selecting the new target,
@@ -100,7 +100,7 @@ _(None.)_
 ## Impact
 
 - A new **separate extraction backend** — new Lean compiler modules
-  (`EmitNoGC`/`EmitCStar` + representation/boxing pass + minimal runtime header +
+  (`EmitNoGC` + representation/boxing pass + minimal runtime header +
   driver flag), held in their own project (the KaRaMeL relationship), not in the
   `codec` library.
 - The `ByteArray` run-model (`decodeByteArray`/`encodeByteArray`/

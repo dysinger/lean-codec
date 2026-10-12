@@ -18,16 +18,18 @@
 
 ## 1. The separate backend target (its own repo, KaRaMeL-shaped)
 
-- [ ] 1.1 Stand up the backend project: module layout mirroring KaRaMeL's stages
-      — `EmitNoGC`/`EmitCStar` (parallel to `Lean.Compiler.LCNF.EmitC`), a
-      representation/boxing pass (parallel to `ExplicitBoxing`/`ExplicitRC`/
-      `MonoTypes`), a `PrintCStar`/`CStarToC` last stage, and a minimal no-GC
-      runtime header (`krmllib.h`-shaped: `target.h`, `types.h`,
-      `lowstar_endianness.h`, `fstar_int.h`).
+- [ ] 1.1 Stand up the backend project: an `EmitNoGC` emitter parallel to
+      `Lean.Compiler.LCNF.EmitC` (printing C directly — no separate AST stage),
+      a representation/boxing pass (parallel to `ExplicitBoxing`/`ExplicitRC`/
+      `MonoTypes`, but _suppressing_ them rather than replicating), and a
+      minimal no-GC runtime header (inspired by `krmllib.h`'s _shape_ — macros +
+      `typedef`s, no allocator beyond libc). Lower the `krmllib`/`C★`/KaRaMeL
+      stage-for-stage vocabulary: Lean has no F★ AST, so there is no "C★" node
+      to emit — the honest name is an unboxed-C emitter (`EmitNoGC`).
 - [ ] 1.2 Specify and implement the **primitive type mapping** (the no-GC core):
       `Nat → size_t`, `UInt8 → uint8_t`, `List UInt8`/`Bytes → (uint8_t *, size_t)`
-      (KaRaMeL's `FStar_Bytes_bytes`), `ByteArray → uint8_t * + size_t`; no
-      `lean_object`, no RC in the hot path.
+      (the slice representation studied in `krmllib`'s `FStar_Bytes_bytes`),
+      `ByteArray → uint8_t * + size_t`; no `lean_object`, no RC in the hot path.
 - [ ] 1.3 Specify the **source subset** (the Low\* analog): first-order, no
       closures, monomorphic over the hot path; `WellFounded.fix` recursion
       recognized and lowered to `while`/`for` (measure erased); out-of-subset

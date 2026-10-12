@@ -121,7 +121,7 @@ Source of truth:
 > Lean code-generation target emitting **GC-less C** in the KaRaMeL/F\* mould
 > (studied: `../fstar` at `v2026.09.20` Pulse C library, and `../karamel`). It is
 > _not_ a post-pass over `EmitC`'s `.c` output and _not_ a `lake` library; it is a
-> new backend (new `EmitNoGC`/`EmitCStar` + representation/boxing pass + a minimal
+> new backend (new `EmitNoGC` + representation/boxing pass + a minimal
 > `krmllib`-shaped runtime header + a driver flag), in its own repo (the
 > KaRaMeL-to-F\* relationship), wired into this repo via a Nix derivation. Plan of
 > record: `openspec/changes/compiler-tier-extraction/`. A lighter-weight `@[extern]`
