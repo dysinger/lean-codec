@@ -116,16 +116,24 @@ Source of truth:
 
 **Open, in order** (full detail in `tasks.md` §11):
 
-> **Compiler-tier direction change (this session):** the FFI/compiler tier is now the
-> **active plan** — a real, _separate_
-> Lean code-generation target emitting **GC-less C** in the KaRaMeL/F\* mould
-> (studied: `../fstar` at `v2026.09.20` Pulse C library, and `../karamel`). It is
-> _not_ a post-pass over `EmitC`'s `.c` output and _not_ a `lake` library; it is a
-> new backend (new `EmitNoGC` + representation/boxing pass + a minimal
-> `krmllib`-shaped runtime header + a driver flag), in its own repo (the
-> KaRaMeL-to-F\* relationship), wired into this repo via a Nix derivation. Plan of
-> record: `openspec/changes/compiler-tier-extraction/`. A lighter-weight `@[extern]`
-> trusted-C fast path is being considered as a stopgap (see the change's task 4.3).
+> **Compiler-tier direction change — ARCHIVED this session (the plan was dumb).**
+> The FFI/compiler "GC-less C backend" plan (`compiler-tier-extraction`) was
+> killed and archived as `openspec/changes/archive/2026-10-12-compiler-tier-extraction/`.
+> Reviewer finding (read-only, against pinned `lean4` 4.34.1): the plan was
+> **not sound enough to start** — `Nat → size_t` is a _semantic_ change Lean's IR
+> doesn't support (bignum `Nat` is not a scalar `lean_object *`), `WellFounded.fix`
+> is genuinely higher-order (the codec's own `decodeFullByteArray` is a backtracking
+> search, not a tail loop, so "erase the measure → `while`" only holds for a _different_
+> function), there is no F\*-style "separate tool" seam in Lean (emitters are
+> in-tree, compiled into `lean`), and the `memchr` acceptance criterion was
+> self-contradictory (a function returning a heap `List` vs zero-allocation `memchr`).
+> The real, cheaper unblock is a **zero-copy `(ptr,len)`/`USize`-indexed, slice-returning
+> entry point** that the existing `EmitC` can already print unboxed — an _interface_
+> change, not a compiler. Do **not** re-open a "new backend" plan until that cheaper
+> first step is tried and shown insufficient. The `@[extern]` stopgap
+> (`extern-c-fast-path`) is DONE and, per its corrected record, was also a
+> mechanism demo (no real speedup) — so the efficiency question is genuinely open,
+> and the next move is the slice-returning API, **not** another compiler plan.
 
 1. _*Efficiency — the F*-style carrier refinement (Paper §4.4, "work faster")._*
    **Tier A done** (`efficient-backtracking-decoder`, archived): `decodeFull`/
@@ -265,7 +273,8 @@ decodeArray d a.data i` _by composition_, re-materializing `a.data.toList` — s
 > change).
 
 > **`@[extern]` C fast path (extern-c-fast-path) — DONE this session.** The
-> **stopgap** noted in `compiler-tier-extraction` task 4.3, landing _before_ the full
+> **stopgap** (formerly `compiler-tier-extraction` task 4.3, since archived),
+> landing _before_ any full
 > GC-less C backend: it splices hand-written, trusted C into the _already proved_
 > `ByteArray` run-model's hot path via Lean's `@[extern]` FFI (shape 2 — a `def` whose
 > **Lean body still elaborates** — the stdlib `ByteArray.get`/`size`/`push` pattern and
@@ -319,8 +328,9 @@ decodeArray d a.data i` _by composition_, re-materializing `a.data.toList` — s
 > via a `lakefile.lean` `buildLeanO`+`moreLinkObjs` target, verified codegen, byte-exact
 > bench checks, `[propext, Quot.sound]`-only — and the named trust seam. **What is NOT
 > established:** any material speedup. The real bottleneck (the `List` boundary + O(n²)
-> append) is a _codegen/interface_ problem, deferred to the full GC-less backend
-> (`compiler-tier-extraction`) and/or a zero-copy `(ptr,len)`-returning entry point.
+> append) is an _interface/codegen_ problem — the proposed full GC-less backend
+> (`compiler-tier-extraction`) was **archived as unsound/too-dumb**, leaving the
+> **zero-copy `(ptr,len)`-returning entry point** as the next move.
 
 > **Documentation conventions (this session):** the README is the **full
 > architecture statement** — _about the project and the paper only_. It carries the

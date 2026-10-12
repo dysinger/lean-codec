@@ -198,7 +198,9 @@ are worth knowing, honestly stated:
   boxed cons cells that the _spec interface_ forces at the decode boundary, and
   the O(n²) `List.append` fold of `encodeRepeat`, which a plain `ByteArray.push`
   fold removes without any new C. The genuine gap is that Lean has **no unboxed
-  C target** to select — that is `compiler-tier-extraction`, not this module.
+  C target** to select — and the plan to build one (`compiler-tier-extraction`)
+  was **archived as unsound**: the honest next step is a zero-copy, slice-returning
+  entry point, not a compiler backend.
 
 What _is_ established here, and is worth keeping:
 
