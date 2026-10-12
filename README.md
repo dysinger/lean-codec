@@ -182,24 +182,41 @@ the speed (if you run over `Bytes`, every byte is a heap cell).
 
 ### The `@[extern]` C fast path — a named trust seam at the buffer edge
 
-The `ByteArray` run-model is **proved equal** to the `Bytes` spec, but "proved
-right" is not "fast": Lean's single C generator boxes every value (`Nat` as a
-bignum `lean_object *`, each byte a cons cell), so the run-model's own _recursion_
-still pays that boxed cost. `Codec/ExternFastPath` splices hand-written, GC-less C
-into the hot path through Lean's `@[extern]` FFI — the same mechanism the stdlib
-itself uses for `ByteArray.get`/`size`/`push`, and the same posture F\* takes
-"trusted-primitive" stance toward KaRaMeL.
+`Codec/ExternFastPath` is a **mechanism demonstration**, not a measured speedup.
+It splices hand-written C into the already-proved `ByteArray` run-model through
+Lean's `@[extern]` FFI — validating that the seam can be made _clean_ (see
+below) — but it does **not** move the needle on the real bottleneck. Two things
+are worth knowing, honestly stated:
 
-The two primitives (`codec_byte_array_slice`, a `memcpy`-style suffix copy;
-`codec_encode_append`, an amortized append) are declared as **plain `def`s whose
-Lean body still elaborates** — `byteSlice a i = a.extract i a.size`,
-`encodeAppend a b = a.push b`. The proofs therefore keep seeing the _meaning_ and
-close `[propext, Quot.sound]`-only; the `@[extern]` tag only swaps the _emitted_
-code for trusted C. That C is a **named, isolated trust seam**: it is trusted to
-satisfy its declared contract (and the bench lane checks byte-exact output), but
-it introduces **no proof axiom** — the codec's laws are unchanged. The routed fast
-paths (`decodeFullByteArrayByte`, `encodeByteArrayBytes`) are proved equal to the
-generic run-model by one equality lemma each.
+- The two primitives (`codec_byte_array_slice`, a `memcpy`-style suffix copy;
+  `codec_encode_append`, an amortized append) are **thin shims over the
+  stdlib's own `@[extern]`s** — `byteSlice a i` is the already-C
+  `ByteArray.extract`/`copySlice` (`lean_byte_array_copy_slice`) specialized to
+  the suffix, and `codec_encode_append` forwards to `lean_byte_array_push`.
+  Neither adds a C primitive that the stdlib did not already supply.
+- The remaining cost is **not in the byte loop** — it is the `List UInt8` of
+  boxed cons cells that the _spec interface_ forces at the decode boundary, and
+  the O(n²) `List.append` fold of `encodeRepeat`, which a plain `ByteArray.push`
+  fold removes without any new C. The genuine gap is that Lean has **no unboxed
+  C target** to select — that is `compiler-tier-extraction`, not this module.
+
+What _is_ established here, and is worth keeping:
+
+- Each primitive is a **plain `def` whose Lean body still elaborates**
+  (`byteSlice a i = ByteArray.mk ((a.data.toList.drop i).toArray)`,
+  `encodeAppend a b = a.push b`), so the proofs keep seeing the _meaning_ and
+  close `[propext, Quot.sound]`-only — the `@[extern]` tag only swaps the
+  _emitted_ code.
+- The C is a **named, isolated trust seam** (the F\* stance toward KaRaMeL):
+  trusted to satisfy its contract, checked byte-exact by the bench lane, and it
+  introduces **no proof axiom** — the codec's laws are unchanged.
+- The build wiring is recorded: a `lakefile.lean` `target` compiling the `.c`
+  via `buildLeanO` and linking it with `moreLinkObjs` (the recipe the full
+  backend will reuse for a `krmllib.h`-shaped runtime).
+
+The routed fast paths (`decodeFullByteArrayByte`, `encodeByteArrayBytes`) are
+proved equal to the generic run-model by one equality lemma each, but they are
+demonstrations of the seam, not the speedup.
 
 ---
 
@@ -392,7 +409,8 @@ structure Iso (α β : Type) where
 --   decodeFullByteArray : Codec α → ConsumesByte p → ByteArray → Nat → Option (List α × Nat)
 -- each proved equal to the `Bytes` spec by one refinement lemma
 
--- the `@[extern]` C fast path (a named trust seam; bodies still elaborate)
+-- the `@[extern]` C fast path (a named trust seam; bodies still elaborate — a
+--   mechanism demo, not a speedup: thin shims over the stdlib's own externs)
 --   byteSlice         : ByteArray → Nat → ByteArray                 (memcpy-style copy)
 --   encodeAppend      : ByteArray → UInt8 → ByteArray               (amortized append)
 --   decodeFullByteArrayByte / encodeByteArrayBytes : routed fast paths, proved equal

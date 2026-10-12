@@ -39,7 +39,20 @@
 
 - [x] 4.1 `lake build` (zero `sorry`/warnings), `#print axioms Codec.roundtrip` ⇒
       `[propext, Quot.sound]`, and `nix build .#checks.<system>.lean` + `nix build
-  .#bench` green.
+.#bench` green.
 - [x] 4.2 Record the measured numbers and the **prove-vs-trust seam decision**
       (named trust, as F\* trusts KaRaMeL) in the README and the `AGENTS.md`
       handoff / ledger.
+
+> **Corrected outcome (post-implementation).** This change delivered the
+> _mechanism_ — elaborating-body `@[extern]` + a hand-written `.c` linked via a
+> `lakefile.lean` `buildLeanO`+`moreLinkObjs` target, verified codegen (`codec_…`
+> symbols, not the Lean bodies), byte-exact bench checks, `[propext, Quot.sound]`
+> axioms — and the named trust seam. It did **not** deliver a material speedup:
+> both primitives are thin shims over stdlib externs (`byteSlice` = suffix over
+> `lean_byte_array_copy_slice`; `codec_encode_append` = `lean_byte_array_push`),
+> and the apparent deltas were against weaker baselines (`List.append` O(n²), the
+> boxed prior semantics) rather than the committed packed carriers. The real
+> bottleneck — `List UInt8` boundary materialization + O(n²) append — is the
+> codegen/interface gap that `compiler-tier-extraction` and/or a zero-copy
+> `(ptr,len)` entry point must close.

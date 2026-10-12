@@ -7,15 +7,17 @@ import Codec.EncodeByteArray
 /-!
 # The trusted `@[extern]` C fast path (F\*-style buffer-edge seam)
 
-The codec's run-model is **proved**, but the reason it is not yet *fast* is the
-Lean C generator's boxed, GC'd representation (`Nat` as bignum, `List UInt8` cons
-cells, unions as closures). The full fix — a separate GC-less C target — is
-`compiler-tier-extraction` (weeks). This module is the **stopgap that lands
-first**: it splices hand-written, GC-less C into the *already proved* `ByteArray`
-run-model's hot path via Lean's existing `@[extern]` FFI, exactly the posture
-F\* uses for its trusted primitives and Lean's own stdlib already uses for
-`ByteArray` itself (`ByteArray.get` ⇒ `lean_byte_array_fget`, `ByteArray.size` ⇒
-`lean_sarray_size`, …).
+A **mechanism demonstration** of the buffer-edge `@[extern]` seam — not a
+measured speedup. The codec's run-model is proved over the `ByteArray` carrier,
+and the *reason it is not yet fast* is Lean's single, boxed C generator and the
+`List UInt8` boundary the spec interface forces. This module validates that the
+seam can be made **clean** — an elaborating `@[extern]` `def`, hand-written C,
+a `lakefile.lean` link, byte-exact checks, `[propext, Quot.sound]`-only — but the
+two primitives it ships are **thin shims over the stdlib's own `@[extern]`s**
+(`byteSlice` over `lean_byte_array_copy_slice`; `codec_encode_append` over
+`lean_byte_array_push`), so they do not move the needle on the actual bottleneck
+(the `List` boundary and the O(n²) `List.append` fold). The full GC-less C target
+is `compiler-tier-extraction`; this module records the seam recipe it will reuse.
 
 **The trust posture.** Each primitive below is a *plain `def`* whose **Lean body
 still elaborates** — so `simp`/`rfl` and the refinement lemmas

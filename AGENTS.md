@@ -303,14 +303,24 @@ decodeArray d a.data i` _by composition_, re-materializing `a.data.toList` — s
 > **The prove-vs-trust seam decision (named, isolated):** the two C symbols are **trusted**
 > to match their declared contract (the F\* stance toward KaRaMeL), and the `_eq` laws pin
 > the _Lean_ meaning, so the codec's laws stay `[propext, Quot.sound]`-only and no proof
-> axiom is introduced; the bench lane checks byte-exact output. **Measured (arm64, reps=20):**
-> `byteSlice byte [1 MiB]` = 14.1 µs (~74 GB/s, the `memcpy` ballpark); routed
-> `decodeFullByteArrayByte byte [8192]` = 47.2 µs vs `decodeFullByteArray` = 328.5 µs
-> (**~7×** — the `WellFounded.fix`-recursion win); `encodeByteArrayBytes byte [1 MiB]` =
-> 1.63 ms vs `encodeRepeat` = 20.5 ms (**~12.5×** — the `List`-append→`push` win);
-> `encodeAppend` = 52 ns/op. The remaining `List` materialization at the boundary is the
-> _spec_-interface cost (a zero-copy `decodeFullByteArraySlice : … → Option (ByteArray × Nat)`
-> entry point is the design's open question, deferred to the full backend).
+> axiom is introduced; the bench lane checks byte-exact output.
+>
+> **Honest outcome (corrected — NOT a speedup).** The two primitives are **thin shims over
+> the stdlib's own `@[extern]`s** — `byteSlice` is the already-C `ByteArray.extract`/
+> `copySlice` (`lean_byte_array_copy_slice`) specialized to the suffix; `codec_encode_append`
+> forwards to `lean_byte_array_push`. The apparent "7×/12.5×" deltas were measured against
+> _weaker_ baselines, not the already-committed packed carriers: `decodeFullByteArrayByte`
+> beats the boxed figure only because both are dominated by the `List UInt8` result
+> materialization (the _spec-interface_ cost, untouched by any C loop), and
+> `encodeByteArrayBytes` beats `encodeRepeat` only because it replaces O(n²) `List.append`
+> with a `ByteArray.push` fold — achievable with **no new C at all**. `byteSlice byte
+[1 MiB]` = 13.2 µs is a real `memcpy` number but duplicates stdlib `copySlice`. **What is
+> established:** the mechanism — elaborating-body `@[extern]` + a hand-written `.c` linked
+> via a `lakefile.lean` `buildLeanO`+`moreLinkObjs` target, verified codegen, byte-exact
+> bench checks, `[propext, Quot.sound]`-only — and the named trust seam. **What is NOT
+> established:** any material speedup. The real bottleneck (the `List` boundary + O(n²)
+> append) is a _codegen/interface_ problem, deferred to the full GC-less backend
+> (`compiler-tier-extraction`) and/or a zero-copy `(ptr,len)`-returning entry point.
 
 > **Documentation conventions (this session):** the README is the **full
 > architecture statement** — _about the project and the paper only_. It carries the
