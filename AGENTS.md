@@ -135,6 +135,22 @@ Source of truth:
 > mechanism demo (no real speedup) — so the efficiency question is genuinely open,
 > and the next move is the slice-returning API, **not** another compiler plan.
 
+> **NEXT-SESSION PLAN — `slice-returning-run-model` (active).** The efficiency
+> question is now answered by changing the _result carrier_, not the compiler and
+> not the byte loop. OpenSpec change **`openspec/changes/slice-returning-run-model/`**
+> (validated): ship a **`USize`-indexed, `ByteArray`-span decode surface**
+> (`decodeByteArraySlice : Codec α → ByteArray → USize → Option (α × USize)`,
+> `decodeFullByteArraySlice : ByteArray → USize → Option (ByteArray × USize)` —
+> `byte` case O(1), full-consumption returns a packed `ByteArray`, never a `List`), and a
+> **packed, amortized-O(n) `ByteArray.push` encode accumulator** (`encodeByteArrayBytes`,
+> promoted from the `extern-c-fast-path` lemmas) — each proved equal to the `Bytes`
+> spec `[propext, Quot.sound]`-only, no new axiom. The key insight (from the two
+> failures): `USize` _is_ a scalar in Lean's IR (unlike bignum `Nat`), so the existing
+> `EmitC` already prints a `size_t` loop with no representation fiction; the zero-copy
+> slice's lifetime is a **named trust seam** ("span valid while source `ByteArray` is
+> referenced"). Bench acceptance: decode ~300 µs → sub-µs packed copy; encode ~20 ms →
+> ~1.5 ms. First, do **not** revisit a compiler backend unless this is proven insufficient.
+
 1. _*Efficiency — the F*-style carrier refinement (Paper §4.4, "work faster")._*
    **Tier A done** (`efficient-backtracking-decoder`, archived): `decodeFull`/
    `decodeRepeatFull`/`decodeFast` proved denotationally equal, `[propext, Quot.sound]`,
