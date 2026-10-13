@@ -57,10 +57,17 @@
 
 ## 7. Benchmark, extraction, docs
 
-- [ ] 7.1 Extract the interpreter hot path to C/LLVM; confirm `Prop` proofs erase.
-- [ ] 7.2 Benchmark `decode`/`encode` on a synthetic `byte`/`many` description — linear time, no per-byte boxing; record the number.
-- [ ] 7.3 Confirm `get!`/remaining-bytes (not `getElem`-with-proof) actually runs post-extraction.
-- [ ] 7.4 `README.md`: guarantee, `Iso`/`Codec`/`Rel` model, pure-framework scope, combinator table, usage.
+- [x] 7.1 Extract the interpreter hot path to C/LLVM; confirm `Prop` proofs erase.
+      **Done** — delivered under §10.5 (`Bench.lean` `lean_exe`, C backend); the
+      LLVM-enabled toolchain landed in `llvm-lean4-toolchain`.
+- [x] 7.2 Benchmark `decode`/`encode` on a synthetic `byte`/`many` description — linear time, no per-byte boxing; record the number.
+      **Done** — see §10.5 / §11.10.5 measured table (linear `encodeRepeat`/`Buffer.*`;
+      O(1) `decode byte`).
+- [x] 7.3 Confirm `get!`/remaining-bytes (not `getElem`-with-proof) actually runs post-extraction.
+      **Done** — §10.5 hot-path audit (`match` destructuring, `ByteArray.data`, no
+      `getElem`-with-proof leak).
+- [x] 7.4 `README.md`: guarantee, `Iso`/`Codec`/`Rel` model, pure-framework scope, combinator table, usage.
+      **Done** — §10.2 / §11.10.2 full architecture statement.
 - [x] 7.5 Zero-`sorry` + `#print axioms` = stdlib only `[propext, Quot.sound]`
       (the `Classical.choice` listed in an earlier draft is **superseded** — see §9.5
       and §10.0a; the chain laws are `[propext, Quot.sound]`, `relRepeat_induction` is
@@ -154,7 +161,10 @@ post-core deliverables (the paper's §4.4 open problem and the §7 transport tar
 
 ### Remaining (reordered: rename + organization/docs before README/downstream)
 
-- [ ] 10.1 **Housekeeping: resolve the `Codec` type-vs-module collision** (neé 10.5).
+- [x] 10.1 **Housekeeping: resolve the `Codec` type-vs-module collision** (neé 10.5).
+      **Done (decision):** kept the type name `Codec`; the uniform `namespace Codec`
+      was restored in `Codec/Codec.lean`, so `Rel`/`relRepeat`/`relRepeat_induction`/
+      `Rel_*`/`single`/`Productive` now live at `Codec.*` (no type rename).
       The inductive `Codec` lives at top level in `Codec/Codec.lean` (no namespace), while
       the other `Codec/*.lean` modules open `namespace Codec` — so the _type_ `Codec` and the
       _namespace_ `Codec` collide (and the root file `Codec.lean` collides with the `Codec/`
@@ -168,7 +178,7 @@ post-core deliverables (the paper's §4.4 open problem and the §7 transport tar
       `Codec.Codec` prefix. Do this **before** the README/downstream hard-code names. (The
       `sepBy`-`[]` docstrings are **done**.)
 
-- [ ] 10.1a **Code organization: lay out the files first-principles, bottom-up.** Each
+- [x] 10.1a **Code organization: lay out the files first-principles, bottom-up.** Each
       `Codec/*.lean` module already has section headers, but the _within-section ordering and
       nesting_ should be audited: (i) `Codec/Codec.lean` — `Rel_*` lemmas should follow the
       **constructor order** `iso, seq, alt, empty, pure, byte` (currently iso, alt, pure, byte
@@ -183,17 +193,22 @@ post-core deliverables (the paper's §4.4 open problem and the §7 transport tar
       unfold → soundness → completeness → the Iso"; (iv) `Sound.lean` is already well-ordered
       (encode_rel → decode_seq_mem → decode_spec → bidir → decode_encode → roundtrip → repetition
       → decode→encode) — preserve it, and add a one-line `/-!`-level map at the top of each file
-      so a porter can navigate the proof tree.
+      so a porter can navigate the proof tree. - **Done:** `Rel_*` in constructor order with `Rel_seq`/`Rel_empty` restored;
+      `Iso.lean` structural isos reordered (`associate`/`commute`/`unit` before
+      `element`/`subset`, then `inverse`/`optionSome`); the fold block is a
+      header-annotated region; module `/-!` maps present.
 
-- [ ] 10.1b **Naming normalization + alphabetization (idiomatic Lean, mathlib style).**
+- [x] 10.1b **Naming normalization + alphabetization (idiomatic Lean, mathlib style).**
       Functions named like their return type; theorems `snake_case`; alphabetize sibling groups.
       Concrete fixes: (i) delete the unused `app`/`unapp` wrappers in `Iso.lean` (dead, like
       `isoMap`/`fail` were); (ii) reconcile `comp` vs `trans` (both exist for category composition
       — keep one idiomatic name, e.g. `comp` or `∘`-notation only); (iii) drop the ad-hoc prime on
       `foldrApply'` and rename the apply-direction family consistently (`foldlApply` vs `foldrApply' → `foldlApply`/`foldrApply`with the terminal-seed restriction named explicitly, e.g.`foldlApplyTerminal`or fold the restriction into the Iso's`apply`with a doc note); (iv)`MeasureDecreases`/`MeasureDecreasesR`— consider a single parameterized name or document the`R`suffix as the left/right step-type marker; (v)`Rel\_\*` lemma names should be a single convention (`Rel_iso`/`Rel_seq`/`Rel_alt`/`Rel_empty`/`Rel_pure`/`Rel_byte\`) matching the
-      constructors, with any _missing_ one either restored or documented as intentionally-absent.
+      constructors, with any _missing_ one either restored or documented as intentionally-absent. - **Done:** dead `app`/`unapp` (and `isoMap`/`fail`) removed; `trans` is the sole
+      composition name (`comp` gone); the ad-hoc prime on `foldrApply'` dropped
+      (`foldrApply`); `Rel_*` uses the single constructor-matched convention.
 
-- [ ] 10.1c **Code documentation to standards.** Audit every public declaration for: a
+- [x] 10.1c **Code documentation to standards.** Audit every public declaration for: a
       one-line doc-comment (`/-- … -/`) stating _what_ and _why_ (not just "the X of Y");
       `/-! … -/` section headers with a clear outline; cross-references to the paper's § and to
       the README `[D#]`/`[S#]` anchors where a departure/strengthening is involved; and the
@@ -201,15 +216,20 @@ post-core deliverables (the paper's §4.4 open problem and the §7 transport tar
       `Unambiguous`, `Functional`) is freshly documented as a _relation/predicate_, not a lemma.
       Ensure the module `-!` doc comes _after_ `import` (per the Lean skill) and that no `-/` byte
       pair appears inside prose (Lexer terminates the block). Verify docstrings do not reference
-      the deleted `many`/`sepBy`/`some`/`many1` symbols as if they exist.
+      the deleted `many`/`sepBy`/`some`/`many1` symbols as if they exist. - **Done:** module `/-!` docs sit after `import` in every `Codec/*.lean`; public
+      decls carry doc-comments; the `Prop`-valued defs (`Rel`, `Productive`,
+      `ConsumesByte`, `Unambiguous`, `Functional`) are documented as relations. No
+      stale references to the deleted `many`/`sepBy`/`some`/`many1` symbols.
 
-- [ ] 10.2 **`README.md` rewrite** (§7.4) — after 10.1/10.1a/10.1b/10.1c (names/organization
+- [x] 10.2 **`README.md` rewrite** (§7.4) — after 10.1/10.1a/10.1b/10.1c (names/organization
       may change): combinator table → the semantic-repetition split (`relRepeat`/`decodeRepeat`/
       `encodeRepeat` + `sepBy`/`chainl1` triples), the downstream split (`lean-binary`/`lean-text`),
       and the corrected decode→encode scoping (encode→decode unconditional roundtrip; converse
       under `Functional`). The canonical `[D#]`/`[S#]` table and "Why these choices?" section
       already reflect the _semantics_; only the symbol/namespace names must be re-checked against
-      the 10.1 rename.
+      the 10.1 rename. - **Done** — see §11.10.2: the README is the full architecture statement (complete
+      `[D1]`–`[D8]`/`[S1]`–`[S6]` table + "Why these choices"), plus `CHANGELOG.md`
+      and `LICENSE.md`.
 
 - [ ] 10.3 **Theorem-coverage cleanups** (review #3/#6/#7): (a) `relRepeat` "least fixpoint"
       — **done**: `relRepeat_induction` proved (axioms `[propext]`); (b) `foldl`/`foldr` share
