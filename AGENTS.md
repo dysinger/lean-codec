@@ -135,7 +135,8 @@ Source of truth:
 > mechanism demo (no real speedup) — so the efficiency question is genuinely open,
 > and the next move is the slice-returning API, **not** another compiler plan.
 
-> **NEXT-SESSION PLAN — `slice-returning-run-model` (active).** The efficiency
+> **NEXT-SESSION PLAN — `slice-returning-run-model` (DONE → superseded by
+> `single-carrier-bytes`).** The efficiency
 > question is now answered by changing the _result carrier_, not the compiler and
 > not the byte loop. OpenSpec change **`openspec/changes/slice-returning-run-model/`**
 > (validated): ship a **`USize`-indexed, `ByteArray`-span decode surface**
@@ -347,6 +348,99 @@ decodeArray d a.data i` _by composition_, re-materializing `a.data.toList` — s
 > append) is an _interface/codegen_ problem — the proposed full GC-less backend
 > (`compiler-tier-extraction`) was **archived as unsound/too-dumb**, leaving the
 > **zero-copy `(ptr,len)`-returning entry point** as the next move.
+
+> **`slice-returning-run-model` — DONE this session.** The "carrier swap, not
+> compiler" fix the failed plans pointed to. Shipped `Codec/DecodeByteArraySlice.lean`
+> and `Codec/EncodeByteArraySlice.lean` (wired into the `Codec` root):
+>
+> - `decodeByteArraySlice d a i : Option (α × USize)` — a **native, `USize`-indexed
+>   greedy decoder** (`decodeByteArrayHead` recursion reads `a[i]`, threads `i + m`
+>   through `seq`, no `List` cell); `byte` case O(1). **Sound but not complete** (it
+>   short-circuits and does not backtrack across `seq`/`alt` — unlike the relational
+>   `decode`), which `decodeByteArrayHead_sound`/`decodeByteArraySlice_spec` state
+>   precisely (`some` result ⇒ valid `decode`).
+> - `decodeFullByteArraySlice a i : Option (ByteArray × USize)` — full consumption
+>   returns the **packed suffix** (never `Option (List α × Nat)`);
+>   `decodeFullByteArraySlice_eq` closes against `decodeFullByteArray_spec`.
+> - `encodeByteArrayBytes xs : ByteArray` — the **committed** amortized-O(n)
+>   `ByteArray.push` accumulator (no custom `@[extern]`), `encodeByteArrayBytes_eq_encodeRepeat`
+>   against the `List.append` denotation.
+>
+> All `[propext, Quot.sound]`-only (zero `Classical.choice`). **Bench (arm64, reps=20):**
+> `encodeByteArrayBytes` 20.5 ms → **1.34 ms** at 1 MiB (~15×); `decodeFullByteArraySlice`
+> ~5× faster than the `List`-cons `decodeFullByteArray` (no per-element result box).
+> **Named trust seam:** the zero-copy span's lifetime (result aliases `a`) is documented,
+> not proved — "valid while `a` is referenced". **Honest tradeoff (important):** the
+> sub-µs `memcpy` floor is the `@[extern]` `byteSlice` (above), _not_ this `@[extern]`-free
+> surface, because the stdlib `Array.extract`/`drop` content lemmas (`Array.toList_extract`,
+> `Array.getElem_extract`, …) pull in `Classical.choice` — so `decodeFullByteArraySlice`'s
+> `_eq` law uses the same `rfl`-clean `ByteArray.mk ((drop i).toArray)` transport as the
+> proven `byteSlice`, trading a list-materialization intermediate (→ the C codegen pays
+> the `List→LeanScalarArray` copy, so ~8 ms at 1 MiB, not sub-µs) for an axiom-free
+> refinement. The next sub-µs step remains the `@[extern]` seam, not a compiler.
+
+> **NEXT-SESSION PLAN — `single-carrier-bytes` (active, in progress).** The five
+> carrier attempts above all failed for one shared reason: the library _proves on
+> `List UInt8` but runs on packed `ByteArray`_, and the representation transfer is
+> the whole cost (and its `Array.extract` lemmas leak `Classical.choice`). The fix is
+> a **single length-indexed byte string** `Bytes n := Fin n → UInt8` — one type that is
+> simulaneously reducible (proofs) and a scalar indexed load (IR), with **no second
+> carrier, no transfer lemma**. OpenSpec change
+> **`openspec/changes/single-carrier-bytes/`** (validated). Thread `n` through the core:
+> `Rel d x (s : Bytes n)`, `decode d (s : Bytes n) : List (α × Suffix n)`,
+> `encode d x : Option ({n} × Bytes n)`, `relRepeat`/`decodeRepeat`/`encodeRepeat`;
+> delete the whole transfer tier (`DecodeArray`/`EncodeArray`/`DecodeByteArray`/
+> `EncodeByteArray`/`DecodeByteArraySlice`/`EncodeByteArraySlice`/`ExternFastPath`/
+> `Buffer`, the `lakefile.lean` `externFastPathO` target, the matching `Bench.lean`
+> lanes). **DONE so far (compiles clean, `[propext, Quot.sound]`-only):** tasks 1.1–1.3
+> (substrate) and 2.1/2.2 (`decode`/`decodeFast`/`decodeRepeat`/`ConsumesByte`;
+> `encode`/`encodeRepeat`). **Two design decisions made this session** (recorded in
+> `design.md` and the task notes — resolve or accept before continuing):
+>
+> 1. **`Suffix n` shape** is `{ remaining : Nat, hle : remaining ≤ n, bytes : Bytes remaining }`
+>    — the spec's `({m} × Bytes m)` with the `m ≤ n` witness — _not_ the design's
+>    `{ consumed, remainder : Bytes (n - consumed) }`, because `seq` composes suffixes by
+>    threading `m₂ ≤ m₁ ≤ n` transitively (`Suffix.trans`), with no `Nat.sub`
+>    re-derivation of `(n − c₁) − c₂`. `Suffix.consumed`/`Suffix.empty`/`Suffix.id`/
+>    `Suffix.drop` accessors cover the rest.
+> 2. **`decodeFull`/`decodeRepeatFull` spec proofs dropped** (`decodeFull_some`/
+>    `decodeFull_ne_none`/`decodeFull_spec`, which fed `Sound.decodeRepeatFull_spec`).
+>    `decodeFull` is **not a spec requirement** (the spec defines `decode`/`decodeRepeat`/
+>    `encode`/`encodeRepeat` and the laws, never `decodeFull`); it was the Tier-A
+>    efficiency-only optimization. The efficient `decodeFull` _definition_ + `decodeFull_zero`
+>    are retained. Re-prove only if full-consumption efficiency is re-added.
+>
+> **REMAINING (not started):** task 2.3 (prefix-arithmetic `Suffix`/`Nat.sub` helpers),
+> 3.1–3.3 (re-derive `Sound.lean`'s unconditional laws + `Combinators.lean` over the
+> `Fin`-split carrier), 4.1–4.3 (delete transfer modules; simplify `lakefile.lean`;
+> rewrite `Bench.lean`; re-derive `VarBinary.lean`), 5.1–5.2 (gate + README/AGENTS docs).
+> `Codec/Sound.lean`, `Codec/Combinators.lean`, `Codec/VarBinary.lean` and the transfer
+> modules are still on the **old `List UInt8` substrate** and do not build against the
+> new `Codec/Codec`/`Decode`/`Encode` until re-derived — the tree is **intentionally in
+> an atomic-change intermediate state** (the full `lake build` does not pass).
+>
+> **Lean lessons earned (add to the `lean` skill):**
+>
+> - Length-indexed vectors `Fin n → UInt8` make `Rel`'s `seq`/`repeat` base cases
+>   **type-incoherent** (`s = emptyBytes : Bytes n = Bytes 0` forces `n = 0`). Fix: state the
+>   base case as the length predicate (`pure ↦ x = x₀ ∧ n = 0`) or a cast (`byte ↦
+∃ h : n = 1, h ▸ s = single b`), and expose `emptyBytes_unique`/`Suffix.eq_empty_of_remaining_zero`
+>   for the transport.
+> - The `seq` split is `splice {n m} (hm : m ≤ n) (s₁ : Bytes m) (s₂ : Bytes (n - m)) : Bytes n
+:= cast (congrArg Bytes (m + (n-m) = n)) (concat s₁ s₂)` — define it **as the cast of
+>   `concat`** so `splice` and `concat` are definitionally the same function (the
+>   `encode_rel` `seq` case then closes by `splice_eq_concat`). The cast proof is
+>   `congrArg Bytes (by rw [Nat.add_comm]; exact Nat.sub_add_cancel hm)` — `cast` wants a
+>   _type_ equality `Bytes … = Bytes …`, not a `Nat` equality.
+> - Well-founded `decodeRepeat`/`decodeFull` now recurse on the **type index `n`** (not
+>   `s.length`); the `fix` runs over `Sigma fun n => Bytes n` with measure `.1`. Proofs use
+>   `Nat.strongRecOn n` (stdlib's strong induction — `Nat.strong_induction_on` does **not**
+>   exist) with `revert xs s` so `s : Bytes n` stays under the `∀` and the motive is
+>   type-correct.
+> - `split_ifs` is **gone** in Lean 4.34.1; `if_neg` is deprecated → use `ite_eq_right`.
+>   `rw [ite_eq_right hn]` on a `dite`-that-`dsimp`ed-to-`ite` can still split into a
+>   spurious `inl.refl`; prefer `cases n` on the `Nat` directly (`Nat` subst into hypotheses
+>   needs `cases h : n` if the goal's `n` must rewrite).
 
 > **Documentation conventions (this session):** the README is the **full
 > architecture statement** — _about the project and the paper only_. It carries the
