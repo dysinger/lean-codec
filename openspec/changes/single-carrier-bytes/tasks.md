@@ -26,7 +26,7 @@
       `Bytes 0`, the single-byte `Bytes 1`, and a `Fin`-shift/prefix lemma; verify
       `lake build Codec.Codec` compiles with the new substrate in place.
 - [x] 1.2 Prove the finitary equality and indexing facts: `s₁ = s₂ ↔ ∀ i : Fin n,
-    s₁ i = s₂ i` (via `funext`), `Bytes n` equality is decidable, and the
+  s₁ i = s₂ i` (via `funext`), `Bytes n` equality is decidable, and the
       single-byte read `s ⟨0, _⟩` reduces; verify `#print axioms` on these lemmas
       is `[propext, Quot.sound]` (no `Classical.choice`) and `lake build` stays clean.
 - [x] 1.3 Re-state `Rel` and `relRepeat` over `Bytes n` (whole-string relation with
@@ -50,7 +50,7 @@
       it. If full-consumption efficiency is re-added, re-prove those over the `Suffix`
       carrier.
       **Design refinement (`Suffix` shape):** `Suffix n` is `{ remaining : Nat,
-    hle : remaining ≤ n, bytes : Bytes remaining }` — the spec's
+  hle : remaining ≤ n, bytes : Bytes remaining }` — the spec's
       `({m : Nat} × Bytes m)` with the `m ≤ n` witness — rather than the design's
       `{ consumed, remainder : Bytes (n - consumed) }`, because `seq` composes two
       suffixes by threading `m₂ ≤ m₁ ≤ n` transitively with no `Nat.sub` re-derivation
@@ -63,6 +63,19 @@
       `seq`/repetition laws need, in the `Suffix`/`Nat.sub` form (the analogue of
       `drop_add_length_of_append`/`flatMap_congr`); verify each lemma's
       `#print axioms` is `[propext, Quot.sound]`.
+      **Status (partial):** the substrate cast library is landed in `Codec/Codec.lean`
+      and proven `[propext, Quot.sound]`-only (zero warnings, `concat_eq_splice`
+      inclusive): `cast_fun_apply`, `cast_fin`, `Fin.cast_val`, `cast_bytes_val`
+      (`⟨k,hk⟩` form), `cast_bytes_val'` (bare-`Fin` form — the fix), `Nat.eq_irrel`,
+      `splice_apply`, `concat_eq_splice`, `Suffix.prepend`, `sub_sub_add`.
+      **Blocked on `prepend_assoc` + `prepend_single_bdrop`:** the cast arguments are
+      `omega`-proved `Nat` equalities (`Nat.sub_sub_self`, `sub_sub_add`) that
+      `rw`/`simp` cannot structurally match against a cast-reduction lemma's `e : n = m`
+      binder. Fix (the right long-term move, not a workaround): normalize the cast's
+      proof in place via `Nat.eq_irrel` (proof irrelevance, `congr 2; exact Nat.eq_irrel
+    e₁ e₂`), then fire `cast_bytes_val'`, then `omega`. See AGENTS.md handoff for the
+      full recipe. Do **not** switch `Suffix` to `{consumed, remainder}` (moves the cast
+      into the decode hot path) nor hand-`rcases` per-case (unscalable).
 
 ## 3. Laws over the single carrier (no `Classical.choice`)
 

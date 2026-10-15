@@ -418,6 +418,46 @@ decodeArray d a.data i` _by composition_, re-materializing `a.data.toList` — s
 > modules are still on the **old `List UInt8` substrate** and do not build against the
 > new `Codec/Codec`/`Decode`/`Encode` until re-derived — the tree is **intentionally in
 > an atomic-change intermediate state** (the full `lake build` does not pass).
+
+> **NEXT-SESSION PLAN — cast-reduction finish on task 2.3 (the substrate lemmas are in).**
+> This session landed the **substrate cast library** in `Codec/Codec.lean`, all proven
+> `[propext, Quot.sound]`-only and building clean (`lake build Codec.Codec Codec.Decode
+Codec.Encode`, zero warnings): `cast_fun_apply` (push cast through a curry application),
+> `cast_fin` + `Fin.cast_val` (`cast (congrArg Fin e) i = Fin.cast e i`, val-preserving),
+> `cast_bytes_val` (**`⟨k, hk⟩` form**) + `cast_bytes_val'` (**bare-`Fin` form**, the fix),
+> `Nat.eq_irrel` (proof irrelevance `Subsingleton.elim` for `n = m`), `splice_apply`
+> (`splice` reduces pointwise to `concat`), **`concat_eq_splice`** (the `encode_rel` `seq`
+> lemma — _proved_), `Suffix.prepend` (the `decode_spec` reconstruction), and
+> `sub_sub_add` (`(n−m₁)+(m₁−m₂)=n−m₂`, the seq reassociation).
+>
+> **The remaining 2.3 lemmas — `prepend_assoc` and `prepend_single_bdrop` — are blocked,
+> and the blocker is now precisely characterized (this is the _right_ long-term fix, not
+> a workaround):** the cast arguments are `omega`-generated `Nat` equalities
+> (`Nat.sub_sub_self h`, `sub_sub_add …`), and Lean's `rw`/`simp` **cannot structurally
+> match** a cast-reduction lemma's `e : n = m` binder against an opaque `omega` proof term —
+> `rw [cast_bytes_val']` leaves a `case e ⊢ n = m` side goal even when `e` is _in scope as a
+> variable_; `simp` reports "made no progress". The fix is **not** a different lemma shape
+> (the bare-`Fin` `cast_bytes_val'` is already the right shape — it fires with an explicit
+> `(e := …)`); it is to **normalize the cast proof first** via proof irrelevance, then fire
+> `cast_bytes_val'`. The recipe, verified in isolation:
+>
+> ```lean
+> -- 1. expose the equality proofs as named hypotheses (not `omega`-inline)
+> rcases (sub_sub_add n m₁ m₂ hm₁ hm₂) with ⟨⟩  -- or name a transparent proof
+> -- 2. normalize the cast's proof argument in place via proof irrelevance
+> congr 2; exact Nat.eq_irrel e₁ e₂
+> -- 3. then cast_bytes_val' (the bare-Fin form) fires, and omega closes the arithmetic
+> simp only [cast_bytes_val']; omega
+> ```
+>
+> Concretely for `prepend_assoc`: prove it as `apply Bytes.ext; intro i;
+simp only [Suffix.prepend, splice]; unfold concat;` then **`congr` the cast proof args
+> short-circuit via `Nat.eq_irrel`, then `simp only [cast_bytes_val']`, then `omega`.**
+> (The `concat_eq_splice` proof above works because `add_sub_cancel_left` is already a
+> transparent, `rfl`-reducible `Nat` lemma; `Nat.sub_sub_self`/`sub_sub_add` are not.)
+> Do **not** switch the `Suffix` shape to `{ consumed, remainder }` (that moves the
+> `Nat.sub` cast _into the decode hot path_ — strictly worse for a library whose point is
+> a clean scalar loop); do **not** hand-`rcases` per-case (unscalable).
 >
 > **Lean lessons earned (add to the `lean` skill):**
 >

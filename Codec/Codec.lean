@@ -261,6 +261,99 @@ theorem relRepeat_nil {α : Type} (R : α → {m : Nat} → Bytes m → Prop) {n
     relRepeat R [] n s ↔ n = 0 :=
   Iff.rfl
 
+/-! ## Substrate lemmas: casts, splice, and concat arithmetic
+
+The length-indexed `Bytes n := Fin n → UInt8` substrates make the `seq`/`byte`
+cases of the laws turn on two proof-shaped facts: (a) `splice` is `concat` cast
+along `m + (n - m) = n` (so the two are equal up to that transport), and (b) the
+transport itself reduces pointwise. Everything here is `[propext, Quot.sound]`
+-only — no `Classical.choice`. -/
+
+/-- Pushing `cast` over a curried function type through an application: casting
+`f : α → γ` along `congrArg (fun X => X → γ) h` and applying to `x : β` equals
+`f (cast h.symm x)`. This is the single reduction that makes `splice`'s cast
+(which lives at the `Bytes = Fin _ → UInt8` function level) reduce pointwise. -/
+theorem cast_fun_apply {α β : Sort u} {γ : Sort v} (h : α = β) (f : α → γ) (x : β) :
+    cast (congrArg (fun X => X → γ) h) f x = f (cast h.symm x) := by
+  subst h
+  simp
+
+/-- Casting a `Fin n` along `congrArg Fin e` is `Fin.cast e`. -/
+theorem cast_fin {n m : Nat} (e : n = m) (i : Fin n) :
+    cast (congrArg Fin e) i = Fin.cast e i := by
+  subst e
+  rfl
+
+/-- `Fin.cast` preserves the underlying `Nat` value. -/
+@[simp] theorem Fin.cast_val {n m : Nat} (e : n = m) (i : Fin n) :
+    (Fin.cast e i).val = i.val := rfl
+
+/-- Casting a byte string along `congrArg Bytes e` and reading at a `Nat`-valued
+index commutes with re-casting the index: the byte at `⟨k, hk⟩` is unchanged. This
+is the one reduction that makes `splice`/`concat` casts disappear pointwise. -/
+@[simp] theorem cast_bytes_val {n m : Nat} (e : n = m) (f : Bytes n) (k : Nat) (hk : k < m) :
+    (cast (congrArg Bytes e) f) ⟨k, hk⟩ = f ⟨k, by simpa [e] using hk⟩ := by
+  subst e
+  rfl
+
+/-- The *bare-`Fin`-variable* form of `cast_bytes_val`: casting a byte string along
+`congrArg Bytes e` and reading at an index `i : Fin m` equals reading at
+`⟨i.val, ·⟩`. Unlike the `⟨k, hk⟩` form, this LHS is a variable projection, so
+`rw`/`simp` can fire it on nested casts whose *index* is a compound
+`omega`-generated term (`⟨↑(cast … i) - m, ·⟩`) — the `⟨k, hk⟩` form's `k`/`hk`
+cannot be unified there. This is the lemma that closes the `prepend_assoc` /
+`decode_spec` `seq` reassociation (see tasks 2.3). -/
+@[simp] theorem cast_bytes_val' {n m : Nat} (e : n = m) (f : Bytes n) (i : Fin m) :
+    (cast (congrArg Bytes e) f) i = f ⟨i.val, by simp [e, i.isLt]⟩ := by
+  subst e
+  rfl
+
+/-- Proof irrelevance for `Nat` equalities: any two proofs of `n = m` are equal,
+so a `cast`/`congrArg` at a length is insensitive to *which* arithmetic proof is
+used. This is what lets the laws close without `Classical.choice`. -/
+theorem Nat.eq_irrel {n m : Nat} (e₁ e₂ : n = m) : e₁ = e₂ :=
+  Subsingleton.elim e₁ e₂
+
+/-- `splice` reduces pointwise: `splice hm s₁ s₂ i` is `concat s₁ s₂` at the
+`Fin`-cast of `i` from `Fin n` back to `Fin (m + (n - m))`. This is the one
+pointwise lemma every `seq`/`byte` law rewrites through. -/
+theorem splice_apply {n m : Nat} (hm : m ≤ n) (s₁ : Bytes m) (s₂ : Bytes (n - m))
+    (i : Fin n) :
+    splice hm s₁ s₂ i = concat s₁ s₂ (cast (congrArg Fin (show m + (n - m) = n by
+      rw [Nat.add_comm]; exact Nat.sub_add_cancel hm)).symm i) := by
+  let hfin : Fin (m + (n - m)) = Fin n :=
+    congrArg Fin (show m + (n - m) = n by rw [Nat.add_comm]; exact Nat.sub_add_cancel hm)
+  unfold splice
+  rw [cast_fun_apply (h := hfin)]
+
+/-- `concat` distributes into `splice`: for `s₁ : Bytes n₁`, `s₂ : Bytes n₂`, the
+plain concatenation equals `splice` with prefix `s₁` and the length-cast of `s₂`
+(to `Bytes ((n₁ + n₂) - n₁)`). This is the ``encode_rel`` `seq`-case lemma (the
+`splice_eq_concat` the design notes): `concat` and `splice` agree via a single
+transport of the suffix length. -/
+theorem concat_eq_splice {n₁ n₂ : Nat} (s₁ : Bytes n₁) (s₂ : Bytes n₂) :
+    concat s₁ s₂ = splice (Nat.le.intro rfl : n₁ ≤ n₁ + n₂)
+      s₁ (cast (congrArg Bytes (Nat.add_sub_cancel_left n₁ n₂).symm) s₂) := by
+  apply Bytes.ext
+  intro i
+  rw [splice_apply]
+  unfold concat
+  simp [cast_fin, Fin.cast]
+
+/-- The `Nat`-sub arithmetic for the `seq`-case reassociation:
+`(n - m₁) + (m₁ - m₂) = n - m₂` under `m₂ ≤ m₁ ≤ n`. -/
+theorem sub_sub_add (n m₁ m₂ : Nat) (hm₁ : m₁ ≤ n) (hm₂ : m₂ ≤ m₁) :
+    (n - m₁) + (m₁ - m₂) = n - m₂ := by
+  omega
+
+/-- Reconstruct a `Bytes n` from a consumed prefix and a suffix: `t.prepend s₀`
+is `s₀` followed by the remaining bytes of `t`. The length cast
+`n - (n - t.remaining) = t.remaining` is discharged by `t.hle`. The `decode_spec`
+law is stated as ``(x, t) ∈ decode d s ↔ ∃ s₀, t.prepend s₀ = s ∧ Rel d x s₀``. -/
+def Suffix.prepend {n : Nat} (t : Suffix n) (s₀ : Bytes (n - t.remaining)) : Bytes n :=
+  splice (Nat.sub_le n t.remaining) s₀
+    (cast (congrArg Bytes (Nat.sub_sub_self t.hle).symm) t.bytes)
+
 /-- `relRepeat`'s `cons` case: a non-empty list relates to a string iff its head
 relates via the step `R` and its tail relates via `relRepeat`, with a compatible
 split. -/
