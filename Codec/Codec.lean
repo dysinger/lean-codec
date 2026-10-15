@@ -354,6 +354,19 @@ def Suffix.prepend {n : Nat} (t : Suffix n) (s₀ : Bytes (n - t.remaining)) : B
   splice (Nat.sub_le n t.remaining) s₀
     (cast (congrArg Bytes (Nat.sub_sub_self t.hle).symm) t.bytes)
 
+/-- `Suffix.prepend` reduces pointwise: `t.prepend s₀ i` is `concat s₀ t.bytes` at
+a `Fin`-cast of `i` (with `t.bytes` transported across
+`n - (n - t.remaining) = t.remaining`). This is the single lemma that makes
+`decode_spec`'s `seq`/`byte` cases close: both sides of `t.prepend s₀ = s` become
+`concat` reads, so the laws reduce to `concat` arithmetic. -/
+@[simp] theorem prepend_apply {n : Nat} (t : Suffix n) (s₀ : Bytes (n - t.remaining))
+    (i : Fin n) :
+    t.prepend s₀ i = concat s₀ (cast (congrArg Bytes (Nat.sub_sub_self t.hle).symm) t.bytes)
+      (cast (congrArg Fin (show (n - t.remaining) + (n - (n - t.remaining)) = n by
+        rw [Nat.add_comm]; exact Nat.sub_add_cancel (Nat.sub_le n t.remaining))).symm i) := by
+  unfold Suffix.prepend
+  rw [splice_apply]
+
 /-- `relRepeat`'s `cons` case: a non-empty list relates to a string iff its head
 relates via the step `R` and its tail relates via `relRepeat`, with a compatible
 split. -/
