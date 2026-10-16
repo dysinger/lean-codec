@@ -1,16 +1,22 @@
 # Tasks
 
 > **Session status (pause point):** tasks 1.1–1.3 (substrate), 2.1 (decode/
-> decodeRepeat/ConsumesByte), 2.2 (encode/encodeRepeat) are **done and compile**
-> clean (`lake build Codec.Codec Codec.Decode Codec.Encode`, zero warnings),
-> `[propext, Quot.sound]`-only. The remaining work (2.3 prefix-arithmetic helpers,
-> 3.1–3.3 the Sound/Combinators law re-derivations, 4.1–4.3 deletions/VarBinary/
-> lakefile/Bench, 5.1–5.2 gate/docs) is **not started**. `Codec/Sound.lean`,
-> `Codec/Combinators.lean`, `Codec/VarBinary.lean` and the transfer modules are
-> still the **old `List UInt8` substrate** and will not build against the new
-> `Codec/Codec`/`Decode`/`Encode` until re-derived — the tree is intentionally in
-> an atomic-change intermediate state. Key design decisions made this session are
-> recorded in the task notes below and in `design.md`.
+> decodeRepeat/ConsumesByte), 2.2 (encode/encodeRepeat), and **2.3 (prefix-arithmetic
+> helpers)** are **done and compile** clean (`lake build Codec.Codec Codec.Decode
+Codec.Encode`, zero warnings), `[propext, Quot.sound]`-only. 2.3 landed `prepend_assoc`
+>
+> - `prepend_single_bdrop` plus the substrate lemmas `Rel_cast`/`Rel_cast_symm`/
+>   `bdrop_splice`/`prepend_eq_of_eq_splice` (all proven, zero `sorry`). **Task 3.1
+>   (`Sound.lean`) is in progress**: the file is fully re-stated over the length-indexed
+>   carrier and typechecks (`lake build Codec.Sound` — only `sorry` warnings); `encode_rel`,
+>   `decode_seq_mem`, and `decode_spec`'s `iso`/`alt`/`empty` cases are proven; the rest
+>   (`decode_spec` `seq`/`pure`/`byte`, `bidir`, `decode_encode`, `roundtrip`,
+>   `productive_iff_consumesByte`, repetition + converses) are clean `sorry` markers.
+>   `Codec/Combinators.lean`, `Codec/VarBinary.lean` and the transfer modules are still
+>   the **old `List UInt8` substrate** and will not build against the new
+>   `Codec/Codec`/`Decode`/`Encode` until re-derived — the tree is intentionally in
+>   an atomic-change intermediate state. Key design decisions are recorded in the
+>   task notes below and in `design.md`; the continuation plan is in `AGENTS.md`.
 
 > Replace the `Bytes := List UInt8` / `ByteArray` / `Array` / `Buffer` two-tier
 > representation with a single length-indexed `Bytes n := Fin n → UInt8`, then
@@ -59,15 +65,20 @@ hle : remaining ≤ n, bytes : Bytes remaining }` — the spec's
       (Fin-sum concat, O(n) in the type index); verify `lake build Codec.Encode`
       and that `encode Codec.byte` returns the length-1 singleton and `encodeRepeat`
       returns the summed length.
-- [ ] 2.3 Re-prove the `decode_suffix` / prefix-arithmetic helper lemmas the
+- [x] 2.3 Re-prove the `decode_suffix` / prefix-arithmetic helper lemmas the
       `seq`/repetition laws need, in the `Suffix`/`Nat.sub` form (the analogue of
       `drop_add_length_of_append`/`flatMap_congr`); verify each lemma's
       `#print axioms` is `[propext, Quot.sound]`.
-      **Status (partial):** the substrate cast library is landed in `Codec/Codec.lean`
-      and proven `[propext, Quot.sound]`-only (zero warnings, `concat_eq_splice`
-      inclusive): `cast_fun_apply`, `cast_fin`, `Fin.cast_val`, `cast_bytes_val`
-      (`⟨k,hk⟩` form), `cast_bytes_val'` (bare-`Fin` form — the fix), `Nat.eq_irrel`,
-      `splice_apply`, `concat_eq_splice`, `Suffix.prepend`, `sub_sub_add`.
+      **Status: COMPLETE.** Landed and proven in `Codec/Codec.lean` (`lake build Codec.Codec`
+      clean, zero warnings, zero `sorry`): `prepend_assoc` (the `seq`-case reassociation,
+      with the required `h : t₂.prepend s₂ = t₁.bytes` hypothesis — the handoff's naive form,
+      sans `h`, is false) and `prepend_single_bdrop` (the `byte`-case reconstruction
+      `(Suffix.drop 1 s).prepend (single (s ⟨0, ·⟩)) = s`). Also landed the supporting
+      substrate lemmas the `Sound` re-derivation needs: `Rel_cast`/`Rel_cast_symm` (the
+      `Rel` length-cast transport, `subst`-closed), `bdrop_splice`, and
+      `prepend_eq_of_eq_splice`. The full cast library (from the prior session's handoff)
+      is unchanged (`splice_add`, `cast_fin_symm`, `cast_bytes_val'`, `cast_bytes_val_symm`,
+      `Nat.eq_irrel`, `concat_assoc`, `sub_sub_add`).
       **Status (2.3 — cast library DONE + `prepend_assoc` ~90%, still not landed).**
       This session landed the full missing cast library, all `[propext, Quot.sound]`
       (or axiom-free) and building clean (`lake build Codec.Codec`, zero warnings):

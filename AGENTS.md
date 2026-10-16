@@ -410,99 +410,69 @@ decodeArray d a.data i` _by composition_, re-materializing `a.data.toList` — s
 >    efficiency-only optimization. The efficient `decodeFull` _definition_ + `decodeFull_zero`
 >    are retained. Re-prove only if full-consumption efficiency is re-added.
 >
-> **REMAINING (not started):** task 2.3 (prefix-arithmetic `Suffix`/`Nat.sub` helpers),
-> 3.1–3.3 (re-derive `Sound.lean`'s unconditional laws + `Combinators.lean` over the
-> `Fin`-split carrier), 4.1–4.3 (delete transfer modules; simplify `lakefile.lean`;
-> rewrite `Bench.lean`; re-derive `VarBinary.lean`), 5.1–5.2 (gate + README/AGENTS docs).
-> `Codec/Sound.lean`, `Codec/Combinators.lean`, `Codec/VarBinary.lean` and the transfer
-> modules are still on the **old `List UInt8` substrate** and do not build against the
-> new `Codec/Codec`/`Decode`/`Encode` until re-derived — the tree is **intentionally in
-> an atomic-change intermediate state** (the full `lake build` does not pass).
+> **REMAINING:** task 3.1–3.3 (finish re-deriving `Sound.lean`'s unconditional laws +
+> `Combinators.lean` over the `Fin`-split carrier; task 2.3 is DONE), 4.1–4.3 (delete
+> transfer modules; simplify `lakefile.lean`; rewrite `Bench.lean`; re-derive `VarBinary.lean`),
+> 5.1–5.2 (gate + README/AGENTS docs).
+> `Codec/Sound.lean` is re-stated and typechecks (in progress; see the NEXT-SESSION PLAN below);
+> `Codec/Combinators.lean`, `Codec/VarBinary.lean` and the transfer modules are still on the
+> **old `List UInt8` substrate** and do not build against the new `Codec/Codec`/`Decode`/`Encode`
+> until re-derived — the tree is **intentionally in an atomic-change intermediate state**
+> (the full `lake build` does not pass).
 
-> **NEXT-SESSION PLAN (task 2.3) — cast-reduction finisher on `prepend_assoc` + `prepend_single_bdrop`
-> (the cast library is now COMPLETE, only the finisher remains).** This session landed the
-> **root-cause fix + the remaining cast library** in `Codec/Codec.lean`, all `[propext,
-Quot.sound]`-only (or axiom-free), building clean (`lake build Codec.Codec Codec.Decode
-Codec.Encode`, zero warnings). The earlier handoff said the blocker was "opaque `omega`
-> proof terms that `rw`/`simp` can't match" — that was a symptom, not the cause. The real
-> root cause was the **inline `show … by rw [Nat.add_comm]; exact …` cast proof inside `splice`**:
-> the `show` produces a `have`-wrapped proof term that no `simp`/`rw` can structurally unify
-> against a cast-reduction lemma's `e : n = m` binder. Landed this session:
+> **NEXT-SESSION PLAN — CONTINUE the single-carrier re-derivation (option #1 chosen).**
+> Task 2.3 is now **DONE and landed clean** (`lake build Codec.Codec`, zero warnings,
+> zero `sorry`): `prepend_assoc` (the `seq`-case reassociation, with the required
+> `h : t₂.prepend s₂ = t₁.bytes` hypothesis) and `prepend_single_bdrop` (the `byte`-case
+> reconstruction `(Suffix.drop 1 s).prepend (single (s ⟨0, ·⟩)) = s`), plus the supporting
+> substrate lemmas `Rel_cast`/`Rel_cast_symm` (length-cast transport of `Rel` — `subst`-closed),
+> `bdrop_splice`, and `prepend_eq_of_eq_splice`. The stale cast-reduction-finisher recipe below
+> (the `prepend_assoc` proof transcript) is now folded into `Codec/Codec.lean`; the cast library
+> (`splice_add`, `cast_fin_symm`, `cast_bytes_val'`, `Nat.eq_irrel`, `concat_assoc`, `sub_sub_add`)
+> is unchanged. `Sound.lean` is **in progress**: the file is fully re-stated over the length-indexed
+> carrier and **typechecks** (`lake build Codec.Sound` — only `sorry` warnings), with these pieces
+> **proven** (`encode_rel`, `decode_seq_mem`, `decode_spec`'s `iso`/`alt`/`empty` cases); the rest
+> are clean `sorry` markers. **Key `Sound` statement corrections made this session** (do not
+> regress): `bidir` uses `Suffix.empty n` (remaining 0), NOT `Suffix.id n s` (remaining n);
+> `decode_encode` is the `concat s r` formulation
+> (`(x, Suffix.drop m (concat s r)) ∈ decode d (concat s r)`, with `s : Bytes m`, `r : Bytes q`);
+> `Functional`/`relFunctional` compare `Sigma` pairs `(⟨n₁, s₁⟩ : Sigma fun n => Bytes n) = ⟨n₂, s₂⟩`
+> (two `Rel` witnesses may have different lengths), `relUnambiguous`/`Unambiguous` quantify
+> `{n} (s : Bytes n)`.
 >
-> - `splice_add {n m} (hm : m ≤ n) : m + (n - m) = n` — the **named** cast proof now used by
->   `splice`/`splice_apply`/`prepend_apply` (replacing the inline `show …`). **This is the fix.**
-> - `concat_assoc {a b c} (s₁ : Bytes a) (s₂ : Bytes b) (s₃ : Bytes c)` — the clean `+`-only
->   content of `prepend_assoc` (no `Nat.sub`):
->   `concat s₁ (concat s₂ s₃) = cast (congrArg Bytes (Nat.add_assoc a b c)) (concat (concat s₁ s₂) s₃)`.
-> - `cast_fin_symm` / `cast_fin_symm_val` / `cast_fin_val` — the `.symm`-aware `Fin`-index
->   casts (`splice`/`prepend` produce `Eq.symm (congrArg Fin e)`, which the positive-form
->   `cast_fin` does not match).
-> - `cast_bytes_val_symm` / `cast_bytes_irrel` — the `.symm`-aware `Bytes` cast and cast-independence.
+> **REMAINING, in order (all `sorry` in `Sound.lean`, then onwards):**
 >
-> **Task 2.3 correct `prepend_assoc` statement (the handoff's naive form was FALSE — it
-> needs the `h` hypothesis):**
+> 1. `decode_spec` `seq` (both directions) — the left case: the forward dir is the
+>    `prepend_assoc` reassociation **plus** `Rel_cast`/`cast_bytes_irrel` to commute the
+>    `Rel_seq` witness (`splice_add` vs `sub_sub_add`, and the `Bytes (n₁+n₂−n₁)` vs `Bytes n₂`
+>    suffix mismatch); the backward dir needs the `s₂++r` intermediary via `prepend_eq_of_eq_splice`
+>    - a `Suffix.trans`-`= `r`reconstruction (needs`Nat.eq_irrel`on the`hle` field).
+> 2. `decode_spec` `pure`/`byte` — `pure` needs a `prepend_id_empty`-style lemma
+>    (`(Suffix.id n s).prepend (cast … emptyBytes) = s`, `Nat.sub_self n` cast); `byte` backward
+>    needs `prepend` injectivity / “read the first byte of a `splice`” (use `prepend_single_bdrop`
+>    in reverse + `s₀ = single x` from `Rel_byte`).
+> 3. `bidir`/`decode_encode`/`roundtrip` (one-line from `decode_spec` + `encode_rel` + a
+>    `(Suffix.empty n).prepend s = s` cast lemma), `productive_iff_consumesByte`, then the
+>    repetition laws `decodeRepeat_spec`/`encodeRepeat_rel` (well-founded on `n`, mirroring the
+>    old `s.length` proofs but over `Suffix`), and the converses (`encode_ne_none`/`encode_of_decode`/
+>    `encode_injective_of_unambiguous`/`relFunctional`/`relUnambiguous`/`encodeRepeat_ne_none`).
+> 4. Task 3.3 `Combinators.lean` (over `Bytes n`; the `sepBy`/`chainl1`/`chainr1` triples take
+>    `relRepeat`/`decodeRepeat`/`encodeRepeat` at the `{n} → Bytes n` level).
+> 5. Task 4.1–4.3: delete the transfer tier (`DecodeArray`/`EncodeArray`/`DecodeByteArray`/
+>    `EncodeByteArray`/`DecodeByteArraySlice`/`EncodeByteArraySlice`/`ExternFastPath.{[lean](lean),c}`/`Buffer`),
+>    simplify `lakefile.lean`, rewrite `Bench.lean` (drop array/byte-array/slice/extern lanes;
+>    add a `Bytes`-substrate lane), re-derive `VarBinary.lean` over `Bytes n`.
+> 6. Task 5.1–5.2: `lake build` (zero `sorry`/warnings), `#print axioms Codec.roundtrip` ⇒
+>    `[propext, Quot.sound]`, run the Nix checks detached, update README `[D#]`/`[S#]` anchors.
+>    The full `lake build` does **not** yet pass (the transfer modules still import the old substrate);
+>    the tree is **intentionally in an atomic-change intermediate state** until task 4.1 deletes them.
 >
-> ```lean
-> theorem prepend_assoc {n} (t₁ : Suffix n) (t₂ : Suffix t₁.remaining)
->     (s₁ : Bytes (n - t₁.remaining)) (s₂ : Bytes (t₁.remaining - t₂.remaining))
->     (h : t₂.prepend s₂ = t₁.bytes) :
->   (Suffix.trans t₁ t₂).prepend
->     (cast (congrArg Bytes (sub_sub_add n t₁.remaining t₂.remaining t₁.hle t₂.hle)) (concat s₁ s₂))
->     = t₁.prepend s₁
-> ```
->
-> The suffix region reads `t₂.bytes` on the LHS but `t₁.bytes` on the RHS, so `h` bridges them;
-> without it the theorem is false. **Proven reduction recipe (validated piece-by-piece):**
-> `apply Bytes.ext; intro i; unfold Suffix.trans Suffix.prepend; dsimp; rw [splice_apply]`×2;
-> `unfold concat; repeat rw [cast_fin_symm]` (close the two `splice_add` side goals); then
-> `by_cases hlt : i.val < n - t₁.remaining`:
->
-> - `hlt` (the `s₁` prefix): `rw [cast_bytes_val' (e := sub_sub_add …)]; simp` closes `s₁ = s₁`.
-> - `¬hlt`: `rw [← h]; simp [Suffix.prepend]; rw [cast_bytes_val']`×2; `rw [splice_apply];
-unfold concat; repeat rw [cast_fin_symm]`; then
->   `by_cases hlt2 : i.val - (n - t₁.remaining) < t₁.remaining - t₂.remaining`:
->   - (`s₂` region) `omega` + `cast_bytes_val'` + `simp` closes `s₂ = s₂`.
->   - (`t₂.bytes` region) the two `cast (Suffix.prepend._proof_2 …) t₂.bytes` reads differ only
->     in cast proof (`Nat.le_trans t₂.hle t₁.hle` vs `t₂.hle`); close by `Nat.eq_irrel` on
->     `Nat.sub_sub_self …` + `Fin.ext` + `Nat.sub_sub` + `omega` (arithmetic
->     `i.val - (n - t₂.remaining) = i.val - (n - t₁.remaining) - (t₁.remaining - t₂.remaining)`
->     is `Nat.sub_sub` ∘ `sub_sub_add`).
->
-> **The ONE last wrinkle:** in the deep-suffix case the two `_proof_2` casts are at
-> _different_ length types — `t₂ : Suffix t₁.remaining` gives `t₁.remaining - (t₁.remaining
->
-> - t₂.remaining) = t₂.remaining`, while `trans t₁ t₂ : Suffix n`gives`n - (n - t₂.remaining)
->   = t₂.remaining`. So reduce BOTH reads to the bare `t₂.bytes`at a`Fin t₂.remaining`index
-via`cast_bytes_val'`**before**`Fin.ext`/`omega`— do NOT`cast_bytes_irrel`between the
-two lengths (that was the mistake). The proof is structurally complete; this final
-cast-transport order is the finisher.`prepend_single_bdrop`(the`byte`-case analogue)
->   is unstarted and analogous.
->
-> Do **not** switch the `Suffix` shape to `{ consumed, remainder }` (moves the cast into the
-> decode hot path); the `Suffix`-with-`hle` shape is correct.
->
-> **Lean lessons earned (add to the `lean` skill):**
->
-> - Length-indexed vectors `Fin n → UInt8` make `Rel`'s `seq`/`repeat` base cases
->   **type-incoherent** (`s = emptyBytes : Bytes n = Bytes 0` forces `n = 0`). Fix: state the
->   base case as the length predicate (`pure ↦ x = x₀ ∧ n = 0`) or a cast (`byte ↦
-∃ h : n = 1, h ▸ s = single b`), and expose `emptyBytes_unique`/`Suffix.eq_empty_of_remaining_zero`
->   for the transport.
-> - The `seq` split is `splice {n m} (hm : m ≤ n) (s₁ : Bytes m) (s₂ : Bytes (n - m)) : Bytes n
-:= cast (congrArg Bytes (m + (n-m) = n)) (concat s₁ s₂)` — define it **as the cast of
->   `concat`** so `splice` and `concat` are definitionally the same function (the
->   `encode_rel` `seq` case then closes by `splice_eq_concat`). The cast proof is
->   `congrArg Bytes (by rw [Nat.add_comm]; exact Nat.sub_add_cancel hm)` — `cast` wants a
->   _type_ equality `Bytes … = Bytes …`, not a `Nat` equality.
-> - Well-founded `decodeRepeat`/`decodeFull` now recurse on the **type index `n`** (not
->   `s.length`); the `fix` runs over `Sigma fun n => Bytes n` with measure `.1`. Proofs use
->   `Nat.strongRecOn n` (stdlib's strong induction — `Nat.strong_induction_on` does **not**
->   exist) with `revert xs s` so `s : Bytes n` stays under the `∀` and the motive is
->   type-correct.
-> - `split_ifs` is **gone** in Lean 4.34.1; `if_neg` is deprecated → use `ite_eq_right`.
->   `rw [ite_eq_right hn]` on a `dite`-that-`dsimp`ed-to-`ite` can still split into a
->   spurious `inl.refl`; prefer `cases n` on the `Nat` directly (`Nat` subst into hypotheses
->   needs `cases h : n` if the goal's `n` must rewrite).
+> **Lean lessons earned this session (already appended to the `lean` skill):** `Rel_cast` is
+> `subst`-trivial; `induction d` on an `iso`-containing AST generalizes the value into the motive
+> (IH takes the value explicitly: `ih a hs`); `⟨n,s⟩` `Sigma` notation is ambiguous in equalities
+> (annotate `(⟨n,s⟩ : Sigma fun k => Bytes k)`); `(k+1)-k` does not reduce (unlike `(k+1)-1`) — use
+> `omega`/`Nat.sub_sub_self`/`Nat.add_sub_cancel_left`; `prepend_assoc` needs the `h` hypothesis.
+> See `Codec/Codec.lean` for the landed forms.
 
 > **Documentation conventions (this session):** the README is the **full
 > architecture statement** — _about the project and the paper only_. It carries the
