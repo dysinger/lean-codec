@@ -26,7 +26,7 @@
       `Bytes 0`, the single-byte `Bytes 1`, and a `Fin`-shift/prefix lemma; verify
       `lake build Codec.Codec` compiles with the new substrate in place.
 - [x] 1.2 Prove the finitary equality and indexing facts: `s₁ = s₂ ↔ ∀ i : Fin n,
-  s₁ i = s₂ i` (via `funext`), `Bytes n` equality is decidable, and the
+s₁ i = s₂ i` (via `funext`), `Bytes n` equality is decidable, and the
       single-byte read `s ⟨0, _⟩` reduces; verify `#print axioms` on these lemmas
       is `[propext, Quot.sound]` (no `Classical.choice`) and `lake build` stays clean.
 - [x] 1.3 Re-state `Rel` and `relRepeat` over `Bytes n` (whole-string relation with
@@ -50,7 +50,7 @@
       it. If full-consumption efficiency is re-added, re-prove those over the `Suffix`
       carrier.
       **Design refinement (`Suffix` shape):** `Suffix n` is `{ remaining : Nat,
-  hle : remaining ≤ n, bytes : Bytes remaining }` — the spec's
+hle : remaining ≤ n, bytes : Bytes remaining }` — the spec's
       `({m : Nat} × Bytes m)` with the `m ≤ n` witness — rather than the design's
       `{ consumed, remainder : Bytes (n - consumed) }`, because `seq` composes two
       suffixes by threading `m₂ ≤ m₁ ≤ n` transitively with no `Nat.sub` re-derivation
@@ -68,14 +68,68 @@
       inclusive): `cast_fun_apply`, `cast_fin`, `Fin.cast_val`, `cast_bytes_val`
       (`⟨k,hk⟩` form), `cast_bytes_val'` (bare-`Fin` form — the fix), `Nat.eq_irrel`,
       `splice_apply`, `concat_eq_splice`, `Suffix.prepend`, `sub_sub_add`.
-      **Blocked on `prepend_assoc` + `prepend_single_bdrop`:** the cast arguments are
-      `omega`-proved `Nat` equalities (`Nat.sub_sub_self`, `sub_sub_add`) that
-      `rw`/`simp` cannot structurally match against a cast-reduction lemma's `e : n = m`
-      binder. Fix (the right long-term move, not a workaround): normalize the cast's
-      proof in place via `Nat.eq_irrel` (proof irrelevance, `congr 2; exact Nat.eq_irrel
-    e₁ e₂`), then fire `cast_bytes_val'`, then `omega`. See AGENTS.md handoff for the
-      full recipe. Do **not** switch `Suffix` to `{consumed, remainder}` (moves the cast
-      into the decode hot path) nor hand-`rcases` per-case (unscalable).
+      **Status (2.3 — cast library DONE + `prepend_assoc` ~90%, still not landed).**
+      This session landed the full missing cast library, all `[propext, Quot.sound]`
+      (or axiom-free) and building clean (`lake build Codec.Codec`, zero warnings):
+
+      - `splice_add {n m} (hm : m ≤ n) : m + (n - m) = n` — the **named** cast proof
+        used by `splice`/`splice_apply`/`prepend_apply`, replacing the inline
+        `show … by rw [Nat.add_comm]; exact …`. This is the root-cause fix: the inline
+        proof was a `have`-wrapped term that `rw`/`simp` could not structurally match
+        against a cast-reduction lemma's `e : n = m` binder; the named constant can.
+      - `concat_assoc {a b c} (s₁ : Bytes a) (s₂ : Bytes b) (s₃ : Bytes c) :
+        concat s₁ (concat s₂ s₃) = cast (congrArg Bytes (Nat.add_assoc a b c))
+        (concat (concat s₁ s₂) s₃)` — the **clean `+`-associativity content** of
+        `prepend_assoc`, `<+`-only, no `Nat.sub`; closes by
+        `apply Bytes.ext; intro i; unfold concat; rw [cast_bytes_val' (e := Nat.add_assoc a b c)];
+        simp; by_cases …; omega`.
+      - `cast_fin_symm {n m} (e : m = n) (i : Fin n) : cast (Eq.symm (congrArg Fin e)) i = ⟨i.val, …⟩`
+        and `cast_fin_symm_val`/`cast_fin_val` (the `.val` variants) — the `.symm`-aware
+        `Fin`-index casts (`splice`/`prepend` produce `Eq.symm (congrArg Fin e)`, which the
+        positive-form `cast_fin` does not match).
+      - `cast_bytes_val_symm {n m} (e : n = m) (f : Bytes m) (i : Fin n) :
+        (cast (Eq.symm (congrArg Bytes e)) f) i = f ⟨i.val, …⟩` — the `.symm`-aware
+        `Bytes` cast (`Suffix.prepend` casts its `bytes` along `(Nat.sub_sub_self hle).symm`).
+      - `cast_bytes_irrel {n m} (e₁ e₂ : n = m) (s : Bytes n) : cast (congrArg Bytes e₁) s =
+        cast (congrArg Bytes e₂) s` — cast-independence via `Nat.eq_irrel`.
+
+      **`prepend_assoc` statement (CORRECTED — needs the `h` hypothesis; the handoff's
+      naive form is false):**
+      ```lean
+      theorem prepend_assoc {n} (t₁ : Suffix n) (t₂ : Suffix t₁.remaining)
+          (s₁ : Bytes (n - t₁.remaining)) (s₂ : Bytes (t₁.remaining - t₂.remaining))
+          (h : t₂.prepend s₂ = t₁.bytes) :
+        (Suffix.trans t₁ t₂).prepend
+          (cast (congrArg Bytes (sub_sub_add n t₁.remaining t₂.remaining t₁.hle t₂.hle)) (concat s₁ s₂))
+          = t₁.prepend s₁
+      ```
+      (The suffix region reads `t₂.bytes` on the LHS but `t₁.bytes` on the RHS; `h`
+      bridges them. Without `h` the theorem is false.)
+
+      **Proven reduction recipe (validated piece-by-piece):**
+      `apply Bytes.ext; intro i;` then `unfold Suffix.trans Suffix.prepend; dsimp;`
+      `rw [splice_apply]`×2; `unfold concat`; `repeat rw [cast_fin_symm]` (closing the
+      two `splice_add` side goals); then case-split `i.val < n - t₁.remaining`:
+      - `hlt` (the `s₁` prefix): `rw [cast_bytes_val' (e := sub_sub_add …)]; simp`
+        closes by `s₁ ⟨i.val⟩ = s₁ ⟨i.val⟩`.
+      - `¬hlt`: `rw [← h]` (replace `t₁.bytes` with `t₂.prepend s₂`),
+        `simp [Suffix.prepend]`, `rw [cast_bytes_val']`×2 to push the `.symm` `bytes`
+        cast through, `rw [splice_apply]`, `unfold concat`, `repeat rw [cast_fin_symm]`,
+        then case-split `i.val - (n - t₁.remaining) < t₁.remaining - t₂.remaining`:
+        - (`s₂` region) `omega` + `cast_bytes_val'` + `simp` closes to `s₂ = s₂`.
+        - (`t₂.bytes` region) the two `cast (Suffix.prepend._proof_2 …) t₂.bytes` reads
+          differ only in the cast proof (`Nat.le_trans t₂.hle t₁.hle` vs `t₂.hle`); close by
+          `Nat.eq_irrel` on `Nat.sub_sub_self …` + `Fin.ext` + `Nat.sub_sub` + `omega`
+          (the arithmetic `i.val - (n - t₂.remaining) = i.val - (n - t₁.remaining) -
+          (t₁.remaining - t₂.remaining)` is `Nat.sub_sub` ∘ `sub_sub_add`).
+      **The one remaining wrinkle:** in the deep-suffix case the two `_proof_2` casts
+      are at *different* length types (`t₂ : Suffix t₁.remaining` gives `t₁.remaining -
+      (t₁.remaining - t₂.remaining) = t₂.remaining`, while `trans t₁ t₂ : Suffix n` gives
+      `n - (n - t₂.remaining) = t₂.remaining`), so the final closure must reduce BOTH
+      reads to the bare `t₂.bytes` at a `Fin t₂.remaining` index via `cast_bytes_val'`
+      *before* `Fin.ext`/`omega` — not `cast_bytes_irrel` between the two lengths. The
+      proof is structurally complete; this last cast-transport order is the finisher.
+      `prepend_single_bdrop` (the `byte`-case lemma) is analogous and unstarted.
 
 ## 3. Laws over the single carrier (no `Classical.choice`)
 
