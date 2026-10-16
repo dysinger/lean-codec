@@ -22,9 +22,11 @@ import Codec.Codec
 import Codec.Decode
 import Codec.DecodeArray
 import Codec.DecodeByteArray
+import Codec.DecodeByteArraySlice
 import Codec.Encode
 import Codec.EncodeArray
 import Codec.EncodeByteArray
+import Codec.EncodeByteArraySlice
 import Codec.ExternFastPath
 import Codec.Sound
 import Codec.Combinators

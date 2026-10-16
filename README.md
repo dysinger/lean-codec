@@ -180,6 +180,44 @@ speed" are two different types on purpose — compromising them into one would
 sacrifice either the proofs (if you prove over `ByteArray`, nothing reduces) or
 the speed (if you run over `Bytes`, every byte is a heap cell).
 
+### The slice-returning run-model — a `USize`-indexed, packed result carrier
+
+The efficiency question is answered by changing the **result carrier**, not the
+byte loop or the compiler. `Codec.DecodeByteArraySlice` and
+`Codec.EncodeByteArraySlice` add the committed slice surface:
+
+- `decodeByteArraySlice d a i : Option (α × USize)` — a **native, `USize`-indexed
+  greedy decoder** reading `a[i]` and threading the index through `seq`; the `byte`
+  case is **one indexed read + index increment** (no `List` cell, no per-element
+  `Nat` box). Unlike the relational `decode`, it is **sound but not complete** (it
+  short-circuits at the first step and does not backtrack across `seq`/`alt`), which
+  `soundness` (`decodeByteArraySlice_spec`) states precisely.
+- `decodeFullByteArraySlice a i : Option (ByteArray × USize)` — full consumption
+  returns the **packed suffix** as a `ByteArray` (never an `Option (List α × Nat)`),
+  plus its length — closing against `decodeFullByteArray_spec` by one refinement
+  (`decodeFullByteArraySlice_eq`).
+- `encodeByteArrayBytes xs : ByteArray` — the **amortized-O(n) `ByteArray.push`**
+  accumulator, proved equal to the O(n²) `List.append` `encodeRepeat Codec.byte`
+  denotation (`encodeByteArrayBytes_eq_encodeRepeat`).
+
+All three are `[propext, Quot.sound]`-only. The **zero-copy lifetime** of the
+returned span is a **named trust seam**, not a proof obligation: the result aliases
+the source `a`'s buffer, so the contract is "the span is valid while `a` is
+referenced; a C consumer must not `lean_dec_ref`/realloc `a` within that span" —
+the same documented-trust posture as `@[extern]`, at the buffer edge.
+
+**Honest measurement** (arm64, reps=20): the packed accumulator
+`encodeByteArrayBytes` runs 20.5 ms → **1.34 ms** at 1 MiB (~15×, the O(n²)→O(n)
+win); `decodeFullByteArraySlice` returns the packed suffix ~5× faster than the
+`List`-cons `decodeFullByteArray` (no per-element result box). The **sub-µs
+`memcpy` floor** is reached by the `@[extern]` `byteSlice` (below), _not_ by this
+`@[extern]`-free surface: the stdlib `Array.extract`/`drop` content lemmas pull in
+`Classical.choice`, which the codec's `[propext, Quot.sound]` discipline excludes —
+so the slice's `_eq` law uses the same `rfl`-clean `ByteArray.mk ((drop i).toArray)`
+transport as the proven `byteSlice`, honestly trading a list-materialization
+intermediate for an axiom-free refinement. The next move toward memcpy without that
+tradeoff is exactly the `@[extern]` seam already proven below.
+
 ### The `@[extern]` C fast path — a named trust seam at the buffer edge
 
 `Codec/ExternFastPath` is a **mechanism demonstration**, not a measured speedup.
