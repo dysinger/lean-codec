@@ -173,7 +173,32 @@ theorem decode_spec {α : Type} (d : Codec α) (x : α) :
             simp
           · exact (Rel_cast d₂ x.2 hcast s₂).2 hrel₂
       · intro h
-        sorry
+        rcases h with ⟨s₀, hs, hrel⟩
+        rw [Rel_seq] at hrel
+        rcases hrel with ⟨m, hm, s₁, s₂, hs₀, hrel₁, hrel₂⟩
+        subst s₀
+        -- s = r.prepend (splice hm s₁ s₂), Rel d₁ x.1 s₁, Rel d₂ x.2 s₂
+        have hrle : r.remaining ≤ n := r.hle
+        refine ⟨Suffix.drop m s, Suffix.drop ((n - r.remaining) - m) (bdrop m s), ?_, ?_, ?_⟩
+        · -- (x.1, Suffix.drop m s) ∈ decode d₁ s
+          refine (ih₁ x.1 s (Suffix.drop m s)).2 ⟨
+            cast (congrArg Bytes (Nat.sub_sub_self (Nat.le_trans hm (Nat.sub_le n r.remaining))).symm) s₁,
+            ?_, ?_⟩
+          · rw [hs]
+            exact prepend_drop_of_prepend_splice r m hm s₁ s₂
+          · exact (Rel_cast d₁ x.1 (Nat.sub_sub_self (Nat.le_trans hm (Nat.sub_le n r.remaining))).symm s₁).2 hrel₁
+        · -- (x.2, t₂) ∈ decode d₂ t₁.bytes
+          refine (ih₂ x.2 (bdrop m s) (Suffix.drop ((n - r.remaining) - m) (bdrop m s))).2 ⟨
+            cast (congrArg Bytes (Nat.sub_sub_self (Nat.sub_le_sub_right (Nat.sub_le n r.remaining) m)).symm) s₂,
+            ?_, ?_⟩
+          · rw [hs]
+            exact prepend_eq_of_eq_splice (bdrop m (r.prepend (splice hm s₁ s₂))) (Nat.sub_le_sub_right (Nat.sub_le n r.remaining) m) s₂ (cast (congrArg Bytes (bdrop_prepend_splice_snd_len r.hle hm).symm) r.bytes) (bdrop_prepend_splice_eq_splice r m hm s₁ s₂)
+          · exact (Rel_cast d₂ x.2 (Nat.sub_sub_self (Nat.sub_le_sub_right (Nat.sub_le n r.remaining) m)).symm s₂).2 hrel₂
+        · -- r = trans t₁ t₂
+          refine Suffix.ext (t₁ := r) (t₂ := Suffix.trans (Suffix.drop m s) (Suffix.drop ((n - r.remaining) - m) (bdrop m s))) ?_ ?_
+          · exact (bdrop_prepend_splice_snd_len r.hle hm).symm
+          · rw [hs]
+            exact (bdrop_drop_eq_bytes r m hm s₁ s₂).symm
   | alt d₁ d₂ ih₁ ih₂ =>
       intro n s r
       rw [decode, List.mem_append]
@@ -191,10 +216,15 @@ theorem decode_spec {α : Type} (d : Codec α) (x : α) :
         · exact Or.inr ((ih₂ x s r).2 ⟨s₀, hs, hr⟩)
   | empty =>
       intro n s r
-      simp [decode, Rel]
+      constructor
+      · intro h
+        simp [decode] at h
+      · intro h
+        rcases h with ⟨s₀, hs, hr⟩
+        simpa [decode] using (Rel_empty x s₀).1 hr
   | pure x₀ =>
       intro n s r
-      simp [decode, Rel]
+      simp [decode, Rel_pure]
       constructor
       · intro h
         rcases h with ⟨hx, hr⟩
@@ -233,7 +263,57 @@ theorem decode_spec {α : Type} (d : Codec α) (x : α) :
           rfl
   | byte =>
       intro n s r
-      sorry
+      by_cases hn : n = 0
+      · subst n
+        have hr0 : r.remaining = 0 := by
+          have := r.hle
+          omega
+        simp [decode, Rel, hr0]
+      · have hnpos : 0 < n := Nat.pos_of_ne_zero hn
+        rw [decode]
+        simp [hn]
+        constructor
+        · intro h
+          rcases h with ⟨hx, hr⟩
+          subst x
+          subst r
+          refine ⟨cast (congrArg Bytes (Nat.sub_sub_self (Nat.succ_le_of_lt hnpos)).symm) (single (s ⟨0, hnpos⟩)), ?_, ?_⟩
+          · simpa using (prepend_drop_single hn s).symm
+          · rw [Rel_byte]
+            exact rel_byte_cast (Nat.sub_sub_self (Nat.succ_le_of_lt hnpos)) (s ⟨0, hnpos⟩)
+        · intro h
+          rcases h with ⟨s₀, hs, hrel⟩
+          rw [Rel_byte] at hrel
+          rcases hrel with ⟨hn1, hs₀⟩
+          -- hn1 : n - r.remaining = 1, hs₀ : hn1 ▸ s₀ = single x
+          have hs₀' : s₀ = cast (congrArg Bytes hn1.symm) (single x) := cast_bytes_eq_single hn1 s₀ x hs₀
+          constructor
+          · -- x = s ⟨0, hnpos⟩
+            rw [hs]
+            rw [prepend_apply]
+            unfold concat
+            have hne : n - r.remaining ≠ 0 := by
+              rw [hn1]
+              decide
+            have hlt : 0 < n - r.remaining := Nat.pos_of_ne_zero hne
+            rw [cast_fin_symm]
+            · dsimp
+              have hb : s₀ ⟨0, hlt⟩ = x := by
+                rw [hs₀']
+                rw [cast_bytes_val' (e := hn1.symm)]
+                dsimp
+                rfl
+              simp [hb]
+              intro hzero
+              have : n - r.remaining = 1 := hn1
+              rw [hzero] at this
+              contradiction
+            · omega
+          · -- r = Suffix.drop 1 s
+            have hdrop : Suffix.drop (n - r.remaining) (r.prepend s₀) = r := drop_prepend r s₀
+            rw [hn1] at hdrop
+            rw [hs]
+            exact hdrop.symm
 
 theorem bidir {α : Type} (d : Codec α) (x : α) (n : Nat) (s : Bytes n) :
     Rel d x s ↔ (x, Suffix.empty n) ∈ decode d s := by
@@ -300,7 +380,98 @@ theorem decodeRepeat_spec {α : Type} (p : Codec α) (h : ConsumesByte p) :
     ∀ (xs : List α) (n : Nat) (s : Bytes n) (r : Suffix n),
       (xs, r) ∈ decodeRepeat p h n s ↔
         ∃ s₀ : Bytes (n - r.remaining), s = r.prepend s₀ ∧ relRepeat (Rel p) xs (n - r.remaining) s₀ := by
-  sorry
+  intro xs
+  intro n
+  revert xs
+  refine Nat.strongRecOn n ?_
+  intro n ih
+  intro xs s r
+  rw [decodeRepeat_eq]
+  constructor
+  · intro hmem
+    rw [List.mem_cons] at hmem
+    rcases hmem with hm | hm
+    · -- (xs, r) = ([], Suffix.id n s)
+      rcases hm with ⟨hxs, hr⟩
+      refine ⟨cast (congrArg Bytes (Nat.sub_self n).symm) (emptyBytes : Bytes 0), ?_, ?_⟩
+      · exact (prepend_id s).symm
+      · dsimp [Suffix.id]
+        simp [relRepeat]
+    · -- (xs, r) ∈ (decode p s).attach.flatMap ...
+      rw [List.mem_flatMap] at hm
+      rcases hm with ⟨a, ha, hm'⟩
+      rcases a with ⟨⟨x, t⟩, ha'⟩
+      rw [List.mem_map] at hm'
+      rcases hm' with ⟨b, hb, hmap⟩
+      rcases b with ⟨rest, r'⟩
+      cases hmap
+      rcases (ih t.remaining (h x s t ha') rest t.bytes r').1 hb with ⟨s₂, hs₂, hrr⟩
+      rcases (decode_spec p x s t).1 ha' with ⟨s₁, hs₁, hrel₁⟩
+      -- want (x :: rest, Suffix.trans t r') with s₀ = concat s₁ s₂ (cast)
+      refine ⟨cast (congrArg Bytes (sub_sub_add n t.remaining r'.remaining t.hle r'.hle)) (concat s₁ s₂), ?_, ?_⟩
+      · -- s = (Suffix.trans t r').prepend (cast ... (concat s₁ s₂))
+        rw [hs₁]
+        exact (prepend_assoc t r' s₁ s₂ hs₂.symm).symm
+      · -- relRepeat (Rel p) (x::rest) (n - r'.remaining) (cast ... (concat s₁ s₂))
+        rw [relRepeat_cons]
+        refine ⟨n - t.remaining, Nat.sub_le_sub_left r'.hle n, s₁, cast (congrArg Bytes (sub_sub_sub n t.remaining r'.remaining t.hle r'.hle).symm) s₂, ?_, hrel₁, ?_⟩
+        · -- cast ... (concat s₁ s₂) = splice ... s₁ (cast ... s₂)
+          exact cast_concat_splice_sub t.hle r'.hle s₁ s₂
+        · exact (relRepeat_cast (Rel p) rest (sub_sub_sub n t.remaining r'.remaining t.hle r'.hle).symm s₂).2 hrr
+  · intro h
+    rcases h with ⟨s₀, hs, hrel⟩
+    cases xs with
+    | nil =>
+        rw [relRepeat_nil] at hrel
+        -- hrel : n - r.remaining = 0
+        rw [List.mem_cons]
+        left
+        congr
+        -- r = Suffix.id n s
+        have hdrop : Suffix.drop 0 s = r := by
+          rw [hs]
+          rw [← hrel]
+          exact drop_prepend r s₀
+        rw [← hdrop]
+        exact drop_zero_eq_id s
+    | cons x rest =>
+        rw [relRepeat_cons] at hrel
+        rcases hrel with ⟨m, hm, s₁, s₂, hs₀, hrel₁, hrel₂⟩
+        subst s₀
+        -- s = r.prepend (splice hm s₁ s₂), hrel₁ : Rel p x s₁, hrel₂ : relRepeat (Rel p) rest (n - r.remaining - m) s₂
+        rw [List.mem_cons]
+        right
+        rw [List.mem_flatMap]
+        have hmem₁ : (x, Suffix.drop m s) ∈ decode p s :=
+          (decode_spec p x s (Suffix.drop m s)).2 ⟨
+            cast (congrArg Bytes (Nat.sub_sub_self (Nat.le_trans hm (Nat.sub_le n r.remaining))).symm) s₁,
+            by rw [hs]; exact prepend_drop_of_prepend_splice r m hm s₁ s₂,
+            (Rel_cast p x (Nat.sub_sub_self (Nat.le_trans hm (Nat.sub_le n r.remaining))).symm s₁).2 hrel₁⟩
+        have hlt : n - m < n := by
+          have := h x s (Suffix.drop m s) hmem₁
+          simpa [Suffix.drop] using this
+        let r' : Suffix (n - m) := Suffix.drop ((n - r.remaining) - m) (bdrop m s)
+        have hmem₂ : (rest, r') ∈ decodeRepeat p h (n - m) (bdrop m s) :=
+          (ih (n - m) hlt rest (bdrop m s) r').2 ⟨
+            cast (congrArg Bytes (Nat.sub_sub_self (Nat.sub_le_sub_right (Nat.sub_le n r.remaining) m)).symm) s₂,
+            by
+              dsimp [r']
+              rw [hs]
+              exact prepend_eq_of_eq_splice (bdrop m (r.prepend (splice hm s₁ s₂))) (Nat.sub_le_sub_right (Nat.sub_le n r.remaining) m) s₂ (cast (congrArg Bytes (bdrop_prepend_splice_snd_len r.hle hm).symm) r.bytes) (bdrop_prepend_splice_eq_splice r m hm s₁ s₂),
+            (relRepeat_cast (Rel p) rest (Nat.sub_sub_self (Nat.sub_le_sub_right (Nat.sub_le n r.remaining) m)).symm s₂).2 hrel₂⟩
+        have htrans : (Suffix.drop m s).trans r' = r := by
+          refine Suffix.ext (t₁ := (Suffix.drop m s).trans r') (t₂ := r) ?_ ?_
+          · dsimp [r', Suffix.trans]
+            exact bdrop_prepend_splice_snd_len r.hle hm
+          · dsimp [r', Suffix.trans, Suffix.drop]
+            rw [hs]
+            rw [bdrop_drop_eq_bytes r m hm s₁ s₂]
+            change cast (congrArg Bytes (bdrop_prepend_splice_snd_len r.hle hm)) (cast (congrArg Bytes (bdrop_prepend_splice_snd_len r.hle hm).symm) r.bytes) = r.bytes
+            simp
+        refine ⟨⟨(x, Suffix.drop m s), hmem₁⟩, List.mem_attach (p.decode s) ⟨(x, Suffix.drop m s), hmem₁⟩, ?_⟩
+        rw [List.mem_map]
+        refine ⟨(rest, r'), hmem₂, ?_⟩
+        exact congrArg (fun y => (x :: rest, y)) htrans
 
 /-- Repetition with an empty-matching step has arbitrarily many results. -/
 theorem relRepeat_unbounded_of_empty {α : Type} (p : Codec α) (x : α)
