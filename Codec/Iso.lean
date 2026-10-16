@@ -320,6 +320,209 @@ def cons {α : Type u} : Iso (α × List α) (List α) where
 -- `iterate` primitive would additionally need a user-supplied well-founded relation
 -- and has no current consumer, so it is omitted; `foldl` is defined directly.
 
+/-! ## A generic well-founded maximal unfold
+
+Both `foldl` (§5.2) and `foldr` (its right-fold dual) are built from one
+maximal-unfold recursion: repeatedly peel a step `step a = some (a', b)` until it
+is total (`step a = none`), collecting the peeled elements, then reconstruct the
+original state by *left*-folding a terminal seed back over the collected list via
+`recons`. A right fold is the same reconstruction over the reversed list (the
+single identity `foldr f x bs = foldl (fun a b => f b a) x bs.reverse`). This
+section factors the recursion and its soundness / completeness proofs once; the
+left- and right-associative folds below are instantiations of it.
+-/
+
+/-- A well-founded unfold step: `step a = some (a', b)` peels one element `b`,
+leaving the strictly smaller `a'` (per `measure`). -/
+structure Unfold (α : Type) (β : Type) (measure : α → Nat) where
+  /-- One maximal-unfold peel. -/
+  step : α → Option (α × β)
+  /-- Each peel strictly decreases the measure (well-foundedness). -/
+  dec : ∀ a a' b, step a = some (a', b) → measure a' < measure a
+
+/-- The maximal unfold of `a`: peel `step` to a fixpoint, collecting the peeled
+elements in reverse order (the most-recently peeled element first). -/
+def unfoldBy {α β : Type} (measure : α → Nat) (u : Unfold α β measure) (a : α) :
+    Option (α × List β) :=
+  WellFounded.fix (InvImage.wf measure Nat.lt_wfRel.wf) (fun a ih =>
+    match hs : u.step a with
+    | none => some (a, [])
+    | some (a', b) =>
+        have hlt : measure a' < measure a := u.dec a a' b hs
+        match ih a' hlt with
+        | none => none
+        | some (seed, bs) => some (seed, bs ++ [b])
+  ) a
+
+/- The recursion equation for `unfoldBy`. -/
+theorem unfoldBy_eq {α β : Type} (measure : α → Nat) (u : Unfold α β measure) (a : α) :
+    unfoldBy measure u a =
+      match _ : u.step a with
+      | none => some (a, [])
+      | some (a', b) =>
+          match unfoldBy measure u a' with
+          | none => none
+          | some (seed, bs) => some (seed, bs ++ [b]) := by
+  unfold unfoldBy
+  rw [WellFounded.fix_eq]
+
+/-- Left fold of a reconstruction step `recons : α → β → Option α`. -/
+def foldRec {α β : Type} (recons : α → β → Option α) (a : α) (bs : List β) : Option α :=
+  match bs with
+  | [] => some a
+  | b :: bs' =>
+      match recons a b with
+      | none => none
+      | some a' => foldRec recons a' bs'
+
+/-- `foldRec` is associative over list append. -/
+theorem foldRec_append {α β : Type} (recons : α → β → Option α) (a : α) (bs cs : List β) :
+    foldRec recons a (bs ++ cs) =
+      Option.bind (foldRec recons a bs) fun x => foldRec recons x cs := by
+  induction bs generalizing a with
+  | nil => simp [foldRec]
+  | cons b bs' ih =>
+      simp [foldRec]
+      cases h : recons a b with
+      | none => simp
+      | some a1 => simp [ih a1]
+
+/-- Soundness of the maximal unfold: `unfoldBy a = some (seed, ops)` gives a left
+fold (`foldRec recons`) that reproduces `a` from the terminal `seed`. -/
+theorem unfoldBy_sound {α β : Type} (measure : α → Nat) (u : Unfold α β measure)
+    (recons : α → β → Option α)
+    (hrecons : ∀ a a' b, u.step a = some (a', b) → recons a' b = some a) :
+    ∀ a seed ops, unfoldBy measure u a = some (seed, ops) →
+      u.step seed = none ∧ foldRec recons seed ops = some a := by
+  intro a
+  have hwf : WellFounded (InvImage (· < ·) measure) := InvImage.wf measure Nat.lt_wfRel.wf
+  induction a using WellFounded.induction (hwf := hwf) with
+  | h a ih =>
+      intro seed ops hf
+      rw [unfoldBy_eq] at hf
+      cases hs : u.step a with
+      | none =>
+          rw [hs] at hf
+          rcases hf with ⟨rfl, rfl⟩
+          exact ⟨hs, rfl⟩
+      | some va =>
+          rcases va with ⟨a', b⟩
+          rw [hs] at hf
+          cases hrec : unfoldBy measure u a' with
+          | none => simp [hrec] at hf
+          | some v =>
+              rcases v with ⟨seed', ops'⟩
+              simp [hrec] at hf
+              rcases hf with ⟨rfl, hops⟩
+              have hlt : InvImage (· < ·) measure a' a := u.dec a a' b hs
+              have hrec' := ih a' hlt seed' ops' hrec
+              rcases hrec' with ⟨hterm, hfold⟩
+              refine ⟨hterm, ?_⟩
+              rw [← hops]
+              have hia : recons a' b = some a := hrecons a a' b hs
+              rw [foldRec_append]
+              rw [hfold]
+              simp [foldRec, hia]
+
+/-- A nonempty list is its `dropLast` concatenated with a singleton of its last
+element. -/
+theorem dropLast_append_last {α : Type} (bs : List α) (h : bs ≠ []) :
+    bs = bs.dropLast ++ [bs.getLast h] := by
+  obtain ⟨b, hgl⟩ : ∃ b, bs.getLast? = some b :=
+    ⟨bs.getLast h, List.getLast?_eq_some_getLast h⟩
+  have hsplit := List.getLast?_eq_some_iff.mp hgl
+  rcases hsplit with ⟨ys, rfl⟩
+  simp
+
+/-- Completeness of the maximal unfold: left-folding a terminal seed over a list
+and unfolding the result returns the seed and the list. Proved by well-founded
+induction on the measure of the final state, peeling one element from the tail. -/
+theorem unfoldBy_of_fold {α β : Type} (measure : α → Nat) (u : Unfold α β measure)
+    (recons : α → β → Option α)
+    (hrecons : ∀ a a' b, recons a' b = some a → u.step a = some (a', b)) :
+    ∀ a bs a', u.step a = none → foldRec recons a bs = some a' →
+      unfoldBy measure u a' = some (a, bs) := by
+  intro a bs a' ht hap
+  revert a bs ht hap
+  have hwf : WellFounded (InvImage (· < ·) measure) := InvImage.wf measure Nat.lt_wfRel.wf
+  induction a' using WellFounded.induction (hwf := hwf) with
+  | h a' ih =>
+      intro a bs ht hap
+      rw [unfoldBy_eq]
+      by_cases hbs : bs = []
+      · subst bs
+        simp [foldRec] at hap
+        subst a'
+        rw [ht]
+      · have hsplit := dropLast_append_last bs hbs
+        rw [hsplit] at hap
+        rw [foldRec_append] at hap
+        cases hpre : foldRec recons a bs.dropLast with
+        | none =>
+            rw [hpre] at hap
+            simp at hap
+        | some a0 =>
+            rw [hpre] at hap
+            simp [foldRec] at hap
+            cases hlast : recons a0 (bs.getLast hbs) with
+            | none => simp [hlast] at hap
+            | some a'' =>
+                simp [hlast] at hap
+                subst a''
+                have hstep : u.step a' = some (a0, bs.getLast hbs) := hrecons a' a0 (bs.getLast hbs) hlast
+                rw [hstep]
+                simp
+                have hlt : InvImage (· < ·) measure a0 a' := u.dec a' a0 (bs.getLast hbs) hstep
+                have hrec := ih a0 hlt a bs.dropLast ht hpre
+                rw [hrec]
+                simp
+                rw [← hsplit]
+
+/-- `Option.map` of the pair-swap `(b, a') ↦ (a', b)`. -/
+theorem map_swap_eq_some {α β : Type} (o : Option (β × α)) (a' : α) (b : β) :
+    o.map (fun p => (p.2, p.1)) = some (a', b) ↔ o = some (b, a') := by
+  cases o with
+  | none => simp
+  | some p =>
+      rcases p with ⟨b', a''⟩
+      constructor
+      · intro h
+        simp at h
+        rcases h with ⟨ha, hb⟩
+        subst a''
+        subst b'
+        rfl
+      · intro h
+        simp at h
+        rcases h with ⟨hb, ha⟩
+        subst b'
+        subst a''
+        rfl
+
+/-- `Option.map` of the pair-swap is none exactly when the option is none. -/
+theorem map_swap_eq_none {α β : Type} (o : Option (β × α)) :
+    o.map (fun p => (p.2, p.1)) = none ↔ o = none := by
+  cases o <;> simp
+
+/-- `Option.map` of the operand-list reversal inverts by reversing again. -/
+theorem map_fst_reverse_eq_some {α β : Type} (o : Option (α × List β)) (a : α) (bs : List β) :
+    o.map (fun p => (p.1, p.2.reverse)) = some (a, bs) ↔ o = some (a, bs.reverse) := by
+  cases o with
+  | none => simp
+  | some p =>
+      rcases p with ⟨a', bs'⟩
+      constructor
+      · intro h
+        simp at h
+        rcases h with ⟨rfl, hrev⟩
+        congr
+        rw [← hrev, List.reverse_reverse]
+      · intro h
+        simp at h
+        rcases h with ⟨rfl, hrev⟩
+        subst bs'
+        simp [List.reverse_reverse]
+
 /-! ## Left-associative folding as an isomorphism (paper §5.2/§5.3) -/
 
 /-- Unfolding via `i.unapply` strictly decreases the measure. This is the
@@ -329,150 +532,25 @@ structure MeasureDecreases {α β : Type} (measure : α → Nat) (i : Iso (α ×
   /-- Each unfold step reduces the measure. -/
   dec : ∀ a a' b, i.unapply a = some (a', b) → measure a' < measure a
 
+/-- The `Unfold` step induced by a left-fold `MeasureDecreases` witness. Here the
+step is `i.unapply` itself, and `reconsLeft i a' b = i.apply (a', b)` is its inverse. -/
+def MeasureDecreases.toUnfold {α β : Type} {measure : α → Nat} {i : Iso (α × β) α}
+    (h : MeasureDecreases measure i) : Unfold α β measure where
+  step := i.unapply
+  dec := h.dec
+
+/-- The left reconstruction step: `reconsLeft i a' b = i.apply (a', b)`. -/
+def reconsLeft {α β : Type} (i : Iso (α × β) α) : α → β → Option α :=
+  fun a' b => i.apply (a', b)
+
 /-- Left fold of the step iso over a list (the `apply` direction of `foldl`). -/
 def foldApply {α β : Type} (i : Iso (α × β) α) (a0 : α) (bs : List β) : Option α :=
-  match bs with
-  | [] => some a0
-  | b :: bs' =>
-      match i.apply (a0, b) with
-      | none => none
-      | some a1 => foldApply i a1 bs'
+  foldRec (reconsLeft i) a0 bs
 
-/-- Maximal unfold (the `unapply` direction of `foldl`), by well-founded recursion
-on `measure a`. Peels `i.unapply` until it returns `none`, collecting operands and
-backing them out to fold order. -/
+/-- Maximal unfold (the `unapply` direction of `foldl`). -/
 def foldUnapply {α β : Type} (measure : α → Nat) (i : Iso (α × β) α)
     (h : MeasureDecreases measure i) (a : α) : Option (α × List β) :=
-  WellFounded.fix (InvImage.wf measure Nat.lt_wfRel.wf) (fun a ih =>
-    match hua : i.unapply a with
-    | none => some (a, [])
-    | some (a', b) =>
-        have hlt : measure a' < measure a := h.dec a a' b hua
-        match ih a' hlt with
-        | none => none
-        | some (seed, bs) => some (seed, bs ++ [b])
-  ) a
-
-/- The recursion equation for `foldUnapply` (derived from `WellFounded.fix_eq`). -/
-theorem foldUnapply_eq {α β : Type} (measure : α → Nat) (i : Iso (α × β) α)
-    (h : MeasureDecreases measure i) (a : α) :
-    foldUnapply measure i h a =
-      match _ : i.unapply a with
-      | none => some (a, [])
-      | some (a', b) =>
-          match foldUnapply measure i h a' with
-          | none => none
-          | some (seed, bs) => some (seed, bs ++ [b]) := by
-  unfold foldUnapply
-  rw [WellFounded.fix_eq]
-
-/-- `foldApply` is associative over list append. -/
-theorem foldApply_append {α β : Type} (i : Iso (α × β) α) (a : α) (bs cs : List β) :
-    foldApply i a (bs ++ cs) =
-      Option.bind (foldApply i a bs) fun x => foldApply i x cs := by
-  induction bs generalizing a with
-  | nil => simp [foldApply]
-  | cons b bs' ih =>
-      simp [foldApply]
-      cases h : i.apply (a, b) with
-      | none => simp
-      | some a1 => simp [ih a1]
-
-/-- Soundness of the maximal unfold: `foldUnapply a = (seed, ops)` gives a fold
-that reproduces `a` from a terminal `seed`. -/
-theorem foldUnapply_sound {α β : Type} (i : Iso (α × β) α) (measure : α → Nat)
-    (h : MeasureDecreases measure i) :
-    ∀ a seed ops, foldUnapply measure i h a = some (seed, ops) →
-      i.unapply seed = none ∧ foldApply i seed ops = some a := by
-  intro a
-  have hwf : WellFounded (InvImage (· < ·) measure) := InvImage.wf measure Nat.lt_wfRel.wf
-  induction a using WellFounded.induction (hwf := hwf) with
-  | h a ih =>
-      intro seed ops hf
-      rw [foldUnapply_eq] at hf
-      cases hua : i.unapply a with
-      | none =>
-          rw [hua] at hf
-          rcases hf with ⟨rfl, rfl⟩
-          exact ⟨hua, rfl⟩
-      | some va =>
-          rcases va with ⟨a', b⟩
-          rw [hua] at hf
-          cases hrec : foldUnapply measure i h a' with
-          | none => simp [hrec] at hf
-          | some v =>
-              rcases v with ⟨seed', ops'⟩
-              simp [hrec] at hf
-              rcases hf with ⟨rfl, hops⟩
-              have hlt : InvImage (· < ·) measure a' a := h.dec a a' b hua
-              have hrec' := ih a' hlt seed' ops' hrec
-              rcases hrec' with ⟨hterm, hfold⟩
-              refine ⟨hterm, ?_⟩
-              rw [← hops]
-              have hia : i.apply (a', b) = some a := (i.law (a', b) a).2 hua
-              rw [foldApply_append]
-              rw [hfold]
-              simp [foldApply, hia]
-
-/-- A nonempty list is its `dropLast` concatenated with a singleton of its last element. -/
-theorem dropLast_append_getLast {α : Type} (bs : List α) (h : bs ≠ []) :
-    bs = bs.dropLast ++ [bs.getLast h] := by
-  obtain ⟨b, hgl⟩ : ∃ b, bs.getLast? = some b :=
-    ⟨bs.getLast h, List.getLast?_eq_some_getLast h⟩
-  have hsplit := List.getLast?_eq_some_iff.mp hgl
-  rcases hsplit with ⟨ys, rfl⟩
-  simp
-
-/-- Completeness of the maximal unfold: folding a terminal seed over a list and
-unfolding the result returns the seed and the list. Proved by well-founded
-induction on the measure of the final state, peeling one element from the tail. -/
-theorem foldUnapply_of_foldApply {α β : Type} (i : Iso (α × β) α) (measure : α → Nat)
-    (h : MeasureDecreases measure i) :
-    ∀ a bs a', i.unapply a = none → foldApply i a bs = some a' →
-      foldUnapply measure i h a' = some (a, bs) := by
-  intro a bs a' ht hap
-  revert a bs ht hap
-  have hwf : WellFounded (InvImage (· < ·) measure) := InvImage.wf measure Nat.lt_wfRel.wf
-  induction a' using WellFounded.induction (hwf := hwf) with
-  | h a' ih =>
-      intro a bs ht hap
-      rw [foldUnapply_eq]
-      by_cases hbs : bs = []
-      · subst bs
-        simp [foldApply] at hap
-        subst a'
-        rw [ht]
-      · have hsplit := dropLast_append_getLast bs hbs
-        rw [hsplit] at hap
-        -- foldApply a (bs.dropLast ++ [getLast]) = some a'
-        rw [foldApply_append] at hap
-        -- Option.bind (foldApply a bs.dropLast) (fun a0 => foldApply a0 [getLast]) = some a'
-        cases hpre : foldApply i a bs.dropLast with
-        | none =>
-            rw [hpre] at hap
-            simp at hap
-        | some a0 =>
-            rw [hpre] at hap
-            simp [foldApply] at hap
-            -- hap : (match i.apply (a0, bs.getLast hbs) with ...) = some a'
-            cases hlast : i.apply (a0, bs.getLast hbs) with
-            | none => simp [hlast] at hap
-            | some a'' =>
-                simp [hlast] at hap
-                subst a''
-                -- now hap says a' = a';
-                -- i.unapply a' = some (a0, getLast) by i.law
-                have hua' : i.unapply a' = some (a0, bs.getLast hbs) := (i.law (a0, bs.getLast hbs) a').1 hlast
-                rw [hua']
-                simp
-                -- goal: foldUnapply measure i h (some...) = some (a, bs); reduce further
-                -- need foldUnapply a0 = some (a, bs.dropLast), by IH
-                have hlt : InvImage (· < ·) measure a0 a' := h.dec a' a0 (bs.getLast hbs) hua'
-                have hrec := ih a0 hlt a bs.dropLast ht hpre
-                rw [hrec]
-                simp
-                -- foldUnapply a' = some (a, bs.dropLast ++ [getLast]) = some (a, bs)
-                rw [← hsplit]
+  unfoldBy measure h.toUnfold a
 
 /-- Left-associative folding as a partial isomorphism (paper §5.3 `foldl`).
 
@@ -500,13 +578,16 @@ def foldl {α β : Type} (i : Iso (α × β) α) (measure : α → Nat)
       cases hua : i.unapply a with
       | none =>
           simp [hua] at hap
-          exact foldUnapply_of_foldApply i measure h a bs y hua hap
+          exact unfoldBy_of_fold measure h.toUnfold (reconsLeft i)
+            (fun a a' b h' => (i.law (a', b) a).1 h') a bs y hua hap
       | some va =>
           simp [hua] at hap
     · intro hun
-      have hsnd := foldUnapply_sound i measure h y a bs hun
+      have hsnd := unfoldBy_sound measure h.toUnfold (reconsLeft i)
+        (fun a a' b h' => (i.law (a', b) a).2 h') y a bs hun
       rcases hsnd with ⟨ht, hfoo⟩
-      simp [ht, hfoo]
+      change i.unapply a = none at ht
+      simp [foldApply, ht, hfoo]
 
 /-! ## Right-associative folding as an isomorphism (the dual of `foldl`) -/
 
@@ -519,120 +600,41 @@ structure MeasureDecreasesR {α β : Type} (measure : α → Nat) (i : Iso (β �
   /-- Each unfold step reduces the measure. -/
   dec : ∀ a b a', i.unapply a = some (b, a') → measure a' < measure a
 
+/-- The `Unfold` step induced by a right-fold `MeasureDecreasesR` witness: swap the
+pair so the step has type `α → Option (α × β)` (accumulator first, element second),
+matching `Unfold`. -/
+def MeasureDecreasesR.toUnfold {α β : Type} {measure : α → Nat} {i : Iso (β × α) α}
+    (h : MeasureDecreasesR measure i) : Unfold α β measure where
+  step a := (i.unapply a).map fun p => (p.2, p.1)
+  dec := by
+    intro a a' b hs
+    cases hua : i.unapply a with
+    | none => simp [hua] at hs
+    | some p =>
+        rcases p with ⟨b', a''⟩
+        simp [hua] at hs
+        rcases hs with ⟨ha, hb⟩
+        subst a''
+        subst b'
+        exact h.dec a b a' hua
+
+/-- The right reconstruction step: `reconsRight i a' b = i.apply (b, a')`. -/
+def reconsRight {α β : Type} (i : Iso (β × α) α) : α → β → Option α :=
+  fun a' b => i.apply (b, a')
+
 /-- Right fold of the step iso over a list (the `apply` direction of `foldr`).
 `foldrApply i a0 [b1, …, bn]` = `i (b1, i (b2, … i (bn, a0)))` — the rightmost
-element is folded first (innermost). -/
+element is folded first (innermost). This is the left fold `foldRec` of
+`reconsRight i` over the reversed list. -/
 def foldrApply {α β : Type} (i : Iso (β × α) α) (a0 : α) (bs : List β) : Option α :=
-  match bs with
-  | [] => some a0
-  | b :: bs' =>
-      match foldrApply i a0 bs' with
-      | none => none
-      | some acc => i.apply (b, acc)
+  foldRec (reconsRight i) a0 bs.reverse
 
-/-- Maximal unfold (the `unapply` direction of `foldr`), by well-founded recursion
-on `measure a`. Peels `i.unapply a = some (b, a')` (element first), recursing on
-`a'` and *prepending* `b` — the dual of `foldl`'s `foldUnapply` (which appends). -/
+/-- Maximal unfold (the `unapply` direction of `foldr`): the generic `unfoldBy`
+(which collects in reverse-peel order) mapped back through `List.reverse` so the
+result is in right-fold order. -/
 def foldrUnapply {α β : Type} (measure : α → Nat) (i : Iso (β × α) α)
     (h : MeasureDecreasesR measure i) (a : α) : Option (α × List β) :=
-  WellFounded.fix (InvImage.wf measure Nat.lt_wfRel.wf) (fun a ih =>
-    match hua : i.unapply a with
-    | none => some (a, [])
-    | some (b, a') =>
-        have hlt : measure a' < measure a := h.dec a b a' hua
-        match ih a' hlt with
-        | none => none
-        | some (seed, bs) => some (seed, b :: bs)
-  ) a
-
-/- The recursion equation for `foldrUnapply` (derived from `WellFounded.fix_eq`). -/
-theorem foldrUnapply_eq {α β : Type} (measure : α → Nat) (i : Iso (β × α) α)
-    (h : MeasureDecreasesR measure i) (a : α) :
-    foldrUnapply measure i h a =
-      match _ : i.unapply a with
-      | none => some (a, [])
-      | some (b, a') =>
-          match foldrUnapply measure i h a' with
-          | none => none
-          | some (seed, bs) => some (seed, b :: bs) := by
-  unfold foldrUnapply
-  rw [WellFounded.fix_eq]
-
-/-- Soundness of the maximal unfold: `foldrUnapply a = (seed, ops)` gives a right
-fold that reproduces `a` from a terminal `seed`. -/
-theorem foldrUnapply_sound {α β : Type} (i : Iso (β × α) α) (measure : α → Nat)
-    (h : MeasureDecreasesR measure i) :
-    ∀ a seed ops, foldrUnapply measure i h a = some (seed, ops) →
-      i.unapply seed = none ∧ foldrApply i seed ops = some a := by
-  intro a
-  have hwf : WellFounded (InvImage (· < ·) measure) := InvImage.wf measure Nat.lt_wfRel.wf
-  induction a using WellFounded.induction (hwf := hwf) with
-  | h a ih =>
-      intro seed ops hf
-      rw [foldrUnapply_eq] at hf
-      cases hua : i.unapply a with
-      | none =>
-          rw [hua] at hf
-          rcases hf with ⟨rfl, rfl⟩
-          exact ⟨hua, rfl⟩
-      | some va =>
-          rcases va with ⟨b, a'⟩
-          rw [hua] at hf
-          cases hrec : foldrUnapply measure i h a' with
-          | none => simp [hrec] at hf
-          | some v =>
-              rcases v with ⟨seed', ops'⟩
-              simp [hrec] at hf
-              rcases hf with ⟨rfl, hops⟩
-              have hlt : InvImage (· < ·) measure a' a := h.dec a b a' hua
-              have hrec' := ih a' hlt seed' ops' hrec
-              rcases hrec' with ⟨hterm, hfold⟩
-              refine ⟨hterm, ?_⟩
-              rw [← hops]
-              have hia : i.apply (b, a') = some a := (i.law (b, a') a).2 hua
-              rw [foldrApply]
-              rw [hfold]
-              simp [hia]
-
-/-- Completeness of the maximal unfold: right-folding a terminal seed over a list
-and unfolding the result returns the seed and the list. Proved by well-founded
-induction on the measure of the final state, peeling one element from the *head*. -/
-theorem foldrUnapply_of_foldrApply {α β : Type} (i : Iso (β × α) α) (measure : α → Nat)
-    (h : MeasureDecreasesR measure i) :
-    ∀ a bs a', i.unapply a = none → foldrApply i a bs = some a' →
-      foldrUnapply measure i h a' = some (a, bs) := by
-  intro a bs a' ht hap
-  revert a bs ht hap
-  have hwf : WellFounded (InvImage (· < ·) measure) := InvImage.wf measure Nat.lt_wfRel.wf
-  induction a' using WellFounded.induction (hwf := hwf) with
-  | h a' ih =>
-      intro a bs ht hap
-      rw [foldrUnapply_eq]
-      cases bs with
-      | nil =>
-          simp [foldrApply] at hap
-          subst a'
-          rw [ht]
-      | cons b bs' =>
-          -- foldrApply a (b :: bs') = some a'
-          simp [foldrApply] at hap
-          cases htail : foldrApply i a bs' with
-          | none => simp [htail] at hap
-          | some acc =>
-              simp [htail] at hap
-              cases hlast : i.apply (b, acc) with
-              | none => simp [hlast] at hap
-              | some a'' =>
-                  simp [hlast] at hap
-                  subst a''
-                  -- now: i.unapply a' = some (b, acc) by i.law
-                  have hua' : i.unapply a' = some (b, acc) := (i.law (b, acc) a').1 hlast
-                  rw [hua']
-                  simp
-                  -- need foldrUnapply acc = some (a, bs'), by IH
-                  have hlt : InvImage (· < ·) measure acc a' := h.dec a' b acc hua'
-                  have hrec := ih acc hlt a bs' ht htail
-                  rw [hrec]
+  (unfoldBy measure h.toUnfold a).map fun p => (p.1, p.2.reverse)
 
 /-- Right-associative folding as a partial isomorphism (the dual of §5.3 `foldl`).
 
@@ -660,13 +662,30 @@ def foldr {α β : Type} (i : Iso (β × α) α) (measure : α → Nat)
       cases hua : i.unapply a with
       | none =>
           simp [hua] at hap
-          exact foldrUnapply_of_foldrApply i measure h a bs y hua hap
+          have hstep_none : h.toUnfold.step a = none := (map_swap_eq_none (i.unapply a)).2 hua
+          have hrecons_back : ∀ a a' b, reconsRight i a' b = some a → h.toUnfold.step a = some (a', b) := by
+            intro a a' b hr
+            have hu : i.unapply a = some (b, a') := (i.law (b, a') a).1 hr
+            exact (map_swap_eq_some (i.unapply a) a' b).2 hu
+          have hcomp := unfoldBy_of_fold measure h.toUnfold (reconsRight i) hrecons_back
+            a bs.reverse y hstep_none hap
+          unfold foldrUnapply
+          exact (map_fst_reverse_eq_some (unfoldBy measure h.toUnfold y) a bs).2 hcomp
       | some va =>
           simp [hua] at hap
     · intro hun
-      have hsnd := foldrUnapply_sound i measure h y a bs hun
-      rcases hsnd with ⟨ht, hfoo⟩
-      simp [ht, hfoo]
+      have hun' : unfoldBy measure h.toUnfold y = some (a, bs.reverse) :=
+        (map_fst_reverse_eq_some (unfoldBy measure h.toUnfold y) a bs).1 (by simpa [foldrUnapply] using hun)
+      have hrecons_fwd : ∀ a a' b, h.toUnfold.step a = some (a', b) → reconsRight i a' b = some a := by
+        intro a a' b hs
+        have hu : i.unapply a = some (b, a') := (map_swap_eq_some (i.unapply a) a' b).1 hs
+        exact (i.law (b, a') a).2 hu
+      have hsnd := unfoldBy_sound measure h.toUnfold (reconsRight i) hrecons_fwd y a (bs.reverse) hun'
+      rcases hsnd with ⟨hstep_none, hfold⟩
+      have hua_term : i.unapply a = none := (map_swap_eq_none (i.unapply a)).1 hstep_none
+      simp [hua_term]
+      simpa [foldrApply, List.reverse_reverse] using hfold
+
 
 /- `iterate` (paper §5.3) is *not* provided as an `Iso`: the paper's definition
 (`apply` iterated via a `driver` until failure, and dually `unapply`) carries its

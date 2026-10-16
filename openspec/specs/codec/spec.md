@@ -2,65 +2,127 @@
 
 ## Purpose
 
-`codec` is the byte codec capability: a `Codec` description (an inductive AST of
-`iso`/`seq`/`alt`/`empty`/`pure`/`byte`) that gives one syntax description both a
-decoder and an encoder over bytes, following Rendel & Ostermann's _Invertible
-Syntax Descriptions_. The decoder is nondeterministic (backtracking union `|`),
-unbounded repetition (`many`) is a well-founded, productive decoder over the
-least-fixpoint relation `relRepeat`, and the bidirectional laws
-(`decode_spec`, `encode_rel`, `roundtrip`) hold unconditionally with only
-`[propext, Quot.sound]` as axioms and zero `sorry`.
+A verified, byte-exact, bidirectional description framework over bytes: one
+description value gives both a decoder (bytes → value) and an encoder (value →
+bytes) that are provably inverse.
 
 ## Requirements
 
-### Requirement: correct, productive repetition decoder
+### Requirement: Invertibility by construction
 
-The repetition (`many`) decoder SHALL be well-founded recursion on the consumed
-byte string, never a fuel counter or a `Productive` precondition, and SHALL NOT
-return wrong results for an empty-matching body.
+The library SHALL represent a partial isomorphism (`Iso α β`) as a pair of
+functions `apply : α → Option β` and `unapply : β → Option α` together with a
+proof that they are inverses: `apply a = some b ↔ unapply b = some a`, for all
+`a` and `b`.
 
-#### Scenario: productive `many` is total and exact
+#### Scenario: An Iso carries its inverse law
 
-- **WHEN** `p` consumes at least one byte per application (every `Rel p x s₁`
-  has `s₁ ≠ []`)
-- **THEN** `decode (many p) s` terminates and enumerates exactly the paper's
-  results (`[]` and every non-empty prefix), e.g. `decode (many byte) [1,2,3]`
-  = `[([],…), ([1],…), ([1,2],…), ([1,2,3],…)]`
+- **WHEN** a value of type `Iso α β` is constructed
+- **THEN** it MUST include a proof of the inverse law; there is no way to build
+  an `Iso` without it.
 
-#### Scenario: empty-matching `many` is genuinely infinite, stated as a fact
+### Requirement: Nondeterministic (backtracking) decoding
 
-- **WHEN** `p` can match the empty string (`p = pure ()`)
-- **THEN** `decode (many p) s` is recognized as non-terminating (infinitely many
-  `[]` results) — asserted as a **theorem**, never faked with a finite result
+Decoding SHALL be a relation-valued function over a byte buffer, returning
+**all** `(value, remaining)` pairs the description admits:
 
-#### Scenario: no fuel, no precondition, no new constructor
+```
+decode : Codec α → List UInt8 → List (α × List UInt8)
+```
 
-- **WHEN** the decoder is implemented
-- **THEN** there is no fuel counter, no `Productive`/`AllProductive` predicate in
-  the semantics, and no `Codec.many` constructor (`many` stays a derived
-  combinator)
+Choice (`|`, the paper's `Alternative`) SHALL be the **backtracking union**:
+`decode (d₁ | d₂) s = decode d₁ s ++ decode d₂ s`, matching the denotation
+`Rel (d₁ | d₂) = Rel d₁ ∨ Rel d₂` by construction. There is no committed choice,
+no cursor, no peeking, and no narrowing to a single result.
 
-### Requirement: proved totality boundary
+#### Scenario: Choice enumerates every branch
 
-The library SHALL provide a theorem stating precisely where `decode (many p)`
-terminates.
+- **WHEN** `decode (d₁ | d₂) s` is evaluated
+- **THEN** the result is the concatenation of `decode d₁ s` and `decode d₂ s` —
+  every `(value, remainder)` pair from either branch, including duplicate values.
 
-#### Scenario: totality theorem
+### Requirement: Byte-exact roundtrip, unconditional
 
-- **WHEN** the change lands
-- **THEN** there is a theorem: `decode (many p) s` terminates iff
-  `∀ x s₁, Rel p x s₁ → s₁ ≠ []` — proved, not assumed
+For every codec `c : Codec α` (with no `NoAlt` gate) and every value `x : α` in
+`c`'s domain, encoding then decoding SHALL reproduce the value and consume
+exactly the encoded bytes:
 
-### Requirement: laws preserved unconditionally
+`encode c x = some s → (x, []) ∈ decode c s`.
 
-The laws (`decode_spec`, `bidir`, `encode_rel`, `decode_encode`, `roundtrip`)
-SHALL remain unconditional and SHALL be re-proved over the unchanged `Rel`, with
-`#print axioms` = `[propext, Quot.sound]` and zero `sorry`.
+The laws SHALL hold **unconditionally** for every description (including `alt`),
+in the presence of full backtracking; no prefix-disjointness or unambiguity
+condition is required.
 
-#### Scenario: the `many` case is the least-fixpoint law, over unchanged `Rel`
+#### Scenario: Encode-then-decode returns the value
 
-- **WHEN** the change lands
-- **THEN** the core `Rel` (the six constructors) is unchanged; the `many` case
-  is realized by `relRepeat` (the least fixpoint) and `decodeRepeat_spec` (the
-  `many`-case bidirectional law), and `#print axioms` on each law reports
-  `[propext, Quot.sound]` with zero `sorry`.
+- **WHEN** `x` is in the codec's domain and `encode c x = some s`
+- **THEN** `(x, [])` is among the results of `decode c s` — the value plus an
+  empty remaining buffer.
+
+#### Scenario: The laws hold over choice
+
+- **WHEN** a description contains `alt` (backtracking union)
+- **THEN** the bidirectional law `decode_spec` and the roundtrip `roundtrip`
+  still hold for it; no prefix condition is imposed.
+
+### Requirement: Lossless capture of allowable bytes
+
+Any run of bytes a codec's predicate permits SHALL be captured as part of the
+decoded value and re-emitted verbatim on encode; no byte SHALL be silently
+discarded.
+
+#### Scenario: Optional bytes are preserved
+
+- **WHEN** a description decodes a maximal run of bytes satisfying predicate `p`
+  via repetition over a `subset p byte` step (denotation `relRepeat`, decoders
+  `decodeRepeat`/`encodeRepeat`)
+- **THEN** that exact run is part of the decoded value and is re-emitted byte-for-
+  byte on encode.
+
+### Requirement: Partial encoding
+
+Encoding SHALL be partial: a codec returns no result for a value outside its
+domain.
+
+#### Scenario: Out-of-domain value
+
+- **WHEN** `encode c x` is called with `x` outside `c`'s domain (e.g. `pure x₀`
+  given `x ≠ x₀`, or `subset p` given `¬ p x`)
+- **THEN** it returns `none`.
+
+### Requirement: Composition is inverse-preserving
+
+The combinators `$` (apply an iso), `*` (product/sequential), `|` (backtracking
+choice), and `empty` SHALL preserve invertibility: composing proven-inverse
+descriptions yields a proven-inverse description.
+
+#### Scenario: Composition preserves the roundtrip
+
+- **WHEN** two codecs `c₁`, `c₂` are composed with `*`
+- **THEN** `encode (c₁ * c₂) (x₁, x₂)` roundtrips through `decode` to
+  `((x₁, x₂), [])` whenever each component roundtrips.
+
+### Requirement: Unbounded repetition is a total denotation
+
+Unbounded repetition (`many`, paper §3.4) SHALL be realized as a total
+least-fixpoint denotation with three separate interpretations, **not** as a
+finite description value:
+
+- `relRepeat (Rel p)` — the denotational relation (total for every step `p`);
+- `decodeRepeat p h` — the productive decoder, well-founded on the input's
+  length, taking `h : ConsumesByte p` (each step consumes ≥ 1 byte) as its
+  totality witness;
+- `encodeRepeat p` — the total encoder, structural on the value list.
+
+#### Scenario: Productive repetition decodes in bounded steps
+
+- **WHEN** `p` is productive (`Productive p`, equivalently `ConsumesByte p`)
+- **THEN** `decodeRepeat p h` is a total function enumerating exactly the
+  `relRepeat (Rel p)` results.
+
+#### Scenario: Empty-matching repetition is genuinely infinite
+
+- **WHEN** `p` matches the empty byte string (e.g. `pure ()`)
+- **THEN** no finite `List` decoder can enumerate all results (the value lists
+  are unbounded: `relRepeat_unbounded_of_empty`), so `decodeRepeat` is defined
+  only for productive `p` and never faked with a finite result.
