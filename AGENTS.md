@@ -410,11 +410,12 @@ decodeArray d a.data i` _by composition_, re-materializing `a.data.toList` — s
 >    efficiency-only optimization. The efficient `decodeFull` _definition_ + `decodeFull_zero`
 >    are retained. Re-prove only if full-consumption efficiency is re-added.
 >
-> **REMAINING:** task 3.1–3.3 (finish re-deriving `Sound.lean`'s unconditional laws +
-> `Combinators.lean` over the `Fin`-split carrier; task 2.3 is DONE), 4.1–4.3 (delete
-> transfer modules; simplify `lakefile.lean`; rewrite `Bench.lean`; re-derive `VarBinary.lean`),
-> 5.1–5.2 (gate + README/AGENTS docs).
-> `Codec/Sound.lean` is re-stated and typechecks (in progress; see the NEXT-SESSION PLAN below);
+> **REMAINING:** task 3.1 is **~90% done** (see the "CONTINUE the single-carrier re-derivation"
+> block below for the three remaining `sorry`s: `decode_spec` `seq`-backward, `decode_spec` `byte`,
+> `decodeRepeat_spec`); 3.2/3.3 (`decodeRepeat_spec` + `Combinators.lean` over the `Fin`-split
+> carrier), 4.1–4.3 (delete transfer modules; simplify `lakefile.lean`; rewrite `Bench.lean`;
+> re-derive `VarBinary.lean`), 5.1–5.2 (gate + README/AGENTS docs).
+> `Codec/Sound.lean` is re-stated and **mostly proven** (only the three `sorry`s above);
 > `Codec/Combinators.lean`, `Codec/VarBinary.lean` and the transfer modules are still on the
 > **old `List UInt8` substrate** and do not build against the new `Codec/Codec`/`Decode`/`Encode`
 > until re-derived — the tree is **intentionally in an atomic-change intermediate state**
@@ -440,22 +441,36 @@ decodeArray d a.data i` _by composition_, re-materializing `a.data.toList` — s
 > (two `Rel` witnesses may have different lengths), `relUnambiguous`/`Unambiguous` quantify
 > `{n} (s : Bytes n)`.
 >
-> **REMAINING, in order (all `sorry` in `Sound.lean`, then onwards):**
+> **REMAINING, in order (three `sorry`s in `Sound.lean`, then onwards):**
 >
-> 1. `decode_spec` `seq` (both directions) — the left case: the forward dir is the
->    `prepend_assoc` reassociation **plus** `Rel_cast`/`cast_bytes_irrel` to commute the
->    `Rel_seq` witness (`splice_add` vs `sub_sub_add`, and the `Bytes (n₁+n₂−n₁)` vs `Bytes n₂`
->    suffix mismatch); the backward dir needs the `s₂++r` intermediary via `prepend_eq_of_eq_splice`
->    - a `Suffix.trans`-`= `r`reconstruction (needs`Nat.eq_irrel`on the`hle` field).
-> 2. `decode_spec` `pure`/`byte` — `pure` needs a `prepend_id_empty`-style lemma
->    (`(Suffix.id n s).prepend (cast … emptyBytes) = s`, `Nat.sub_self n` cast); `byte` backward
->    needs `prepend` injectivity / “read the first byte of a `splice`” (use `prepend_single_bdrop`
->    in reverse + `s₀ = single x` from `Rel_byte`).
-> 3. `bidir`/`decode_encode`/`roundtrip` (one-line from `decode_spec` + `encode_rel` + a
->    `(Suffix.empty n).prepend s = s` cast lemma), `productive_iff_consumesByte`, then the
->    repetition laws `decodeRepeat_spec`/`encodeRepeat_rel` (well-founded on `n`, mirroring the
->    old `s.length` proofs but over `Suffix`), and the converses (`encode_ne_none`/`encode_of_decode`/
->    `encode_injective_of_unambiguous`/`relFunctional`/`relUnambiguous`/`encodeRepeat_ne_none`).
+> **Done this session — most of `Sound.lean` is now proven.** Six **new substrate
+> lemmas** landed in `Codec/Codec.lean` (all `[propext, Quot.sound]`-only, `lake build
+Codec.Codec` clean, zero `sorry`): `relRepeat_cast` (length-cast transport of `relRepeat`),
+> `prepend_empty`/`prepend_empty_eq` (empty-remainder prepend reconstruction),
+> `prepend_id` (identity-suffix prepend = `s`), `splice_cast_commute` (cast commutes past a
+> `splice` prefix), and **`splice_splice_assoc`** (the three-way `splice` associativity —
+> the session's hard blocker, now proven pointwise). In `Codec/Sound.lean`, proven:
+> `encode_rel`, `decode_seq_mem`, `decode_spec` `iso`/`alt`/`empty`/`pure` (both directions)
+> and `seq` **forward**, `bidir`, `decode_encode`, `roundtrip`, `productive_iff_consumesByte`,
+> `relRepeat_unbounded_of_empty`, `not_productive_pure`, `encodeRepeat_rel`, `encode_ne_none`,
+> `encode_of_decode`, `encode_injective_of_unambiguous`, `encodeRepeat_ne_none`.
+> `#print axioms Codec.encode_rel` ⇒ `[propext, Quot.sound]` (zero `Classical.choice`).
+>
+> **Three `sorry`s remain (all the same cast-heavy reconstruction class):**
+>
+> 1. `decode_spec` `seq` **backward** — the `←` direction; the forward dir is already proven
+>    (uses `prepend_assoc` + a fresh `hcast` + `splice_cast_commute`). Backward needs
+>    `bdrop_prepend_splice` (prove it: `bdrop m (r.prepend (splice hm s₁ s₂)) = concat s₂ r.bytes`
+>    up to a length cast, by chaining `splice_splice_assoc` → `bdrop_splice`, both already in
+>    `Codec.lean`), then `prepend_eq_of_eq_splice` for the `s = (Suffix.drop m s).prepend s₁` step
+>    and `Suffix.trans` field-reconstruction for `r`.
+> 2. `decode_spec` `byte` — `Rel_byte` + `prepend_single_bdrop`, transported from `Bytes n`
+>    (with `n ≠ 0`) to `Bytes ((n−1)+1)`; the recurring `(Suffix.drop 1 s).remaining` vs `n − 1`
+>    transparency needs a `dsimp [Suffix.drop]` in the right position.
+> 3. `decodeRepeat_spec` (task 3.2, well-founded on `n`) — same re-parenthesization as
+>    `seq`-backward via `splice_splice_assoc` + `bdrop_prepend_splice`; mirror the old
+>    `s.length` proof but over `Suffix n`.
+>
 > 4. Task 3.3 `Combinators.lean` (over `Bytes n`; the `sepBy`/`chainl1`/`chainr1` triples take
 >    `relRepeat`/`decodeRepeat`/`encodeRepeat` at the `{n} → Bytes n` level).
 > 5. Task 4.1–4.3: delete the transfer tier (`DecodeArray`/`EncodeArray`/`DecodeByteArray`/
@@ -473,6 +488,16 @@ decodeArray d a.data i` _by composition_, re-materializing `a.data.toList` — s
 > (annotate `(⟨n,s⟩ : Sigma fun k => Bytes k)`); `(k+1)-k` does not reduce (unlike `(k+1)-1`) — use
 > `omega`/`Nat.sub_sub_self`/`Nat.add_sub_cancel_left`; `prepend_assoc` needs the `h` hypothesis.
 > See `Codec/Codec.lean` for the landed forms.
+>
+> **Second Lean lesson (`2026-10-16` changelog entry in the `lean` skill):** the length-indexed
+> carrier's remaining laws are all _splice-cast-commutation_ — `splice_splice_assoc` (three-way
+> re-parenthesization, closed only by explicit `splice_apply` + ordered `cast_fin_symm` rewrites,
+> **not** `simp`, which produces an un-reducible `cast (concat (cast (concat …)))`) ,
+> `splice_cast_commute` (`subst e; simp`-trivial), `prepend_empty`/`prepend_id` (`Bytes.ext` +
+> `Nat.sub_zero`/`Nat.sub_self` named `have`s). The recurring trap is `(Suffix.drop 1 s).remaining`
+> not reducing to `n − 1` — `dsimp [Suffix.drop]`/`unfold Suffix.id` _in position_ before the cast
+> unifies. And `encode_of_decode` closes via `hd x s s' hrels hrel' : ⟨n, s⟩ = ⟨n', s'⟩` + `.symm`
+> with `hrels` from `(bidir d x n s).2` — avoid `Sigma.mk.inj`/`HEq` fallout entirely.
 
 > **Documentation conventions (this session):** the README is the **full
 > architecture statement** — _about the project and the paper only_. It carries the

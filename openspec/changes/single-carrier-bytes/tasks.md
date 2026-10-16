@@ -3,20 +3,35 @@
 > **Session status (pause point):** tasks 1.1–1.3 (substrate), 2.1 (decode/
 > decodeRepeat/ConsumesByte), 2.2 (encode/encodeRepeat), and **2.3 (prefix-arithmetic
 > helpers)** are **done and compile** clean (`lake build Codec.Codec Codec.Decode
-Codec.Encode`, zero warnings), `[propext, Quot.sound]`-only. 2.3 landed `prepend_assoc`
+Codec.Encode`, zero warnings), `[propext, Quot.sound]`-only.
 >
-> - `prepend_single_bdrop` plus the substrate lemmas `Rel_cast`/`Rel_cast_symm`/
->   `bdrop_splice`/`prepend_eq_of_eq_splice` (all proven, zero `sorry`). **Task 3.1
->   (`Sound.lean`) is in progress**: the file is fully re-stated over the length-indexed
->   carrier and typechecks (`lake build Codec.Sound` — only `sorry` warnings); `encode_rel`,
->   `decode_seq_mem`, and `decode_spec`'s `iso`/`alt`/`empty` cases are proven; the rest
->   (`decode_spec` `seq`/`pure`/`byte`, `bidir`, `decode_encode`, `roundtrip`,
->   `productive_iff_consumesByte`, repetition + converses) are clean `sorry` markers.
->   `Codec/Combinators.lean`, `Codec/VarBinary.lean` and the transfer modules are still
->   the **old `List UInt8` substrate** and will not build against the new
->   `Codec/Codec`/`Decode`/`Encode` until re-derived — the tree is intentionally in
->   an atomic-change intermediate state. Key design decisions are recorded in the
->   task notes below and in `design.md`; the continuation plan is in `AGENTS.md`.
+> **Update (next session, task 3.1 in progress — most of `Sound.lean` is now proven):**
+> the single-carrier re-derivation is **~90% done on the `Sound` laws**. Landing this
+> session (all `lake build Codec.Codec` clean, zero `sorry`, zero `Classical.choice`):
+> six **new substrate lemmas** proved in `Codec/Codec.lean` — `relRepeat_cast` (length-
+> cast transport of `relRepeat`), `prepend_empty`/`prepend_empty_eq` (empty-remainder
+> prepend reconstruction), `prepend_id` (identity-suffix prepend = `s`), `splice_cast_commute`
+> (cast commutes past a `splice` prefix), and **`splice_splice_assoc`** (the three-way
+> `splice` associativity that unblocks the `seq`-backward / `decodeRepeat_spec`
+> re-parenthesization — this was the session's hard blocker). Plus in `Codec/Sound.lean`:
+> `encode_rel`, `decode_seq_mem`, `decode_spec` `iso`/`alt`/`empty`/`pure` (both directions)
+> and `seq` **forward**, `bidir`, `decode_encode`, `roundtrip`, `productive_iff_consumesByte`,
+> `relRepeat_unbounded_of_empty`, `not_productive_pure`, `encodeRepeat_rel`, `encode_ne_none`,
+> `encode_of_decode`, `encode_injective_of_unambiguous`, `encodeRepeat_ne_none` — all proven.
+> `#print axioms Codec.encode_rel` ⇒ `[propext, Quot.sound]` (no `Classical.choice`).
+>
+> **Remaining `sorry`s in `Sound.lean` (exactly three, all the same cast-heavy reconstruction class):**
+> `decode_spec` `seq` **backward** (line ~176) and `byte` (line ~236) finish task 3.1;
+> `decodeRepeat_spec` (line ~303) is task 3.2. Each is now purely mechanical given
+> `splice_splice_assoc`/`splice_cast_commute`/`prepend_id`/`prepend_single_bdrop` + the
+> pointwise `Bytes.ext`→`splice_apply`→`cast_fin_symm`→`cast_bytes_val*` recipe that
+> already closes `prepend_single_bdrop`/`prepend_empty`/`splice_splice_assoc`. The one
+> missing helper still wanted for `seq`-backward/`decodeRepeat_spec` is `bdrop_prepend_splice`
+> (`bdrop m (r.prepend (splice hm s₁ s₂)) = concat s₂ r.bytes` up to a length cast) — prove
+> it by chaining `splice_splice_assoc` then `bdrop_splice` (both already in `Codec.lean`).
+> `Codec/Combinators.lean`, `Codec/VarBinary.lean` and the transfer modules are still the
+> **old `List UInt8` substrate** and will not build until re-derived — the tree stays in
+> the atomic-change intermediate state until task 4.1 deletes them.
 
 > Replace the `Bytes := List UInt8` / `ByteArray` / `Array` / `Buffer` two-tier
 > representation with a single length-indexed `Bytes n := Fin n → UInt8`, then
