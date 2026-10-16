@@ -220,10 +220,10 @@ unsafe def benchRoundtripVarint (reps : Nat) : IO Unit := do
   let (encoded, dt1) ← timeBatch reps fun _ => encodeVarint 12345678
   let (decoded, dt2) ← timeBatch reps fun _ => decodeVarint encoded 0
   match decoded with
-  | [(n, j)] =>
-      if n != 12345678 || j != (encoded.data.toList.length) then
+  | some n =>
+      if n != 12345678 then
         throw (IO.userError "roundtrip varint: mismatch")
-  | _ => throw (IO.userError "roundtrip varint: expected one result")
+  | none => throw (IO.userError "roundtrip varint: expected a result")
   IO.println s!"encodeVarint 12345678: {dt1 / reps} ns/op"
   IO.println s!"decodeVarint 12345678: {dt2 / reps} ns/op"
 
@@ -289,6 +289,61 @@ unsafe def benchEncodeAppend (reps : Nat) : IO Unit := do
   if r.data.toList != [1] then throw (IO.userError "encodeAppend byte: expected [1]")
   IO.println s!"encodeAppend byte: {dt / reps} ns/op"
 
+/-! ## The slice-returning + packed-accumulator tier (carrier swap, not compiler)
+
+`Codec.DecodeByteArraySlice` (`decodeByteArraySlice`/`decodeFullByteArraySlice`) and
+`Codec.EncodeByteArraySlice` (`encodeByteArrayBytes`) are the `USize`-indexed,
+slice-returning surfaces that *stop returning a `List` at the hot edge* — the fix the
+`slice-returning-run-model` change ships (no compiler backend, no new `@[extern]`).
+These lanes measure the packed suffix (one `ByteArray.extract` = a `memcpy`-class copy)
+against the `List`-materializing `decodeFullByteArray` baseline, and the packed
+`ByteArray.push` accumulator against the O(n²) `List.append` `encodeRepeat`. -/
+
+/-- The raw `ByteArray.extract` suffix copy: the `memcpy`-class throughput *floor*
+the slice full-consumption is compared against (the same packed copy
+`decodeFullByteArraySlice` performs, sans the `USize`/`Option` wrapper). -/
+unsafe def benchRawExtract (n : Nat) (reps : Nat) : IO Unit := do
+  let a : ByteArray := byteArrayBytesOf n
+  let (r, dt) ← timeBatch reps fun _ => a.extract 0 a.size
+  if r.data.toList.length != n then
+    throw (IO.userError s!"rawExtract: expected {n} bytes, got {r.data.toList.length}")
+  IO.println s!"rawExtract (memcpy floor) byte [{n}]: {dt / reps} ns/op"
+
+/-- The slice-returning single-byte decode: `decodeByteArraySlice Codec.byte a 0` is
+one indexed read + index increment (no `List` cell). -/
+unsafe def benchDecodeByteArraySlice (n : Nat) (reps : Nat) : IO Unit := do
+  let a : ByteArray := byteArrayBytesOf n
+  let (r, dt) ← timeBatch reps fun _ => decodeByteArraySlice Codec.byte a 0
+  match r with
+  | some (x, k) =>
+      if x != (1 : UInt8) || k.toNat != 1 then
+        throw (IO.userError s!"decodeByteArraySlice byte: expected (1,1), got ({x},{k.toNat})")
+  | none => throw (IO.userError "decodeByteArraySlice byte: expected some")
+  IO.println s!"decodeByteArraySlice byte [{n}]: {dt / reps} ns/op"
+
+/-- The slice-returning full-consumption decode: `decodeFullByteArraySlice a 0` returns
+the packed suffix in one `ByteArray.extract` (never an `Option (List α × Nat)`). This is
+the hot edge the `List`-materializing `decodeFullByteArray` could not reach. -/
+unsafe def benchDecodeFullByteArraySlice (n : Nat) (reps : Nat) : IO Unit := do
+  let a : ByteArray := byteArrayBytesOf n
+  let (r, dt) ← timeBatch reps fun _ => decodeFullByteArraySlice a 0
+  match r with
+  | some (b, k) =>
+      if b.data.toList.length != n || k.toNat != n then
+        throw (IO.userError s!"decodeFullByteArraySlice byte: expected ({n},{n}), got ({b.data.toList.length},{k.toNat})")
+  | none => throw (IO.userError "decodeFullByteArraySlice byte: expected some")
+  IO.println s!"decodeFullByteArraySlice byte [{n}]: {dt / reps} ns/op"
+
+/-- The committed packed encode accumulator (`Codec.encodeByteArrayBytes`, the
+`ByteArray.push` fold — no custom `@[extern]` of its own). Same amortized-O(n) shape as
+the extern shim, but this is the *committed* surface. -/
+unsafe def benchEncodeByteArrayBytesCommitted (n : Nat) (reps : Nat) : IO Unit := do
+  let xs : List UInt8 := bytesOf n
+  let (r, dt) ← timeBatch reps fun _ => Codec.encodeByteArrayBytes xs
+  if r.data.toList.length != n then
+    throw (IO.userError s!"encodeByteArrayBytes (committed): expected {n} bytes, got {r.data.toList.length}")
+  IO.println s!"encodeByteArrayBytes (committed) byte [{n}]: {dt / reps} ns/op"
+
 end Codec.Bench
 
 open Codec.Bench in
@@ -331,4 +386,12 @@ unsafe def main (args : List String) : IO Unit := do
     Codec.Bench.benchEncodeByteArrayBytes size reps
   Codec.Bench.benchDecodeFullByteArrayByte m reps
   Codec.Bench.benchEncodeAppend reps
+  -- Slice-returning + packed-accumulator tier (carrier swap, not compiler): the packed
+  -- suffix (one `ByteArray.extract` = memcpy) and the committed push accumulator vs the
+  -- `List` baselines and the raw `memcpy` floor.
+  for size in [n / 4, n / 2, n] do
+    Codec.Bench.benchRawExtract size reps
+    Codec.Bench.benchDecodeByteArraySlice size reps
+    Codec.Bench.benchDecodeFullByteArraySlice size reps
+    Codec.Bench.benchEncodeByteArrayBytesCommitted size reps
   IO.println "done"

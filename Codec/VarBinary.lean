@@ -258,8 +258,9 @@ The motivating hot path: the same LEB128 read/write over the packed `ByteArray`
 carrier (`a.data[i]` / `ByteArray.mk`), tied to the `varint` spec above through the
 carrier equality. `encodeVarint` builds the packed bytes in one `mk`; `decodeVarint a i`
 reads one canonical varint starting at absolute index `i` and returns the (unique)
-`(value, i + encoded-length)` pair — the `List` shape for uniformity with
-`decodeByteArray`, but the varint is unambiguous so there is at most one result. -/
+`value` — an `Option`, because the varint is unambiguous: the single result is
+structural (at most one), not a prose claim over a list. The consumed length is
+recoverable as `(varintBytes n).length`. -/
 
 /-- The packed LEB128 encode: `n` as a single `ByteArray` (`ByteArray.mk` over the
 `varintBytes` list-encode, one materialization — no per-byte `push`). -/
@@ -271,39 +272,23 @@ opaque `ByteArray.toList`). -/
 theorem encodeVarint_eq (n : Nat) : (encodeVarint n).data.toList = varintBytes n := rfl
 
 /-- The packed LEB128 decode: read one canonical varint starting at index `i` of the
-packed buffer, returning the `(value, i + consumed)` pair (or `[]` on an empty/
-overlong prefix). Composed over the `varint` spec's `varintUnapply` on the dropped
-suffix. -/
-def decodeVarint (a : ByteArray) (i : Nat) : List (Nat × Nat) :=
-  match varintUnapply (a.data.toList.drop i) with
-  | some n => [(n, i + (varintBytes n).length)]
-  | none => []
+packed buffer, returning the `value` (or `none` on an empty/overlong prefix). Composed
+over the `varint` spec's `varintUnapply` on the dropped suffix. The `Option` carrier
+makes the unambiguous single result structural. -/
+def decodeVarint (a : ByteArray) (i : Nat) : Option Nat :=
+  varintUnapply (a.data.toList.drop i)
 
-/-- The membership refinement of the carrier: `(n, j) ∈ decodeVarint a i` iff the
-dropped suffix is the canonical `varintBytes n` (so `varintUnapply (drop i) = some n`)
-and `j = i + (varintBytes n).length` — the unambiguous single result. -/
-theorem decodeVarint_eq (a : ByteArray) (i : Nat) (n : Nat) (j : Nat) :
-    (n, j) ∈ decodeVarint a i ↔
-      varintUnapply (a.data.toList.drop i) = some n ∧ j = i + (varintBytes n).length := by
-  rw [decodeVarint]
-  cases h : varintUnapply (a.data.toList.drop i) with
-  | none => simp
-  | some m =>
-      simp
-      constructor
-      · intro hm
-        rcases hm with ⟨hnm, hj⟩
-        subst n
-        exact ⟨rfl, hj⟩
-      · intro hm
-        rcases hm with ⟨hmn, hj⟩
-        rw [hmn]
-        exact ⟨rfl, hj⟩
+/-- The carrier refinement: `decodeVarint a i = some n` iff the dropped suffix is the
+canonical `varintBytes n` (i.e. `varintUnapply (drop i) = some n`). The consumed length
+is then `(varintBytes n).length`. -/
+theorem decodeVarint_eq (a : ByteArray) (i : Nat) (n : Nat) :
+    decodeVarint a i = some n ↔ varintUnapply (a.data.toList.drop i) = some n := by
+  rfl
 
 /-- The packed LEB128 roundtrip: `decodeVarint (encodeVarint n) 0` yields the
-original `n` at the canonical consumed length. -/
+original `n` (optionally), at the canonical consumed length `(varintBytes n).length`. -/
 theorem roundtripVarint (n : Nat) :
-    decodeVarint (encodeVarint n) 0 = [(n, (varintBytes n).length)] := by
+    decodeVarint (encodeVarint n) 0 = some n := by
   rw [decodeVarint]
   rw [encodeVarint_eq]
   simp

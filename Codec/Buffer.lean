@@ -95,7 +95,8 @@ theorem decodeBuffer_eq {α : Type} (d : Codec α) (b : Buffer) (x : α) (r' : B
     exact ⟨(x, r), hpr, rfl⟩
 
 /-- `encodeBuffer` agrees with `encode` through the barrier: it packs exactly the
-`Bytes` encodings. -/
+`Bytes` encodings. (The fresh name `b` sits on the left of `=`, matching the
+`decodeBuffer_eq`/`Buffer.ofBytes` convention.) -/
 theorem encodeBuffer_eq {α : Type} (d : Codec α) (x : α) (b : Buffer) :
     encodeBuffer d x = some b ↔ ∃ l, encode d x = some l ∧ b = Buffer.ofBytes l := by
   rw [encodeBuffer]

@@ -66,7 +66,14 @@ codec's laws `[propext, Quot.sound]`-only. The extern symbol `codec_byte_array_s
 is a hand-written, bounds-checked `memcpy`-style loop (the *executed* body; the
 Lean body is proof-only and never code-generated), specializing the suffix case
 that the general `copySlice`'s three `extract`+concats would otherwise pay.
--/
+
+**Trust-seam domain**: the contract is over *scalar* (`USize`-representable)
+indices `i`. For a bignum `i` (not `lean_unbox`-able), the C returns the *empty*
+suffix; the Lean body returns `List.drop i`, which for any `i` exceeding `a.size`
+is also `[]` — the two coincide (any bignum exceeds any real array size), but this
+coincidence is *not* enforced by a theorem over the bignum domain. The structural
+fix (restrict `i : USize` at the seam) is the planned `slice-returning-run-model`
+entry point. -/
 @[extern "codec_byte_array_slice"]
 def byteSlice (a : ByteArray) (i : Nat) : ByteArray :=
   ByteArray.mk ((a.data.toList.drop i).toArray)
@@ -81,7 +88,12 @@ theorem byteSlice_size (a : ByteArray) (i : Nat) :
 named trust contract the hand-written C loop (`memcpy` of `a[i .. size)`) must
 preserve — it is the *Lean body* redex (`rfl`, `List.toArray`/`Array.toList` are
 mutual inverses over the reducible `Array`), so it is `[propext, Quot.sound]`-only
-(no `Classical.choice` from the stdlib's `Array.toList_extract`). -/
+(no `Classical.choice` from the stdlib's `Array.toList_extract`).
+
+As with `byteSlice`, the contract is enforced over *scalar* indices `i`; a bignum
+`i` yields `[]` in both the Lean body (`List.drop` saturates) and the C (the
+non-scalar branch returns the empty sarray), so they coincide without a dedicated
+theorem. -/
 theorem byteSlice_data_toList (a : ByteArray) (i : Nat) :
     (byteSlice a i).data.toList = a.data.toList.drop i := by
   rfl
