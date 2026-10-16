@@ -158,6 +158,25 @@ theorem Suffix.eq_empty_of_remaining_zero {n : Nat} (t : Suffix n) (h : t.remain
       cases hb
       rfl
 
+/-- Extensionality for `Suffix n`: two suffixes are equal when their `remaining`
+lengths agree (up to the transport `hrem`) and their `bytes` fields agree under
+that same transport. The `hle` field is proof-irrelevant. Used by `decode_spec`'s
+`seq` backward third goal to close `r = Suffix.trans t₁ t₂` from the
+`bdrop_drop_eq_bytes` field equality. `[propext, Quot.sound]`-only. -/
+theorem Suffix.ext {n : Nat} {t₁ t₂ : Suffix n}
+    (hrem : t₁.remaining = t₂.remaining)
+    (hbytes : cast (congrArg Bytes hrem) t₁.bytes = t₂.bytes) : t₁ = t₂ := by
+  cases t₁ with
+  | mk rem₁ hle₁ bytes₁ =>
+      cases t₂ with
+      | mk rem₂ hle₂ bytes₂ =>
+          simp only at hrem
+          subst rem₁
+          have hbytes' : bytes₁ = bytes₂ := by
+            simpa using hbytes
+          subst bytes₁
+          rfl
+
 /-- `Bytes n` equality is pointwise on `Fin n`, decidable without `Classical.choice`. -/
 theorem Bytes.ext {n : Nat} {s₁ s₂ : Bytes n} :
     (∀ i : Fin n, s₁ i = s₂ i) → s₁ = s₂ := by
@@ -443,6 +462,13 @@ theorem sub_sub_add (n m₁ m₂ : Nat) (hm₁ : m₁ ≤ n) (hm₂ : m₂ ≤ m
     (n - m₁) + (m₁ - m₂) = n - m₂ := by
   omega
 
+/-- The `Nat`-sub arithmetic for the `decodeRepeat_spec` cons-case reassociation:
+`(n - m₂) - (n - m₁) = m₁ - m₂` under `m₂ ≤ m₁ ≤ n`. Named so the suffix length cast
+of the `relRepeat_cons` witness is a clean constant. `[propext, Quot.sound]`-only. -/
+theorem sub_sub_sub (n m₁ m₂ : Nat) (hm₁ : m₁ ≤ n) (hm₂ : m₂ ≤ m₁) :
+    (n - m₂) - (n - m₁) = m₁ - m₂ := by
+  omega
+
 /-- Casting a whole `splice` commutes past its prefix: `cast (congrArg Bytes e) (splice hm s₁ s₂)`
 (for `e : n = n'`) equals `splice (m ≤ n') s₁ (cast (n' - m = n - m) s₂)` — the prefix `s₁` is
 unchanged and the suffix `s₂` is length-transported along `n' - m = n - m`. This is the
@@ -456,6 +482,15 @@ theorem splice_cast_commute {n n' m : Nat} (e : n = n') (hm : m ≤ n)
   subst e
   simp
 
+/-- The length cast of `splice_splice_assoc`: under `k ≤ m ≤ n`,
+`(m - k) + (n - m) = n - k`. Named so the cast argument of
+`splice_splice_assoc` is a clean constant (not an inline `omega` proof) that
+`rw`/`simp` can match when closing the `decode_spec` `seq` backward / `decodeRepeat_spec`
+re-parenthesization. `[propext, Quot.sound]`-only. -/
+theorem splice_splice_len {n m k : Nat} (hm : m ≤ n) (hk : k ≤ m) :
+    (m - k) + (n - m) = n - k := by
+  omega
+
 /-- Three-way associativity of `splice`: `splice hm (splice hk s₁ s₂) s₃` re-parenthesizes
 into `splice (Nat.le_trans hk hm) s₁ (cast … (splice (Nat.sub_le_sub_right hm k) s₂ s₃))` —
 the split at `m` then at `k ≤ m` becomes the split at `k` then at `m - k`. This is the
@@ -467,7 +502,7 @@ theorem splice_splice_assoc {n m k : Nat} (hm : m ≤ n) (hk : k ≤ m)
     (s₁ : Bytes k) (s₂ : Bytes (m - k)) (s₃ : Bytes (n - m)) :
     splice hm (splice hk s₁ s₂) s₃ =
       splice (Nat.le_trans hk hm)
-        s₁ (cast (congrArg Bytes (by omega : (m - k) + (n - m) = n - k))
+        s₁ (cast (congrArg Bytes (splice_splice_len hm hk))
           (concat s₂ s₃)) := by
   apply Bytes.ext
   intro i
@@ -490,13 +525,13 @@ theorem splice_splice_assoc {n m k : Nat} (hm : m ≤ n) (hk : k ≤ m)
           simp [h1, h2]
           rw [splice_apply]
           rw [cast_fin_symm (e := splice_add hk) (i := ⟨i.val, h2⟩)]
-          rw [cast_bytes_val' (e := show (m - k) + (n - m) = n - k by omega)]
+          rw [cast_bytes_val' (e := splice_splice_len hm hk)]
           unfold concat
           simp [h1, h2']
         · have hgenm : m ≤ i.val := Nat.le_of_not_gt h2
           have hnot : ¬ i.val - k < m - k := by omega
           simp [h1, h2]
-          rw [cast_bytes_val' (e := show (m - k) + (n - m) = n - k by omega)]
+          rw [cast_bytes_val' (e := splice_splice_len hm hk)]
           dsimp
           simp [hnot]
           congr 1
@@ -576,6 +611,222 @@ theorem prepend_eq_of_eq_splice {n m : Nat} (s : Bytes n) (hm : m ≤ n)
     · omega
   · omega
 
+/-- Reconstruction for `decode_spec`'s `seq` backward direction: given a
+`r.prepend (splice hm s₁ s₂)` reassembly (a `r`-suffix over a `splice` of `s₁` then
+`s₂`), dropping the first `m` bytes (the `s₁` part) and re-prepending `s₁` recovers
+the whole: `r.prepend (splice hm s₁ s₂) = (Suffix.drop m (r.prepend (splice hm s₁ s₂))).prepend
+(cast … s₁)`. This is the `s₁`-prefix factorization the backward case of `decode_spec`
+`seq` needs to obtain `(x.1, Suffix.drop m s) ∈ decode d₁ s` from `Rel d₁ x.1 s₁`;
+it chains `splice_splice_assoc` (to re-parenthesize into `s₁ ++ (s₂ ++ r.bytes)`) with
+`prepend_eq_of_eq_splice` (to reconstruct from the drop). `[propext, Quot.sound]`-only. -/
+theorem prepend_drop_of_prepend_splice {n : Nat} (r : Suffix n) (m : Nat)
+    (hm : m ≤ n - r.remaining) (s₁ : Bytes m) (s₂ : Bytes ((n - r.remaining) - m)) :
+    r.prepend (splice hm s₁ s₂) =
+      (Suffix.drop m (r.prepend (splice hm s₁ s₂))).prepend
+        (cast (congrArg Bytes (Nat.sub_sub_self (Nat.le_trans hm (Nat.sub_le n r.remaining))).symm) s₁) := by
+  have hrle : r.remaining ≤ n := r.hle
+  unfold Suffix.prepend
+  exact prepend_eq_of_eq_splice (splice (Nat.sub_le n r.remaining) (splice hm s₁ s₂) (cast (congrArg Bytes (Nat.sub_sub_self hrle).symm) r.bytes)) (Nat.le_trans hm (Nat.sub_le n r.remaining)) s₁ _ (by rw [splice_splice_assoc (Nat.sub_le n r.remaining) hm s₁ s₂ (cast (congrArg Bytes (Nat.sub_sub_self hrle).symm) r.bytes)])
+
+/-- The length cast of `bdrop_prepend_splice`: under `rem ≤ n` and `m ≤ n - rem`,
+`(n - rem) - m + rem = n - m`. Named so the cast argument of
+`bdrop_prepend_splice` is a clean constant (not an inline `omega` proof) that
+`rw`/`simp` can match when closing the `decode_spec` `seq` backward / `decodeRepeat_spec`
+re-parenthesization. `[propext, Quot.sound]`-only. -/
+theorem bdrop_prepend_splice_len {n rem m : Nat} (hrem : rem ≤ n) (hm : m ≤ n - rem) :
+    (n - rem) - m + rem = n - m := by
+  omega
+
+/-- Dropping the first `m` bytes of `r.prepend (splice hm s₁ s₂)` (a `r`-suffixed
+re-assembly whose consumed region is itself a `splice` of `s₁` then `s₂`) recovers
+`s₂ ++ r.bytes` — the ``concat`` of the inner suffix `s₂` with the outer suffix
+`r.bytes`, up to the length cast `(n - r.remaining) - m + r.remaining = n - m`. This
+is the `decode_spec` `seq`-backward / `decodeRepeat_spec` helper: it re-parenthesizes
+a `r.prepend (splice hm s₁ s₂)` into `s₁` followed by `s₂ ++ r.bytes`, giving the
+first-step `s₁` prefix and the recursive `s₂ ++ r.bytes` remainder. `[propext, Quot.sound]`-only. -/
+theorem bdrop_prepend_splice {n : Nat} (r : Suffix n) (m : Nat)
+    (hm : m ≤ n - r.remaining) (s₁ : Bytes m) (s₂ : Bytes ((n - r.remaining) - m)) :
+    bdrop m (r.prepend (splice hm s₁ s₂)) =
+      cast (congrArg Bytes (bdrop_prepend_splice_len r.hle hm))
+        (concat s₂ r.bytes) := by
+  have hrle : r.remaining ≤ n := r.hle
+  apply Bytes.ext
+  intro i
+  unfold bdrop
+  rw [prepend_apply]
+  unfold concat
+  rw [cast_fin_symm]
+  · dsimp
+    rw [cast_bytes_val' (e := bdrop_prepend_splice_len hrle hm)]
+    unfold concat at *
+    by_cases h1 : i.val < (n - r.remaining) - m
+    · have hlt : i.val + m < n - r.remaining := by omega
+      simp [h1, hlt]
+      rw [splice_apply]
+      unfold concat
+      rw [cast_fin_symm]
+      · dsimp
+        have hnot : ¬ i.val + m < m := by omega
+        simp [hnot]
+      · omega
+    · have hnot_outer : ¬ i.val + m < n - r.remaining := by omega
+      simp [h1, hnot_outer]
+      rw [cast_bytes_val_symm (e := Nat.sub_sub_self hrle)]
+      congr 1
+      apply Fin.ext
+      change (↑i + m - (n - r.remaining)) = (↑i - (n - r.remaining - m))
+      omega
+  · omega
+
+/-- The suffix length cast of `bdrop_prepend_splice_eq_splice`: under `rem ≤ n` and
+`m ≤ n - rem`, `n - m - ((n - rem) - m) = rem`. Named so the suffix cast of
+`bdrop_prepend_splice_eq_splice` is a clean constant. `[propext, Quot.sound]`-only. -/
+theorem bdrop_prepend_splice_snd_len {n rem m : Nat} (hrem : rem ≤ n) (hm : m ≤ n - rem) :
+    n - m - ((n - rem) - m) = rem := by
+  omega
+
+/-- The `concat`-to-`splice` re-parenthesization of `bdrop_prepend_splice`: casting
+`concat s₂ r.bytes` along `(n - rem) - m + rem = n - m` equals the `splice` of `s₂`
+with the length-transported `r.bytes` suffix. This is the `concat_eq_splice` fact
+specialized to the `bdrop_prepend_splice` length, with both casts named so `rw`/`simp`
+can match them when closing the `decode_spec` `seq` backward / `decodeRepeat_spec`
+second-step reconstruction. `[propext, Quot.sound]`-only. -/
+theorem cast_concat_eq_splice {n rem m : Nat} (hrem : rem ≤ n) (hm : m ≤ n - rem)
+    (s₂ : Bytes ((n - rem) - m)) (rbytes : Bytes rem) :
+    cast (congrArg Bytes (bdrop_prepend_splice_len hrem hm)) (concat s₂ rbytes) =
+      splice (Nat.sub_le_sub_right (Nat.sub_le n rem) m) s₂
+        (cast (congrArg Bytes (bdrop_prepend_splice_snd_len hrem hm).symm) rbytes) := by
+  apply Bytes.ext
+  intro i
+  rw [cast_bytes_val' (e := bdrop_prepend_splice_len hrem hm)]
+  rw [splice_apply]
+  unfold concat
+  rw [cast_fin_symm]
+  · dsimp
+    by_cases hlt : i.val < (n - rem) - m
+    · simp [hlt]
+    · have hge : (n - rem) - m ≤ i.val := Nat.le_of_not_gt hlt
+      simp [hlt]
+      rw [cast_bytes_val_symm (e := bdrop_prepend_splice_snd_len hrem hm)]
+  · omega
+
+/-- Dropping the first `m` bytes of `r.prepend (splice hm s₁ s₂)` recovers the inner
+suffix `s₂` followed by the outer suffix `r.bytes`, re-parenthesized as a `splice` (the
+`concat_eq_splice` reading of `bdrop_prepend_splice`):
+`bdrop m (r.prepend (splice hm s₁ s₂)) = splice (… : (n - r.remaining) - m ≤ n - m) s₂
+(cast … r.bytes)`. This is the second-step reconstruction the `decode_spec` `seq`
+backward / `decodeRepeat_spec` need to obtain `(x.2, Suffix.drop L (bdrop m s)) ∈
+decode d₂ (bdrop m s)` from `Rel d₂ x.2 s₂`. `[propext, Quot.sound]`-only. -/
+theorem bdrop_prepend_splice_eq_splice {n : Nat} (r : Suffix n) (m : Nat)
+    (hm : m ≤ n - r.remaining) (s₁ : Bytes m) (s₂ : Bytes ((n - r.remaining) - m)) :
+    bdrop m (r.prepend (splice hm s₁ s₂)) =
+      splice (Nat.sub_le_sub_right (Nat.sub_le n r.remaining) m) s₂
+        (cast (congrArg Bytes (bdrop_prepend_splice_snd_len r.hle hm).symm) r.bytes) := by
+  rw [bdrop_prepend_splice r m hm s₁ s₂]
+  exact cast_concat_eq_splice r.hle hm s₂ r.bytes
+
+/-- Casting `concat s₁ s₂` (length `(n - t) + (t - r)`) along `sub_sub_add n t r`
+equals the `splice` of `s₁` with the length-transported `s₂` suffix (length
+`t - r = (n - r) - (n - t)` via `sub_sub_sub`). This is the `relRepeat_cons`
+witness re-parenthesization for `decodeRepeat_spec`'s cons case: it turns the
+`concat s₁ s₂` decoded prefix into the first-step `s₁` and recursive `s₂` split. `[propext, Quot.sound]`-only. -/
+theorem cast_concat_splice_sub {n t r : Nat} (ht : t ≤ n) (hr : r ≤ t)
+    (s₁ : Bytes (n - t)) (s₂ : Bytes (t - r)) :
+    cast (congrArg Bytes (sub_sub_add n t r ht hr)) (concat s₁ s₂) =
+      splice (Nat.sub_le_sub_left hr n) s₁
+        (cast (congrArg Bytes (sub_sub_sub n t r ht hr).symm) s₂) := by
+  apply Bytes.ext
+  intro i
+  rw [cast_bytes_val' (e := sub_sub_add n t r ht hr)]
+  rw [splice_apply]
+  unfold concat
+  rw [cast_fin_symm]
+  · dsimp
+    by_cases h1 : i.val < n - t
+    · simp [h1]
+    · have hge : n - t ≤ i.val := Nat.le_of_not_gt h1
+      simp [h1]
+      rw [cast_bytes_val' (e := (sub_sub_sub n t r ht hr).symm)]
+  · omega
+
+/-- Dropping the whole consumed prefix `n - r.remaining` of `r.prepend s₀` recovers
+`r.bytes` (transported across `n - (n - r.remaining) = r.remaining`). This is the
+`bdrop`-of-`prepend` reconstruction (the `s₂ ++ r.bytes` tail read), used by
+`bdrop_drop_eq_bytes` to close the `decode_spec` `seq` backward third goal. `[propext, Quot.sound]`-only. -/
+theorem bdrop_prepend {n : Nat} (r : Suffix n) (s₀ : Bytes (n - r.remaining)) :
+    bdrop (n - r.remaining) (r.prepend s₀) =
+      cast (congrArg Bytes (Nat.sub_sub_self r.hle).symm) r.bytes := by
+  apply Bytes.ext
+  intro i
+  unfold bdrop
+  rw [prepend_apply]
+  unfold concat
+  rw [cast_fin_symm]
+  · dsimp
+    have hnot : ¬ ↑i + (n - r.remaining) < n - r.remaining := by omega
+    simp [hnot]
+  · omega
+
+/-- The inverse of `bdrop_prepend`: dropping the whole consumed prefix
+`n - r.remaining` of `r.prepend s₀` recovers the suffix `r` itself (up to the
+`Suffix.ext` re-indexing). Used by `decode_spec`'s `byte` backward case to close
+`r = Suffix.drop 1 s` from `s = r.prepend s₀`. `[propext, Quot.sound]`-only. -/
+theorem drop_prepend {n : Nat} (r : Suffix n) (s₀ : Bytes (n - r.remaining)) :
+    Suffix.drop (n - r.remaining) (r.prepend s₀) = r := by
+  refine Suffix.ext (t₁ := Suffix.drop (n - r.remaining) (r.prepend s₀)) (t₂ := r) ?_ ?_
+  · dsimp [Suffix.drop]
+    exact Nat.sub_sub_self r.hle
+  · dsimp [Suffix.drop]
+    rw [bdrop_prepend r s₀]
+    change cast (congrArg Bytes (Nat.sub_sub_self r.hle)) (cast (congrArg Bytes (Nat.sub_sub_self r.hle).symm) r.bytes) = r.bytes
+    simp
+
+/-- Dropping zero bytes is the identity on byte strings (`bdrop 0 s = s`). `[propext, Quot.sound]`-only. -/
+theorem bdrop_zero {n : Nat} (s : Bytes n) : bdrop 0 s = s := by
+  apply Bytes.ext
+  intro i
+  dsimp [bdrop]
+
+/-- A suffix with all `n` bytes remaining is the identity suffix (`Suffix.drop 0 s =
+Suffix.id n s`). Used by `decodeRepeat_spec`'s nil case to close `r = Suffix.id n s`
+from `n - r.remaining = 0`. `[propext, Quot.sound]`-only. -/
+theorem drop_zero_eq_id {n : Nat} (s : Bytes n) : Suffix.drop 0 s = Suffix.id n s := by
+  refine Suffix.ext (t₁ := Suffix.drop 0 s) (t₂ := Suffix.id n s) ?_ ?_
+  · dsimp [Suffix.drop, Suffix.id]
+  · dsimp [Suffix.drop, Suffix.id]
+    rw [bdrop_zero s]
+    change cast (congrArg Bytes (Nat.sub_zero n)) s = s
+    simp
+
+/-- Dropping the inner suffix `s₂` (of length `(n - r.remaining) - m`) and then the
+outer consumed prefix `m` of `r.prepend (splice hm s₁ s₂)` recovers `r.bytes`,
+transported across `n - m - ((n - r.remaining) - m) = r.remaining`. This is the
+`t₂.bytes = r.bytes` field equality the `decode_spec` `seq` backward third goal
+(`r = Suffix.trans t₁ t₂`) needs. `[propext, Quot.sound]`-only. -/
+theorem bdrop_drop_eq_bytes {n : Nat} (r : Suffix n) (m : Nat)
+    (hm : m ≤ n - r.remaining) (s₁ : Bytes m) (s₂ : Bytes ((n - r.remaining) - m)) :
+    bdrop ((n - r.remaining) - m) (bdrop m (r.prepend (splice hm s₁ s₂))) =
+      cast (congrArg Bytes (bdrop_prepend_splice_snd_len r.hle hm).symm) r.bytes := by
+  have hrle : r.remaining ≤ n := r.hle
+  apply Bytes.ext
+  intro i
+  unfold bdrop
+  rw [prepend_apply]
+  unfold concat
+  rw [cast_fin_symm]
+  · dsimp
+    have hsum : m + ((n - r.remaining) - m) = n - r.remaining := by omega
+    have hnot : ¬ (↑i + ((n - r.remaining) - m) + m) < n - r.remaining := by omega
+    simp [hnot]
+    rw [cast_bytes_val_symm (e := Nat.sub_sub_self hrle)]
+    dsimp
+    rw [cast_bytes_val' (e := (bdrop_prepend_splice_snd_len hrle hm).symm)]
+    congr 1
+    apply Fin.ext
+    dsimp
+    omega
+  · omega
+
 /-- Associativity of `Suffix.prepend` over two successive suffixes: prepending
 `s₁` then `s₂` to `t₂.bytes` (and threading the `≤` witnesses to a suffix of `n`)
 is the same as prepending the concatenation `s₁ ++ s₂` to `t₁`, provided the
@@ -615,8 +866,8 @@ theorem prepend_assoc {n : Nat} (t₁ : Suffix n) (t₂ : Suffix t₁.remaining)
           rw [cast_fin_symm]
           · dsimp
             by_cases hlt2 : i.val - (n - t₁.remaining) < t₁.remaining - t₂.remaining
-            · have hlt2a : i.val < (t₁.remaining - t₂.remaining) + (n - t₁.remaining) :=
-                (Nat.sub_lt_iff_lt_add (Nat.le_of_not_gt hlt)).1 hlt2
+            · have hlt2a : i.val < (t₁.remaining - t₂.remaining) + (n - t₁.remaining) := by
+                omega
               have hlt2' : i.val < n - t₂.remaining := by
                 rw [Nat.add_comm] at hlt2a
                 rw [sub_sub_add n t₁.remaining t₂.remaining t₁.hle t₂.hle] at hlt2a
@@ -665,6 +916,57 @@ theorem prepend_single_bdrop {k : Nat} (s : Bytes (k + 1)) :
     · have hge : 1 ≤ i.val := Nat.le_of_not_gt h
       simp [h, bdrop]
       exact congrArg s (Fin.ext (by dsimp; omega))
+  · omega
+
+/-- `byte` relates a single byte `x` to any length-`1` byte string obtained by
+length-transporting `single x`. This is the `Rel_byte` witness of `decode_spec`'s
+`byte` forward case (the decoder's `(s ⟨0, ·⟩, Suffix.drop 1 s)` result, whose
+remainder length `n - (n-1)` is `1`). `[propext, Quot.sound]`-only. -/
+theorem rel_byte_cast {n : Nat} (h : n = 1) (x : UInt8) :
+    Rel Codec.byte x (cast (congrArg Bytes h.symm) (single x)) := by
+  rw [Rel_byte]
+  refine ⟨h, ?_⟩
+  subst h
+  rfl
+
+/-- Reversing `byte`'s `Rel` transport: if a length-`n` byte string transports (along
+`h : n = 1`) to `single x`, then the string itself is the length-transported `single x`.
+This is the `decode_spec` `byte` backward case's `s₀ = single x` extraction. `[propext, Quot.sound]`-only. -/
+theorem cast_bytes_eq_single {n : Nat} (h : n = 1) (s : Bytes n) (x : UInt8)
+    (hs : h ▸ s = single x) : s = cast (congrArg Bytes h.symm) (single x) := by
+  subst h
+  simpa using hs
+
+/-- The `n ≠ 0` spelling of `prepend_single_bdrop`: dropping the first byte of a
+non-empty `s : Bytes n` and prepending the recovered single byte gives back `s`,
+with the length cast `n - (n - 1) = 1` named via `Nat.sub_sub_self`. This is the
+reconstruction `decode_spec`'s `byte` forward case needs. `[propext, Quot.sound]`-only. -/
+theorem prepend_drop_single {n : Nat} (hn : n ≠ 0) (s : Bytes n) :
+    (Suffix.drop 1 s).prepend
+      (cast (congrArg Bytes (Nat.sub_sub_self (Nat.succ_le_of_lt (Nat.pos_of_ne_zero hn))).symm) (single (s ⟨0, Nat.pos_of_ne_zero hn⟩))) = s := by
+  apply Bytes.ext
+  intro i
+  unfold Suffix.drop
+  rw [prepend_apply]
+  dsimp
+  unfold concat
+  have hn1 : n - (n - 1) = 1 := Nat.sub_sub_self (Nat.succ_le_of_lt (Nat.pos_of_ne_zero hn))
+  rw [cast_fin_symm]
+  · dsimp
+    simp only [hn1]
+    by_cases h : i.val < 1
+    · have h0 : i.val = 0 := by omega
+      simp [h0]
+      rw [cast_bytes_val_symm (e := Nat.sub_sub_self (Nat.succ_le_of_lt (Nat.pos_of_ne_zero hn)))]
+      exact congrArg s (Fin.ext (by simp [h0]))
+    · have hge : 1 ≤ i.val := Nat.le_of_not_gt h
+      simp [h]
+      rw [cast_bytes_val_symm (e := Nat.sub_sub_self (Nat.sub_le n 1))]
+      unfold bdrop
+      congr 1
+      apply Fin.ext
+      dsimp
+      omega
   · omega
 
 /-- Prepending a prefix `s₀` to the empty suffix recovers the prefix (up to the
