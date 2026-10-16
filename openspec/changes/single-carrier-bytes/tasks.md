@@ -1,5 +1,29 @@
 # Tasks
 
+> **Session status (latest):** tasks **3.1 and 3.2 are DONE** — the three remaining
+> `sorry`s are proven and `Codec/Sound.lean` builds clean (zero `sorry`, zero
+> `Classical.choice`). `#print axioms` on `roundtrip`/`decode_spec`/`decodeRepeat_spec`/
+> `bidir`/`decode_encode`/`productive_iff_consumesByte` all report `[propext, Quot.sound]`.
+> `encode_rel`, `encode_ne_none`, `encodeRepeat_ne_none`, `not_productive_pure` are
+> `[propext]`-only. The **remaining `Classical.choice` that pre-dated this session** was
+> traced to `simp [decode, Rel]` in `decode_spec`'s `empty`/`pure` cases (unfolding the `Rel`
+> definition pulled choice); replaced with `Rel_empty`/`Rel_pure` + `simp [decode]`.
+>
+> **New substrate lemmas landed this session** (all `[propext, Quot.sound]`-only, in
+> `Codec/Codec.lean`): `splice_splice_len`/`sub_sub_sub` (named length casts re-wiring
+> `splice_splice_assoc` and `prepend_assoc` away from inline `by omega`), `Suffix.ext`
+> (extensionality for `Suffix`), `prepend_drop_of_prepend_splice` (the `seq`-backward `s₁`
+> factorization), `bdrop_prepend_splice_len`/`bdrop_prepend_splice_snd_len`/
+> `bdrop_prepend_splice`/`cast_concat_eq_splice`/`bdrop_prepend_splice_eq_splice`/
+> `cast_concat_splice_sub`/`bdrop_prepend`/`drop_prepend`/`bdrop_drop_eq_bytes`/
+> `bdrop_zero`/`drop_zero_eq_id` (the `seq`/`decodeRepeat` re-parenthesization and
+> `drop`-reconstruction machinery), `rel_byte_cast`/`cast_bytes_eq_single`/
+> `prepend_drop_single` (the `byte` case). `prepend_assoc`'s `Nat.sub_lt_iff_lt_add` was
+> replaced with `omega` (removing a `Classical.choice` source).
+>
+> **Next: task 3.3** re-derive `Codec/Combinators.lean` over `Bytes n`, then 4.1–4.3
+> (delete transfer tier, simplify lakefile, re-derive `VarBinary`), then 5.1–5.2 (gate + docs).
+
 > **Session status (pause point):** tasks 1.1–1.3 (substrate), 2.1 (decode/
 > decodeRepeat/ConsumesByte), 2.2 (encode/encodeRepeat), and **2.3 (prefix-arithmetic
 > helpers)** are **done and compile** clean (`lake build Codec.Codec Codec.Decode
@@ -159,11 +183,11 @@ hle : remaining ≤ n, bytes : Bytes remaining }` — the spec's
 
 ## 3. Laws over the single carrier (no `Classical.choice`)
 
-- [ ] 3.1 Re-prove `decode_spec`, `bidir`, `encode_rel`, `decode_encode`,
+- [x] 3.1 Re-prove `decode_spec`, `bidir`, `encode_rel`, `decode_encode`,
       `roundtrip`, `productive_iff_consumesByte` over `Bytes n`; verify
       `#print axioms Codec.roundtrip` ⇒ `[propext, Quot.sound]` and `lake build`
       is clean of `sorry`.
-- [ ] 3.2 Re-prove the repetition laws `decodeRepeat_spec`/`encodeRepeat_rel` and
+- [x] 3.2 Re-prove the repetition laws `decodeRepeat_spec`/`encodeRepeat_rel` and
       the chain converses over `Bytes n`; verify their `#print axioms` reports
       `[propext, Quot.sound]` (zero `Classical.choice`) with `lake build` green.
 - [ ] 3.3 Re-derive `Codec/Combinators.lean` (the `sepBy`/`chainl1`/`chainr1`/
