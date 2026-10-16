@@ -283,6 +283,17 @@ theorem relRepeat_nil {α : Type} (R : α → {m : Nat} → Bytes m → Prop) {n
     relRepeat R [] n s ↔ n = 0 :=
   Iff.rfl
 
+/-- `relRepeat` is insensitive to a length-cast of its byte string: `relRepeat R xs m
+(cast (congrArg Bytes e) s)` iff `relRepeat R xs n s` for `e : n = m`. The
+`relRepeat`-level analogue of `Rel_cast`, needed by `encodeRepeat_rel`'s `cons` case
+(where the recursive suffix length `n₂` is cast to `(n₁ + n₂) - n₁`). Proved by
+`subst`, no `Classical.choice`. -/
+theorem relRepeat_cast {α : Type} (R : α → {m : Nat} → Bytes m → Prop) (xs : List α)
+    {n m : Nat} (e : n = m) (s : Bytes n) :
+    relRepeat R xs m (cast (congrArg Bytes e) s) ↔ relRepeat R xs n s := by
+  subst m
+  rfl
+
 /-! ## Substrate lemmas: casts, splice, and concat arithmetic
 
 The length-indexed `Bytes n := Fin n → UInt8` substrates make the `seq`/`byte`
@@ -431,6 +442,72 @@ theorem concat_eq_splice {n₁ n₂ : Nat} (s₁ : Bytes n₁) (s₂ : Bytes n�
 theorem sub_sub_add (n m₁ m₂ : Nat) (hm₁ : m₁ ≤ n) (hm₂ : m₂ ≤ m₁) :
     (n - m₁) + (m₁ - m₂) = n - m₂ := by
   omega
+
+/-- Casting a whole `splice` commutes past its prefix: `cast (congrArg Bytes e) (splice hm s₁ s₂)`
+(for `e : n = n'`) equals `splice (m ≤ n') s₁ (cast (n' - m = n - m) s₂)` — the prefix `s₁` is
+unchanged and the suffix `s₂` is length-transported along `n' - m = n - m`. This is the
+`concat_eq_splice`-companion that closes the `decode_spec` `seq`-case forwarding, where the
+`Rel_seq` witness's suffix length `n - t₂.remaining` differs from the encoder's `(n - t₁) + (t₁ - t₂)`
+by the `sub_sub_add` cast. `[propext, Quot.sound]`-only. -/
+theorem splice_cast_commute {n n' m : Nat} (e : n = n') (hm : m ≤ n)
+    (s₁ : Bytes m) (s₂ : Bytes (n - m)) :
+    cast (congrArg Bytes e) (splice hm s₁ s₂) =
+      splice (by omega : m ≤ n') s₁ (cast (congrArg Bytes (by omega : n - m = n' - m)) s₂) := by
+  subst e
+  simp
+
+/-- Three-way associativity of `splice`: `splice hm (splice hk s₁ s₂) s₃` re-parenthesizes
+into `splice (Nat.le_trans hk hm) s₁ (cast … (splice (Nat.sub_le_sub_right hm k) s₂ s₃))` —
+the split at `m` then at `k ≤ m` becomes the split at `k` then at `m - k`. This is the
+`n - m`-indexed sub analogue of `concat_assoc`, and is what `decode_spec`'s `seq`
+completeness and `decodeRepeat_spec`'s cons case use to re-parenthesize a
+`r.prepend (splice hm s₁ s₂)` decomposition into a first-step `s₁` prefix plus the
+recursive `(s₂ ++ r)` remainder. `[propext, Quot.sound]`-only. -/
+theorem splice_splice_assoc {n m k : Nat} (hm : m ≤ n) (hk : k ≤ m)
+    (s₁ : Bytes k) (s₂ : Bytes (m - k)) (s₃ : Bytes (n - m)) :
+    splice hm (splice hk s₁ s₂) s₃ =
+      splice (Nat.le_trans hk hm)
+        s₁ (cast (congrArg Bytes (by omega : (m - k) + (n - m) = n - k))
+          (concat s₂ s₃)) := by
+  apply Bytes.ext
+  intro i
+  rw [splice_apply]
+  rw [splice_apply]
+  rw [cast_fin_symm]
+  · rw [cast_fin_symm]
+    · unfold concat
+      dsimp
+      by_cases h1 : i.val < k
+      · have h1m : i.val < m := Nat.lt_of_lt_of_le h1 hk
+        simp [h1, h1m]
+        rw [splice_apply]
+        unfold concat
+        rw [cast_fin_symm (e := splice_add hk) (i := ⟨i.val, h1m⟩)]
+        simp [h1]
+      · have hgek : k ≤ i.val := Nat.le_of_not_gt h1
+        by_cases h2 : i.val < m
+        · have h2' : i.val - k < m - k := by omega
+          simp [h1, h2]
+          rw [splice_apply]
+          rw [cast_fin_symm (e := splice_add hk) (i := ⟨i.val, h2⟩)]
+          rw [cast_bytes_val' (e := show (m - k) + (n - m) = n - k by omega)]
+          unfold concat
+          simp [h1, h2']
+        · have hgenm : m ≤ i.val := Nat.le_of_not_gt h2
+          have hnot : ¬ i.val - k < m - k := by omega
+          simp [h1, h2]
+          rw [cast_bytes_val' (e := show (m - k) + (n - m) = n - k by omega)]
+          dsimp
+          simp [hnot]
+          congr 1
+          apply Fin.ext
+          calc
+            i.val - m = i.val - (k + (m - k)) := by omega
+            _ = i.val - k - (m - k) := by rw [Nat.sub_sub]
+
+    · omega
+  · omega
+
 
 /-- Reconstruct a `Bytes n` from a consumed prefix and a suffix: `t.prepend s₀`
 is `s₀` followed by the remaining bytes of `t`. The length cast
@@ -588,6 +665,58 @@ theorem prepend_single_bdrop {k : Nat} (s : Bytes (k + 1)) :
     · have hge : 1 ≤ i.val := Nat.le_of_not_gt h
       simp [h, bdrop]
       exact congrArg s (Fin.ext (by dsimp; omega))
+  · omega
+
+/-- Prepending a prefix `s₀` to the empty suffix recovers the prefix (up to the
+`n - 0 = n` length cast). This is the reconstruct for `bidir`'s empty-remainder case:
+`(Suffix.empty n).prepend s₀ = cast (congrArg Bytes (Nat.sub_zero n)) s₀` — the
+`decode_spec` completeness witness `s₀` (a `Bytes (n - 0)`) reassembles to the whole
+input `s : Bytes n`. `[propext, Quot.sound]`-only. -/
+theorem prepend_empty {n : Nat} (s₀ : Bytes (n - 0)) :
+    (Suffix.empty n).prepend s₀ = cast (congrArg Bytes (Nat.sub_zero n)) s₀ := by
+  apply Bytes.ext
+  intro i
+  unfold Suffix.prepend Suffix.empty
+  rw [splice_apply]
+  unfold concat
+  rw [cast_fin_symm]
+  · dsimp
+    simp
+  · omega
+
+/-- Prepending a prefix `s : Bytes n` (transported to the `Bytes (n - 0)` length
+`Suffix.prepend` asks for) to the empty suffix recovers `s` exactly. This is the
+`bidir` forward witness: `(Suffix.empty n).prepend (cast (Nat.sub_zero n).symm s) = s`.
+`[propext, Quot.sound]`-only. -/
+theorem prepend_empty_eq {n : Nat} (s : Bytes n) :
+    (Suffix.empty n).prepend (cast (congrArg Bytes (Nat.sub_zero n).symm) s) = s := by
+  apply Bytes.ext
+  intro i
+  unfold Suffix.prepend Suffix.empty
+  rw [splice_apply]
+  unfold concat
+  rw [cast_fin_symm]
+  · dsimp
+    simp
+  · omega
+
+/-- Prepending the empty byte string to the identity suffix recovers the input:
+`(Suffix.id n s).prepend (cast (Nat.sub_self n).symm emptyBytes) = s`. This is the
+`decode_spec` `pure`-case reconstruction: the decoder accepts `(x₀, Suffix.id n s)`
+(consuming nothing), and re-assembling with `Suffix.prepend` — prefix `emptyBytes`, full
+`s` remaining — gives back `s`. `[propext, Quot.sound]`-only. -/
+theorem prepend_id {n : Nat} (s : Bytes n) :
+    (Suffix.id n s).prepend (cast (congrArg Bytes (Nat.sub_self n).symm) emptyBytes) = s := by
+  apply Bytes.ext
+  intro i
+  unfold Suffix.prepend Suffix.id
+  rw [splice_apply]
+  unfold concat
+  rw [cast_fin_symm]
+  · dsimp
+    have h0 : n - n = 0 := Nat.sub_self n
+    have hnot : ¬ i.val < n - n := by rw [h0]; exact Nat.not_lt_zero i.val
+    simp
   · omega
 
 /-- `relRepeat`'s `cons` case: a non-empty list relates to a string iff its head

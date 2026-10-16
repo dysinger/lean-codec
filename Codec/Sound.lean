@@ -150,7 +150,30 @@ theorem decode_spec {α : Type} (d : Codec α) (x : α) :
         · simp [hia]
   | seq d₁ d₂ ih₁ ih₂ =>
       intro n s r
-      sorry
+      rw [decode_seq_mem]
+      constructor
+      · intro h
+        rcases h with ⟨t₁, t₂, hd₁, hd₂, hr⟩
+        subst r
+        rcases (ih₁ x.1 s t₁).1 hd₁ with ⟨s₁, hs₁, hrel₁⟩
+        rcases (ih₂ x.2 t₁.bytes t₂).1 hd₂ with ⟨s₂, hs₂, hrel₂⟩
+        refine ⟨cast (congrArg Bytes (sub_sub_add n t₁.remaining t₂.remaining t₁.hle t₂.hle)) (concat s₁ s₂), ?_, ?_⟩
+        · rw [hs₁]
+          exact (prepend_assoc t₁ t₂ s₁ s₂ hs₂.symm).symm
+        · rw [Rel_seq]
+          have hcast : t₁.remaining - t₂.remaining = n - t₂.remaining - (n - t₁.remaining) := by
+            have ht₁ : t₁.remaining ≤ n := t₁.hle
+            have ht₂ : t₂.remaining ≤ t₁.remaining := t₂.hle
+            omega
+          refine ⟨n - t₁.remaining, Nat.le.intro (by rw [sub_sub_add n t₁.remaining t₂.remaining t₁.hle t₂.hle]; rfl), s₁, cast (congrArg Bytes hcast) s₂, ?_, hrel₁, ?_⟩
+          · rw [concat_eq_splice s₁ s₂]
+            dsimp [Suffix.trans]
+            rw [splice_cast_commute (sub_sub_add n t₁.remaining t₂.remaining t₁.hle t₂.hle) (Nat.le.intro rfl) s₁ _]
+            congr 1
+            simp
+          · exact (Rel_cast d₂ x.2 hcast s₂).2 hrel₂
+      · intro h
+        sorry
   | alt d₁ d₂ ih₁ ih₂ =>
       intro n s r
       rw [decode, List.mem_append]
@@ -174,16 +197,61 @@ theorem decode_spec {α : Type} (d : Codec α) (x : α) :
       simp [decode, Rel]
       constructor
       · intro h
-        sorry
+        rcases h with ⟨hx, hr⟩
+        subst hr
+        dsimp [Suffix.id]
+        refine ⟨⟨cast (congrArg Bytes (Nat.sub_self n).symm) (emptyBytes : Bytes 0), ?_⟩, hx, Nat.sub_self n⟩
+        · exact (prepend_id s).symm
       · intro h
-        sorry
+        rcases h with ⟨hexist, hx, hn⟩
+        rcases hexist with ⟨s₀, hs⟩
+        have hrle : r.remaining ≤ n := r.hle
+        have hrem : r.remaining = n := by omega
+        -- r.bytes (transported to Bytes n) equals s
+        have hbytes : cast (congrArg Bytes hrem) r.bytes = s := by
+          rw [hs]
+          apply Bytes.ext
+          intro j
+          unfold Suffix.prepend
+          rw [splice_apply]
+          unfold concat
+          rw [cast_bytes_val' (e := hrem)]
+          rw [cast_fin_symm]
+          · dsimp
+            have hn0 : n - r.remaining = 0 := hn
+            simp [hn0]
+            rw [cast_bytes_val_symm (e := Nat.sub_sub_self r.hle)]
+          · omega
+
+        refine ⟨hx, ?_⟩
+        cases r with | mk remaining hle bytes =>
+          change (Suffix.mk remaining hle bytes : Suffix n) = Suffix.id n s
+          have hrem' : remaining = n := by simpa using hrem
+          cases hrem'
+          have hbytes' : bytes = s := by simpa using hbytes
+          cases hbytes'
+          rfl
   | byte =>
       intro n s r
       sorry
 
 theorem bidir {α : Type} (d : Codec α) (x : α) (n : Nat) (s : Bytes n) :
     Rel d x s ↔ (x, Suffix.empty n) ∈ decode d s := by
-  sorry
+  have hspec := decode_spec d x (s := s) (r := Suffix.empty n)
+  constructor
+  · intro hr
+    refine hspec.2 ⟨cast (congrArg Bytes (Nat.sub_zero n).symm) s, ?_, ?_⟩
+    · exact (prepend_empty_eq s).symm
+    · exact (Rel_cast d x (Nat.sub_zero n).symm s).2 hr
+  · intro hd
+    rcases hspec.1 hd with ⟨s₀, hs, hr⟩
+    have hscast : cast (congrArg Bytes (Nat.sub_zero n).symm) s = s₀ := by
+      rw [hs]
+      rw [prepend_empty s₀]
+      cases (Nat.sub_zero n)
+      rfl
+    rw [← hscast] at hr
+    exact (Rel_cast d x (Nat.sub_zero n).symm s).1 hr
 
 /-- The strong roundtrip invariant: a value encoded to `s : Bytes m` decodes back to
 `(x, ·)` leaving exactly the appended `r : Bytes q` unconsumed, from the input
@@ -192,13 +260,21 @@ theorem decode_encode {α : Type} (d : Codec α) (x : α) :
     ∀ {m : Nat} {s : Bytes m}, encode d x = some ⟨m, s⟩ →
       ∀ {q : Nat} (r : Bytes q),
         (x, Suffix.drop m (concat s r)) ∈ decode d (concat s r) := by
-  sorry
+  intro m s he q r
+  have hrel : Rel d x s := encode_rel d x he
+  have hspre : concat s r = (Suffix.drop m (concat s r)).prepend
+      (cast (congrArg Bytes (Nat.sub_sub_self (Nat.le.intro rfl)).symm) s) :=
+    prepend_eq_of_eq_splice (concat s r) (Nat.le.intro rfl) s
+      (cast (congrArg Bytes (Nat.add_sub_cancel_left m q).symm) r) (concat_eq_splice s r)
+  refine (decode_spec d x (s := concat s r) (r := Suffix.drop m (concat s r))).2 ⟨cast (congrArg Bytes (Nat.sub_sub_self (Nat.le.intro rfl)).symm) s, hspre, ?_⟩
+  exact (Rel_cast d x (Nat.sub_sub_self (Nat.le.intro rfl)).symm s).2 hrel
 
 /-- The byte-exact roundtrip: a value encoded to `s` decodes back to `x` with
 no remainder. Unconditional. -/
 theorem roundtrip {α : Type} (d : Codec α) (x : α) (n : Nat) (s : Bytes n) :
     encode d x = some ⟨n, s⟩ → (x, Suffix.empty n) ∈ decode d s := by
-  sorry
+  intro he
+  exact (bidir d x n s).1 (encode_rel d x he)
 
 /-! ## Repetition: the totality boundary and the decoder law -/
 
@@ -206,7 +282,17 @@ theorem roundtrip {α : Type} (d : Codec α) (x : α) (n : Nat) (s : Bytes n) :
 `p` is productive (every value it relates sits on a non-empty string). -/
 theorem productive_iff_consumesByte {α : Type} (p : Codec α) :
     Productive p ↔ ConsumesByte p := by
-  sorry
+  constructor
+  · intro hprod x n s t hmem
+    rcases (decode_spec p x (s := s) (r := t)).1 hmem with ⟨s₀, hs, hrel⟩
+    have hn0 : n - t.remaining ≠ 0 := hprod x s₀ hrel
+    have hlt : t.remaining < n := by omega
+    exact hlt
+  · intro hcons x n s hrel hn
+    subst n
+    have hmem : (x, Suffix.empty 0) ∈ decode p s := (bidir p x 0 s).1 hrel
+    have hlt : (Suffix.empty 0).remaining < 0 := hcons x s (Suffix.empty 0) hmem
+    omega
 
 /-- The `many`-case of the bidirectional law: `(xs, r) ∈ decodeRepeat p h n s`
 exactly when the input splits as a `relRepeat`-prefix plus `r`. -/
@@ -220,17 +306,57 @@ theorem decodeRepeat_spec {α : Type} (p : Codec α) (h : ConsumesByte p) :
 theorem relRepeat_unbounded_of_empty {α : Type} (p : Codec α) (x : α)
     (hx : Rel p x (emptyBytes : Bytes 0)) :
     ∀ m : Nat, relRepeat (Rel p) (List.replicate m x) 0 emptyBytes := by
-  sorry
+  intro m
+  induction m with
+  | zero => simp [relRepeat]
+  | succ m ih =>
+      change relRepeat (Rel p) (x :: List.replicate m x) 0 emptyBytes
+      rw [relRepeat_cons]
+      refine ⟨0, Nat.zero_le 0, emptyBytes, emptyBytes, ?_, hx, ih⟩
+      apply Bytes.ext
+      intro i
+      exact Fin.elim0 i
 
 /-- `pure x` is not productive. -/
 theorem not_productive_pure {α : Type} [DecidableEq α] (x : α) :
     ¬ Productive (Codec.pure x : Codec α) := by
-  sorry
+  intro hp
+  have hrel : Rel (Codec.pure x : Codec α) x (emptyBytes : Bytes 0) := by
+    simp [Rel]
+  have h := hp x (emptyBytes : Bytes 0) hrel
+  exact (h rfl)
 
 /-- Encoder soundness for repetition. -/
 theorem encodeRepeat_rel {α : Type} (p : Codec α) :
     ∀ (xs : List α) {n : Nat} {s : Bytes n}, encodeRepeat p xs = some ⟨n, s⟩ → relRepeat (Rel p) xs n s := by
-  sorry
+  intro xs
+  induction xs with
+  | nil =>
+      intro n s he
+      have hs : (⟨0, (emptyBytes : Bytes 0)⟩ : Sigma fun k => Bytes k) = ⟨n, s⟩ := by
+        simpa [encodeRepeat] using he
+      cases hs
+      simp [relRepeat]
+  | cons x rest ih =>
+      intro n s he
+      rw [encodeRepeat] at he
+      cases hx : encode p x with
+      | none => simp [hx] at he
+      | some sx =>
+          rw [hx] at he
+          rcases sx with ⟨n₁, s₁⟩
+          cases hr : encodeRepeat p rest with
+          | none => simp [hr] at he
+          | some sr =>
+              rw [hr] at he
+              rcases sr with ⟨n₂, s₂⟩
+              have heq : (⟨n₁ + n₂, concat s₁ s₂⟩ : Sigma fun k => Bytes k) = ⟨n, s⟩ := by
+                simpa using he
+              cases heq
+              rw [relRepeat_cons]
+              refine ⟨n₁, Nat.le.intro rfl, s₁, cast (congrArg Bytes (Nat.add_sub_cancel_left n₁ n₂).symm) s₂, ?_, encode_rel p x hx, ?_⟩
+              · exact concat_eq_splice s₁ s₂
+              · exact (relRepeat_cast (Rel p) rest (Nat.add_sub_cancel_left n₁ n₂).symm s₂).2 (ih hr)
 
 /-! ## Unambiguity, functionality, and the decode→encode direction -/
 
@@ -244,16 +370,77 @@ def Functional {α : Type} (d : Codec α) : Prop :=
 /-- **Encoder completeness**: every value in the denotation encodes successfully. -/
 theorem encode_ne_none {α : Type} (d : Codec α) (x : α) {n : Nat} (s : Bytes n) :
     Rel d x s → encode d x ≠ none := by
-  sorry
+  induction d generalizing n s with
+  | iso i d ih =>
+      intro hrel
+      rcases hrel with ⟨a, hia, hda⟩
+      rw [encode]
+      have hua : i.unapply x = some a := (i.law a x).1 hia
+      rw [hua]
+      exact ih a s hda
+  | seq d₁ d₂ ih₁ ih₂ =>
+      rcases x with ⟨x₁, x₂⟩
+      intro hrel
+      rw [Rel_seq] at hrel
+      rcases hrel with ⟨m, hm, s₁, s₂, hs, hr₁, hr₂⟩
+      rw [encode]
+      have hne₁ : encode d₁ x₁ ≠ none := ih₁ x₁ s₁ hr₁
+      cases h₁ : encode d₁ x₁ with
+      | none => exact False.elim (hne₁ h₁)
+      | some e₁ =>
+          rcases e₁ with ⟨n₁, b₁⟩
+          have hne₂ : encode d₂ x₂ ≠ none := ih₂ x₂ s₂ hr₂
+          cases h₂ : encode d₂ x₂ with
+          | none => exact False.elim (hne₂ h₂)
+          | some e₂ => simp
+  | alt d₁ d₂ ih₁ ih₂ =>
+      intro hrel
+      rw [encode]
+      rw [Rel_alt] at hrel
+      rcases hrel with hr | hr
+      · have hne : encode d₁ x ≠ none := ih₁ x s hr
+        cases h₁ : encode d₁ x with
+        | none => exact False.elim (hne h₁)
+        | some e₁ => simp
+      · have hne : encode d₂ x ≠ none := ih₂ x s hr
+        cases h₂ : encode d₂ x with
+        | none => exact False.elim (hne h₂)
+        | some e₂ => simp
+  | empty =>
+      intro hrel
+      simp [Rel] at hrel
+  | pure x₀ =>
+      intro hrel
+      rw [encode]
+      rw [Rel_pure] at hrel
+      rcases hrel with ⟨hx, hs⟩
+      simp [hx]
+  | byte =>
+      intro hrel
+      rw [encode]
+      rw [Rel_byte] at hrel
+      rcases hrel with ⟨h, hs⟩
+      subst h
+      simp
 
 theorem encode_of_decode {α : Type} (d : Codec α) (hd : Functional d) (x : α)
     {n : Nat} {s : Bytes n} (hdcd : (x, Suffix.empty n) ∈ decode d s) : encode d x = some ⟨n, s⟩ := by
-  sorry
+  have hne : encode d x ≠ none := encode_ne_none d x s ((bidir d x n s).2 hdcd)
+  cases he : encode d x with
+  | none => exact False.elim (hne he)
+  | some e =>
+      rcases e with ⟨n', s'⟩
+      have hrel' : Rel d x s' := encode_rel d x he
+      have hrels : Rel d x s := (bidir d x n s).2 hdcd
+      congr 1
+      exact (hd x s s' hrels hrel').symm
 
 theorem encode_injective_of_unambiguous {α : Type} (d : Codec α) (hd : Unambiguous d)
     {x y : α} {n : Nat} {s : Bytes n} (hx : encode d x = some ⟨n, s⟩) (hy : encode d y = some ⟨n, s⟩) :
     x = y := by
-  sorry
+  have hrelx : Rel d x s := encode_rel d x hx
+  have hrely : Rel d y s := encode_rel d y hy
+  exact hd s hrelx hrely
 
 /-! ## Relation-level completeness and functionality -/
 
@@ -266,6 +453,25 @@ def relUnambiguous {α : Type} (R : α → {n : Nat} → Bytes n → Prop) : Pro
 
 theorem encodeRepeat_ne_none {α : Type} (p : Codec α) :
     ∀ (xs : List α) {n : Nat} (s : Bytes n), relRepeat (Rel p) xs n s → encodeRepeat p xs ≠ none := by
-  sorry
+  intro xs
+  induction xs with
+  | nil =>
+      intro n s hrel
+      rw [relRepeat_nil] at hrel
+      subst hrel
+      simp [encodeRepeat]
+  | cons x rest ih =>
+      intro n s hrel
+      rw [relRepeat_cons] at hrel
+      rcases hrel with ⟨m, hm, s₁, s₂, hs, hx, hrest⟩
+      rw [encodeRepeat]
+      have hne : encode p x ≠ none := encode_ne_none p x s₁ hx
+      cases h₁ : encode p x with
+      | none => exact False.elim (hne h₁)
+      | some e₁ =>
+          have hne' : encodeRepeat p rest ≠ none := ih s₂ hrest
+          cases h₂ : encodeRepeat p rest with
+          | none => exact False.elim (hne' h₂)
+          | some e₂ => simp
 
 end Codec
