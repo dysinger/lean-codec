@@ -231,10 +231,17 @@ post-core deliverables (the paper's §4.4 open problem and the §7 transport tar
       `[D1]`–`[D8]`/`[S1]`–`[S6]` table + "Why these choices"), plus `CHANGELOG.md`
       and `LICENSE.md`.
 
-- [ ] 10.3 **Theorem-coverage cleanups** (review #3/#6/#7): (a) `relRepeat` "least fixpoint"
+- [x] 10.3 **Theorem-coverage cleanups** (review #3/#6/#7): (a) `relRepeat` "least fixpoint"
       — **done**: `relRepeat_induction` proved (axioms `[propext]`); (b) `foldl`/`foldr` share
-      ~380 lines of near-duplicate well-founded machinery — factor a common `unfoldBy` (this is
-      now partly covered by 10.1a's fold-block rework; do them together); (c) dead code — **done**
+      ~380 lines of near-duplicate well-founded machinery — **done**: factored into a single
+      generic well-founded maximal unfold `Unfold`/`unfoldBy` + `foldRec` with one
+      `unfoldBy_sound`/`unfoldBy_of_fold` pair; `foldl`/`foldr` are now thin instantiations
+      (`MeasureDecreases.toUnfold`/`MeasureDecreasesR.toUnfold` + `reconsLeft`/`reconsRight`),
+      with `foldr`'s operand order recovered by the single `foldr f x bs =
+    foldl (fun a b => f b a) x bs.reverse` identity (`map_fst_reverse_eq_some`). Public
+      `foldl`/`foldr`/`MeasureDecreases`/`MeasureDecreasesR` signatures unchanged, so
+      `Combinators.lean` and the chain laws are untouched; axioms `[propext, Quot.sound]`
+      preserved (`unfoldBy` itself is axiom-free); (c) dead code — **done**
       for `foldrApply_append`/`cons_head_tail`/`isoMap`/`seq`/`alt`/`fail`; remaining `app`/`unapp`
       are ticketed in 10.1b.
 
