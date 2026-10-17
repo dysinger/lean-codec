@@ -98,46 +98,43 @@ elided `ByteArray` lane's ~667–747 MiB/s (737.5/747.4/667.6 at ×1/×2/×4) an
 hits ~500–700 MiB/s on the plain `cc`).
 
 **Status:** `fastEncodeRepeat`/`pushBytesFrom`/`array_readback`/`list_ofFn_getElem_clean`/
-`ofFn_concat`/`pushBytesFrom_eq` are **done** in `Codec/Encode.lean` (uncommitted, all
-`[propext, Quot.sound]`-only — the earlier `toArray.toList` `Classical.choice` blocker is
-resolved by reading back as a pure `List.ofFn`, see the `lean` skill 2026-10-17 entries).
-`Codec/Packed.lean` now holds the **packed carrier definitions** (`decodeArray`,
-`decodeFullArray`, `encodeArray`, `encodeByteArrayBytes`, `consumedAbs`, and the
-`decodeArray_bounded` monotone invariant) — all building, `[propext, Quot.sound]`-only,
-zero `sorry`. **The four refinement laws are still open**: `decodeArray_eq`,
-`decodeFullArray_spec`, `encodeArray_eq`, `encodeByteArrayBytes_eq`.
+`ofFn_concat`/`pushBytesFrom_eq` are **done** in `Codec/Encode.lean` (committed, all
+`[propext, Quot.sound]`-only). `Codec/Packed.lean` holds the **packed carrier
+definitions** (`decodeArray`, `decodeFullArray`, `encodeArray`, `encodeByteArrayBytes`,
+`consumedAbs`, `decodeArray_bounded`). **The encode refinements are now proved**:
+`encodeArray_eq` and `encodeByteArrayBytes_eq` close `[propext, Quot.sound]`-only
+(List-level readback `(encodeArray d x).map (·.toList) = (encode d x).map (List.ofFn ∘ snd)`,
+via `ofFn_concat` + `Array.toList_append`). The **decode refinements remain open** — see
+"next session" below.
 
 **Two binding decisions, already made (do not re-litigate):**
 
-1. **Cursor is `Nat`, not `USize`.** `USize`'s `+` is `Nat`-addition modulo `2^64` and
-   `USize.size = 2^64` needs the unproven platform fact `System.Platform.numBits = 64`,
-   so a `USize`-cursor refinement cannot close `[propext, Quot.sound]`-only. `Nat` is the
-   proof/runtime carrier (same as `fastEncodeRepeat`). The "`USize` lowers to `size_t`"
-   claim is settled by IR inspection (task 3.1), never by typing the cursor `USize`.
-2. **Speed-run the implementation; gate _provability_ before volume.** Write the
-   executable definitions first (keep `lake build` green with `sorry` placeholders
-   temporarily), but run a one-case `#print axioms` spike _before_ committing to a
-   carrier/readback shape (the cheapest way to learn a type leaks `Classical.choice`
-   or a platform premise). The throwaway work should be the _implementation_, never a
-   whole proof built on an unprovable carrier.
+1. **Cursor is `Nat`, not `USize`.** (unproven `System.Platform.numBits = 64` platform
+   fact would break the `[propext, Quot.sound]`-only gate; `Nat` is the proof carrier;
+   the `size_t` question is answered by IR inspection, task 3.1.)
+2. **Speed-run the implementation; gate _provability_ before volume.**
 
 **Concrete order for next session:**
 
-1. **Spike the encode readback inversion** (the one thing that stalled this session):
-   prove `arr.toList = List.ofFn s → ⟨arr.size, fun i => arr[i]⟩ = ⟨n, s⟩` (or the
-   `Array`-`ofFn`-clean equivalent) closes `[propext, Quot.sound]`-only. If clean, the
-   encode refinements (`encodeArray_eq`, `encodeByteArrayBytes_eq`) each fall out in one
-   induction using `ofFn_concat` + `Array.toList_append`/`List.append_toArray`.
-2. **Prove `encodeArray_eq` / `encodeByteArrayBytes_eq`** (List-level readback form
-   `(encodeArray d x).map (·.toList) = (encode d x).map (List.ofFn ∘ snd)`), gated by
-   `#print axioms`.
-3. **Prove the decode bridge** — the from-scratch `Suffix`-transport (`decode_cast`,
-   `decode` insensitive to `cast (congrArg Bytes e) s`) — then `decodeArray_eq` and
-   `decodeFullArray_spec`.
-4. **Task 3.1 IR inspection** — cite the emitted `.c` (`.lake/build/ir/Codec/Packed.c`)
-   to record whether the `Nat` cursor lowers to `size_t`/bignum, honestly; mark the
-   "no backend"/"scalar index" premise true or false per the actual IR.
-5. **Tasks 4.x / 5.x** — the `@[extern]` `byteSlice` trust seam, then bench + gate.
+1. **Prove the missing `decode` genuine-suffix invariant** — the one lemma that unblocks
+   `decodeArray_eq`'s `seq` case — and close `decodeArray_eq` / `decodeFullArray_spec`.
+   The invariant: every result suffix `t` of `decode d s` is a _genuine_ suffix,
+   `t.bytes = bdrop (n - t.remaining) s` (`∀ (x, t) ∈ decode d s, t.bytes = bdrop
+(n - t.remaining) s`, by induction on `d`). **Why this is the blocker:** the `seq`
+   case must equate the inner `decodeArray d₂ a c₁` (over `bdrop c₁ (arrayToBytes a)`) with
+   `decode d₂ t₁.bytes` (over `Bytes t₁.remaining`) — and `bdrop c₁ (arrayToBytes a) =
+cast … t₁.bytes` is **not** provable for an _arbitrary_ `Suffix t₁`; it is a property of
+   `decode`'s own construction, not of the `Suffix` type. The transport lemmas that compose
+   once it exists (`sub_sub_eq`, `bdrop_add`, `consumedAbs_remaining`, the cast-insensitive
+   `.remaining`) are already proved in `Codec/Packed.lean`. The `iso`/`alt`/`empty`/`pure`/
+   `byte` cases of `decodeArray_eq` also already close (`consumedAbs_id`/
+   `consumedAbs_drop_one` are the `@[simp]` byte-count bridge).
+2. **Task 3.1 IR inspection** — cite `.lake/build/ir/Codec/Packed.c` for whether the `Nat`
+   cursor lowers to `size_t`/bignum. (Current pre-inspection evidence: the `byte` case emits
+   `lean_nat_add`/`lean_nat_dec_lt`/`lean_array_fget_borrowed` — boxed bignum `lean_object *`,
+   **not** `size_t` — so the "`USize`→`size_t` scalar" claim is currently _unverified_ and
+   the `Nat` cursor does _not_ lower to `size_t`.)
+3. **Tasks 4.x / 5.x** — the `@[extern]` `byteSlice` trust seam, then bench + gate.
 
 Reads/`decode` stay on `Bytes n`; **only the packed carrier + bulk shapes get the
 contiguous-buffer fast path, proved equal to the spec.** Read the change's own
