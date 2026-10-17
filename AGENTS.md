@@ -226,7 +226,7 @@ the `USize`-indexed `commitRemainder` (`byteSlice` wrapper), with a definitional
 MODIFIED deltas that carry over all existing scenarios); and the `byteSlice`/C trust is a runtime
 contract excluded from the axiom gate, never folded into a law.
 
-## Next session: implement `shipped-c-fast-path`
+## Next session: implement `shipped-c-fast-path` (Task 2 onward)
 
 Planning is complete and validated for the **active change** `shipped-c-fast-path`
 (`openspec/changes/shipped-c-fast-path/`, proposal/specs/design/tasks). The strategic
@@ -237,18 +237,30 @@ spec_.** The pure carriers cap ~16–32 MiB/s because a pure immutable value is 
 fold (boxed `UInt8`, boxed `Nat` cursor, `List` cons churn, nondeterminism plumbing); `byteSlice`
 runs ~55 GiB/s because a single `memcpy` is the only thing at that floor.
 
-**Concrete order (see `shipped-c-fast-path/tasks.md`):**
+**Progress this session: Task 1 (bulk copy + scan seams) DONE (3/13).** `blitBytes` (buffer-to-buffer
+`memcpy`) and `findByte` (`memchr`) are in `Codec/ByteSlice.lean` + `.c`, `USize`-indexed with
+reducible `Array`-spelled bodies; `blitBytes_spec` is axiom-free (`rfl`), `findByte_spec` is
+`[propext]` (`rfl`). Bench lanes value-check both byte-for-byte. `[measured]` (128 KiB): `blitBytes L2`
+23225 MiB/s vs `calib memcpy` 30033; `findByte L2` 697 ns/op. The `findByte` C initially returned
+`some idx` by the wrong boxing (`lean_box(idx+1)` instead of `lean_alloc_ctor(1,1,0)` +
+`lean_ctor_set(…, 0, lean_box_usize(idx))`) — caught by the value check, fixed and recorded in the
+`lean` skill. Gate: `lake build` zero `sorry`/warnings; `#print axioms Codec.roundtrip` ⇒
+`[propext, Quot.sound]`.
 
-1. **Task 1.x — bulk copy + scan seams.** Generalize `byteSlice` into `blitBytes` (buffer-to-buffer
-   `memcpy`) and `findByte` (`memchr`), `USize`-indexed, Lean body reducible, C trusted — the
-   `byteSlice` posture. Prove the spec laws `rfl`-clean and value-check byte-for-byte.
-2. **Task 2.x — varint span + numeric parse + zlib seams.** `varintEncodeInto`/`varintDecodeFrom`
+**Concrete order for next session (see `shipped-c-fast-path/tasks.md`):**
+
+1. **Task 2.x — varint span + numeric parse + zlib seams.** `varintEncodeInto`/`varintDecodeFrom`
    (LEB128 into `lean_sarray_cptr`, no bignum cursor), `parseNumber` (`strtod`/`strtoll`), and
-   `deflate`/`inflate` (link zlib, PNG's IDAT). Each Lean body = spec; C trusted.
-3. **Task 3.x — deterministic decode under `Unambiguous`/`Functional`.** `decodeOne` committing
+   `deflate`/`inflate` (link zlib, PNG's IDAT). Each Lean body = spec; C trusted. **Decision to make
+   up-front:** consolidate all seams into one `.c`/object (simpler incremental rebuild) or one
+   `target … (pkg) : FilePath` per seam (cleaner isolation). The current `byteSliceO` target's
+   `buildLeanO oFile (Job.pure srcFile)` does **not** recompile its `.o` on a `.c` mtime change in
+   _incremental_ dev (needs `rm .lake/build/ByteSlice.o` or a clean `nix build .#bench`); new seams
+   must still be git-tracked before `nix build` sees them.
+2. **Task 3.x — deterministic decode under `Unambiguous`/`Functional`.** `decodeOne` committing
    `|`, gated by `Functional d`/`Unambiguous d`, proved equal to the unique `decodeArray` result
    under that hypothesis. The unconditional `decode (d₁|d₂)` law stays untouched.
-4. **Task 4.x/5.x — per-format paths + gate.** WAV (header + one `blitBytes` PCM), protobuf
+3. **Task 4.x/5.x — per-format paths + gate.** WAV (header + one `blitBytes` PCM), protobuf
    (tag/varint + length-delimited blit), JSON/TOML scanner, PNG/QR — each proved `[propext,
 Quot.sound]`-equal to the spec or seam-backed. `lake build` zero `sorry`/warnings;
    `#print axioms Codec.roundtrip` ⇒ `[propext, Quot.sound]`; bench value-checks every seam.
@@ -290,6 +302,21 @@ nixpkgs `lean4` (clang 21).
 This repo uses OpenSpec (spec-driven). Changes live under
 `openspec/changes/`. Planning artifacts (proposal / spec delta / design / tasks)
 are created before implementation; see `.pi/prompts/opsx-*.md`.
+
+**Consider every open OpenSpec change/proposal when forming or validating a new
+plan.** Before authoring a new change's spec deltas (and before validating any
+plan — new or in-flight), run `openspec list --json` to see _all_ active
+(`in-progress`, `complete`-not-yet-archived) and open changes, and read their
+spec deltas under `openspec/changes/<name>/specs/**` alongside the main specs
+`openspec/specs/**`. Two changes that each clarify the _same_ requirement
+(e.g. both MODIFY `codec`'s "Nondeterministic (backtracking) decoding") can add
+_different_ scenarios to the same block; whichever syncs/archives first leaves
+the other's MODIFIED block stale, and a MODIFIED requirement replaces the whole
+block, so a later `openspec validate` flags the dropped scenario. Reconcile such
+overlaps at planning/review time — carry every scenario into each delta's
+MODIFIED block — rather than discovering the collision during archive. This
+happened with `partial-remainder-fast-path` and `shipped-c-fast-path` (each
+added a distinct third scenario to the same requirement).
 
 ## Git conventions
 
