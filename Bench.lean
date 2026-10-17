@@ -142,6 +142,22 @@ unsafe def benchEncodeLength (n : Nat) (reps : Nat) : IO Unit := do
   | none => throw (IO.userError "encodeRepeat returned none")
   printLane "encodeRepeat byte" n (dt / reps) n
 
+/-- The bulk fast-path lane: `fastEncodeRepeat Codec.byte xs` accumulates into an
+`Array UInt8` and reads back a `Bytes`, asserting the result **value** (byte-for-byte,
+`Sigma`-equal) against the spec `encodeRepeat Codec.byte xs` — a wrong fast path fails
+the bench, not just the proof (the refinement is `Codec.fastEncodeRepeat_eq`, but the
+bench re-checks it at run time). Reports ns/op + MiB/s against the calibrated baseline. -/
+unsafe def benchFastEncodeRepeat (n : Nat) (reps : Nat) : IO Unit := do
+  let xs : List UInt8 := List.replicate n (1 : UInt8)
+  let (r, dt) ← timeBatch reps fun _ => fastEncodeRepeat Codec.byte xs
+  match r, encodeRepeat Codec.byte xs with
+  | some fast, some spec =>
+      if fast != spec then
+        throw (IO.userError "fastEncodeRepeat ≠ encodeRepeat (value mismatch)")
+  | none, none => return ()
+  | _, _ => throw (IO.userError "fastEncodeRepeat/spec none mismatch")
+  printLane "fastEncodeRepeat byte" n (dt / reps) n
+
 /-- The representation-isolation lane for `encodeRepeat`: time the encode with the
 `concat`/sigma/`Fin`-sum arithmetic **elided** — a raw `unsafe` scratch `ByteArray`
 accumulator that appends one byte per element (`ByteArray.push`, an `@[extern]`
@@ -230,6 +246,8 @@ unsafe def main (args : List String) : IO Unit := do
     Codec.Bench.benchScalarIndexRead size reps
     Codec.Bench.benchDecodeByte size reps
     Codec.Bench.benchEncodeLength size reps
+    -- Bulk fast path (proved `= encodeRepeat`, value-checked here at run time).
+    Codec.Bench.benchFastEncodeRepeat size reps
     -- Representation-isolation: same byte count, but concat/sigma/Fin-sum elided.
     Codec.Bench.benchEncodeRepeatIsolation size reps
   -- Single-byte empty-remainder roundtrip.
