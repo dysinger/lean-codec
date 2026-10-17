@@ -24,16 +24,15 @@ three already-separate places instead:
 
   * `relRepeat (Rel p)` (`Codec.Codec`) — the total least-fixpoint denotation.
   * `decodeRepeat p h` (`Codec.Decode`) — the productive decoder, well-founded on
-    `s.length`, taking `h : ConsumesByte p` as its argument.
+    `n`, taking `h : ConsumesByte p` as its argument.
   * `encodeRepeat p` (`Codec.Encode`) — the total encoder, structural on the value
     list (no productivity witness needed).
 
 The `many`-shaped *list* combinators (`sepBy`, `chainl1`; see the explicit symbol
-names above) are re-derived at the
-end of this file **over these three**, not over an opaque `many p` value — a
-former `partial def many` was irreducibly opaque at the `Rel` level (a `partial
-def` produces no equational lemma), making `Rel (many p) ↔ relRepeat (Rel p)`
-unprovable.
+names above) are re-derived at the end of this file **over these three**, not over
+an opaque `many p` value — a former `partial def many` was irreducibly opaque at
+the `Rel` level (a `partial def` produces no equational lemma), making
+`Rel (many p) ↔ relRepeat (Rel p)` unprovable.
 -/
 
 namespace Codec
@@ -97,7 +96,7 @@ representative lemmas pin down that claim; the full laws (`decode_spec`, `bidir`
 /-- `optional p` relates `Option.some x` iff `p` relates `x` (the `none` case
 is `pure none`). -/
 theorem Rel_optional_some {α : Type} [DecidableEq α] (p : Codec α) (x : α)
-    (s : Bytes) :
+    {n : Nat} (s : Bytes n) :
     Rel (optional p) (Option.some x) s ↔ Rel p x s := by
   unfold optional
   rw [Rel_alt]
@@ -119,28 +118,28 @@ theorem Rel_optional_some {α : Type} [DecidableEq α] (p : Codec α) (x : α)
     exact ⟨x, rfl, hp⟩
 
 /-- `count 0 p` relates only the empty list to the empty bytes. -/
-theorem Rel_count_zero {α : Type} (p : Codec α) (xs : List α) (s : Bytes) :
-    Rel (count 0 p) xs s ↔ xs = [] ∧ s = [] := by
+theorem Rel_count_zero {α : Type} (p : Codec α) (xs : List α) {n : Nat} (s : Bytes n) :
+    Rel (count 0 p) xs s ↔ xs = [] ∧ n = 0 := by
   unfold count
   rw [Rel_iso]
   constructor
   · intro h
     rcases h with ⟨u, hnil, hpure⟩
     rw [Rel_pure] at hpure
-    rcases hpure with ⟨_, hs⟩
+    rcases hpure with ⟨_, hn⟩
     have : u = () := by cases u; rfl
     subst u
     rw [Iso.nil] at hnil
-    -- hnil : Iso.nil.apply () = some xs, i.e. some [] = some xs
     have : xs = [] := by simpa using hnil.symm
-    exact ⟨this, hs⟩
+    exact ⟨this, hn⟩
   · intro h
-    rcases h with ⟨hxs, hs⟩
-    subst xs; subst s
-    exact ⟨(), rfl, by simp [Rel_pure]⟩
+    rcases h with ⟨hxs, hn⟩
+    subst xs
+    subst n
+    exact ⟨(), rfl, (Rel_pure () () (s := s)).2 ⟨rfl, rfl⟩⟩
 
 /-- `choice ps` relates iff some description in `ps` relates. -/
-theorem Rel_choice {α : Type} (ps : List (Codec α)) (x : α) (s : Bytes) :
+theorem Rel_choice {α : Type} (ps : List (Codec α)) (x : α) {n : Nat} (s : Bytes n) :
     Rel (choice ps) x s ↔ ∃ d ∈ ps, Rel d x s := by
   induction ps generalizing x s with
   | nil =>
@@ -183,31 +182,32 @@ and `encodeSepBy [] = none`), so this combinator is semantically the paper's
 `optional (sepBy p sep)`. This is the `many`-case denotation statement,
 specialized to a non-empty head. -/
 def relSepBy {α : Type} (p : Codec α) (sep : Codec Unit) :
-    List α → Bytes → Prop
-  | x₀ :: rest, s => ∃ s₀ s', s = s₀ ++ s' ∧ Rel p x₀ s₀ ∧ relRepeat (Rel (seqRight sep p)) rest s'
-  | [], _ => False
+    List α → {n : Nat} → Bytes n → Prop
+  | x₀ :: rest, n, s => ∃ (m : Nat) (hm : m ≤ n) (s₁ : Bytes m) (s₂ : Bytes (n - m)),
+      s = splice hm s₁ s₂ ∧ Rel p x₀ s₁ ∧ relRepeat (Rel (seqRight sep p)) rest (n - m) s₂
+  | [], _, _ => False
 
 /-- `decodeRepeat` specialized to the `sepBy` tail step: enumerate the results of
 `p` then arbitrarily many `(sep *> p)`, threading the remainder. The empty list is
 not produced (separation is one-or-more). Total for a productive `sep`
 (`hsep : ConsumesByte (seqRight sep p)`). -/
 def decodeSepBy {α : Type} (p : Codec α) (sep : Codec Unit)
-    (hsep : ConsumesByte (seqRight sep p)) (s : Bytes) :
-    List (List α × Bytes) :=
+    (hsep : ConsumesByte (seqRight sep p)) {n : Nat} (s : Bytes n) :
+    List (List α × Suffix n) :=
   (decode p s).flatMap fun (x₀, t) =>
-    (decodeRepeat (seqRight sep p) hsep t).map fun (rest, r) => (x₀ :: rest, r)
+    (decodeRepeat (seqRight sep p) hsep t.remaining t.bytes).map fun (rest, r) => (x₀ :: rest, Suffix.trans t r)
 
 /-- The total encoder for `sepBy p sep`: encode the head with `p` and the tail
 with `encodeRepeat (seqRight sep p)`. -/
 def encodeSepBy {α : Type} (p : Codec α) (sep : Codec Unit) :
-    List α → Option (Bytes)
+    List α → Option (Sigma fun n => Bytes n)
   | x₀ :: rest =>
       match encode p x₀ with
       | none => none
       | some s₀ =>
           match encodeRepeat (seqRight sep p) rest with
           | none => none
-          | some s' => some (s₀ ++ s')
+          | some s' => some ⟨s₀.1 + s'.1, concat s₀.2 s'.2⟩
   | [] => none
 
 /-! ## Left- and right-associative chains on a fold
@@ -224,43 +224,45 @@ unchanged.
 list `ops` from the shifted step `seq op arg`, folded by `Iso.foldl f`. -/
 def relChainl1 {α β : Type} (f : Iso (α × (β × α)) α) (measure : α → Nat)
     (h : MeasureDecreases measure f) (arg : Codec α) (op : Codec β) :
-    α → Bytes → Prop :=
-  fun a s => ∃ a₀ ops s₀ s', s = s₀ ++ s' ∧ Rel arg a₀ s₀ ∧
-    relRepeat (Rel (Codec.seq op arg)) ops s' ∧ (foldl f measure h).apply (a₀, ops) = some a
+    α → {n : Nat} → Bytes n → Prop :=
+  fun a {n : Nat} s => ∃ (a₀ : α) (ops : List (β × α)) (m : Nat) (hm : m ≤ n) (s₁ : Bytes m) (s₂ : Bytes (n - m)),
+    s = splice hm s₁ s₂ ∧ Rel arg a₀ s₁ ∧
+    relRepeat (Rel (Codec.seq op arg)) ops (n - m) s₂ ∧ (foldl f measure h).apply (a₀, ops) = some a
 
 /-- The denotation of a right-associative chain: a seed `a₀` from `arg`, an operand
 list `ops` from the shifted step `seq arg op`, folded by `Iso.foldr f`. -/
 def relChainr1 {α β : Type} (f : Iso ((α × β) × α) α) (measure : α → Nat)
     (h : MeasureDecreasesR measure f) (arg : Codec α) (op : Codec β) :
-    α → Bytes → Prop :=
-  fun a s => ∃ a₀ ops s₀ s', s = s₀ ++ s' ∧ Rel arg a₀ s₀ ∧
-    relRepeat (Rel (Codec.seq arg op)) ops s' ∧ (foldr f measure h).apply (a₀, ops) = some a
+    α → {n : Nat} → Bytes n → Prop :=
+  fun a {n : Nat} s => ∃ (a₀ : α) (ops : List (α × β)) (m : Nat) (hm : m ≤ n) (s₁ : Bytes m) (s₂ : Bytes (n - m)),
+    s = splice hm s₁ s₂ ∧ Rel arg a₀ s₁ ∧
+    relRepeat (Rel (Codec.seq arg op)) ops (n - m) s₂ ∧ (foldr f measure h).apply (a₀, ops) = some a
 
 /-- The decoder for a left-associative chain: decode the seed `arg`, decode the
 operand list via `decodeRepeat`, then fold. Total for a productive `op`-step
 (`hsep : ConsumesByte (seq op arg)`). -/
 def decodeChainl1 {α β : Type} (f : Iso (α × (β × α)) α) (measure : α → Nat)
     (h : MeasureDecreases measure f) (arg : Codec α) (op : Codec β)
-    (hsep : ConsumesByte (Codec.seq op arg)) (s : Bytes) :
-    List (α × Bytes) :=
+    (hsep : ConsumesByte (Codec.seq op arg)) {n : Nat} (s : Bytes n) :
+    List (α × Suffix n) :=
   (decode arg s).flatMap fun (a₀, t) =>
-    (decodeRepeat (Codec.seq op arg) hsep t).filterMap fun (ops, r) =>
-      ((foldl f measure h).apply (a₀, ops)).map fun a => (a, r)
+    (decodeRepeat (Codec.seq op arg) hsep t.remaining t.bytes).filterMap fun (ops, r) =>
+      ((foldl f measure h).apply (a₀, ops)).map fun a => (a, Suffix.trans t r)
 
 /-- The decoder for a right-associative chain. -/
 def decodeChainr1 {α β : Type} (f : Iso ((α × β) × α) α) (measure : α → Nat)
     (h : MeasureDecreasesR measure f) (arg : Codec α) (op : Codec β)
-    (hsep : ConsumesByte (Codec.seq arg op)) (s : Bytes) :
-    List (α × Bytes) :=
+    (hsep : ConsumesByte (Codec.seq arg op)) {n : Nat} (s : Bytes n) :
+    List (α × Suffix n) :=
   (decode arg s).flatMap fun (a₀, t) =>
-    (decodeRepeat (Codec.seq arg op) hsep t).filterMap fun (ops, r) =>
-      ((foldr f measure h).apply (a₀, ops)).map fun a => (a, r)
+    (decodeRepeat (Codec.seq arg op) hsep t.remaining t.bytes).filterMap fun (ops, r) =>
+      ((foldr f measure h).apply (a₀, ops)).map fun a => (a, Suffix.trans t r)
 
 /-- The encoder for a left-associative chain: maximally unfold `a` via `foldl`,
 then encode the seed and the operand list. -/
 def encodeChainl1 {α β : Type} (f : Iso (α × (β × α)) α)
     (measure : α → Nat) (h : MeasureDecreases measure f) (arg : Codec α)
-    (op : Codec β) (a : α) : Option (Bytes) :=
+    (op : Codec β) (a : α) : Option (Sigma fun n => Bytes n) :=
   match (foldl f measure h).unapply a with
   | none => none
   | some (a₀, ops) =>
@@ -269,12 +271,12 @@ def encodeChainl1 {α β : Type} (f : Iso (α × (β × α)) α)
       | some s₀ =>
           match encodeRepeat (Codec.seq op arg) ops with
           | none => none
-          | some s' => some (s₀ ++ s')
+          | some s' => some ⟨s₀.1 + s'.1, concat s₀.2 s'.2⟩
 
 /-- The encoder for a right-associative chain. -/
 def encodeChainr1 {α β : Type} (f : Iso ((α × β) × α) α)
     (measure : α → Nat) (h : MeasureDecreasesR measure f) (arg : Codec α)
-    (op : Codec β) (a : α) : Option (Bytes) :=
+    (op : Codec β) (a : α) : Option (Sigma fun n => Bytes n) :=
   match (foldr f measure h).unapply a with
   | none => none
   | some (a₀, ops) =>
@@ -283,7 +285,7 @@ def encodeChainr1 {α β : Type} (f : Iso ((α × β) × α) α)
       | some s₀ =>
           match encodeRepeat (Codec.seq arg op) ops with
           | none => none
-          | some s' => some (s₀ ++ s')
+          | some s' => some ⟨s₀.1 + s'.1, concat s₀.2 s'.2⟩
 
 /-! ## Soundness of the `many`-derived list combinators
 
@@ -298,67 +300,89 @@ iff the input splits as a `relSepBy`-prefix plus `r`. Unconditional; productivit
 is carried only as `hsep`. -/
 theorem decodeSepBy_spec {α : Type} (p : Codec α) (sep : Codec Unit)
     (hsep : ConsumesByte (seqRight sep p)) :
-    ∀ (xs : List α) {s r : Bytes},
+    ∀ (xs : List α) {n : Nat} (s : Bytes n) (r : Suffix n),
       (xs, r) ∈ decodeSepBy p sep hsep s ↔
-        ∃ s₀, s = s₀ ++ r ∧ relSepBy p sep xs s₀ := by
-  intro xs s r
+        ∃ s₀ : Bytes (n - r.remaining), s = r.prepend s₀ ∧ relSepBy p sep xs s₀ := by
+  intro xs n s r
   rw [decodeSepBy, List.mem_flatMap]
   cases xs with
   | nil =>
       constructor
       · intro h
-        rcases h with ⟨a, _ha, hm⟩
-        rcases a with ⟨x₀, t⟩
+        rcases h with ⟨ab, _hab, hm⟩
+        rcases ab with ⟨x₀, t⟩
         rw [List.mem_map] at hm
         rcases hm with ⟨pr, _hpr, heq⟩
-        rcases pr with ⟨_rest, _r'⟩
+        rcases pr with ⟨rest, r'⟩
         cases heq
       · intro h
-        rcases h with ⟨_s₀, _hs, hrel⟩
+        rcases h with ⟨s₀, _hs, hrel⟩
         simp [relSepBy] at hrel
   | cons x₀ rest =>
       constructor
       · intro h
-        rcases h with ⟨a, ha, hm⟩
-        rcases a with ⟨ax, t⟩
+        rcases h with ⟨ab, hab, hm⟩
+        rcases ab with ⟨ax, t⟩
         rw [List.mem_map] at hm
         rcases hm with ⟨pr, hpr, heq⟩
         rcases pr with ⟨rest', r'⟩
         have hcons : ax :: rest' = x₀ :: rest := congrArg Prod.fst heq
-        have hr : r' = r := congrArg Prod.snd heq
+        have hr : Suffix.trans t r' = r := congrArg Prod.snd heq
         cases hcons
-        cases hr
-        rcases (decode_spec p x₀).1 ha with ⟨s₁, hs₁, hrel₁⟩
-        rcases (decodeRepeat_spec (seqRight sep p) hsep rest t r).1 hpr with ⟨s₂, hs₂, hrel₂⟩
-        refine ⟨s₁ ++ s₂, ?_, ?_⟩
-        · rw [hs₁, hs₂]
-          simp [List.append_assoc]
+        subst r
+        rcases (decode_spec p x₀ (s := s) (r := t)).1 hab with ⟨s₁, hs₁, hrel₁⟩
+        rcases (decodeRepeat_spec (seqRight sep p) hsep rest t.remaining t.bytes r').1 hpr with ⟨s₂, hs₂, hrel₂⟩
+        refine ⟨cast (congrArg Bytes (sub_sub_add n t.remaining r'.remaining t.hle r'.hle)) (concat s₁ s₂), ?_, ?_⟩
+        · rw [hs₁]
+          exact (prepend_assoc t r' s₁ s₂ hs₂.symm).symm
         · rw [relSepBy]
-          exact ⟨s₁, s₂, rfl, hrel₁, hrel₂⟩
+          refine ⟨n - t.remaining, Nat.sub_le_sub_left r'.hle n, s₁, cast (congrArg Bytes (sub_sub_sub n t.remaining r'.remaining t.hle r'.hle).symm) s₂, ?_, hrel₁, ?_⟩
+          · exact cast_concat_splice_sub t.hle r'.hle s₁ s₂
+          · exact (relRepeat_cast (Rel (seqRight sep p)) rest (sub_sub_sub n t.remaining r'.remaining t.hle r'.hle).symm s₂).2 hrel₂
       · intro h
         rcases h with ⟨s₀, hs, hrel⟩
         rw [relSepBy] at hrel
-        rcases hrel with ⟨s₁, s₂, hs₀, hrel₁, hrel₂⟩
-        have hx : (x₀, s₂ ++ r) ∈ decode p s := by
-          refine (decode_spec p x₀).2 ⟨s₁, ?_, hrel₁⟩
-          rw [hs, hs₀]
-          simp [List.append_assoc]
-        refine ⟨(x₀, s₂ ++ r), hx, ?_⟩
+        rcases hrel with ⟨m, hm, s₁, s₂, hs₀, hrel₁, hrel₂⟩
+        subst s₀
+        have hmem₁ : (x₀, Suffix.drop m s) ∈ decode p s := by
+          refine (decode_spec p x₀ (s := s) (r := Suffix.drop m s)).2 ⟨
+            cast (congrArg Bytes (Nat.sub_sub_self (Nat.le_trans hm (Nat.sub_le n r.remaining))).symm) s₁,
+            ?_, ?_⟩
+          · rw [hs]
+            exact prepend_drop_of_prepend_splice r m hm s₁ s₂
+          · exact (Rel_cast p x₀ (Nat.sub_sub_self (Nat.le_trans hm (Nat.sub_le n r.remaining))).symm s₁).2 hrel₁
+        let r' : Suffix (n - m) := Suffix.drop ((n - r.remaining) - m) (bdrop m s)
+        have hmem₂ : (rest, r') ∈ decodeRepeat (seqRight sep p) hsep (n - m) (bdrop m s) := by
+          refine (decodeRepeat_spec (seqRight sep p) hsep rest (n - m) (bdrop m s) r').2 ⟨
+            cast (congrArg Bytes (Nat.sub_sub_self (Nat.sub_le_sub_right (Nat.sub_le n r.remaining) m)).symm) s₂,
+            ?_, ?_⟩
+          · dsimp [r']
+            rw [hs]
+            exact prepend_eq_of_eq_splice (bdrop m (r.prepend (splice hm s₁ s₂))) (Nat.sub_le_sub_right (Nat.sub_le n r.remaining) m) s₂ (cast (congrArg Bytes (bdrop_prepend_splice_snd_len r.hle hm).symm) r.bytes) (bdrop_prepend_splice_eq_splice r m hm s₁ s₂)
+          · exact (relRepeat_cast (Rel (seqRight sep p)) rest (Nat.sub_sub_self (Nat.sub_le_sub_right (Nat.sub_le n r.remaining) m)).symm s₂).2 hrel₂
+        have htrans : (Suffix.drop m s).trans r' = r := by
+          refine Suffix.ext (t₁ := (Suffix.drop m s).trans r') (t₂ := r) ?_ ?_
+          · dsimp [r', Suffix.trans]
+            exact bdrop_prepend_splice_snd_len r.hle hm
+          · dsimp [r', Suffix.trans, Suffix.drop]
+            rw [hs]
+            rw [bdrop_drop_eq_bytes r m hm s₁ s₂]
+            change cast (congrArg Bytes (bdrop_prepend_splice_snd_len r.hle hm)) (cast (congrArg Bytes (bdrop_prepend_splice_snd_len r.hle hm).symm) r.bytes) = r.bytes
+            simp
+        refine ⟨(x₀, Suffix.drop m s), hmem₁, ?_⟩
         rw [List.mem_map]
-        refine ⟨(rest, r), ?_, rfl⟩
-        exact (decodeRepeat_spec (seqRight sep p) hsep rest (s₂ ++ r) r).2 ⟨s₂, rfl, hrel₂⟩
+        refine ⟨(rest, r'), hmem₂, ?_⟩
+        exact congrArg (fun y => (x₀ :: rest, y)) htrans
 
 /-- Encoder soundness for `sepBy`: any list the `sepBy`-encoder prints is in
 `relSepBy`. Structural on the value list; no productivity witness needed. -/
 theorem encodeSepBy_rel {α : Type} (p : Codec α) (sep : Codec Unit) :
-    ∀ (xs : List α) {s : Bytes}, encodeSepBy p sep xs = some s → relSepBy p sep xs s := by
-  intro xs
+    ∀ (xs : List α) {n : Nat} {s : Bytes n}, encodeSepBy p sep xs = some ⟨n, s⟩ → relSepBy p sep xs s := by
+  intro xs n s he
   cases xs with
   | nil =>
-      intro s he
       simp [encodeSepBy] at he
   | cons x₀ rest =>
-      intro s he
       rw [encodeSepBy] at he
       cases hx : encode p x₀ with
       | none => simp [hx] at he
@@ -368,9 +392,13 @@ theorem encodeSepBy_rel {α : Type} (p : Codec α) (sep : Codec Unit) :
           | none => simp [hr] at he
           | some s' =>
               rw [hr] at he
-              cases he
+              have heq : (⟨s₀.1 + s'.1, concat s₀.2 s'.2⟩ : Sigma fun k => Bytes k) = ⟨n, s⟩ := by
+                simpa using he
+              cases heq
               rw [relSepBy]
-              exact ⟨s₀, s', rfl, encode_rel p x₀ hx, encodeRepeat_rel (seqRight sep p) rest hr⟩
+              refine ⟨s₀.1, Nat.le.intro rfl, s₀.2, cast (congrArg Bytes (Nat.add_sub_cancel_left s₀.1 s'.1).symm) s'.2, ?_, encode_rel p x₀ hx, ?_⟩
+              · exact concat_eq_splice s₀.2 s'.2
+              · exact (relRepeat_cast (Rel (seqRight sep p)) rest (Nat.add_sub_cancel_left s₀.1 s'.1).symm s'.2).2 (encodeRepeat_rel (seqRight sep p) rest hr)
 
 /-- The bidirectional law for `chainl1`: the chain decoder is complete and sound
 against `relChainl1`. Unconditional; productivity is the decoder's `hsep` argument.
@@ -378,9 +406,9 @@ The fold step `foldl` (and its `MeasureDecreases` witness `h`) is unchanged. -/
 theorem decodeChainl1_spec {α β : Type} (f : Iso (α × (β × α)) α) (measure : α → Nat)
     (h : MeasureDecreases measure f) (arg : Codec α) (op : Codec β)
     (hsep : ConsumesByte (Codec.seq op arg)) :
-    ∀ (a : α) {s r : Bytes}, (a, r) ∈ decodeChainl1 f measure h arg op hsep s ↔
-      ∃ s₀, s = s₀ ++ r ∧ relChainl1 f measure h arg op a s₀ := by
-  intro a s r
+    ∀ (a : α) {n : Nat} (s : Bytes n) (r : Suffix n), (a, r) ∈ decodeChainl1 f measure h arg op hsep s ↔
+      ∃ s₀ : Bytes (n - r.remaining), s = r.prepend s₀ ∧ relChainl1 f measure h arg op a s₀ := by
+  intro a n s r
   rw [decodeChainl1, List.mem_flatMap]
   constructor
   · intro hm
@@ -395,27 +423,51 @@ theorem decodeChainl1_spec {α β : Type} (f : Iso (α × (β × α)) α) (measu
         simp [haply] at hf
         rcases hf with ⟨ha', hr'⟩
         cases ha'
-        cases hr'
-        rcases (decode_spec arg a₀).1 hpr with ⟨s₁, hs₁, hrel₁⟩
-        rcases (decodeRepeat_spec (Codec.seq op arg) hsep ops t r).1 hopsr with ⟨s₂, hs₂, hrel₂⟩
-        refine ⟨s₁ ++ s₂, ?_, ?_⟩
-        · rw [hs₁, hs₂]
-          simp [List.append_assoc]
+        subst r
+        rcases (decode_spec arg a₀ (s := s) (r := t)).1 hpr with ⟨s₁, hs₁, hrel₁⟩
+        rcases (decodeRepeat_spec (Codec.seq op arg) hsep ops t.remaining t.bytes r').1 hopsr with ⟨s₂, hs₂, hrel₂⟩
+        refine ⟨cast (congrArg Bytes (sub_sub_add n t.remaining r'.remaining t.hle r'.hle)) (concat s₁ s₂), ?_, ?_⟩
+        · rw [hs₁]
+          exact (prepend_assoc t r' s₁ s₂ hs₂.symm).symm
         · rw [relChainl1]
-          exact ⟨a₀, ops, s₁, s₂, rfl, hrel₁, hrel₂, haply⟩
+          refine ⟨a₀, ops, n - t.remaining, Nat.sub_le_sub_left r'.hle n, s₁, cast (congrArg Bytes (sub_sub_sub n t.remaining r'.remaining t.hle r'.hle).symm) s₂, ?_, hrel₁, ?_, haply⟩
+          · exact cast_concat_splice_sub t.hle r'.hle s₁ s₂
+          · exact (relRepeat_cast (Rel (Codec.seq op arg)) ops (sub_sub_sub n t.remaining r'.remaining t.hle r'.hle).symm s₂).2 hrel₂
   · intro hm
     rcases hm with ⟨s₀, hs, hrel⟩
     rw [relChainl1] at hrel
-    rcases hrel with ⟨a₀, ops, s₁, s₂, hs₀, hrel₁, hrel₂, haply⟩
-    have ha : (a₀, s₂ ++ r) ∈ decode arg s := by
-      refine (decode_spec arg a₀).2 ⟨s₁, ?_, hrel₁⟩
-      rw [hs, hs₀]
-      simp [List.append_assoc]
-    refine ⟨(a₀, s₂ ++ r), ha, ?_⟩
+    rcases hrel with ⟨a₀, ops, m, hm₀, s₁, s₂, hs₀, hrel₁, hrel₂, haply⟩
+    subst s₀
+    have hmem₁ : (a₀, Suffix.drop m s) ∈ decode arg s := by
+      refine (decode_spec arg a₀ (s := s) (r := Suffix.drop m s)).2 ⟨
+        cast (congrArg Bytes (Nat.sub_sub_self (Nat.le_trans hm₀ (Nat.sub_le n r.remaining))).symm) s₁,
+        ?_, ?_⟩
+      · rw [hs]
+        exact prepend_drop_of_prepend_splice r m hm₀ s₁ s₂
+      · exact (Rel_cast arg a₀ (Nat.sub_sub_self (Nat.le_trans hm₀ (Nat.sub_le n r.remaining))).symm s₁).2 hrel₁
+    let r' : Suffix (n - m) := Suffix.drop ((n - r.remaining) - m) (bdrop m s)
+    have hmem₂ : (ops, r') ∈ decodeRepeat (Codec.seq op arg) hsep (n - m) (bdrop m s) := by
+      refine (decodeRepeat_spec (Codec.seq op arg) hsep ops (n - m) (bdrop m s) r').2 ⟨
+        cast (congrArg Bytes (Nat.sub_sub_self (Nat.sub_le_sub_right (Nat.sub_le n r.remaining) m)).symm) s₂,
+        ?_, ?_⟩
+      · dsimp [r']
+        rw [hs]
+        exact prepend_eq_of_eq_splice (bdrop m (r.prepend (splice hm₀ s₁ s₂))) (Nat.sub_le_sub_right (Nat.sub_le n r.remaining) m) s₂ (cast (congrArg Bytes (bdrop_prepend_splice_snd_len r.hle hm₀).symm) r.bytes) (bdrop_prepend_splice_eq_splice r m hm₀ s₁ s₂)
+      · exact (relRepeat_cast (Rel (Codec.seq op arg)) ops (Nat.sub_sub_self (Nat.sub_le_sub_right (Nat.sub_le n r.remaining) m)).symm s₂).2 hrel₂
+    have htrans : (Suffix.drop m s).trans r' = r := by
+      refine Suffix.ext (t₁ := (Suffix.drop m s).trans r') (t₂ := r) ?_ ?_
+      · dsimp [r', Suffix.trans]
+        exact bdrop_prepend_splice_snd_len r.hle hm₀
+      · dsimp [r', Suffix.trans, Suffix.drop]
+        rw [hs]
+        rw [bdrop_drop_eq_bytes r m hm₀ s₁ s₂]
+        change cast (congrArg Bytes (bdrop_prepend_splice_snd_len r.hle hm₀)) (cast (congrArg Bytes (bdrop_prepend_splice_snd_len r.hle hm₀).symm) r.bytes) = r.bytes
+        simp
+    refine ⟨(a₀, Suffix.drop m s), hmem₁, ?_⟩
     rw [List.mem_filterMap]
-    refine ⟨(ops, r), ?_, ?_⟩
-    · exact (decodeRepeat_spec (Codec.seq op arg) hsep ops (s₂ ++ r) r).2 ⟨s₂, rfl, hrel₂⟩
-    · simp [haply]
+    refine ⟨(ops, r'), ?_, ?_⟩
+    · exact hmem₂
+    · simp [haply, congrArg (fun y => (a, y)) htrans]
 
 /-- Encoder soundness for `chainl1`: any value the chain-encoder prints is in
 `relChainl1`. The `foldl.unapply` direction is tied to `foldl.apply` by the
@@ -423,9 +475,9 @@ theorem decodeChainl1_spec {α β : Type} (f : Iso (α × (β × α)) α) (measu
 original value. -/
 theorem encodeChainl1_rel {α β : Type} (f : Iso (α × (β × α)) α) (measure : α → Nat)
     (h : MeasureDecreases measure f) (arg : Codec α) (op : Codec β) :
-    ∀ (a : α) {s : Bytes}, encodeChainl1 f measure h arg op a = some s →
+    ∀ (a : α) {n : Nat} {s : Bytes n}, encodeChainl1 f measure h arg op a = some ⟨n, s⟩ →
       relChainl1 f measure h arg op a s := by
-  intro a s he
+  intro a n s he
   rw [encodeChainl1] at he
   cases hu : (foldl f measure h).unapply a with
   | none => simp [hu] at he
@@ -440,20 +492,23 @@ theorem encodeChainl1_rel {α β : Type} (f : Iso (α × (β × α)) α) (measur
           | none => simp [hr] at he
           | some s' =>
               simp [hr] at he
-              cases he
+              have heq : (⟨s₀.1 + s'.1, concat s₀.2 s'.2⟩ : Sigma fun k => Bytes k) = ⟨n, s⟩ := by
+                simpa using he
+              cases heq
               have haply : (foldl f measure h).apply (a₀, ops) = some a :=
                 ((foldl f measure h).law (a₀, ops) a).2 hu
               rw [relChainl1]
-              exact ⟨a₀, ops, s₀, s', rfl, encode_rel arg a₀ ha,
-                encodeRepeat_rel (Codec.seq op arg) ops hr, haply⟩
+              refine ⟨a₀, ops, s₀.1, Nat.le.intro rfl, s₀.2, cast (congrArg Bytes (Nat.add_sub_cancel_left s₀.1 s'.1).symm) s'.2, ?_, encode_rel arg a₀ ha, ?_, haply⟩
+              · exact concat_eq_splice s₀.2 s'.2
+              · exact (relRepeat_cast (Rel (Codec.seq op arg)) ops (Nat.add_sub_cancel_left s₀.1 s'.1).symm s'.2).2 (encodeRepeat_rel (Codec.seq op arg) ops hr)
 
 /-- The bidirectional law for `chainr1` (the right-fold dual of `decodeChainl1_spec`). -/
 theorem decodeChainr1_spec {α β : Type} (f : Iso ((α × β) × α) α) (measure : α → Nat)
     (h : MeasureDecreasesR measure f) (arg : Codec α) (op : Codec β)
     (hsep : ConsumesByte (Codec.seq arg op)) :
-    ∀ (a : α) {s r : Bytes}, (a, r) ∈ decodeChainr1 f measure h arg op hsep s ↔
-      ∃ s₀, s = s₀ ++ r ∧ relChainr1 f measure h arg op a s₀ := by
-  intro a s r
+    ∀ (a : α) {n : Nat} (s : Bytes n) (r : Suffix n), (a, r) ∈ decodeChainr1 f measure h arg op hsep s ↔
+      ∃ s₀ : Bytes (n - r.remaining), s = r.prepend s₀ ∧ relChainr1 f measure h arg op a s₀ := by
+  intro a n s r
   rw [decodeChainr1, List.mem_flatMap]
   constructor
   · intro hm
@@ -468,34 +523,58 @@ theorem decodeChainr1_spec {α β : Type} (f : Iso ((α × β) × α) α) (measu
         simp [haply] at hf
         rcases hf with ⟨ha', hr'⟩
         cases ha'
-        cases hr'
-        rcases (decode_spec arg a₀).1 hpr with ⟨s₁, hs₁, hrel₁⟩
-        rcases (decodeRepeat_spec (Codec.seq arg op) hsep ops t r).1 hopsr with ⟨s₂, hs₂, hrel₂⟩
-        refine ⟨s₁ ++ s₂, ?_, ?_⟩
-        · rw [hs₁, hs₂]
-          simp [List.append_assoc]
+        subst r
+        rcases (decode_spec arg a₀ (s := s) (r := t)).1 hpr with ⟨s₁, hs₁, hrel₁⟩
+        rcases (decodeRepeat_spec (Codec.seq arg op) hsep ops t.remaining t.bytes r').1 hopsr with ⟨s₂, hs₂, hrel₂⟩
+        refine ⟨cast (congrArg Bytes (sub_sub_add n t.remaining r'.remaining t.hle r'.hle)) (concat s₁ s₂), ?_, ?_⟩
+        · rw [hs₁]
+          exact (prepend_assoc t r' s₁ s₂ hs₂.symm).symm
         · rw [relChainr1]
-          exact ⟨a₀, ops, s₁, s₂, rfl, hrel₁, hrel₂, haply⟩
+          refine ⟨a₀, ops, n - t.remaining, Nat.sub_le_sub_left r'.hle n, s₁, cast (congrArg Bytes (sub_sub_sub n t.remaining r'.remaining t.hle r'.hle).symm) s₂, ?_, hrel₁, ?_, haply⟩
+          · exact cast_concat_splice_sub t.hle r'.hle s₁ s₂
+          · exact (relRepeat_cast (Rel (Codec.seq arg op)) ops (sub_sub_sub n t.remaining r'.remaining t.hle r'.hle).symm s₂).2 hrel₂
   · intro hm
     rcases hm with ⟨s₀, hs, hrel⟩
     rw [relChainr1] at hrel
-    rcases hrel with ⟨a₀, ops, s₁, s₂, hs₀, hrel₁, hrel₂, haply⟩
-    have ha : (a₀, s₂ ++ r) ∈ decode arg s := by
-      refine (decode_spec arg a₀).2 ⟨s₁, ?_, hrel₁⟩
-      rw [hs, hs₀]
-      simp [List.append_assoc]
-    refine ⟨(a₀, s₂ ++ r), ha, ?_⟩
+    rcases hrel with ⟨a₀, ops, m, hm₀, s₁, s₂, hs₀, hrel₁, hrel₂, haply⟩
+    subst s₀
+    have hmem₁ : (a₀, Suffix.drop m s) ∈ decode arg s := by
+      refine (decode_spec arg a₀ (s := s) (r := Suffix.drop m s)).2 ⟨
+        cast (congrArg Bytes (Nat.sub_sub_self (Nat.le_trans hm₀ (Nat.sub_le n r.remaining))).symm) s₁,
+        ?_, ?_⟩
+      · rw [hs]
+        exact prepend_drop_of_prepend_splice r m hm₀ s₁ s₂
+      · exact (Rel_cast arg a₀ (Nat.sub_sub_self (Nat.le_trans hm₀ (Nat.sub_le n r.remaining))).symm s₁).2 hrel₁
+    let r' : Suffix (n - m) := Suffix.drop ((n - r.remaining) - m) (bdrop m s)
+    have hmem₂ : (ops, r') ∈ decodeRepeat (Codec.seq arg op) hsep (n - m) (bdrop m s) := by
+      refine (decodeRepeat_spec (Codec.seq arg op) hsep ops (n - m) (bdrop m s) r').2 ⟨
+        cast (congrArg Bytes (Nat.sub_sub_self (Nat.sub_le_sub_right (Nat.sub_le n r.remaining) m)).symm) s₂,
+        ?_, ?_⟩
+      · dsimp [r']
+        rw [hs]
+        exact prepend_eq_of_eq_splice (bdrop m (r.prepend (splice hm₀ s₁ s₂))) (Nat.sub_le_sub_right (Nat.sub_le n r.remaining) m) s₂ (cast (congrArg Bytes (bdrop_prepend_splice_snd_len r.hle hm₀).symm) r.bytes) (bdrop_prepend_splice_eq_splice r m hm₀ s₁ s₂)
+      · exact (relRepeat_cast (Rel (Codec.seq arg op)) ops (Nat.sub_sub_self (Nat.sub_le_sub_right (Nat.sub_le n r.remaining) m)).symm s₂).2 hrel₂
+    have htrans : (Suffix.drop m s).trans r' = r := by
+      refine Suffix.ext (t₁ := (Suffix.drop m s).trans r') (t₂ := r) ?_ ?_
+      · dsimp [r', Suffix.trans]
+        exact bdrop_prepend_splice_snd_len r.hle hm₀
+      · dsimp [r', Suffix.trans, Suffix.drop]
+        rw [hs]
+        rw [bdrop_drop_eq_bytes r m hm₀ s₁ s₂]
+        change cast (congrArg Bytes (bdrop_prepend_splice_snd_len r.hle hm₀)) (cast (congrArg Bytes (bdrop_prepend_splice_snd_len r.hle hm₀).symm) r.bytes) = r.bytes
+        simp
+    refine ⟨(a₀, Suffix.drop m s), hmem₁, ?_⟩
     rw [List.mem_filterMap]
-    refine ⟨(ops, r), ?_, ?_⟩
-    · exact (decodeRepeat_spec (Codec.seq arg op) hsep ops (s₂ ++ r) r).2 ⟨s₂, rfl, hrel₂⟩
-    · simp [haply]
+    refine ⟨(ops, r'), ?_, ?_⟩
+    · exact hmem₂
+    · simp [haply, congrArg (fun y => (a, y)) htrans]
 
 /-- Encoder soundness for `chainr1` (the right-fold dual of `encodeChainl1_rel`). -/
 theorem encodeChainr1_rel {α β : Type} (f : Iso ((α × β) × α) α) (measure : α → Nat)
     (h : MeasureDecreasesR measure f) (arg : Codec α) (op : Codec β) :
-    ∀ (a : α) {s : Bytes}, encodeChainr1 f measure h arg op a = some s →
+    ∀ (a : α) {n : Nat} {s : Bytes n}, encodeChainr1 f measure h arg op a = some ⟨n, s⟩ →
       relChainr1 f measure h arg op a s := by
-  intro a s he
+  intro a n s he
   rw [encodeChainr1] at he
   cases hu : (foldr f measure h).unapply a with
   | none => simp [hu] at he
@@ -510,12 +589,15 @@ theorem encodeChainr1_rel {α β : Type} (f : Iso ((α × β) × α) α) (measur
           | none => simp [hr] at he
           | some s' =>
               simp [hr] at he
-              cases he
+              have heq : (⟨s₀.1 + s'.1, concat s₀.2 s'.2⟩ : Sigma fun k => Bytes k) = ⟨n, s⟩ := by
+                simpa using he
+              cases heq
               have haply : (foldr f measure h).apply (a₀, ops) = some a :=
                 ((foldr f measure h).law (a₀, ops) a).2 hu
               rw [relChainr1]
-              exact ⟨a₀, ops, s₀, s', rfl, encode_rel arg a₀ ha,
-                encodeRepeat_rel (Codec.seq arg op) ops hr, haply⟩
+              refine ⟨a₀, ops, s₀.1, Nat.le.intro rfl, s₀.2, cast (congrArg Bytes (Nat.add_sub_cancel_left s₀.1 s'.1).symm) s'.2, ?_, encode_rel arg a₀ ha, ?_, haply⟩
+              · exact concat_eq_splice s₀.2 s'.2
+              · exact (relRepeat_cast (Rel (Codec.seq arg op)) ops (Nat.add_sub_cancel_left s₀.1 s'.1).symm s'.2).2 (encodeRepeat_rel (Codec.seq arg op) ops hr)
 
 /-! ## The chain decode→encode direction, and chain injectivity
 
@@ -528,27 +610,46 @@ relation-level predicates `relFunctional`/`relUnambiguous` over `relChainl1`/
 (`encodeChainl1_rel`) and the decoder law (`decodeChainl1_spec`) to a full
 decode→encode bijection and injectivity under those hypotheses. -/
 
+/-- `relChainl1` is insensitive to a length-cast of its byte string (the
+`relFunctional`/`relFunctional`-carrying transport the `_of_decode` laws need to
+conclude at the *input* length `n` rather than the decoder's `n - 0`). -/
+theorem relChainl1_cast {α β : Type} (f : Iso (α × (β × α)) α) (measure : α → Nat)
+    (h : MeasureDecreases measure f) (arg : Codec α) (op : Codec β) (a : α)
+    {n m : Nat} (e : n = m) (s : Bytes n) :
+    relChainl1 f measure h arg op a (cast (congrArg Bytes e) s) ↔ relChainl1 f measure h arg op a s := by
+  cases e
+  rfl
+
+/-- `relChainr1` is insensitive to a length-cast of its byte string (the
+right-fold dual of `relChainl1_cast`). -/
+theorem relChainr1_cast {α β : Type} (f : Iso ((α × β) × α) α) (measure : α → Nat)
+    (h : MeasureDecreasesR measure f) (arg : Codec α) (op : Codec β) (a : α)
+    {n m : Nat} (e : n = m) (s : Bytes n) :
+    relChainr1 f measure h arg op a (cast (congrArg Bytes e) s) ↔ relChainr1 f measure h arg op a s := by
+  cases e
+  rfl
+
 /-- **Encoder completeness for a left chain**: every value in `relChainl1` encodes
 successfully. The maximal unfold of `a` via `foldl` is tied to the fold's apply by
 the `Iso.law` field, so the relation's seed/operands are recovered and each part
 encodes (seed via `encode_ne_none`, operands via `encodeRepeat_ne_none`). -/
 theorem encodeChainl1_ne_none {α β : Type} (f : Iso (α × (β × α)) α) (measure : α → Nat)
     (h : MeasureDecreases measure f) (arg : Codec α) (op : Codec β) :
-    ∀ (a : α) (s : Bytes), relChainl1 f measure h arg op a s →
+    ∀ (a : α) {n : Nat} (s : Bytes n), relChainl1 f measure h arg op a s →
       encodeChainl1 f measure h arg op a ≠ none := by
-  intro a s hrel
+  intro a n s hrel
   rw [relChainl1] at hrel
-  rcases hrel with ⟨a₀, ops, s₀, s', _hs, hrel₀, hrelops, haply⟩
+  rcases hrel with ⟨a₀, ops, m, _hm, s₁, s₂, _hs, hrel₀, hrelops, haply⟩
   rw [encodeChainl1]
   have hu : (foldl f measure h).unapply a = some (a₀, ops) :=
     ((foldl f measure h).law (a₀, ops) a).1 haply
   rw [hu]
-  have hne₀ : encode arg a₀ ≠ none := encode_ne_none arg a₀ s₀ hrel₀
+  have hne₀ : encode arg a₀ ≠ none := encode_ne_none arg a₀ s₁ hrel₀
   cases h₁ : encode arg a₀ with
   | none => exact False.elim (hne₀ h₁)
   | some e₀ =>
       have hneops : encodeRepeat (Codec.seq op arg) ops ≠ none :=
-        encodeRepeat_ne_none (Codec.seq op arg) ops s' hrelops
+        encodeRepeat_ne_none (Codec.seq op arg) ops s₂ hrelops
       cases h₂ : encodeRepeat (Codec.seq op arg) ops with
       | none => exact False.elim (hneops h₂)
       | some eops => simp [h₁, h₂]
@@ -556,48 +657,54 @@ theorem encodeChainl1_ne_none {α β : Type} (f : Iso (α × (β × α)) α) (me
 /-- **Encoder completeness for a right chain** (the dual of `encodeChainl1_ne_none`). -/
 theorem encodeChainr1_ne_none {α β : Type} (f : Iso ((α × β) × α) α) (measure : α → Nat)
     (h : MeasureDecreasesR measure f) (arg : Codec α) (op : Codec β) :
-    ∀ (a : α) (s : Bytes), relChainr1 f measure h arg op a s →
+    ∀ (a : α) {n : Nat} (s : Bytes n), relChainr1 f measure h arg op a s →
       encodeChainr1 f measure h arg op a ≠ none := by
-  intro a s hrel
+  intro a n s hrel
   rw [relChainr1] at hrel
-  rcases hrel with ⟨a₀, ops, s₀, s', _hs, hrel₀, hrelops, haply⟩
+  rcases hrel with ⟨a₀, ops, m, _hm, s₁, s₂, _hs, hrel₀, hrelops, haply⟩
   rw [encodeChainr1]
   have hu : (foldr f measure h).unapply a = some (a₀, ops) :=
     ((foldr f measure h).law (a₀, ops) a).1 haply
   rw [hu]
-  have hne₀ : encode arg a₀ ≠ none := encode_ne_none arg a₀ s₀ hrel₀
+  have hne₀ : encode arg a₀ ≠ none := encode_ne_none arg a₀ s₁ hrel₀
   cases h₁ : encode arg a₀ with
   | none => exact False.elim (hne₀ h₁)
   | some e₀ =>
       have hneops : encodeRepeat (Codec.seq arg op) ops ≠ none :=
-        encodeRepeat_ne_none (Codec.seq arg op) ops s' hrelops
+        encodeRepeat_ne_none (Codec.seq arg op) ops s₂ hrelops
       cases h₂ : encodeRepeat (Codec.seq arg op) ops with
       | none => exact False.elim (hneops h₂)
       | some eops => simp [h₁, h₂]
 
 /-- Under chain functionality, a value the left-chain decoder accepts (with no
 remainder) re-encodes to exactly the same bytes — the chain mirror of
-`encode_of_decode`, making `encodeChainl1 … = some s ↔ (a, []) ∈ decodeChainl1 … s`
+`encode_of_decode`, making `encodeChainl1 … = some s ↔ (a, Suffix.empty n) ∈ decodeChainl1 … s`
 a bijection for functional chains. -/
 theorem encodeChainl1_of_decode {α β : Type} (f : Iso (α × (β × α)) α)
     (measure : α → Nat) (h : MeasureDecreases measure f) (arg : Codec α) (op : Codec β)
     (hsep : ConsumesByte (Codec.seq op arg))
     (hd : relFunctional (relChainl1 f measure h arg op)) (a : α)
-    {s : Bytes} (hdcd : (a, []) ∈ decodeChainl1 f measure h arg op hsep s) :
-    encodeChainl1 f measure h arg op a = some s := by
-  rcases (decodeChainl1_spec f measure h arg op hsep a (s := s) (r := [])).1 hdcd with
+    {n : Nat} {s : Bytes n} (hdcd : (a, Suffix.empty n) ∈ decodeChainl1 f measure h arg op hsep s) :
+    encodeChainl1 f measure h arg op a = some ⟨n, s⟩ := by
+  rcases (decodeChainl1_spec f measure h arg op hsep a (s := s) (r := Suffix.empty n)).1 hdcd with
     ⟨s₀, hsplit, hrel⟩
-  have hs₀ : s = s₀ := by simpa using hsplit
-  subst s₀
+  have hcast : s = cast (congrArg Bytes (Nat.sub_zero n)) s₀ := by
+    rw [hsplit]
+    exact prepend_empty s₀
+  have hrels : relChainl1 f measure h arg op a s := by
+    rw [hcast]
+    exact (relChainl1_cast f measure h arg op a (Nat.sub_zero n) s₀).1 hrel
   have hne : encodeChainl1 f measure h arg op a ≠ none :=
-    encodeChainl1_ne_none f measure h arg op a s hrel
+    encodeChainl1_ne_none f measure h arg op a s hrels
   cases he : encodeChainl1 f measure h arg op a with
   | none => exact False.elim (hne he)
-  | some s' =>
+  | some e =>
+      rcases e with ⟨n', s'⟩
       have hrel' : relChainl1 f measure h arg op a s' :=
         encodeChainl1_rel f measure h arg op a he
-      have hs' : s' = s := hd a hrel' hrel
-      rw [hs']
+      have hs' : (⟨n', s'⟩ : Sigma fun k => Bytes k) = ⟨n, s⟩ := hd a s' s hrel' hrels
+      cases hs'
+      rfl
 
 /-- Under chain functionality, a value the right-chain decoder accepts re-encodes
 to exactly the same bytes (the dual of `encodeChainl1_of_decode`). -/
@@ -605,29 +712,35 @@ theorem encodeChainr1_of_decode {α β : Type} (f : Iso ((α × β) × α) α)
     (measure : α → Nat) (h : MeasureDecreasesR measure f) (arg : Codec α) (op : Codec β)
     (hsep : ConsumesByte (Codec.seq arg op))
     (hd : relFunctional (relChainr1 f measure h arg op)) (a : α)
-    {s : Bytes} (hdcd : (a, []) ∈ decodeChainr1 f measure h arg op hsep s) :
-    encodeChainr1 f measure h arg op a = some s := by
-  rcases (decodeChainr1_spec f measure h arg op hsep a (s := s) (r := [])).1 hdcd with
+    {n : Nat} {s : Bytes n} (hdcd : (a, Suffix.empty n) ∈ decodeChainr1 f measure h arg op hsep s) :
+    encodeChainr1 f measure h arg op a = some ⟨n, s⟩ := by
+  rcases (decodeChainr1_spec f measure h arg op hsep a (s := s) (r := Suffix.empty n)).1 hdcd with
     ⟨s₀, hsplit, hrel⟩
-  have hs₀ : s = s₀ := by simpa using hsplit
-  subst s₀
+  have hcast : s = cast (congrArg Bytes (Nat.sub_zero n)) s₀ := by
+    rw [hsplit]
+    exact prepend_empty s₀
+  have hrels : relChainr1 f measure h arg op a s := by
+    rw [hcast]
+    exact (relChainr1_cast f measure h arg op a (Nat.sub_zero n) s₀).1 hrel
   have hne : encodeChainr1 f measure h arg op a ≠ none :=
-    encodeChainr1_ne_none f measure h arg op a s hrel
+    encodeChainr1_ne_none f measure h arg op a s hrels
   cases he : encodeChainr1 f measure h arg op a with
   | none => exact False.elim (hne he)
-  | some s' =>
+  | some e =>
+      rcases e with ⟨n', s'⟩
       have hrel' : relChainr1 f measure h arg op a s' :=
         encodeChainr1_rel f measure h arg op a he
-      have hs' : s' = s := hd a hrel' hrel
-      rw [hs']
+      have hs' : (⟨n', s'⟩ : Sigma fun k => Bytes k) = ⟨n, s⟩ := hd a s' s hrel' hrels
+      cases hs'
+      rfl
 
 /-- `encodeChainl1` is injective on the bytes it prints, for chain-unambiguous
 descriptions (the chain mirror of `encode_injective_of_unambiguous`). -/
 theorem encodeChainl1_injective_of_unambiguous {α β : Type} (f : Iso (α × (β × α)) α)
     (measure : α → Nat) (h : MeasureDecreases measure f) (arg : Codec α) (op : Codec β)
-    (hd : relUnambiguous (relChainl1 f measure h arg op)) {x y : α} {s : Bytes}
-    (hx : encodeChainl1 f measure h arg op x = some s)
-    (hy : encodeChainl1 f measure h arg op y = some s) : x = y := by
+    (hd : relUnambiguous (relChainl1 f measure h arg op)) {x y : α} {n : Nat} {s : Bytes n}
+    (hx : encodeChainl1 f measure h arg op x = some ⟨n, s⟩)
+    (hy : encodeChainl1 f measure h arg op y = some ⟨n, s⟩) : x = y := by
   have hrelx : relChainl1 f measure h arg op x s := encodeChainl1_rel f measure h arg op x hx
   have hrely : relChainl1 f measure h arg op y s := encodeChainl1_rel f measure h arg op y hy
   exact hd s hrelx hrely
@@ -636,9 +749,9 @@ theorem encodeChainl1_injective_of_unambiguous {α β : Type} (f : Iso (α × (�
 descriptions (the dual of `encodeChainl1_injective_of_unambiguous`). -/
 theorem encodeChainr1_injective_of_unambiguous {α β : Type} (f : Iso ((α × β) × α) α)
     (measure : α → Nat) (h : MeasureDecreasesR measure f) (arg : Codec α) (op : Codec β)
-    (hd : relUnambiguous (relChainr1 f measure h arg op)) {x y : α} {s : Bytes}
-    (hx : encodeChainr1 f measure h arg op x = some s)
-    (hy : encodeChainr1 f measure h arg op y = some s) : x = y := by
+    (hd : relUnambiguous (relChainr1 f measure h arg op)) {x y : α} {n : Nat} {s : Bytes n}
+    (hx : encodeChainr1 f measure h arg op x = some ⟨n, s⟩)
+    (hy : encodeChainr1 f measure h arg op y = some ⟨n, s⟩) : x = y := by
   have hrelx : relChainr1 f measure h arg op x s := encodeChainr1_rel f measure h arg op x hx
   have hrely : relChainr1 f measure h arg op y s := encodeChainr1_rel f measure h arg op y hy
   exact hd s hrelx hrely

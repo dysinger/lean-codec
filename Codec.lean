@@ -15,20 +15,13 @@ library's components:
   * `Codec.Encode` — the partial encoder
   * `Codec.Sound` — the bidirectional and roundtrip laws
   * `Codec.Combinators` — derived combinators (`many`, `*>`, `<*`, …)
+  * `Codec.VarBinary` — the LEB128 varint over the length-indexed bytes
 -/
 
 import Codec.Iso
 import Codec.Codec
 import Codec.Decode
-import Codec.DecodeArray
-import Codec.DecodeByteArray
-import Codec.DecodeByteArraySlice
 import Codec.Encode
-import Codec.EncodeArray
-import Codec.EncodeByteArray
-import Codec.EncodeByteArraySlice
-import Codec.ExternFastPath
 import Codec.Sound
 import Codec.Combinators
-import Codec.Buffer
 import Codec.VarBinary
