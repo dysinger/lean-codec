@@ -89,6 +89,23 @@ unsafe def benchCalibration (n : Nat) (reps : Nat) : IO Unit := do
   printLane "calib memset " n (dtMemset / reps) n
   printLane "calib memcpy " n (dtMemcpy / reps) n
 
+/-- The Layer-2 trust-seam lane: `byteSlice src i` (the `@[extern "codec_byteSlice"]`
+`memcpy`-style suffix copy) is timed on a packed path, and **value-checked
+byte-for-byte** against the Lean *body* (`Array.extract` on `.data`, the
+specification the law is pinned to — not a length check). A wrong C implementation
+fails the bench, not just the trust contract. The lane copies the `n/2`-suffix, so
+`bytesPerOp` is `n - n/2` (the bytes actually moved), not `n`. -/
+unsafe def benchByteSlice (n : Nat) (reps : Nat) : IO Unit := do
+  let src := ByteArray.mk (Array.ofFn fun (_ : Fin n) => (1 : UInt8))
+  let half : Nat := n / 2
+  let idx : USize := half.toUSize
+  -- spec: the Lean body `byteSlice` reduces to (`extract` on `.data`).
+  let spec : ByteArray := ByteArray.mk (src.data.extract half src.data.size)
+  let (r, dt) ← timeBatch reps fun _ => byteSlice src idx
+  if r != spec then
+    throw (IO.userError "byteSlice ≠ extract (value mismatch)")
+  printLane "byteSlice L2  " n (dt / reps) (n - half)
+
 /-- The scalar-index read lane: reading `s ⟨i, ·⟩` is a structural indexed load on
 the length-indexed carrier (the one read the single substrate exposes). -/
 unsafe def benchScalarIndexRead (n : Nat) (reps : Nat) : IO Unit := do
@@ -250,6 +267,8 @@ unsafe def main (args : List String) : IO Unit := do
     Codec.Bench.benchFastEncodeRepeat size reps
     -- Representation-isolation: same byte count, but concat/sigma/Fin-sum elided.
     Codec.Bench.benchEncodeRepeatIsolation size reps
+    -- Layer-2 named trust seam: the `codec_byteSlice` memcpy suffix copy.
+    Codec.Bench.benchByteSlice size reps
   -- Single-byte empty-remainder roundtrip.
   Codec.Bench.benchRoundtripByte reps
   -- Quadratic backtracking "many" decoder (kept small, paper §4.4).

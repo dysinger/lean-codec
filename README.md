@@ -177,9 +177,10 @@ attempts shared: they split the carrier (a `List`/opaque `ByteArray` slab pair) 
 then paid for `Classical.choice`-leaking `Array.extract`/`Array.toList` transport lemmas
 at the seam. One length-indexed byte string removes that split and its leaks for the
 _proof_ substrate. **The carrier split was never the strategy; it was the defect.**
-(The bulk-encode fast path re-introduces a `ByteArray` accumulator _only_ as a proved-equal
-implementation — see the performance change — keeping `Bytes n` as the specification every
-law is stated over.)
+(The performance change re-introduces a `ByteArray` accumulator _only_ as a proved-equal
+implementation, in two layers with **distinct proof status** — see
+[Performance](#performance-two-proof-layers) — keeping `Bytes n` as the specification
+every law is stated over.)
 
 ---
 
@@ -392,6 +393,54 @@ description — no solver, no per-combinator gate, no prefix-disjointness condit
   `lengthPrefix`, image/Protobuf demos, and the speed benchmark.
 - **`lean-text`** (downstream): `utf8` plus `text`/`identifier`/`whitespace` —
   the paper's §6 text domain, re-based on bytes.
+
+## Performance — two proof layers
+
+The packed result carrier (see `Codec/Packed.lean`) gives the interpreter a
+contiguous-buffer fast path, in **two layers with distinct proof status** that are
+never conflated:
+
+- **Layer 1 — proven, zero trusted C.** The packed decoder/encoder (`decodeArray` /
+  `decodeFullArray` / `encodeArray` / `encodeByteArrayBytes`) and their refinement
+  theorems (`decodeArray_eq`, `decodeFullArray_spec`, `encodeArray_eq`,
+  `encodeByteArrayBytes_eq`), each `[propext, Quot.sound]`-only, zero
+  `Classical.choice`, zero `sorry`. These are the **only** layer admitted to the
+  `#print axioms` gate.
+- **Layer 2 — a named trust seam.** `byteSlice (a : ByteArray) (i : USize)` (in
+  `Codec/ByteSlice.lean`) is a `memcpy`-style suffix copy whose **Lean body**
+  elaborates and reduces (so `#print axioms Codec.byteSlice` reports no axioms — the
+  proof sees the proof-only body), but whose **running C** (`codec_byteSlice` in
+  `Codec/ByteSlice.c`) is **trusted, not proven**. Layer 2 is **excluded** from the
+  `#print axioms` acceptance and documented as the F\*-vs-KaRaMeL posture: the Lean
+  body pins the meaning; the same-named C symbol is the isolated trust seam.
+
+  `byteSlice` is a **standalone seam**: in this change it has no library-internal
+  caller — the proven `decodeFullArray` (Layer 1) deliberately builds its suffix via
+  the `List.toArray.drop` transport (an axiom-clean body, not a trusted `@[extern]`),
+  and the bench lane is the packed-path consumer that exercises it. The "wired only
+  onto a packed path" rule is a _how-to-use_ constraint (never call it from a
+  `List`-re-materializing consumer), not a claim that it is already in the critical
+  path.
+
+"No axiom" is **not** "no trust": Layer 1 is proven zero-C; Layer 2 is trusted C
+under a named contract. The `#print axioms` gate accepts only Layer 1; the bench
+value-checks both byte-for-byte, so a semantically-wrong fast path fails at run time.
+
+Measured (current `bench`, 128 KiB linear sweep `[measured]`, never hand-typed;
+all figures are the bench's own): the Layer-2 `byteSlice` suffix copy of the
+`n/2` suffix runs **108695 MiB/s** (`575` ns/op moving `n/2` bytes at 128 KiB) vs
+the **30994 MiB/s** `memcpy` calibration on the same machine (which moves the full
+`n` bytes); the proven Layer-1 bulk `fastEncodeRepeat` runs **30 MiB/s** vs the
+**32 MiB/s** `Bytes n` spec `encodeRepeat` at the same 128 KiB — though note the
+comparison is not perfectly controlled (the `fastEncodeRepeat` lane value-checks
+byte-for-byte while the `encodeRepeat` lane checks only length, so the gap is partly
+measurement asymmetry). The contiguous accumulator removes the nested `concat`
+closure per element, but both Layer-1 lanes are far from the `byteSlice`/`memcpy`
+floor — the pure-carrier bulk write is the cost, and the result-carrier swap (not
+the byte loop) is the lever this change exercises.
+The carrier swap removes the _result_ allocation; near-C speed of the general
+interpreter for arbitrary `α` on real workloads (JSON/PNG/protobuf) is out of scope
+here.
 
 ## Getting started
 

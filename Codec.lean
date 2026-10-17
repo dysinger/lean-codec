@@ -26,3 +26,4 @@ import Codec.Sound
 import Codec.Combinators
 import Codec.VarBinary
 import Codec.Packed
+import Codec.ByteSlice
