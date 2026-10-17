@@ -3,7 +3,46 @@
 > **Session status (latest):** toolchain is plain nixpkgs `lean4` (clang 21.1.8).
 > §1 (profiling/attribution) is complete; the measured finding settled that pure
 > `Bytes n` lowering cannot reach the baseline, so §2/§3 collapse into one
-> law-backed bulk fast path. Next: §2.1 (`fastEncodeRepeat` + its refinement proof).
+> law-backed bulk fast path. **§2.1 is in progress — the refinement proof hit a
+> `Classical.choice` leak in Lean 4.34.1's `List.toArray`/`Array.toList` `GetElem`
+> round-trip (see the §2.1 log below); the clean building blocks (`ofFn_concat`,
+> `fastEncodeRepeatAcc_eq`, `list_ofFn_getElem_clean`) are proved and committed-ready, but
+> `fastEncodeRepeat_eq` needs the readback re-worked to avoid `.toArray.toList[i.val]`.**
+
+## §2.1 log (carrier fast path — `fastEncodeRepeat`; refinement proof still open)
+
+**Prototyped and proved clean `[propext, Quot.sound]`-only (not yet committed — see §2.1):**
+
+- `ofFn_concat {m n} (s₀ : Bytes m) (s₁ : Bytes n) : List.ofFn (concat s₀ s₁) = List.ofFn s₀ ++ List.ofFn s₁`
+  — the keystone: `List.ofFn` (the `Fin n → T ≃ List` enumeration) distributes over
+  `concat`, proved via `List.ext_getElem` + `getElem_ofFn`/`getElem_append` + `by_cases`.
+- `fastEncodeRepeatAcc_eq` — the tail-recursive `Array UInt8` accumulator (appends
+  `(List.ofFn s).toArray` per element, `Array.push`-backed `@[extern]`) equals
+  `(encodeRepeat p xs).map (fun ⟨n,s⟩ => acc ++ (List.ofFn s).toArray)`, by induction +
+  `Array.ext'`/`Array.toList_append` + `ofFn_concat`.
+- `list_ofFn_getElem_clean {n} (s : Bytes n) (i : Nat) (h : i < (List.ofFn s).length) :
+(List.ofFn s)[i] = s ⟨i, Nat.lt_of_lt_of_eq h List.length_ofFn⟩` — a **clean** replacement
+  for the stdlib `List.getElem_ofFn`, whose output term carries `by simp_all` (a
+  `Classical.choice` leak when `rw`'d).
+
+**The remaining blocker (precise):** `fastEncodeRepeat_eq` cannot be closed
+`[propext, Quot.sound]`-only because of ONE stdlib elaboration leak, minimal-repro'd:
+
+- `(List.ofFn s)[i.val]` (pure `List` read at a `Fin` index) is clean — `[propext]`.
+- `(List.ofFn s).toArray.toList[i.val]` leaks `[Classical.choice]` — even the _trivial_
+  `x = x` (`rfl`) on that term leaks. `List.toArray`/`Array.toList` (`[i.val]` through the
+  `.toArray.toList` round-trip) re-enters the classical `GetElem` instance during
+  elaboration — **not** the `Fin.cast`/`Nat.lt_of_lt_of_eq` transport (those are
+  `[propext]`/no-axioms clean).
+- `rw [htoList]` on `.toArray.toList[i.val]` inside `fun i => …` fails "motive is not type
+  correct" (the `GetElem` `i < length` motive depends on the rewritten `toList` length).
+
+**The fix (next session):** make the _readback_ go through a pure `List` (no
+`.toArray.toList`), keeping the `Array UInt8` accumulator for the _writes_. Either (a) push
+individual bytes (`Array.push` over `Fin n`) so `arr.toList` is already clean, or (b) prove
+`arr.toList = List.ofFn s` as a list-level lemma and substitute it _before_ any `[i.val]`
+access (via `funext`/`congrArg` on the list, never `rw` inside `[i.val]`). The three clean
+lemmas carry over unchanged.
 
 ## 1. Profile and attribute the cost
 
@@ -99,7 +138,7 @@ the `ByteArray` lane, not by pure `Bytes n`.
       cast per `cons`) to a single flat accumulator: pre-size the output, append
       per element with a hoisted bounds check, and do the length-cast once at the
       end. Prove `encodeRepeat`'s type/denotation unchanged; `#print axioms
-  Codec.encodeRepeat_rel` stays `[propext, Quot.sound]`.
+Codec.encodeRepeat_rel` stays `[propext, Quot.sound]`.
       **→ Implemented as `fastEncodeRepeat`: a `ByteArray`/`Array UInt8`
       accumulator behind `@[extern]` primops, proved `= encodeRepeat` pointwise.**
 - [ ] 2.2 Hoist bounds-check and `Nat`/`Fin` index computation out of the
