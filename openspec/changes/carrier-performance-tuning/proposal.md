@@ -2,69 +2,79 @@
 
 ## Why
 
-The single-carrier rewrite (`single-carrier-bytes`) made the codec _provably
-correct_ and _axiom-clean_ (`[propext, Quot.sound]`-only, zero `Classical.choice`),
-and the carrier read (`s ⟨i,·⟩`) already lowers to a ~20 ns scalar indexed load —
-essentially a bare pointer read. But the bench exposes that the _bulk_ paths are
-nowhere near hand-tuned C:
+`codec` is a verified byte-exact bidirectional codec: one `Codec α` description gives
+both an encoder and a decoder, with the unconditional `roundtrip`/`decode_spec`/`bidir`
+laws proved `[propext, Quot.sound]`-only over the length-indexed carrier
+`Bytes n := Fin n → UInt8`. The intended use is parsing and serializing real binary
+formats — JSON, PNG, QR, WAV, FLAC, Protobuf — so the description _interpreter_
+(`decode d s` / `encode d x`) must run near C speed for arbitrary `α`, not just for a
+single-byte repetition.
 
-- `encodeRepeat Codec.byte` runs at ~30 ns/byte (~33 MB/s) for a 1 MiB list, and
-  grows linearly with a constant factor ~40× higher than a `memcpy`-speed bulk
-  write;
-- `decodeFull` (the "fused" full-consumption `many`) is still ~50 µs/byte at 8k,
-  still quadratic despite threading a single `Option`;
-- `decodeRepeat` is the paper's inherent Θ(m²) all-prefix enumeration and is
-  2.5 s at 8192 bytes.
-
-The aim stated from the start was "as close to hand-tuned C as possible." The
-correctness work is done; the performance work is not. The remaining gap is not
-semantic — it is a _lowering_/representation problem: the carrier's dependent
-type index (`Fin n → UInt8`) is a **pure function**, so the bulk `encodeRepeat`
-builds one nested `concat` closure per element (a scalar-indexed-load substrate
-for _reads_, but a nested-closure substrate for _writes_).
+The read path is already there: `s ⟨i,·⟩` is a scalar indexed load. What is missing is a
+fast _result carrier_ for the interpreter. `decode` returns `List (α × Suffix n)` — a heap
+cons cell and a `Suffix`/`Bytes` closure per result — and `encode` builds a nested
+`concat` closure per element. That is the cost this change removes, by giving the
+interpreter a **packed `USize`-cursor result carrier** proved equal to the `Bytes n`
+spec. The carrier swap, not a compiler and not more `@[extern]` C, is the lever: both
+alternatives are already ruled out by prior recorded work (`compiler-tier-extraction`
+archived as unsound; `extern-c-fast-path` recorded as a no-op shim over the stdlib's own
+externs).
 
 ## What Changes
 
-- **Profile and attribute first** (done §1): a calibrated bench with a
-  `memcpy`/`memset` baseline, per-lane ns/op + MiB/s across a ×1/×2/×4 sweep, and
-  a representation-isolation lane. This settled the question: the pure `Bytes n`
-  carrier cannot be a flat accumulator, and the gap is the nested `concat`
-  closures, not bandwidth.
-- **Re-stage the bulk encode/decode through a contiguous `ByteArray`/`Array UInt8`
-  accumulator** behind the Lean runtime's own `@[extern]` C primops
-  (`ByteArray.push`/`copySlice`/`get!`). These are hand-written C in the runtime,
-  compiled by the plain `cc`.
-- **Prove the fast path equal to the spec** — `fastEncodeRepeat p xs = encodeRepeat p xs`
-  (and the decode dual) — _pointwise_ via the carrier's finitary `Bytes.ext` and
-  `Array.ofFn`/`GetElem` bridge, never `Array.extract`/`Array.toList` (which leak
-  `Classical.choice`). `Bytes n` stays the _specification_ every law is stated over;
-  the `ByteArray` accumulator is only a proved-equal _implementation_.
-- **Tune the emitted C** with plain clang `-O3`/`-march=native`/LTO/PGO on the
-  `*.c` Lean emits, and re-measure.
-- **Preserve every semantic law untouched.** This is a performance change only:
-  `Rel`, `decode_spec`, `bidir`, `roundtrip`, `decodeRepeat_spec`,
-  `decodeFull_spec`, the `Combinators` laws, and the `varint` denotation do not
-  change meaning. The axiom gate stays `[propext, Quot.sound]`-only; any new
-  fast path must be proved equal to the spec, not asserted.
+- **A packed `USize`-cursor decoder** (`decodeArray`) that reads `a[i]` by `USize` index,
+  threads `i + m` through `seq`, and preserves `decode`'s full backtracking semantics
+  (`alt` is the union `++`, `seq` is the `flatMap` cross-product). Its result is
+  `List (α × USize)` — the `List` is the non-determinism multiplicity, which a faithful
+  `decode` cannot drop; the packed carrier removes only the _per-branch_ `Suffix`/`Bytes`
+  closure, not the `alt`/`seq` result `List`.
+- **A packed full-consumption result** `decodeFullArray : … → Option (ByteArray × USize)`
+  — one suffix copy, never `Option (List α × Suffix n)`.
+- **A packed encoder** `encodeArray : Codec α → α → Option (Array UInt8)`, plus the
+  byte-sequence packer `encodeByteArrayBytes : List UInt8 → ByteArray`, both accumulating
+  via `ByteArray.push` instead of a `concat`-closure fold.
+- **One refinement theorem per packed carrier**, proved `[propext, Quot.sound]`-only,
+  equating the packed run to the unchanged `Bytes n` spec: `decodeArray_eq`,
+  `decodeFullArray_spec`, `encodeArray_eq`, `encodeByteArrayBytes_eq`.
+- **Two proof layers, both shipped and never conflated** (see the design):
+  - **Layer 1 — proven, zero trusted C**: the packed carrier above, `[propext,
+Quot.sound]`-only, proof body `ByteArray.mk ((a.data.toList.drop i.toNat).toArray)`.
+  - **Layer 2 — named trust seam**: an `@[extern]` `byteSlice` (a `memcpy`-style suffix
+    copy) whose Lean body elaborates (so it does not add an axiom) but whose running C is
+    _trusted, not proven_; it is excluded from the `#print axioms` gate and wired onto a
+    packed path only.
 
 ## Capabilities
 
 ### New Capabilities
 
-- `codec/performance`: the §10.5 acceptance criteria, stated as measurable
-  throughput/latency targets per lane, the profiling methodology (per-op
-  wall-clock plus emitted-IR attribution), and the calibrated-bench-harness
-  requirements — used to demonstrate the single-carrier codec approaches
-  hand-tuned C.
+- `codec/performance`: the acceptance criterion that the packed `USize`-cursor
+  interpreter is a genuine refinement of the `Bytes n` spec (`decodeArray_eq` etc.,
+  `[propext, Quot.sound]`-only, full backtracking preserved), measured against the
+  bench's own calibrated baseline, with the two layers (proven vs trusted) reported as
+  distinct lanes and never conflated.
+
+### Scope
+
+**In scope**: the packed `USize`-cursor carrier (`decodeArray` / `decodeFullArray` /
+`encodeArray`, typed over arbitrary `Codec α`) and its refinement proof against the
+unchanged `Bytes n` spec — i.e. the _correctness_ of a packed result carrier, proved
+`[propext, Quot.sound]`-only, with full backtracking preserved.
+
+**Out of scope**: proving or benchmarking that the general interpreter _runs near C for
+arbitrary `α` on real workloads_ (JSON/PNG/protobuf), and any optimization of the
+heterogeneous interpreter's speed beyond the isolated byte-sequence/`byte`-slice lanes.
+The carrier and its proof land here; the general near-C performance claim is a separate
+follow-up.
 
 ## Impact
 
-- `Bench.lean`: add a profiling harness (per-op attribution, larger/smaller size
-  sweeps, a `memcpy`-speed baseline for calibration) without removing the
-  byte-exact roundtrip smoke checks.
-- `lakefile.lean`/`flake.nix`/`default.nix`: adjust the plain-clang compile
-  flags (`-O3`/LTO/PGO/target-march) for the emitted `*.c`.
-- `Codec/*.lean`: lower-level representation of the encode/decode hot loops,
-  gated so every law still holds with zero `sorry`, zero `Classical.choice`.
-- Axiom record unchanged: `#print axioms Codec.roundtrip` ⇒
-  `[propext, Quot.sound]`.
+- `Codec/Encode.lean`: already contains the packed encode accumulator (`fastEncodeRepeat`,
+  `pushBytesFrom`, `array_readback`, and the clean readback lemmas `list_ofFn_getElem_clean`,
+  `ofFn_concat`, `pushBytesFrom_eq`), all `[propext, Quot.sound]`-only and committed-ready.
+- New packed decoder/encoder modules re-exported from the `Codec` root.
+- `ExternFastPath.lean`/`.c`: the `@[extern]` `byteSlice` trust seam (re-introduced, not
+  recovered — the extern tier was deleted), wired onto a packed path.
+- `Bench.lean`: two honest lanes (proven packed carrier; `@[extern]` `byteSlice` floor),
+  each byte-exact value-checked.
+- Axiom record unchanged: `#print axioms Codec.roundtrip` ⇒ `[propext, Quot.sound]`.
