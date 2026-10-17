@@ -101,6 +101,18 @@ Concrete next steps, in order (each gated by `#print axioms` `⇒ [propext, Quot
 1. `fastEncodeRepeat : Codec α → List α → Option ({n} × Bytes n)` backed by an
    `Array UInt8`/`ByteArray` accumulator; prove `fastEncodeRepeat p xs = encodeRepeat p xs`
    **pointwise** via `Bytes.ext` + `Array.ofFn`/`GetElem`, zero `Classical.choice`.
+
+   **Status (this session, uncommitted — see `openspec/changes/carrier-performance-tuning/tasks.md` §2.1 log):**
+   three clean `[propext, Quot.sound]` lemmas are prototyped (`ofFn_concat`,
+   `fastEncodeRepeatAcc_eq`, `list_ofFn_getElem_clean`), but `fastEncodeRepeat_eq` is
+   **blocked by a stdlib `Classical.choice` leak**: `(List.ofFn s).toArray.toList[i.val]`
+   leaks (even `rfl`), while `(List.ofFn s)[i.val]` and `Fin.cast`/`Nat.lt_of_lt_of_eq`
+   are clean (minimal `#print axioms` repros confirm). **Next move:** make the readback
+   a _pure `List`_ reading (no `.toArray.toList` round-trip) — push individual bytes via
+   `Array.push` over `Fin n`, or substitute `arr.toList = List.ofFn s` as a list-level
+   lemma _before_ any `[i.val]` access — while keeping the `Array UInt8` accumulator for
+   the writes. Do **not** `rw` a `toList` lemma inside `[i.val]` ("motive not type correct").
+
 2. The decode bulk dual (`fastDecodeFull`), same refinement equality and gate.
 3. Wire both into `Bench.lean` behind a flag, keeping the byte-exact value checks.
 4. Measure: confirm ~500–700 MiB/s on the plain `cc`, `lake build` zero-`sorry`.
