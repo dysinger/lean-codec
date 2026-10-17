@@ -54,11 +54,11 @@ The paper's concrete syntax is textual: `Rel :: [(α, String)]` (§4.1 the decod
 is `String → [(α, String)]`) and `token :: δ Char` (§4.3). `codec` targets
 binary, so the base unit is `UInt8`, the base string is a byte sequence, and
 `byte : Codec UInt8` is the `token` analogue. Text/Unicode is rebuilt downstream
-(`lean-text`) on top of bytes, not in core. **Two byte representations, two jobs**
-(see [Representations](#representations-two-byte-types-two-jobs)): the _proof_
-substrate is the plain `Bytes = List UInt8` list, and the _run-model_ (the
-packed, extraction-facing surface) is `ByteArray`. They are not interchangeable;
-they are two layers of the same bytes.
+(`lean-text`) on top of bytes, not in core. **One byte-string type, one job**
+(see [Representations](#representations-one-length-indexed-byte-string)): the
+substrate is the single length-indexed `Bytes n := Fin n → UInt8`, which is
+structurally reducible for proofs **and** a scalar indexed load at runtime — there
+is no separate `List` spec and no `ByteArray` run-model slab.
 
 **[D2] The nondeterministic list decoder.** The paper's decoder returns a _list_
 of `(value, remaining)` pairs — a relation (§4.1 `Parser (String → [(α, String)])`,
@@ -148,115 +148,37 @@ and partial encoding is preserved.
 
 ---
 
-## Representations — two byte types, two jobs
+## Representations — one length-indexed byte string
 
-`codec` uses **two** byte types, and each does exactly one job. They are not two
-ways to spell the same thing; they are two _layers_ of the same bytes.
+`codec` uses **one** byte-string type, the length-indexed `Bytes n := Fin n → UInt8`. The
+length `n` is part of the _type_, so the byte count is known without an auxiliary
+length field. The read `s ⟨i, ·⟩` is a **structural indexed load** — it reduces under
+`simp`/`rfl`/`induction` for proofs and lowers to a scalar indexed load in the emitted
+IR. There is no second `List UInt8`/`Array`/`ByteArray`/`Buffer` carrier: the proof
+substrate **is** the run-model.
 
-|                    | **`Bytes`** (`= List UInt8`)                                               | **`ByteArray`**                                                                         |
-| ------------------ | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| **Job**            | the **proof substrate**                                                    | the **run-model**                                                                       |
-| **Shape**          | a `List.cons` cell per byte                                                | a contiguous `uint8_t*` (`LeanScalarArray`), no per-byte box                            |
-| **For the prover** | reducible under `simp`/`rfl`/`induction` — every law is a finite induction | opaque (`toList` is an FFI projection) — cannot be reasoned about directly              |
-| **At runtime**     | allocates one `lean_object` per byte                                       | `lean_byte_array_get`/`lean_sarray_size`/`lean_sarray_push` are O(1), `memcmp` equality |
+|                    | **`Bytes n`** (`= Fin n → UInt8`)                                                             |
+| ------------------ | --------------------------------------------------------------------------------------------- |
+| **Job**            | the single proof substrate _and_ run-model                                                    |
+| **Shape**          | a length-indexed function; `s ⟨i, ·⟩` is a structural read, no `List` cons cell               |
+| **For the prover** | reducible under `simp`/`rfl`/`funext`; decidable equality is finitary (`funext` over `Fin n`) |
+| **At runtime**     | a scalar indexed load — the length `n` is a _type_ index, not a boxed `Nat`                   |
 
-**The decision.** All laws (`Rel`, `decode_spec`, `bidir`, `roundtrip`, …) are
-stated and proved **over `Bytes`**, because that is the representation the proof
-assistant can reduce. The executable surface — the functions a program actually
-calls — is **committed to `ByteArray`**: `decodeByteArray`, `encodeByteArray`,
-`decodeFullByteArray`, and the varbinary `decodeVarint`/`encodeVarint` are the
-_native_ `ByteArray`-carrier interpreters, proved **equal** to the `Bytes` spec by
-one refinement lemma each (`decodeByteArray_eq`, `encodeByteArray_eq`,
-`decodeFullByteArray_spec`, …), all `[propext, Quot.sound]`-only. The `Buffer`
-newtype is the transport surface that moves bytes across the `Bytes ↔ ByteArray`
-seam (`Buffer.toBytes`/`Buffer.ofBytes`). There is **no** `Array UInt8` carrier in
-the committed surface: it is a strictly-dominated intermediate (a pointer array of
-boxed bytes) kept only as a historical stepping stone in the ledger, not a type a
-caller should choose.
+**The decision.** Every law (`Rel`, `decode_spec`, `bidir`, `roundtrip`, …) is stated and
+proved over the single `Bytes n`, because that one type is both what the proof assistant
+can reduce _and_ what lowers to a scalar indexed load. `decode d (s : Bytes n)` returns
+`List (α × Suffix n)` where a `Suffix n` carries the remaining length (a `m ≤ n` witness)
+and the remaining `Bytes m`; `encode d x` returns `Option ({n : Nat} × Bytes n)` — the
+encoded bytes and their length in one sigma. The LEB128 `varint` is `Iso Nat (Σ k, Bytes k)`,
+the same single carrier.
 
-The two-tier shape is the F\*-style move: _spec over the list, run-model over the
-packed buffer, proved equal_. "The model you prove on" and "the model you run at
-speed" are two different types on purpose — compromising them into one would
-sacrifice either the proofs (if you prove over `ByteArray`, nothing reduces) or
-the speed (if you run over `Bytes`, every byte is a heap cell).
-
-### The slice-returning run-model — a `USize`-indexed, packed result carrier
-
-The efficiency question is answered by changing the **result carrier**, not the
-byte loop or the compiler. `Codec.DecodeByteArraySlice` and
-`Codec.EncodeByteArraySlice` add the committed slice surface:
-
-- `decodeByteArraySlice d a i : Option (α × USize)` — a **native, `USize`-indexed
-  greedy decoder** reading `a[i]` and threading the index through `seq`; the `byte`
-  case is **one indexed read + index increment** (no `List` cell, no per-element
-  `Nat` box). Unlike the relational `decode`, it is **sound but not complete** (it
-  short-circuits at the first step and does not backtrack across `seq`/`alt`), which
-  `soundness` (`decodeByteArraySlice_spec`) states precisely.
-- `decodeFullByteArraySlice a i : Option (ByteArray × USize)` — full consumption
-  returns the **packed suffix** as a `ByteArray` (never an `Option (List α × Nat)`),
-  plus its length — closing against `decodeFullByteArray_spec` by one refinement
-  (`decodeFullByteArraySlice_eq`).
-- `encodeByteArrayBytes xs : ByteArray` — the **amortized-O(n) `ByteArray.push`**
-  accumulator, proved equal to the O(n²) `List.append` `encodeRepeat Codec.byte`
-  denotation (`encodeByteArrayBytes_eq_encodeRepeat`).
-
-All three are `[propext, Quot.sound]`-only. The **zero-copy lifetime** of the
-returned span is a **named trust seam**, not a proof obligation: the result aliases
-the source `a`'s buffer, so the contract is "the span is valid while `a` is
-referenced; a C consumer must not `lean_dec_ref`/realloc `a` within that span" —
-the same documented-trust posture as `@[extern]`, at the buffer edge.
-
-**Honest measurement** (arm64, reps=20): the packed accumulator
-`encodeByteArrayBytes` runs 20.5 ms → **1.34 ms** at 1 MiB (~15×, the O(n²)→O(n)
-win); `decodeFullByteArraySlice` returns the packed suffix ~5× faster than the
-`List`-cons `decodeFullByteArray` (no per-element result box). The **sub-µs
-`memcpy` floor** is reached by the `@[extern]` `byteSlice` (below), _not_ by this
-`@[extern]`-free surface: the stdlib `Array.extract`/`drop` content lemmas pull in
-`Classical.choice`, which the codec's `[propext, Quot.sound]` discipline excludes —
-so the slice's `_eq` law uses the same `rfl`-clean `ByteArray.mk ((drop i).toArray)`
-transport as the proven `byteSlice`, honestly trading a list-materialization
-intermediate for an axiom-free refinement. The next move toward memcpy without that
-tradeoff is exactly the `@[extern]` seam already proven below.
-
-### The `@[extern]` C fast path — a named trust seam at the buffer edge
-
-`Codec/ExternFastPath` is a **mechanism demonstration**, not a measured speedup.
-It splices hand-written C into the already-proved `ByteArray` run-model through
-Lean's `@[extern]` FFI — validating that the seam can be made _clean_ (see
-below) — but it does **not** move the needle on the real bottleneck. Two things
-are worth knowing, honestly stated:
-
-- The two primitives (`codec_byte_array_slice`, a `memcpy`-style suffix copy;
-  `codec_encode_append`, an amortized append) are **thin shims over the
-  stdlib's own `@[extern]`s** — `byteSlice a i` is the already-C
-  `ByteArray.extract`/`copySlice` (`lean_byte_array_copy_slice`) specialized to
-  the suffix, and `codec_encode_append` forwards to `lean_byte_array_push`.
-  Neither adds a C primitive that the stdlib did not already supply.
-- The remaining cost is **not in the byte loop** — it is the `List UInt8` of
-  boxed cons cells that the _spec interface_ forces at the decode boundary, and
-  the O(n²) `List.append` fold of `encodeRepeat`, which a plain `ByteArray.push`
-  fold removes without any new C. The genuine gap is that Lean has **no unboxed
-  C target** to select — and the plan to build one (`compiler-tier-extraction`)
-  was **archived as unsound**: the honest next step is a zero-copy, slice-returning
-  entry point, not a compiler backend.
-
-What _is_ established here, and is worth keeping:
-
-- Each primitive is a **plain `def` whose Lean body still elaborates**
-  (`byteSlice a i = ByteArray.mk ((a.data.toList.drop i).toArray)`,
-  `encodeAppend a b = a.push b`), so the proofs keep seeing the _meaning_ and
-  close `[propext, Quot.sound]`-only — the `@[extern]` tag only swaps the
-  _emitted_ code.
-- The C is a **named, isolated trust seam** (the F\* stance toward KaRaMeL):
-  trusted to satisfy its contract, checked byte-exact by the bench lane, and it
-  introduces **no proof axiom** — the codec's laws are unchanged.
-- The build wiring is recorded: a `lakefile.lean` `target` compiling the `.c`
-  via `buildLeanO` and linking it with `moreLinkObjs` (the recipe the full
-  backend will reuse for a `krmllib.h`-shaped runtime).
-
-The routed fast paths (`decodeFullByteArrayByte`, `encodeByteArrayBytes`) are
-proved equal to the generic run-model by one equality lemma each, but they are
-demonstrations of the seam, not the speedup.
+The single-carrier collapse is the fix for the defect that five prior efficiency attempts
+(`buffer-carrier-decoders`, `bytearray-carrier-decoders`, `llvm-lean4-toolchain`,
+`extern-c-fast-path`, `slice-returning-run-model`) all shared: the carrier _split_ itself
+(the `List` spec vs the opaque `ByteArray` slab and its `Classical.choice`-leaking
+`Array.extract` lemmas) was the cost. One length-indexed byte string removes the split,
+the transport lemmas, and the `Classical.choice` leaks together. **The carrier split was
+never the strategy; it was the defect.**
 
 ---
 
@@ -288,13 +210,14 @@ string to a byte list; text becomes a downstream concern (`utf8` maps `String`
 onto bytes) — on _top_ of bytes, not underneath. Nothing about the framework
 changes; only the ground floor does.
 
-The **run-model is committed to `ByteArray`** (a `ByteArray` is raw memory — the
-_fast_ representation), but it is opaque to the proof assistant, which cannot see
-inside it to reduce equations. So the two byte types are assigned one job each:
-**`Bytes = List UInt8` is the _proof_ substrate** (reducible, so every `List`
-lemma applies and every law is an induction), and **`ByteArray` is the _run-model_** (packed `uint8_t*`, no per-byte boxing, the only carrier the executable surface
-uses). "The model you prove on" and "the model you run at speed" are deliberately
-two things — see [Representations](#representations-two-byte-types-two-jobs).
+The **substrate is the single length-indexed `Bytes n := Fin n → UInt8`**: it is
+a reducible, length-indexed function, so every `Fin`/`funext` lemma applies and
+every law is a finite induction, **and** it lowers to a scalar indexed load in the
+emitted IR — no second carrier, no transfer lemma. So there is one byte-string
+type assigned one job each: **`Bytes n` is both the proof substrate and the
+run-model** (the length is a _type_ index, not a boxed `Nat`). "The model you prove
+on" and "the model you run at speed" are the same thing — see
+[Representations](#representations-one-length-indexed-byte-string).
 
 ### `[D2]` + `[D3]` the decoder returns a _list_, and `|` means "try both, keep
 
@@ -439,25 +362,20 @@ structure Iso (α β : Type) where
 --   | : Codec α → Codec α → Codec α      (backtracking union)
 --   empty / pure / byte                   (failure / fixed value / one byte)
 
--- one description, two interpreters (the proof substrate is `Bytes = List UInt8`)
---   decode : Codec α → List UInt8 → List (α × List UInt8)   -- all (value, rest) pairs
---   encode : Codec α → α → Option (List UInt8)              -- partial
+-- the length-indexed byte string (the single proof substrate and run-model)
+--   Bytes n := Fin n → UInt8 ; s ⟨i, ·⟩ is a structural indexed load
 
--- the run-model (the executable surface, committed to `ByteArray`)
---   decodeByteArray   : Codec α → ByteArray → Nat → List (α × Nat)
---   encodeByteArray   : Codec α → α → Option ByteArray
---   decodeFullByteArray : Codec α → ConsumesByte p → ByteArray → Nat → Option (List α × Nat)
--- each proved equal to the `Bytes` spec by one refinement lemma
+-- one description, two interpreters (the substrate is `Bytes n`)
+--   decode : Codec α → {n : Nat} → Bytes n → List (α × Suffix n)  -- all (value, rest) pairs
+--   encode : Codec α → α → Option ({n : Nat} × Bytes n)           -- partial, length + bytes
 
--- the `@[extern]` C fast path (a named trust seam; bodies still elaborate — a
---   mechanism demo, not a speedup: thin shims over the stdlib's own externs)
---   byteSlice         : ByteArray → Nat → ByteArray                 (memcpy-style copy)
---   encodeAppend      : ByteArray → UInt8 → ByteArray               (amortized append)
---   decodeFullByteArrayByte / encodeByteArrayBytes : routed fast paths, proved equal
+-- the LEB128 varint over the single carrier
+--   varint : Iso Nat ({k : Nat} × Bytes k)
+--   encodeVarint n : {k : Nat} × Bytes k ; decodeVarint : {k : Nat} × Bytes k → Option Nat
 
 -- the laws that make it a codec
---   Rel d x s ↔ (x, []) ∈ decode d s          (bidirectional)
---   encode d x = some s → (x, []) ∈ decode d s (roundtrip, unconditional)
+--   Rel d x s ↔ (x, Suffix.empty n) ∈ decode d s     (bidirectional)
+--   encode d x = some ⟨n, s⟩ → (x, Suffix.empty n) ∈ decode d s (roundtrip, unconditional)
 ```
 
 Every `Codec` is a composition of `Iso`s; the inverse guarantee is **structural**:
@@ -467,7 +385,7 @@ description — no solver, no per-combinator gate, no prefix-disjointness condit
 ## Scope
 
 - **`codec`** (this package): the pure framework — `Iso`, `Codec`, `Rel`, the two
-  interpreters (the `Bytes` spec + the `ByteArray` run-model), and the laws. **No
+  interpreters (the single `Bytes n` substrate), and the laws. **No
   domain-specific leaf codecs** (not even `u8`).
 - **`lean-binary`** (downstream): `u8`, `u16le`/`u16be`, … , `varint`,
   `lengthPrefix`, image/Protobuf demos, and the speed benchmark.
