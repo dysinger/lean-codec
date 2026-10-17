@@ -8,16 +8,33 @@
 > prove _agreement with the slow spec_. Start with WAV + protobuf (clearest `memcpy`-shaped
 > hot paths), then generalize.
 
+> **Status (this session): Task 1 (bulk copy + scan seams) is DONE (3/13).**
+> `blitBytes`/`findByte` landed in `Codec/ByteSlice.lean` + `.c`, both `USize`-indexed with
+> reducible `Array`-spelled bodies; `blitBytes_spec` is axiom-free (`rfl`), `findByte_spec` is
+> `[propext]` (`rfl`). Both bench lanes value-check byte-for-byte against their Lean bodies.
+> `[measured]` (128 KiB): `blitBytes L2` 23225 MiB/s (vs `calib memcpy` 30033), `findByte L2` 697
+> ns/op. **Session win:** the `findByte` C first returned `lean_box(idx+1)` for `some (idx : USize)`
+> — wrong; the value-check caught it (returned `none`), and it was fixed to the correct
+> `lean_alloc_ctor(1,1,0)` + `lean_ctor_set(_, 0, lean_box_usize(idx))` (verified against the IR's own
+> `some (off+i)` construction). This is recorded in the `lean` skill (§ Append).
+> **Next session (Task 2):** the varint-span (2.1) + numeric-parse (2.2) + zlib (2.3) seams — same
+> shape, new `.c` files. **Known latent gotcha:** the lakefile `byteSliceO` target's
+> `buildLeanO oFile (Job.pure srcFile)` does **not** rebuild the `.o` on a `.c` mtime change in
+> _incremental_ dev (needs `rm .lake/build/ByteSlice.o`, or a clean `nix build .#bench`); the new
+> `.c` targets in Task 2 (varint/numparse/zlib) must use the same `target … (pkg) : FilePath` shape
+> and be git-tracked before `nix build` sees them. Decide up-front whether to consolidate all seams
+> into one `.c`/object (simpler incremental story) or one target per seam (cleaner isolation).
+
 ## 1. The bulk copy + scan seams (generalize `byteSlice`)
 
-- [ ] 1.1 Add `blitBytes (dst : ByteArray) (dstOff : USize) (src : ByteArray) (srcOff : USize)
-    (len : USize) : ByteArray` — a buffer-to-buffer `memcpy`, Lean body the reducible
+- [x] 1.1 Add `blitBytes (dst : ByteArray) (dstOff : USize) (src : ByteArray) (srcOff : USize)
+  (len : USize) : ByteArray` — a buffer-to-buffer `memcpy`, Lean body the reducible
       `Array.extract`+`append` composition, C symbol a single `memcpy`, in `Codec/ByteSlice.lean`
       (+ `.c`). `USize`-indexed so its body is `rfl`-clean.
-- [ ] 1.2 Add `findByte (a : ByteArray) (off : USize) (b : UInt8) : Option USize` — a span
+- [x] 1.2 Add `findByte (a : ByteArray) (off : USize) (b : UInt8) : Option USize` — a span
       scan via `memchr`, Lean body a `List`/`Array` `find?` reference, C one `memchr`. Document
       both contracts verbatim (the `ByteSlice.lean` posture), excluded from the axiom gate.
-- [ ] 1.3 Prove `blitBytes_spec`/`findByte_spec` (Lean body = spec; any index web stays
+- [x] 1.3 Prove `blitBytes_spec`/`findByte_spec` (Lean body = spec; any index web stays
       `[propext, Quot.sound]`-only), and value-check both in a bench lane byte-for-byte.
 
 ## 2. Varint span + numeric parse + zlib seams
@@ -56,7 +73,7 @@
 - [ ] 5.1 Per-format lanes (WAV raw PCM, protobuf blobs, JSON scan) value-checked byte-for-byte
       against the spec, recording `[measured]` ns/op + MiB/s vs the `memcpy`/`byteSlice` baseline.
 - [ ] 5.2 `lake build` zero `sorry`/warnings; `#print axioms Codec.roundtrip` ⇒ `[propext,
-    Quot.sound]`; every new seam's Lean body axiom-clean; every refinement `[propext,
-    Quot.sound]`-only. Update `README.md` §Performance and `AGENTS.md` with the shipped-C
+  Quot.sound]`; every new seam's Lean body axiom-clean; every refinement `[propext,
+  Quot.sound]`-only. Update `README.md` §Performance and `AGENTS.md` with the shipped-C
       surface and the spec-vs-shipped two-layer framing (Layer 1 proven, Layer 2 trusted C,
       never conflated).

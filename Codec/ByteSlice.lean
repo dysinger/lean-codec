@@ -83,4 +83,67 @@ Lean, documented in this module's header — never an axiom, never "no trust". -
 def commitRemainder (a : Array UInt8) (c : USize) : ByteArray :=
   byteSlice (ByteArray.mk a) c
 
+/--
+The Layer-2 named trust seam: a buffer-to-buffer `memcpy` blit. `blitBytes dst
+dstOff src srcOff len` copies `len` bytes from `src[srcOff .. srcOff+len)` into
+`dst[dstOff .. dstOff+len)`, returning a fresh `ByteArray` with the rest of `dst`
+unchanged.
+
+The Lean body below is the *specification* — the `Array.extract`+`append`
+composition over the backing `data` (reducible, so its `blitBytes_spec` law closes
+by `rfl`, `[propext, Quot.sound]`-only, no added axiom). The `@[extern
+"codec_blitBytes"]` attribute makes the *running* C call the matching `codec_blitBytes`
+symbol in `ByteSlice.c`; that C is trusted, not proven, and is therefore excluded
+from the `#print axioms` gate (Layer 2).
+
+The indices are `USize` so the body is `rfl`-clean (no `Nat ↔ USize` roundtrip, no
+`System.Platform.numBits` premise). -/
+@[extern "codec_blitBytes"]
+def blitBytes (dst : ByteArray) (dstOff : USize) (src : ByteArray) (srcOff : USize)
+    (len : USize) : ByteArray :=
+  ByteArray.mk
+    (dst.data.extract 0 dstOff.toNat
+      ++ src.data.extract srcOff.toNat (srcOff.toNat + len.toNat)
+      ++ dst.data.extract (dstOff.toNat + len.toNat) dst.data.size)
+
+/--
+The Layer-2 named trust seam: a span `memchr` scan. `findByte a off b` returns
+the first index `i ≥ off.toNat` (as a `USize`) at which `a` holds the byte `b`,
+or `none` when there is no such index.
+
+The Lean body below is the *specification* — `Array.findIdx?` over the
+`Array.extract` of the suffix from `off` (reducible, so `findByte_spec` closes by
+`rfl`). The `@[extern "codec_findByte"]` attribute makes the running C call the
+matching `codec_findByte` symbol (a single `memchr`); that C is trusted, not
+proven, and is excluded from the `#print axioms` gate. -/
+@[extern "codec_findByte"]
+def findByte (a : ByteArray) (off : USize) (b : UInt8) : Option USize :=
+  match Array.findIdx? (fun x => x == b) (a.data.extract off.toNat a.data.size) with
+  | some i => some (off + i.toUSize)
+  | none => none
+
+/-- The `blitBytes` refinement is a definitional identity: the result is `dst`
+with its `[dstOff, dstOff+len)` slice replaced by `src[srcOff, srcOff+len)`. The
+`USize` indices carry no `Nat ↔ USize` roundtrip the law must justify, so
+`#print axioms Codec.blitBytes_spec` reports `[propext, Quot.sound]` with no
+`blitBytes`-related axiom. `rfl`-clean. -/
+theorem blitBytes_spec (dst : ByteArray) (dstOff : USize) (src : ByteArray) (srcOff : USize)
+    (len : USize) :
+    blitBytes dst dstOff src srcOff len =
+      ByteArray.mk
+        (dst.data.extract 0 dstOff.toNat
+          ++ src.data.extract srcOff.toNat (srcOff.toNat + len.toNat)
+          ++ dst.data.extract (dstOff.toNat + len.toNat) dst.data.size) := by
+  rfl
+
+/-- The `findByte` refinement is a definitional identity: `findByte a off b` is
+exactly the `Array.findIdx?` scan of the suffix from `off`, re-offset by `off`.
+`rfl`-clean, `[propext, Quot.sound]`-only. -/
+theorem findByte_spec (a : ByteArray) (off : USize) (b : UInt8) :
+    findByte a off b =
+      match Array.findIdx? (fun x => x == b) (a.data.extract off.toNat a.data.size) with
+      | some i => some (off + i.toUSize)
+      | none => none := by
+  rfl
+
 end Codec

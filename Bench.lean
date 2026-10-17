@@ -124,6 +124,56 @@ unsafe def benchCommitRemainder (n : Nat) (reps : Nat) : IO Unit := do
     throw (IO.userError "commitRemainder ≠ extract (value mismatch)")
   printLane "commitRemainder L2" n (dt / reps) (n - third)
 
+/-- The Layer-2 bulk-copy seam lane: `blitBytes dst dstOff src srcOff len` (the
+`@[extern "codec_blitBytes"]` buffer-to-buffer `memcpy`) is timed on a packed path,
+and **value-checked byte-for-byte** against the Lean *body* (the
+`Array.extract`+`append` composition, the specification the law is pinned to —
+not a length check). Copies a mid-buffer `len = n/2` window at `srcOff = n/4`
+into `dstOff = n/8`, so the window is neither the prefix nor the suffix and a
+wrong C `memcpy` (wrong offsets, wrong length) is caught at run time.
+`bytesPerOp` is `len` (the bytes actually moved). -/
+unsafe def benchBlitBytes (n : Nat) (reps : Nat) : IO Unit := do
+  let mk : Nat → ByteArray := fun v =>
+    ByteArray.mk (Array.ofFn fun (_ : Fin n) => UInt8.ofNat v)
+  let dst := mk 1
+  let src := mk 2
+  let dstOff : USize := (n / 8).toUSize
+  let srcOff : USize := (n / 4).toUSize
+  let len : USize := (n / 2).toUSize
+  -- spec: the Lean body `blitBytes` reduces to (`Array.extract` + `append`).
+  let spec : ByteArray :=
+    ByteArray.mk
+      (dst.data.extract 0 dstOff.toNat
+        ++ src.data.extract srcOff.toNat (srcOff.toNat + len.toNat)
+        ++ dst.data.extract (dstOff.toNat + len.toNat) dst.data.size)
+  let (r, dt) ← timeBatch reps fun _ => blitBytes dst dstOff src srcOff len
+  if r != spec then
+    throw (IO.userError "blitBytes ≠ extract+append (value mismatch)")
+  printLane "blitBytes L2  " n (dt / reps) (n / 2)
+
+/-- The Layer-2 span-scan seam lane: `findByte a off b` (the
+`@[extern "codec_findByte"]` `memchr` scan) is timed, and **value-checked** against
+the Lean *body* (the `Array.findIdx?` scan of the suffix). Places a single
+sentinel byte `b = 0x7F` at `n/2` and scans from `off = n/4`, so a wrong C
+`memchr` (bad start offset, wrong byte, off-by-one result) is caught. Reports
+ns/op only (no byte throughput — a scan moves no buffer). -/
+unsafe def benchFindByte (n : Nat) (reps : Nat) : IO Unit := do
+  let arr : Array UInt8 := Array.ofFn fun (i : Fin n) =>
+    if i.val = n / 2 then (0x7F : UInt8) else (1 : UInt8)
+  let a : ByteArray := ByteArray.mk arr
+  let off : USize := (n / 4).toUSize
+  -- spec: the Lean body `findByte` reduces to (`findIdx?` over the suffix).
+  let spec : Option USize :=
+    match Array.findIdx? (fun x => x == (0x7F : UInt8)) (a.data.extract off.toNat a.data.size) with
+    | some i => some (off + i.toUSize)
+    | none => none
+  let (r, dt) ← timeBatch reps fun _ => findByte a off (0x7F : UInt8)
+  if r != spec then
+    throw (IO.userError "findByte ≠ findIdx? scan (value mismatch)")
+  if spec != some (n / 2).toUSize then
+    throw (IO.userError "findByte: expected sentinel at n/2")
+  IO.println s!"findByte L2   [{n}]: {dt / reps} ns/op"
+
 /-- The scalar-index read lane: reading `s ⟨i, ·⟩` is a structural indexed load on
 the length-indexed carrier (the one read the single substrate exposes). -/
 unsafe def benchScalarIndexRead (n : Nat) (reps : Nat) : IO Unit := do
@@ -289,6 +339,10 @@ unsafe def main (args : List String) : IO Unit := do
     Codec.Bench.benchByteSlice size reps
     -- Layer-2 partial-remainder commit: mid-buffer `USize` cursor, value-checked.
     Codec.Bench.benchCommitRemainder size reps
+    -- Layer-2 bulk copy seam: buffer-to-buffer `blitBytes` memcpy, value-checked.
+    Codec.Bench.benchBlitBytes size reps
+    -- Layer-2 span scan seam: `findByte` memchr, value-checked.
+    Codec.Bench.benchFindByte size reps
   -- Single-byte empty-remainder roundtrip.
   Codec.Bench.benchRoundtripByte reps
   -- Quadratic backtracking "many" decoder (kept small, paper §4.4).
