@@ -87,38 +87,61 @@ Codec.roundtrip` = `[propext, Quot.sound]`, `nix build .#checks.aarch64-darwin.l
 Axiom discipline: every law must stay `[propext, Quot.sound]`-only. `#print axioms
 Codec.roundtrip` is the check.
 
-### Next session: the performance plan (bulk fast path)
+### Next session: the packed carrier (speed-run implementation first, prove after)
 
 The §1 profiling already settled the question: the pure `Bytes n` carrier is a
 scalar _read_ substrate (already a single load) but a **nested-closure** _bulk-write_
-substrate (`encodeRepeat` builds one `concat` closure per element → 28 MiB/s vs the
-elided `ByteArray` lane's 507–737 MiB/s and `memcpy`'s 56 000 MiB/s). Pure re-staging
-is a dead end; the plan is a **law-backed bulk fast path** (the `@[extern]`
-`ByteArray`/`Array UInt8` accumulator hits ~500–700 MiB/s on the plain `cc`).
+substrate (`encodeRepeat` builds one `concat` closure per element → 28.7 MiB/s vs the
+elided `ByteArray` lane's ~667–747 MiB/s (737.5/747.4/667.6 at ×1/×2/×4) and
+`memcpy`'s 56 532 MiB/s ≈ 55.2 GiB/s). Pure re-staging is a dead end; the plan is a
+**law-backed bulk fast path** (the `@[extern]` `ByteArray`/`Array UInt8` accumulator
+hits ~500–700 MiB/s on the plain `cc`).
 
-Concrete next steps, in order (each gated by `#print axioms` `⇒ [propext, Quot.sound]`):
+**Status:** `fastEncodeRepeat`/`pushBytesFrom`/`array_readback`/`list_ofFn_getElem_clean`/
+`ofFn_concat`/`pushBytesFrom_eq` are **done** in `Codec/Encode.lean` (uncommitted, all
+`[propext, Quot.sound]`-only — the earlier `toArray.toList` `Classical.choice` blocker is
+resolved by reading back as a pure `List.ofFn`, see the `lean` skill 2026-10-17 entries).
+`Codec/Packed.lean` now holds the **packed carrier definitions** (`decodeArray`,
+`decodeFullArray`, `encodeArray`, `encodeByteArrayBytes`, `consumedAbs`, and the
+`decodeArray_bounded` monotone invariant) — all building, `[propext, Quot.sound]`-only,
+zero `sorry`. **The four refinement laws are still open**: `decodeArray_eq`,
+`decodeFullArray_spec`, `encodeArray_eq`, `encodeByteArrayBytes_eq`.
 
-1. `fastEncodeRepeat : Codec α → List α → Option ({n} × Bytes n)` backed by an
-   `Array UInt8`/`ByteArray` accumulator; prove `fastEncodeRepeat p xs = encodeRepeat p xs`
-   **pointwise** via `Bytes.ext` + `Array.ofFn`/`GetElem`, zero `Classical.choice`.
+**Two binding decisions, already made (do not re-litigate):**
 
-   **Status (this session, uncommitted — see `openspec/changes/carrier-performance-tuning/tasks.md` §2.1 log):**
-   three clean `[propext, Quot.sound]` lemmas are prototyped (`ofFn_concat`,
-   `fastEncodeRepeatAcc_eq`, `list_ofFn_getElem_clean`), but `fastEncodeRepeat_eq` is
-   **blocked by a stdlib `Classical.choice` leak**: `(List.ofFn s).toArray.toList[i.val]`
-   leaks (even `rfl`), while `(List.ofFn s)[i.val]` and `Fin.cast`/`Nat.lt_of_lt_of_eq`
-   are clean (minimal `#print axioms` repros confirm). **Next move:** make the readback
-   a _pure `List`_ reading (no `.toArray.toList` round-trip) — push individual bytes via
-   `Array.push` over `Fin n`, or substitute `arr.toList = List.ofFn s` as a list-level
-   lemma _before_ any `[i.val]` access — while keeping the `Array UInt8` accumulator for
-   the writes. Do **not** `rw` a `toList` lemma inside `[i.val]` ("motive not type correct").
+1. **Cursor is `Nat`, not `USize`.** `USize`'s `+` is `Nat`-addition modulo `2^64` and
+   `USize.size = 2^64` needs the unproven platform fact `System.Platform.numBits = 64`,
+   so a `USize`-cursor refinement cannot close `[propext, Quot.sound]`-only. `Nat` is the
+   proof/runtime carrier (same as `fastEncodeRepeat`). The "`USize` lowers to `size_t`"
+   claim is settled by IR inspection (task 3.1), never by typing the cursor `USize`.
+2. **Speed-run the implementation; gate _provability_ before volume.** Write the
+   executable definitions first (keep `lake build` green with `sorry` placeholders
+   temporarily), but run a one-case `#print axioms` spike _before_ committing to a
+   carrier/readback shape (the cheapest way to learn a type leaks `Classical.choice`
+   or a platform premise). The throwaway work should be the _implementation_, never a
+   whole proof built on an unprovable carrier.
 
-2. The decode bulk dual (`fastDecodeFull`), same refinement equality and gate.
-3. Wire both into `Bench.lean` behind a flag, keeping the byte-exact value checks.
-4. Measure: confirm ~500–700 MiB/s on the plain `cc`, `lake build` zero-`sorry`.
+**Concrete order for next session:**
 
-Reads/`decode` stay on `Bytes n`; **only the bulk shapes get the contiguous-buffer fast
-path, proved equal to the spec.**
+1. **Spike the encode readback inversion** (the one thing that stalled this session):
+   prove `arr.toList = List.ofFn s → ⟨arr.size, fun i => arr[i]⟩ = ⟨n, s⟩` (or the
+   `Array`-`ofFn`-clean equivalent) closes `[propext, Quot.sound]`-only. If clean, the
+   encode refinements (`encodeArray_eq`, `encodeByteArrayBytes_eq`) each fall out in one
+   induction using `ofFn_concat` + `Array.toList_append`/`List.append_toArray`.
+2. **Prove `encodeArray_eq` / `encodeByteArrayBytes_eq`** (List-level readback form
+   `(encodeArray d x).map (·.toList) = (encode d x).map (List.ofFn ∘ snd)`), gated by
+   `#print axioms`.
+3. **Prove the decode bridge** — the from-scratch `Suffix`-transport (`decode_cast`,
+   `decode` insensitive to `cast (congrArg Bytes e) s`) — then `decodeArray_eq` and
+   `decodeFullArray_spec`.
+4. **Task 3.1 IR inspection** — cite the emitted `.c` (`.lake/build/ir/Codec/Packed.c`)
+   to record whether the `Nat` cursor lowers to `size_t`/bignum, honestly; mark the
+   "no backend"/"scalar index" premise true or false per the actual IR.
+5. **Tasks 4.x / 5.x** — the `@[extern]` `byteSlice` trust seam, then bench + gate.
+
+Reads/`decode` stay on `Bytes n`; **only the packed carrier + bulk shapes get the
+contiguous-buffer fast path, proved equal to the spec.** Read the change's own
+`openspec/changes/carrier-performance-tuning/tasks.md` session log for the finer log.
 
 ## Critical review of the single-carrier change (COMPLETE)
 
