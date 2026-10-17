@@ -56,10 +56,13 @@ reminder that the toolchain is _flake-scoped_, not host-global.)
   with a layman "why"):** `README.md`.
 - **Engineering state & task ledger (spec-driven):** `openspec/`. Every change
   lives under `openspec/changes/` as proposal / spec delta / design / tasks. The
-  **active change is `single-carrier-bytes`** — consult
-  `openspec/changes/single-carrier-bytes/tasks.md` for the current task status and
-  next steps. History ("we used to / reverted / this session") belongs in that
-  ledger, **never** in this file or the README.
+  **active change is `carrier-performance-tuning`** (profiling done, Lever B
+  law-backed fast path next) — consult
+  `openspec/changes/carrier-performance-tuning/tasks.md` for the current task
+  status and next steps. History ("we used to / reverted / this session")
+  belongs in that ledger, **never** in this file or the README.
+  (`single-carrier-bytes` is archived as
+  `openspec/changes/archive/2026-10-17-single-carrier-bytes`.)
 - **Library source (module `Codec`):** `Codec/`.
   - `Iso.lean` — partial isomorphisms + folded combinators (`foldl`/`foldr`).
   - `Codec.lean` — the description AST, the length-indexed substrate `Bytes n`,
@@ -70,68 +73,70 @@ reminder that the toolchain is _flake-scoped_, not host-global.)
 - **Executable/bench:** `Bench.lean`, wired through `lakefile.lean` and Nix
   `default.nix`/`flake.nix`.
 
-## Active work (single carrier)
+## Active work (single carrier — archived; now `carrier-performance-tuning`)
 
 The core (`Codec`/`Decode`/`Encode`/`Sound`/`Combinators`/`VarBinary`) is
 **re-derived over the single length-indexed substrate `Bytes n := Fin n → UInt8`**,
 `[propext, Quot.sound]`-only (no `Classical.choice`, zero `sorry`). The old transfer-tier
 modules (`DecodeArray`/`EncodeArray`/`DecodeByteArray`/`EncodeByteArray`/
 `DecodeByteArraySlice`/`EncodeByteArraySlice`/`ExternFastPath`/`Buffer`) are
-**deleted**, the `lakefile.lean` extern target is dropped, and `Bench.lean` is a
-single `Bytes`-substrate lane. `single-carrier-bytes` is **14/14 tasks complete, green**
-(`lake build` zero `sorry`/warnings, `#print axioms Codec.roundtrip` = `[propext, Quot.sound]`,
-`nix build .#checks.aarch64-darwin.lean .#bench` both green).
-
-The change is **implemented but not yet critically reviewed / archived** — see
-[Next: critical review](#next-critical-review-of-the-single-carrier-change).
+**deleted**. `single-carrier-bytes` is **archived** (19/19 tasks, `#print axioms
+Codec.roundtrip` = `[propext, Quot.sound]`, `nix build .#checks.aarch64-darwin.lean
+.#bench` green), including the section-6 post-review hardening.
 
 Axiom discipline: every law must stay `[propext, Quot.sound]`-only. `#print axioms
 Codec.roundtrip` is the check.
 
-## Next: critical review of the single-carrier change
+### Next session: the performance plan (Lever B, no LLVM)
 
-The re-derivation is green, but it is a **proof-critical rewrite** and must be reviewed
-critically before archive. Review in this order (expensive/most-fragile first):
+The §1 profiling already settled the question: the pure `Bytes n` carrier is a
+scalar _read_ substrate (already a single load) but a **nested-closure** _bulk-write_
+substrate (`encodeRepeat` builds one `concat` closure per element → 28 MiB/s vs the
+elided `ByteArray` lane's 507–737 MiB/s and `memcpy`'s 56 000 MiB/s). Lever A (pure
+re-staging) is a dead end; the plan is **Lever B done correctly — and it does NOT
+need LLVM** (the `@[extern]` `ByteArray`/`Array UInt8` accumulator hits ~500–700 MiB/s
+on plain clang; that is exactly why §0 removed LLVM).
 
-1. **`Codec/VarBinary.lean` backward (`enc_dec`/`varintUnapply_inj`) — the fragile part.**
-   The `Sigma.ext` + `heq_of_eq`/`cast_heq`/`HEq.trans` reconstruction over the
-   length-indexed carrier is subtle. Re-verify byte-exactness against concrete LEB128
-   vectors — `varintBytes 0 = ⟨1, [0]⟩`, `128 → [0x80, 0x01]`, `300 → [0xAC, 0x02]` — via
-   `#eval`/`#reduce`, _not_ just the roundtrip theorem. Confirm the `varint` is still
-   `Iso Nat (Σ k, Bytes k)` with the SAME denotation as the old `Iso Nat (List UInt8)`
-   (the carrier changed; the map `n ↦ canonical bytes` must not).
-2. **`encodeVarint_eq`/`decodeVarint_eq` became `rfl` aliases.** The old versions were
-   meaningful carrier-refinement lemmas; the new `encodeVarint = varintBytes` and
-   `decodeVarint = varintUnapply` are definitional. Confirm this is the intended
-   single-carrier collapse (no lost guarantee), and that `decodeVarint` losing the old
-   absolute-offset `a i` argument (now whole-buffer) is acceptable — the old API could
-   decode _at_ an offset; the new one consumes a whole `Σ k, Bytes k`.
-3. **`Codec/Combinators.lean` list-combinator laws keep their _semantics_.** Confirm
-   `relSepBy`/`decodeSepBy`/`encodeSepBy` still mean "head `p`, then many `(sep *> p)`"
-   (one-or-more, empty list `= False`), and `relChainl1`/`relChainr1` still use
-   `foldl`/`foldr` over `relRepeat (Rel (seq op arg))` with the operand list at the right
-   type (`List (β × α)` for `chainl1`, `List (α × β)` for `chainr1`). The new
-   `relChainl1_cast`/`relChainr1_cast` (`cases e; rfl`) are axiom-clean but trivially
-   correct only if the relations are genuinely cast-invariant — eyeball that.
-4. **Completeness of the `_spec` laws (forward direction).** `decodeSepBy_spec`/
-   `decodeChainl1_spec`/`decodeChainr1_spec` enumerate _all_ prefixes; a subset bug reads
-   green but is wrong. Re-run `#print axioms` on each new law (not just `roundtrip`), and
-   sanity-check the `List.mem_flatMap`/`mem_filterMap` destructuring didn't drop a case.
-5. **Deletion completeness.** Grep `Codec/` and `Bench.lean` for any dangling `Buffer`/
-   `ByteArray`/`Array UInt8`/`DecodeArray`/`encodeByteArrayBytes`/`decodeVarint … i
-(old-signature) reference; confirm the root `Codec.lean`re-exports exactly`Iso`,
-`Codec`, `Decode`, `Encode`, `Sound`, `Combinators`, `VarBinary`.
-6. **README/AGENTS/doc consistency.** Verify the README no longer claims a two-tier
-   `List ✓ spec + ByteArray run-model` anywhere (stale fragments may remain past the
-   sections edited this session), and that the `[D1]` anchor's link target
-   (`#representations-one-length-indexed-byte-string`) resolves.
-7. **`Bench.lean` scope.** Confirm dropping all array/byte-array/slice/extern lanes is
-   exactly what the spec's 4.2 requires (it is), and that the surviving lanes
-   (scalar-index read, empty-remainder roundtrip, encode length) still exercise the hot
-   paths meaningfully.
+Concrete next steps, in order (each gated by `#print axioms` `⇒ [propext, Quot.sound]`):
 
-Once reviewed, archive `single-carrier-bytes` (`/opsx-archive`) and decide whether the
-concrete-vector smoke checks (`#eval varintBytes 300`, …) deserve a permanent test lane.
+1. `fastEncodeRepeat : Codec α → List α → Option ({n} × Bytes n)` backed by an
+   `Array UInt8`/`ByteArray` accumulator; prove `fastEncodeRepeat p xs = encodeRepeat p xs`
+   **pointwise** via `Bytes.ext` + `Array.ofFn`/`GetElem`, zero `Classical.choice`.
+2. The decode bulk dual (`fastDecodeFull`), same refinement equality and gate.
+3. Wire both into `Bench.lean` behind a flag, keeping the byte-exact value checks.
+4. Measure: confirm ~500–700 MiB/s on plain clang, no LLVM, `lake build` zero-`sorry`.
+
+Reads/`decode` stay on `Bytes n`; **only the bulk shapes get the contiguous-buffer fast
+path, proved equal to the spec.**
+
+## Critical review of the single-carrier change (COMPLETE)
+
+The re-derivation is a proof-critical rewrite and was reviewed critically. The review
+verified: (1) LEB128 byte-exactness by `#eval` (`0→[0]`, `128→[0x80,0x01]`, `300→[0xAC,0x02]`,
+`127→[0x7F]`, `16384→[0x80,0x80,0x01]`, `624485→[0xE5,0x8E,0x26]`, overlong encodings rejected);
+(2) `encodeVarint_eq`/`decodeVarint_eq` are intended `rfl` collapses and `decodeVarint`'s
+whole-buffer form is acceptable; (3) `sepBy` is one-or-more and `chainl1`/`chainr1` keep
+their operand list types; (4) every `_spec` law enumerates all prefixes (no dropped case);
+(5) no dangling `Buffer`/`ByteArray`/`Array UInt8` references, and the root re-exports
+exactly `Iso`/`Codec`/`Decode`/`Encode`/`Sound`/`Combinators`/`VarBinary`; (6) README is
+single-carrier throughout; (7) `Bench.lean` scope matches spec 4.2. No unsound proof, no
+vacuous antecedent, no `Classical.choice`, zero `sorry`. All new `decodeFull_*` laws are
+`[propext, Quot.sound]`-only (`#print axioms Codec.decodeFull_spec`).
+
+**Section-6 hardening (reviewer findings closed):** re-derived `decodeFull_some`/
+`decodeFull_ne_none`/`decodeFull_spec` over the `Suffix` carrier (the dropped
+`decodeFull_spec` full-consumption law is now proved, with the same uniqueness hypothesis
+as its `List`-substrate predecessor), fixed the stale `ByteArray` docstring, added the
+`decodeVarint` whole-buffer note, justified `relChainl1_cast`/`relChainr1_cast`, and
+hardened the `Bench.lean` `decodeFull`/`decodeFast` checks. The Nix `lean4-llvm` override
+was later **removed** (see `openspec/changes/carrier-performance-tuning`): the A/B measured
+LLVM as neutral on the single `Bytes n` carrier, so the override + clang-19 pin was dropped
+as dead weight and the toolchain returns to plain nixpkgs `lean4` (clang 21).
+
+(`single-carrier-bytes` is now **archived** as
+`openspec/changes/archive/2026-10-17-single-carrier-bytes`.) The concrete-vector smoke checks
+(`#eval varintBytes 300`, …) remain not-yet-permanent; they can become a test lane during the
+`carrier-performance-tuning` gate (task 5.1).
 
 ## Openspec workflow
 
@@ -157,4 +162,6 @@ are created before implementation; see `.pi/prompts/opsx-*.md`.
 - Nix tooling: **multiple Nix skills exist** — the repo is a Nix flake
   (`flake.nix`/`default.nix`); use `devenv` / `devenv-migration` only when actually
   migrating to devenv, never for this flake's own `devShells.default` (which is
-  plain `pkgs.mkShellNoCC`).
+  `pkgs.mkShellNoCC` **plus `pkgs.stdenv.cc`** — the Nix clang wrapper is added so
+  `cc`/`clang`/`c++` resolve to a `libc++`-aware toolchain and `lake build bench`
+  links in the dev shell, matching the `nix build .#bench` sandbox).

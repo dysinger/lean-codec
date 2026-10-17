@@ -52,6 +52,43 @@ unsafe def timeBatch (reps : Nat) (f : Nat → α) : IO (α × Nat) := do
   let stop ← IO.monoNanosNow
   return (r, (stop - start))
 
+/-- Per-op throughput in MiB/s: `bytes` bytes moved in `nsPerOp` nanoseconds. -/
+def mebibytesPerSec (bytes : Nat) (nsPerOp : Nat) : Nat :=
+  if nsPerOp = 0 then 0 else (bytes * 10^9) / (nsPerOp * 2^20)
+
+/-- Print one lane's timing line with both ns/op and MiB/s (when a non-zero byte
+count is supplied). The `label` is left-padded by the caller's alignment. -/
+unsafe def printLane (label : String) (n : Nat) (nsPerOp : Nat) (bytesPerOp : Nat) : IO Unit :=
+  if bytesPerOp = 0 then
+    IO.println s!"{label} [{n}]: {nsPerOp} ns/op"
+  else
+    IO.println s!"{label} [{n}]: {nsPerOp} ns/op  ({mebibytesPerSec bytesPerOp nsPerOp} MiB/s)"
+
+/-- The machine calibration baseline lane: a `memset`-like fill (writing one byte
+`n` times into a fresh `ByteArray` via a `push` append loop) and a `memcpy`-like
+copy (`ByteArray.copySlice`, the `@[extern "lean_byte_array_copy_slice"]` primitive)
+of the same `n`-byte count. Printed once at startup so every other lane's
+throughput is *relative* to this same machine's raw memory-move speed, not an
+absolute ns figure. -/
+unsafe def benchCalibration (n : Nat) (reps : Nat) : IO Unit := do
+  -- memset-like: write a single byte into a fresh n-byte array (the allocation
+  -- cost dominates here; it is the floor for any "produce n bytes" lane).
+  let (filled, dtMemset) ← timeBatch reps fun _ =>
+    Id.run do
+      let mut a := ByteArray.empty
+      for _i in [0:n] do a := a.push (1 : UInt8)
+      a
+  if (filled.size : Nat) != n then
+    throw (IO.userError "calibration memset: size mismatch")
+  -- memcpy-like: copy the n-byte source into a fresh destination via the
+  -- `lean_byte_array_copy_slice` extern (a real memcpy).
+  let src := filled
+  let (copied, dtMemcpy) ← timeBatch reps fun _ => src.copySlice 0 ByteArray.empty 0 n
+  if (copied.size : Nat) != n then
+    throw (IO.userError "calibration memcpy: size mismatch")
+  printLane "calib memset " n (dtMemset / reps) n
+  printLane "calib memcpy " n (dtMemcpy / reps) n
+
 /-- The scalar-index read lane: reading `s ⟨i, ·⟩` is a structural indexed load on
 the length-indexed carrier (the one read the single substrate exposes). -/
 unsafe def benchScalarIndexRead (n : Nat) (reps : Nat) : IO Unit := do
@@ -92,7 +129,9 @@ unsafe def benchRoundtripByte (reps : Nat) : IO Unit := do
       IO.println s!"roundtrip byte (decode): {dt2 / reps} ns/op"
 
 /-- The encode-length lane: `encode Codec.byte x` returns the bytes **and their
-length** in one sigma; the length is exactly `1` for a byte. -/
+length** in one sigma; the length is exactly `1` for a byte. Reports ns/op and
+the per-byte throughput (MiB/s) so the bulk-encode cost is visible against the
+calibration baseline. -/
 unsafe def benchEncodeLength (n : Nat) (reps : Nat) : IO Unit := do
   let xs : List UInt8 := List.replicate n (1 : UInt8)
   let (r, dt) ← timeBatch reps fun _ => encodeRepeat Codec.byte xs
@@ -101,7 +140,24 @@ unsafe def benchEncodeLength (n : Nat) (reps : Nat) : IO Unit := do
       if k != n then
         throw (IO.userError "encodeRepeat length mismatch")
   | none => throw (IO.userError "encodeRepeat returned none")
-  IO.println s!"encodeRepeat byte [{n}]: {dt / reps} ns/op"
+  printLane "encodeRepeat byte" n (dt / reps) n
+
+/-- The representation-isolation lane for `encodeRepeat`: time the encode with the
+`concat`/sigma/`Fin`-sum arithmetic **elided** — a raw `unsafe` scratch `ByteArray`
+accumulator that appends one byte per element (`ByteArray.push`, an `@[extern]`
+primop), so this is the bandwidth + allocation floor separate from the carrier's
+`Nat`/`Fin` index arithmetic, sigma re-packaging, and `concat`/cast. Not part of
+`Codec`; purely to split bandwidth vs dependent-type bookkeeping vs residual in
+the profiling attribution. -/
+unsafe def benchEncodeRepeatIsolation (n : Nat) (reps : Nat) : IO Unit := do
+  let (acc, dt) ← timeBatch reps fun _ =>
+    Id.run do
+      let mut b := ByteArray.empty
+      for _i in [0:n] do b := b.push (1 : UInt8)
+      b
+  if (acc.size : Nat) != n then
+    throw (IO.userError "encodeRepeat isolation: size mismatch")
+  printLane "encodeRepeat iso  " n (dt / reps) n
 
 /-- The backtracking "many" decoder (quadratic output, paper §4.4), kept at a
 small `n`. Confirms it yields `n+1` prefixes. -/
@@ -114,26 +170,31 @@ unsafe def benchDecodeRepeat (n : Nat) : IO Unit := do
 
 /-- The full-consumption repetition decoder: unlike `decodeRepeat` (which
 materializes all `n+1` prefixes), this threads one `Option` and returns
-`some (replicate n byte)` for the whole input. -/
+`some (replicate n byte)` for the whole input. Asserts the *value* (not just its
+length) against `replicate n (1 : UInt8)`; that this value is a full-consumption
+result is the unconditional `Codec.decodeFull_some` law. -/
 unsafe def benchDecodeFull (n : Nat) (reps : Nat) : IO Unit := do
   let s : Bytes n := bytesOf n
   let (r, dt) ← timeBatch reps fun _ => decodeFull Codec.byte byteConsumesByte n s
   match r with
   | some xs =>
-      if xs.length != n then
-        throw (IO.userError s!"decodeFull: expected {n} bytes, got {xs.length}")
+      let expected : List UInt8 := List.replicate n (1 : UInt8)
+      if xs != expected then
+        throw (IO.userError s!"decodeFull: expected {expected.length}×0x01 bytes, got {xs}")
   | none => throw (IO.userError "decodeFull: expected some, got none")
   IO.println s!"decodeFull byte [{n}]: {dt / reps} ns/op"
 
 /-- The fused single-step decoder `decodeFast`: peels one `Codec.byte` in O(1),
-without re-traversing. Confirms `decodeFast` equals `decode`. -/
+without re-traversing. Confirms `decodeFast` agrees with `decode` on the remainder
+length (the `Suffix` carries no decidable value-equality, so this lanes checks the
+consumed-length component; value agreement is the `decodeFast_eq` theorem). -/
 unsafe def benchDecodeFast (n : Nat) (reps : Nat) : IO Unit := do
   let s : Bytes n := bytesOf n
   let (r, dt) ← timeBatch reps fun _ => decodeFast Codec.byte s
   match r, decode Codec.byte s with
   | [(1, t)], [(1, t')] =>
       if t.remaining != t'.remaining then
-        throw (IO.userError "decodeFast ≠ decode")
+        throw (IO.userError "decodeFast ≠ decode (remainder length)")
   | _, _ => throw (IO.userError "decodeFast: expected one result")
   IO.println s!"decodeFast byte [{n}]: {dt / reps} ns/op"
 
@@ -161,11 +222,16 @@ unsafe def main (args : List String) : IO Unit := do
   let m := (args.getD 1 "8192").toNat!
   let reps := 20
   IO.println s!"codec bench — linear n = {n} bytes, quadratic m = {m} bytes, reps = {reps}"
+  -- Machine calibration baseline (memset/memcpy at the same byte count), once at
+  -- startup so every lane below is relative to this machine's raw memory speed.
+  Codec.Bench.benchCalibration n reps
   -- Linear paths, scaled ×1/×2/×4 to show O(n) growth.
   for size in [n / 4, n / 2, n] do
     Codec.Bench.benchScalarIndexRead size reps
     Codec.Bench.benchDecodeByte size reps
     Codec.Bench.benchEncodeLength size reps
+    -- Representation-isolation: same byte count, but concat/sigma/Fin-sum elided.
+    Codec.Bench.benchEncodeRepeatIsolation size reps
   -- Single-byte empty-remainder roundtrip.
   Codec.Bench.benchRoundtripByte reps
   -- Quadratic backtracking "many" decoder (kept small, paper §4.4).
