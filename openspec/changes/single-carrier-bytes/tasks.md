@@ -1,6 +1,27 @@
 # Tasks
 
-> **Session status (latest):** tasks **3.1 and 3.2 are DONE** — the three remaining
+> **Session status (latest):** the change is **14/14 tasks complete and green** — the
+> whole tree is re-derived over the single length-indexed carrier `Bytes n := Fin n → UInt8`,
+> zero `sorry`, zero `Classical.choice` (`#print axioms Codec.roundtrip`, `Codec.varint`,
+> `Codec.decodeSepBy_spec` all report `[propext, Quot.sound]`; `lake build` and
+> `nix build .#checks.aarch64-darwin.lean .#bench` both green). This session landed
+> tasks 3.3 (Combinators over `Bytes n`), 4.1 (delete transfer tier), 4.2 (lakefile +
+> Bench), 4.3 (LEB128 varint over `Bytes n`), 5.1 (gate), 5.2 (README/AGENTS).
+>
+> **Next: critical review before archive** (also recorded in `AGENTS.md` under
+> "Next: critical review"). The re-derivation is proof-critical; review in this order:
+> (1) `Codec/VarBinary.lean` backward `enc_dec`/`varintUnapply_inj` — the `Sigma.ext`+
+> `heq_of_eq`/`cast_heq`/`HEq.trans` reconstruction is the fragile part; re-verify concrete
+> LEB128 vectors (`0→[0]`, `128→[0x80,0x01]`, `300→[0xAC,0x02]`) by `#eval`, not just the
+> roundtrip theorem. (2) `encodeVarint_eq`/`decodeVarint_eq` became `rfl` aliases and
+> `decodeVarint` lost its absolute-offset argument — confirm that collapse is intended.
+> (3) Combinators keep their semantics (`sepBy` one-or-more, `chainl1`/`chainr1` operand
+> list types). (4) completeness of each `_spec` law (all-prefix enumeration). (5) deletion
+> completeness (grep for dangling `Buffer`/`ByteArray`/`Array UInt8`/old `decodeVarint … i`).
+> (6) README no longer claims a two-tier representation anywhere. (7) Bench lane scope per
+> spec 4.2. Then archive.
+
+> **Session status (previous):** tasks **3.1 and 3.2 are DONE** — the three remaining
 > `sorry`s are proven and `Codec/Sound.lean` builds clean (zero `sorry`, zero
 > `Classical.choice`). `#print axioms` on `roundtrip`/`decode_spec`/`decodeRepeat_spec`/
 > `bidir`/`decode_encode`/`productive_iff_consumesByte` all report `[propext, Quot.sound]`.
@@ -190,34 +211,34 @@ hle : remaining ≤ n, bytes : Bytes remaining }` — the spec's
 - [x] 3.2 Re-prove the repetition laws `decodeRepeat_spec`/`encodeRepeat_rel` and
       the chain converses over `Bytes n`; verify their `#print axioms` reports
       `[propext, Quot.sound]` (zero `Classical.choice`) with `lake build` green.
-- [ ] 3.3 Re-derive `Codec/Combinators.lean` (the `sepBy`/`chainl1`/`chainr1`/
+- [x] 3.3 Re-derive `Codec/Combinators.lean` (the `sepBy`/`chainl1`/`chainr1`/
       finite combinators) over `Bytes n`; verify `lake build Codec.Combinators`
       compiles and the `_spec`/`_rel`/converse laws close.
 
 ## 4. Delete the transfer tier
 
-- [ ] 4.1 Delete `Codec/DecodeArray.lean`, `Codec/EncodeArray.lean`,
+- [x] 4.1 Delete `Codec/DecodeArray.lean`, `Codec/EncodeArray.lean`,
       `Codec/DecodeByteArray.lean`, `Codec/EncodeByteArray.lean`,
       `Codec/DecodeByteArraySlice.lean`, `Codec/EncodeByteArraySlice.lean`,
       `Codec/ExternFastPath.lean`, `Codec/ExternFastPath.c`, `Codec/Buffer.lean`;
       drop their imports from the root `Codec.lean`; verify `lake build` compiles
       with only the remaining modules.
-- [ ] 4.2 Simplify `lakefile.lean` (drop the `externFastPathO` target and
+- [x] 4.2 Simplify `lakefile.lean` (drop the `externFastPathO` target and
       `moreLinkObjs`; keep `@[default_target] lean_lib codec`) and rewrite
       `Bench.lean` to drop the array/byte-array/slice/extern lanes and add a
       `Bytes`-substrate lane (scalar-index read, empty-remainder roundtrip,
       encode length); verify `lake build bench` links and the bench runs byte-exactly.
-- [ ] 4.3 Re-derive `Codec/VarBinary.lean` (LEB128 `varint`) over `Bytes n`; verify
+- [x] 4.3 Re-derive `Codec/VarBinary.lean` (LEB128 `varint`) over `Bytes n`; verify
       `lake build Codec.VarBinary` and `roundtripVarint`/`decodeVarint_eq`/
       `encodeVarint_eq` close `[propext, Quot.sound]`.
 
 ## 5. Integration gate + docs
 
-- [ ] 5.1 `lake build` (zero `sorry`/warnings) and `#print axioms Codec.roundtrip`
+- [x] 5.1 `lake build` (zero `sorry`/warnings) and `#print axioms Codec.roundtrip`
       ⇒ `[propext, Quot.sound]` (zero `Classical.choice`); run
       `nix build .#checks.<system>.lean` + `.#bench` (detached, polled) and confirm
       both green after `git add` of any new/removed modules.
-- [ ] 5.2 Update the README anchors `[D#]`/`[S#]` and the "Representations" section
+- [x] 5.2 Update the README anchors `[D#]`/`[S#]` and the "Representations" section
       to record the single length-indexed carrier and the "carrier split was the
       defect, not the strategy" lesson, and update the `AGENTS.md` handoff (done/
       open) accordingly; verify the docs no longer reference `List UInt8`/`Buffer`/
