@@ -1,0 +1,62 @@
+# Tasks
+
+> The plan: keep the pure `Bytes n` interpreter as the slow spec, and ship a fast C
+> surface — `@[extern]` seams (each `byteSlice`-shaped: reducible Lean body + trusted
+> C) plus per-format specialized decoders/encoders, all proved `[propext, Quot.sound]`-equal
+> to the spec or named as runtime-only trust. The review's strategic conclusion is the
+> anchor: do **not** try to make the generic interpreter fast; make the shipped C fast and
+> prove _agreement with the slow spec_. Start with WAV + protobuf (clearest `memcpy`-shaped
+> hot paths), then generalize.
+
+## 1. The bulk copy + scan seams (generalize `byteSlice`)
+
+- [ ] 1.1 Add `blitBytes (dst : ByteArray) (dstOff : USize) (src : ByteArray) (srcOff : USize)
+    (len : USize) : ByteArray` — a buffer-to-buffer `memcpy`, Lean body the reducible
+      `Array.extract`+`append` composition, C symbol a single `memcpy`, in `Codec/ByteSlice.lean`
+      (+ `.c`). `USize`-indexed so its body is `rfl`-clean.
+- [ ] 1.2 Add `findByte (a : ByteArray) (off : USize) (b : UInt8) : Option USize` — a span
+      scan via `memchr`, Lean body a `List`/`Array` `find?` reference, C one `memchr`. Document
+      both contracts verbatim (the `ByteSlice.lean` posture), excluded from the axiom gate.
+- [ ] 1.3 Prove `blitBytes_spec`/`findByte_spec` (Lean body = spec; any index web stays
+      `[propext, Quot.sound]`-only), and value-check both in a bench lane byte-for-byte.
+
+## 2. Varint span + numeric parse + zlib seams
+
+- [ ] 2.1 Add `varintEncodeInto`/`varintDecodeFrom` span ops (LEB128 into/from
+      `lean_sarray_cptr`), Lean body reducible-equal to the existing `VarBinary`; C a scalar
+      `size_t`+`uint8_t` loop (no bignum cursor). Prove the spec law and `#print axioms` clean.
+- [ ] 2.2 Add `parseNumber` (wraps `strtod`/`strtoll`) for JSON/TOML literals, Lean body a slow
+      reference parse; prove it agrees with the reference on the bench.
+- [ ] 2.3 Add `deflate`/`inflate` (link zlib) for PNG IDAT, Lean body the raw/stored reference;
+      note the zlib dependency boundary in the module header. (This is "unusable → usable", not
+      a micro-opt.)
+
+## 3. Deterministic decode under `Unambiguous`/`Functional`
+
+- [ ] 3.1 Add `decodeOne {α} (d : Codec α) (a : Array UInt8) (i : Nat) : Option (α × Nat)` that
+      commits each `|` choice, **gated** by a `Functional d` (or `Unambiguous d`) hypothesis, so
+      no alternative is silently discarded. Prove it equals the (unique) `decodeArray` result
+      under that hypothesis, `[propext, Quot.sound]`-only. Leave the unconditional `decode (d₁|d₂)`
+      law untouched.
+- [ ] 3.2 Confirm `#print axioms Codec.roundtrip` ⇒ `[propext, Quot.sound]` is unchanged after 3.x.
+
+## 4. Per-format specialized paths (proved equal to spec)
+
+- [ ] 4.1 WAV: `wavDecode` (44-byte header struct + one `blitBytes`/`memcpy` PCM block) and
+      `wavEncode`, proved `[propext, Quot.sound]`-equal to the generic `decode`/`encode` of a
+      WAV description by a `decodeArray_eq`-style lemma.
+- [ ] 4.2 protobuf: tag/varint loop + length-delimited `blitBytes` body, proved equal to the
+      spec; value-checked byte-for-byte including the varint seam (2.1).
+- [ ] 4.3 JSON/TOML scanner (delimiter `findByte`/`memchr`, numbers via `parseNumber`), PNG
+      (header + zlib seam), QR (byte matrix fill) — prove-agree-with-spec lemmas where structural,
+      seam-backed where raw.
+
+## 5. Bench + gate
+
+- [ ] 5.1 Per-format lanes (WAV raw PCM, protobuf blobs, JSON scan) value-checked byte-for-byte
+      against the spec, recording `[measured]` ns/op + MiB/s vs the `memcpy`/`byteSlice` baseline.
+- [ ] 5.2 `lake build` zero `sorry`/warnings; `#print axioms Codec.roundtrip` ⇒ `[propext,
+    Quot.sound]`; every new seam's Lean body axiom-clean; every refinement `[propext,
+    Quot.sound]`-only. Update `README.md` §Performance and `AGENTS.md` with the shipped-C
+      surface and the spec-vs-shipped two-layer framing (Layer 1 proven, Layer 2 trusted C,
+      never conflated).

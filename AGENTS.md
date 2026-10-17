@@ -56,13 +56,15 @@ reminder that the toolchain is _flake-scoped_, not host-global.)
   with a layman "why"):** `README.md`.
 - **Engineering state & task ledger (spec-driven):** `openspec/`. Every change
   lives under `openspec/changes/` as proposal / spec delta / design / tasks. The
-  **active change is `carrier-performance-tuning`** (profiling done, law-backed
-  bulk fast path next) — consult
-  `openspec/changes/carrier-performance-tuning/tasks.md` for the current task
-  status and next steps. History ("we used to / reverted / this session")
-  belongs in that ledger, **never** in this file or the README.
+  **active change is `shipped-c-fast-path`** (planning done — keep the pure `Bytes n`
+  spec slow, ship fast C via `@[extern]` seams + per-format specialized decoders,
+  each proved `[propext, Quot.sound]`-equal to the spec) — consult
+  `openspec/changes/shipped-c-fast-path/tasks.md` for the current task status and
+  next steps. History ("we used to / reverted / this session") belongs in that
+  ledger, **never** in this file or the README.
   (`single-carrier-bytes` is archived as
-  `openspec/changes/archive/2026-10-17-single-carrier-bytes`.)
+  `openspec/changes/archive/2026-10-17-single-carrier-bytes`; `carrier-performance-tuning`
+  is complete 11/11; `partial-remainder-fast-path` is complete 7/7.)
 - **Library source (module `Codec`):** `Codec/`.
   - `Iso.lean` — partial isomorphisms + folded combinators (`foldl`/`foldr`).
   - `Codec.lean` — the description AST, the length-indexed substrate `Bytes n`,
@@ -194,31 +196,67 @@ as the seed note `openspec/changes/carrier-performance-tuning/design-note-5th-mo
 review + a from-scratch rewrite fixing three Criticals, as the new change
 **`openspec/changes/partial-remainder-fast-path`** (validated; planning complete).
 
-## Next session: implement `partial-remainder-fast-path`
+## Session status: `partial-remainder-fast-path` DONE
 
-The plan (see `openspec/changes/partial-remainder-fast-path/`): wire `byteSlice` onto a
-**partial-remainder commit**. The packed decoder already returns `(value, Nat cursor)` (`decodeArray`);
-the missing piece is a single `memcpy` that turns a chosen cursor into a `ByteArray` remainder.
+The plan (see `openspec/changes/partial-remainder-fast-path/`) is **implemented**: `byteSlice` is
+wired onto a **partial-remainder commit**. The packed decoder returns `(value, Nat cursor)`
+(`decodeArray`); the single `memcpy` that turns a chosen cursor into a `ByteArray` remainder is
+the `USize`-indexed `commitRemainder` (`byteSlice` wrapper), with a definitional law.
 
-**Concrete order:**
+**Landed (7/7 tasks):**
 
-1. **Task 1.x — definitions.** Add `commitRemainder (a : Array UInt8) (c : USize) : ByteArray :=
-byteSlice (ByteArray.mk a) c` in `Codec/ByteSlice.lean` — **`USize`-indexed on purpose** (matching
-   `byteSlice`'s index, so NO `Nat ↔ USize` roundtrip, NO `System.Platform.numBits` premise). Add
-   `decodeArrayFast := decodeArray` in `Codec/Packed.lean` (a documented rename, not a new decoder).
-2. **Task 2.x — the definitional law.** Prove `commitRemainder_spec : commitRemainder a c =
-ByteArray.mk (a.extract c.toNat a.size)` by `rfl`. The refinement to `decode d` stays the
-   existing `decodeArray_eq`; add **no** new equality to `decode d`.
-3. **Task 3.x — bench.** `benchCommitRemainder n` at a **mid-buffer** cursor `c = (n/3).toUSize`,
-   value-checked byte-for-byte, as a distinct Layer-2 lane.
-4. **Task 4.x — gate.** `lake build` zero `sorry`; `#print axioms Codec.roundtrip` ⇒ `[propext,
-Quot.sound]`; `#print axioms Codec.commitRemainder_spec` ⇒ `[propext, Quot.sound]` (definitional).
-   Run the bench, record `[measured]`. Update `README.md`/`AGENTS.md`.
+1. **`commitRemainder (a : Array UInt8) (c : USize) : ByteArray := byteSlice (ByteArray.mk a) c`**
+   in `Codec/ByteSlice.lean` — `USize`-indexed on purpose (matches `byteSlice`'s index, so **no**
+   `Nat ↔ USize` roundtrip and **no** `System.Platform.numBits` premise; the `Nat → USize`
+   conversion is the caller's, once, at the call site).
+2. **`decodeArrayFast := decodeArray`** in `Codec/Packed.lean` — a documented rename stating the
+   "decode yields cursors, no materialization during decode" contract (the `Nat` cursor is a fixed
+   binding decision).
+3. **`commitRemainder_spec : commitRemainder a c = ByteArray.mk (a.extract c.toNat a.size)`** proved
+   by `rfl` (`#print axioms Codec.commitRemainder_spec` ⇒ no axioms). The refinement to `decode d`
+   stays the existing `decodeArray_eq`; **no** new equality to `decode d`.
+4. **Bench lane** `benchCommitRemainder n` at a mid-buffer cursor `c = (n/3).toUSize`, value-checked
+   byte-for-byte against `Array.extract`, a distinct Layer-2 lane. `[measured]` (128 KiB sweep):
+   `~1450–3669 MiB/s` across ×1/×2/×4 (131072 bytes: `57452` ns/op).
+5. **Gate green**: `lake build` zero `sorry`/warnings; `#print axioms Codec.roundtrip` ⇒
+   `[propext, Quot.sound]`; `commitRemainder_spec` ⇒ no axioms (definitional).
 
-**Two invariants that must hold (do not re-litigate):** the `Bytes n` spec and its laws are
-untouched (the two carrier requirements in `codec`/`codec/byte-string` are **relaxed**, not removed,
-via MODIFIED deltas that carry over all existing scenarios); and the `byteSlice`/C trust is a runtime
+**Two invariants that held (do not re-litigate):** the `Bytes n` spec and its laws are untouched
+(the two carrier requirements in `codec`/`codec/byte-string` are **relaxed**, not removed, via
+MODIFIED deltas that carry over all existing scenarios); and the `byteSlice`/C trust is a runtime
 contract excluded from the axiom gate, never folded into a law.
+
+## Next session: implement `shipped-c-fast-path`
+
+Planning is complete and validated for the **active change** `shipped-c-fast-path`
+(`openspec/changes/shipped-c-fast-path/`, proposal/specs/design/tasks). The strategic
+conclusion from the independent review, now recorded as the anchor: **do not make the generic
+pure `Bytes n` interpreter fast — it is the spec and stays slow; make the _shipped C_ fast via
+`@[extern]` seams + per-format specialized decoders/encoders, and prove _agreement with the slow
+spec_.** The pure carriers cap ~16–32 MiB/s because a pure immutable value is built by a per-element
+fold (boxed `UInt8`, boxed `Nat` cursor, `List` cons churn, nondeterminism plumbing); `byteSlice`
+runs ~55 GiB/s because a single `memcpy` is the only thing at that floor.
+
+**Concrete order (see `shipped-c-fast-path/tasks.md`):**
+
+1. **Task 1.x — bulk copy + scan seams.** Generalize `byteSlice` into `blitBytes` (buffer-to-buffer
+   `memcpy`) and `findByte` (`memchr`), `USize`-indexed, Lean body reducible, C trusted — the
+   `byteSlice` posture. Prove the spec laws `rfl`-clean and value-check byte-for-byte.
+2. **Task 2.x — varint span + numeric parse + zlib seams.** `varintEncodeInto`/`varintDecodeFrom`
+   (LEB128 into `lean_sarray_cptr`, no bignum cursor), `parseNumber` (`strtod`/`strtoll`), and
+   `deflate`/`inflate` (link zlib, PNG's IDAT). Each Lean body = spec; C trusted.
+3. **Task 3.x — deterministic decode under `Unambiguous`/`Functional`.** `decodeOne` committing
+   `|`, gated by `Functional d`/`Unambiguous d`, proved equal to the unique `decodeArray` result
+   under that hypothesis. The unconditional `decode (d₁|d₂)` law stays untouched.
+4. **Task 4.x/5.x — per-format paths + gate.** WAV (header + one `blitBytes` PCM), protobuf
+   (tag/varint + length-delimited blit), JSON/TOML scanner, PNG/QR — each proved `[propext,
+Quot.sound]`-equal to the spec or seam-backed. `lake build` zero `sorry`/warnings;
+   `#print axioms Codec.roundtrip` ⇒ `[propext, Quot.sound]`; bench value-checks every seam.
+
+**Two invariants that must hold (do not re-litigate):** the `Bytes n` spec and its laws are the
+single denotation and stay untouched; and the `@[extern]`/zlib trust is a runtime contract
+excluded from the axiom gate, never folded into a law (the C is invisible to Lean; `#print axioms`
+sees only the pure body).
 
 ## Critical review of the single-carrier change (COMPLETE)
 

@@ -1,0 +1,45 @@
+# Spec Delta
+
+## MODIFIED Requirements
+
+### Requirement: Nondeterministic (backtracking) decoding
+
+Decoding SHALL be a relation-valued function over the length-indexed byte
+string, returning **all** `(value, remaining-buffer)` pairs the description
+admits:
+
+```
+decode : Codec α → {n : Nat} → Bytes n → List (α × ({m : Nat} × Bytes m))
+```
+
+where the remaining buffer `Bytes m` records the consumed length via `m ≤ n`.
+Choice (`|`, the paper's `Alternative`) SHALL be the **backtracking union**:
+`decode (d₁ | d₂) s = decode d₁ s ++ decode d₂ s`, matching the denotation
+`Rel (d₁ | d₂) = Rel d₁ ∨ Rel d₂` by construction. There is no committed choice,
+no cursor, no peeking, and no narrowing to a single result, and `decode d s`
+itself is stated over the single `Bytes n` carrier (no `List UInt8`/`Array`/
+`ByteArray`/`Buffer` carrier replaces it). A **shipped fast path** MAY commit a
+`|` choice to a single result **only** under an explicit `Unambiguous`/`Functional`
+hypothesis on the description, and SHALL NOT be presented as equal to the
+backtracking `decode` without that hypothesis; the unconditional backtracking law
+for the general `decode` is unchanged.
+
+#### Scenario: Choice enumerates every branch
+
+- **WHEN** `decode (d₁ | d₂) s` is evaluated
+- **THEN** the result is the concatenation of `decode d₁ s` and `decode d₂ s` —
+  every `(value, remainder)` pair from either branch, including duplicate values.
+
+#### Scenario: The remaining buffer is length-indexed
+
+- **WHEN** `decode c (s : Bytes n)` returns a `(value, remainder)` pair
+- **THEN** `remainder : Bytes m` for a `m ≤ n` witnessed at the type, and the
+  byte string is the single `Bytes` carrier — no separate `List` spec and no
+  opaque run-model slab.
+
+#### Scenario: A committed choice requires unambiguity
+
+- **WHEN** a fast path commits a `|` choice to one result
+- **THEN** the description is shown `Unambiguous`/`Functional`, so that single
+  result is the _only_ backtracking result, and no alternative is discarded for a
+  non-unambiguous description.
