@@ -172,13 +172,14 @@ and the remaining `Bytes m`; `encode d x` returns `Option ({n : Nat} × Bytes n)
 encoded bytes and their length in one sigma. The LEB128 `varint` is `Iso Nat (Σ k, Bytes k)`,
 the same single carrier.
 
-The single-carrier collapse is the fix for the defect that five prior efficiency attempts
-(`buffer-carrier-decoders`, `bytearray-carrier-decoders`, `llvm-lean4-toolchain`,
-`extern-c-fast-path`, `slice-returning-run-model`) all shared: the carrier _split_ itself
-(the `List` spec vs the opaque `ByteArray` slab and its `Classical.choice`-leaking
-`Array.extract` lemmas) was the cost. One length-indexed byte string removes the split,
-the transport lemmas, and the `Classical.choice` leaks together. **The carrier split was
-never the strategy; it was the defect.**
+The single-carrier collapse is the fix for the defect that the earlier efficiency
+attempts shared: they split the carrier (a `List`/opaque `ByteArray` slab pair) and
+then paid for `Classical.choice`-leaking `Array.extract`/`Array.toList` transport lemmas
+at the seam. One length-indexed byte string removes that split and its leaks for the
+_proof_ substrate. **The carrier split was never the strategy; it was the defect.**
+(The bulk-encode fast path re-introduces a `ByteArray` accumulator _only_ as a proved-equal
+implementation — see the performance change — keeping `Bytes n` as the specification every
+law is stated over.)
 
 ---
 

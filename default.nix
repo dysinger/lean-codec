@@ -12,12 +12,9 @@
 # `native`/`check` are the SAME `lake build`; `check` is the proof gate,
 # `native` is the installable library, `bench` is the extraction vehicle.
 #
-# NOTE: no LLVM override. A former `lean4-llvm` override built `lean4` with
-# `-DLLVM=ON` to lower `Array`/`ByteArray` primops to their `@[extern]` C++
-# implementations. That fast path targeted the deleted two-tier transfer modules;
-# the single carrier `Bytes n := Fin n → UInt8` never emits an `Array`/`ByteArray`
-# primop, so the A/B in `openspec/changes/carrier-performance-tuning` measured
-# LLVM as neutral and the override was dropped.
+# Plain nixpkgs `lean4`. The bulk fast path uses the Lean runtime's own
+# `@[extern]` C primops (`ByteArray.push`/`copySlice`), compiled by the plain
+# `cc`.
 
 {
   lean4,

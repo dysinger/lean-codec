@@ -56,8 +56,8 @@ reminder that the toolchain is _flake-scoped_, not host-global.)
   with a layman "why"):** `README.md`.
 - **Engineering state & task ledger (spec-driven):** `openspec/`. Every change
   lives under `openspec/changes/` as proposal / spec delta / design / tasks. The
-  **active change is `carrier-performance-tuning`** (profiling done, Lever B
-  law-backed fast path next) — consult
+  **active change is `carrier-performance-tuning`** (profiling done, law-backed
+  bulk fast path next) — consult
   `openspec/changes/carrier-performance-tuning/tasks.md` for the current task
   status and next steps. History ("we used to / reverted / this session")
   belongs in that ledger, **never** in this file or the README.
@@ -87,15 +87,14 @@ Codec.roundtrip` = `[propext, Quot.sound]`, `nix build .#checks.aarch64-darwin.l
 Axiom discipline: every law must stay `[propext, Quot.sound]`-only. `#print axioms
 Codec.roundtrip` is the check.
 
-### Next session: the performance plan (Lever B, no LLVM)
+### Next session: the performance plan (bulk fast path)
 
 The §1 profiling already settled the question: the pure `Bytes n` carrier is a
 scalar _read_ substrate (already a single load) but a **nested-closure** _bulk-write_
 substrate (`encodeRepeat` builds one `concat` closure per element → 28 MiB/s vs the
-elided `ByteArray` lane's 507–737 MiB/s and `memcpy`'s 56 000 MiB/s). Lever A (pure
-re-staging) is a dead end; the plan is **Lever B done correctly — and it does NOT
-need LLVM** (the `@[extern]` `ByteArray`/`Array UInt8` accumulator hits ~500–700 MiB/s
-on plain clang; that is exactly why §0 removed LLVM).
+elided `ByteArray` lane's 507–737 MiB/s and `memcpy`'s 56 000 MiB/s). Pure re-staging
+is a dead end; the plan is a **law-backed bulk fast path** (the `@[extern]`
+`ByteArray`/`Array UInt8` accumulator hits ~500–700 MiB/s on the plain `cc`).
 
 Concrete next steps, in order (each gated by `#print axioms` `⇒ [propext, Quot.sound]`):
 
@@ -104,7 +103,7 @@ Concrete next steps, in order (each gated by `#print axioms` `⇒ [propext, Quot
    **pointwise** via `Bytes.ext` + `Array.ofFn`/`GetElem`, zero `Classical.choice`.
 2. The decode bulk dual (`fastDecodeFull`), same refinement equality and gate.
 3. Wire both into `Bench.lean` behind a flag, keeping the byte-exact value checks.
-4. Measure: confirm ~500–700 MiB/s on plain clang, no LLVM, `lake build` zero-`sorry`.
+4. Measure: confirm ~500–700 MiB/s on the plain `cc`, `lake build` zero-`sorry`.
 
 Reads/`decode` stay on `Bytes n`; **only the bulk shapes get the contiguous-buffer fast
 path, proved equal to the spec.**
@@ -128,10 +127,8 @@ vacuous antecedent, no `Classical.choice`, zero `sorry`. All new `decodeFull_*` 
 `decodeFull_spec` full-consumption law is now proved, with the same uniqueness hypothesis
 as its `List`-substrate predecessor), fixed the stale `ByteArray` docstring, added the
 `decodeVarint` whole-buffer note, justified `relChainl1_cast`/`relChainr1_cast`, and
-hardened the `Bench.lean` `decodeFull`/`decodeFast` checks. The Nix `lean4-llvm` override
-was later **removed** (see `openspec/changes/carrier-performance-tuning`): the A/B measured
-LLVM as neutral on the single `Bytes n` carrier, so the override + clang-19 pin was dropped
-as dead weight and the toolchain returns to plain nixpkgs `lean4` (clang 21).
+hardened the `Bench.lean` `decodeFull`/`decodeFast` checks. The toolchain is plain
+nixpkgs `lean4` (clang 21).
 
 (`single-carrier-bytes` is now **archived** as
 `openspec/changes/archive/2026-10-17-single-carrier-bytes`.) The concrete-vector smoke checks
