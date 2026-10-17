@@ -221,22 +221,140 @@ theorem consumedAbs_remaining (a : Array UInt8) (i : Nat) (t : Suffix (a.size - 
   have hle : t.remaining ≤ a.size - i := t.hle
   omega
 
-/-! ## Remaining refinements (not yet proved)
+/-! ## Refinement: the packed decoder equals the spec `decode` -/
 
-The decode-side refinement laws. The `seq` case of `decodeArray_eq` needs a
-yet-unproven invariant of `decode` — that every result suffix `t` is a *genuine*
-suffix, `t.bytes = bdrop (n - t.remaining) s` — before the `bdrop`-composition
-(`bdrop_add`, proved above) and the `consumedAbs` transitivity bridge can close it.
-That invariant is the "from-scratch `Suffix`-transport bridge" the design flags:
+/-- `decode` is insensitive to a length cast of its input: decoding a
+length-cast `Bytes n` result yields the same values, with each `Suffix` field
+length-cast along the same equality. (The `cast` is along `rfl` after `subst`, so
+the body is definitionally transparent.) `[propext, Quot.sound]`-only. -/
+theorem decode_cast {α : Type} (d : Codec α) {n m : Nat} (e : n = m) (s : Bytes n) :
+    decode d (cast (congrArg Bytes e) s) =
+      (decode d s).map (fun (x, t) => (x, cast (congrArg Suffix e) t)) := by
+  subst e
+  simp
 
-  * `decodeArray_eq` — packed decoder ≡ spec `decode`, via `consumedAbs`; the
-    `iso`/`alt`/`empty`/`pure`/`byte` cases close, the `seq` case needs the
-    `decode` genuine-suffix invariant (`t.bytes = bdrop (t.consumed) s`) first.
-  * `decodeFullArray_spec` — packed full-consumption ≡ spec `decodeFull` (depends
-    on `decodeArray_eq`).
+/-- A length-cast `Suffix` has the same `remaining` field (the cast only moves
+the `hle` bound, which is proof-irrelevant). `[propext, Quot.sound]`-only. -/
+theorem Suffix_cast_remaining {n m : Nat} (e : n = m) (t : Suffix n) :
+    (cast (congrArg Suffix e) t).remaining = t.remaining := by
+  cases e
+  rfl
 
-Each must close `[propext, Quot.sound]`-only, zero `sorry`, zero `Classical.choice`.
--/
+/-- The consumed-count bridge composed with the `decode` genuine-suffix
+invariant: for any decode result `(x, t) ∈ decode d (bdrop i (arrayToBytes a))`,
+the `bdrop (consumedAbs a i t)` of the *whole* array is exactly `t.bytes`,
+transported across `consumedAbs_remaining`. Proved by `bdrop_add` (drop
+composition) + `decode_genuine_suffix` + `cast` cancellation. `[propext,
+Quot.sound]`-only. -/
+theorem bdrop_consumedAbs_eq {α : Type} (d : Codec α) (a : Array UInt8) (i : Nat) :
+    ∀ (x : α) (t : Suffix (a.size - i)), (x, t) ∈ decode d (bdrop i (arrayToBytes a)) →
+      bdrop (consumedAbs a i t) (arrayToBytes a) =
+        cast (congrArg Bytes (consumedAbs_remaining a i t).symm) t.bytes := by
+  intro x t hm
+  have hg := decode_genuine_suffix d (bdrop i (arrayToBytes a)) x t hm
+  have hb := bdrop_add (n := a.size) (i := i) (m := (a.size - i) - t.remaining) (s := arrayToBytes a)
+  unfold consumedAbs
+  rw [hb, ← hg, cast_cast]
+
+/-- Transitivity of the consumed-count bridge across a length cast:
+`consumedAbs a (consumedAbs a i t₁) (cast … t₂) = consumedAbs a i (Suffix.trans t₁ t₂)`.
+This is the `seq`-case arithmetic that aligns the inner decoder's absolute cursor
+with the composed `Suffix.trans`. `[propext, Quot.sound]`-only. -/
+theorem consumedAbs_cast_trans (a : Array UInt8) (i : Nat) (t₁ : Suffix (a.size - i)) (t₂ : Suffix t₁.remaining) :
+    consumedAbs a (consumedAbs a i t₁) (cast (congrArg Suffix (consumedAbs_remaining a i t₁).symm) t₂) =
+    consumedAbs a i (Suffix.trans t₁ t₂) := by
+  unfold consumedAbs
+  rw [Suffix_cast_remaining]
+  · simp only [Suffix.trans]
+    have ht₁ : t₁.remaining ≤ a.size - i := t₁.hle
+    have ht₂ : t₂.remaining ≤ t₁.remaining := t₂.hle
+    omega
+  · exact (consumedAbs_remaining a i t₁).symm
+
+/-- The packed decoder equals the spec `decode`, up to the consumed-count
+readback: `decodeArray d a i = (decode d (bdrop i (arrayToBytes a))).map
+(fun (x, t) => (x, consumedAbs a i t))`. The `seq` case bridges the inner
+`decodeArray d₂ a c₁` (over `bdrop c₁ (arrayToBytes a)`) with `decode d₂ t₁.bytes`
+via `decode_cast` and the genuine-suffix/`bdrop_add` composition
+(`bdrop_consumedAbs_eq`), with `consumedAbs_cast_trans` aligning the cursors.
+`[propext, Quot.sound]`-only, zero `sorry`, zero `Classical.choice`. -/
+theorem decodeArray_eq {α : Type} (d : Codec α) (a : Array UInt8) (i : Nat) :
+    decodeArray d a i = (decode d (bdrop i (arrayToBytes a))).map (fun (x, t) => (x, consumedAbs a i t)) := by
+  induction d generalizing a i with
+  | iso j d ih =>
+      simp only [decodeArray, decode]
+      rw [ih a i]
+      rw [List.filterMap_map, List.map_filterMap]
+      congr 1
+      funext pr
+      cases pr with
+      | mk x t =>
+          dsimp
+          cases hj : j.apply x with
+          | none => rfl
+          | some y => rfl
+  | seq d₁ d₂ ih₁ ih₂ =>
+      simp only [decodeArray, decode]
+      rw [ih₁ a i]
+      rw [List.flatMap_map]
+      rw [List.map_flatMap]
+      simp only [List.map_flatMap]
+      change (List.map (fun a_1 => List.flatMap (fun x => [((a_1.fst, x.fst), x.snd)]) (decodeArray d₂ a (consumedAbs a i a_1.snd))) (decode d₁ (bdrop i (arrayToBytes a)))).flatten =
+             (List.map (fun a_1 => List.flatMap (fun a_2 => List.map (fun x => (x.fst, consumedAbs a i x.snd)) [((a_1.fst, a_2.fst), a_1.snd.trans a_2.snd)]) (decode d₂ a_1.snd.bytes)) (decode d₁ (bdrop i (arrayToBytes a)))).flatten
+      congr 1
+      apply List.map_inj_left.mpr
+      intro pr hm
+      cases pr with
+      | mk x₁ t₁ =>
+          dsimp
+          rw [ih₂ a (consumedAbs a i t₁)]
+          rw [List.flatMap_map]
+          have hbd := bdrop_consumedAbs_eq d₁ a i x₁ t₁ hm
+          rw [hbd]
+          rw [decode_cast d₂ (e := (consumedAbs_remaining a i t₁).symm)]
+          rw [List.flatMap_map]
+          congr 1
+          funext pr₂
+          cases pr₂ with
+          | mk y t₂ =>
+              dsimp
+              rw [consumedAbs_cast_trans a i t₁ t₂]
+              rfl
+  | alt d₁ d₂ ih₁ ih₂ =>
+      simp only [decodeArray, decode]
+      rw [ih₁ a i, ih₂ a i]
+      rw [List.map_append]
+  | empty => rfl
+  | pure x₀ =>
+      simp only [decodeArray, decode, List.map]
+      congr
+      exact (consumedAbs_id a i).symm
+  | byte =>
+      simp only [decodeArray, decode]
+      by_cases h : i < a.size
+      · have hn : (a.size - i) ≠ 0 := by omega
+        simp [h, hn]
+        constructor
+        · dsimp [arrayToBytes, bdrop]
+          congr 1
+          omega
+        · exact (consumedAbs_drop_one a i (bdrop i (arrayToBytes a)) h).symm
+      · have hn : (a.size - i) = 0 := Nat.sub_eq_zero_of_le (Nat.le_of_not_gt h)
+        simp [h, hn]
+
+/-- The packed full-consumption decoder equals the *first* spec `decode` result,
+with its suffix packed as a `ByteArray` and its consumed count read back. (The
+packed carrier takes the first match, exactly as the packed `head?`-projection of
+`decode`; full backtracking is preserved by `decodeArray_eq`.) `[propext,
+Quot.sound]`-only. -/
+theorem decodeFullArray_spec {α : Type} (d : Codec α) (a : Array UInt8) (i : Nat) :
+    (decodeFullArray d a i) =
+      ((decode d (bdrop i (arrayToBytes a))).head?).map (fun (_, t) => (ByteArray.mk ((a.toList.drop (consumedAbs a i t)).toArray), consumedAbs a i t)) := by
+  simp only [decodeFullArray]
+  rw [decodeArray_eq d a i]
+  cases hd : decode d (bdrop i (arrayToBytes a)) with
+  | nil => simp
+  | cons p tl => simp
 
 /-! ## Refinement: the packed encoder equals the spec `encode` -/
 
