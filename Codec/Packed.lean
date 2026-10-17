@@ -186,20 +186,206 @@ theorem decodeArray_bounded {α : Type} (d : Codec α) (a : Array UInt8) (i c : 
         exact Nat.le_succ i
       · simp [h] at hc
 
+/-! ## Transport lemmas for the decode refinement
+
+The decode-side `Suffix`-transport bridge. The spec's `decode d s` returns
+`(x, t)` with `t : Suffix n`; the packed `decodeArray d a i` returns `(x, c)` with
+the absolute consumed count `c`. The bridge is `consumedAbs a i t` (`i` plus the
+count consumed within `s`), and these lemmas transport a `bdrop`/`Suffix.trans`
+across it. `[propext, Quot.sound]`-only. -/
+
+/-- `(n - i) - m = n - (i + m)`. The length identity behind
+`bdrop` composition (`Nat.sub_sub`). -/
+theorem sub_sub_eq {n i m : Nat} : (n - i) - m = n - (i + m) := by
+  exact Nat.sub_sub n i m
+
+/-- `bdrop (i + m) s` is `bdrop m (bdrop i s)` up to the length cast
+`(n - i) - m = n - (i + m)`. The composition law the `seq` bridge needs.
+`[propext, Quot.sound]`-only. -/
+theorem bdrop_add {n i m : Nat} (s : Bytes n) :
+    bdrop (i + m) s = cast (congrArg Bytes (sub_sub_eq (n := n) (i := i) (m := m))) (bdrop m (bdrop i s)) := by
+  apply Bytes.ext
+  intro k
+  unfold bdrop
+  rw [cast_bytes_val (e := sub_sub_eq (n := n) (i := i) (m := m))]
+  congr 1
+  apply Fin.ext
+  dsimp
+  omega
+
+/-- The length identity: the length left after consuming `consumedAbs a i t` bytes is
+exactly `t.remaining`. `[propext, Quot.sound]`-only. -/
+theorem consumedAbs_remaining (a : Array UInt8) (i : Nat) (t : Suffix (a.size - i)) :
+    a.size - consumedAbs a i t = t.remaining := by
+  unfold consumedAbs
+  have hle : t.remaining ≤ a.size - i := t.hle
+  omega
+
 /-! ## Remaining refinements (not yet proved)
 
-The following are the remaining Layer-1 refinement laws, left for a dedicated
-follow-up (they need the from-scratch `Suffix`-transport bridge on the decode side
-and an `Array`-`ofFn`-clean readback inversion on the encode side — both the
-"real proof work" the design flags as not-yet-existing):
+The decode-side refinement laws. The `seq` case of `decodeArray_eq` needs a
+yet-unproven invariant of `decode` — that every result suffix `t` is a *genuine*
+suffix, `t.bytes = bdrop (n - t.remaining) s` — before the `bdrop`-composition
+(`bdrop_add`, proved above) and the `consumedAbs` transitivity bridge can close it.
+That invariant is the "from-scratch `Suffix`-transport bridge" the design flags:
 
-  * `decodeArray_eq` — packed decoder ≡ spec `decode`, via the `Suffix`
-    reconstruction `{ remaining := n - c, hle := Nat.sub_le n c, bytes := bdrop c s }`.
-  * `decodeFullArray_spec` — packed full-consumption ≡ spec `decodeFull`.
-  * `encodeArray_eq` — packed encoder ≡ spec `encode` (List-level readback).
-  * `encodeByteArrayBytes_eq` — byte-sequence packer ≡ `List.toArray` materialization.
+  * `decodeArray_eq` — packed decoder ≡ spec `decode`, via `consumedAbs`; the
+    `iso`/`alt`/`empty`/`pure`/`byte` cases close, the `seq` case needs the
+    `decode` genuine-suffix invariant (`t.bytes = bdrop (t.consumed) s`) first.
+  * `decodeFullArray_spec` — packed full-consumption ≡ spec `decodeFull` (depends
+    on `decodeArray_eq`).
 
 Each must close `[propext, Quot.sound]`-only, zero `sorry`, zero `Classical.choice`.
 -/
+
+/-! ## Refinement: the packed encoder equals the spec `encode` -/
+
+/-- If the readback equality holds, `encodeArray d x` is `none` exactly when
+`encode d x` is `none`. This is the monadic-skeleton bridge that lets the
+`seq`/`alt` cases of `encodeArray_eq` turn `encodeArray = none` into
+`encode = none` (and back) without re-running the encoder. `[propext]`-only. -/
+theorem map_toList_eq_ofFn_none_iff {α : Type} {d : Codec α} {x : α} :
+    ((encodeArray d x).map (fun a : Array UInt8 => a.toList) = (encode d x).map (fun e => List.ofFn e.2)) →
+    (encodeArray d x = none ↔ encode d x = none) := by
+  intro h
+  constructor
+  · intro hnA
+    cases e : encode d x with
+    | none => rfl
+    | some e' =>
+        rcases e' with ⟨n, s⟩
+        rw [hnA, e] at h
+        simp only [Option.map] at h
+        cases h
+  · intro hn
+    cases e : encodeArray d x with
+    | none => rfl
+    | some a =>
+        rw [e, hn] at h
+        simp only [Option.map] at h
+        cases h
+
+/-- The packed encoder equals the spec `encode`, up to the List-level readback:
+`(encodeArray d x).map (·.toList) = (encode d x).map (List.ofFn ∘ snd)`. The
+`Array.toList`/`List.ofFn` readback is the `[propext, Quot.sound]`-clean form (the
+`Array.ofFn`/`Array.toList_ofFn` round-trip would leak `Classical.choice`); the
+`seq` leaf is `Array.toList_append` + `ofFn_concat`. `[propext, Quot.sound]`-only. -/
+theorem encodeArray_eq {α : Type} (d : Codec α) (x : α) :
+    (encodeArray d x).map (fun a : Array UInt8 => a.toList) =
+      (encode d x).map (fun e => List.ofFn e.2) := by
+  induction d with
+  | iso i d ih =>
+      simp only [encodeArray, encode, Option.bind]
+      cases hi : i.unapply x with
+      | none => simp
+      | some a => simpa [hi] using ih a
+  | seq d₁ d₂ ih₁ ih₂ =>
+      cases x with
+      | mk x₁ x₂ =>
+          simp only [encodeArray, encode, Option.bind]
+          have h₁ := ih₁ x₁
+          have h₂ := ih₂ x₂
+          have hn₁ := (map_toList_eq_ofFn_none_iff (d := d₁) (x := x₁)) h₁
+          have hn₂ := (map_toList_eq_ofFn_none_iff (d := d₂) (x := x₂)) h₂
+          cases ha₁ : encodeArray d₁ x₁ with
+          | none =>
+              have he₁ : encode d₁ x₁ = none := hn₁.mp ha₁
+              simp only [he₁, Option.map]
+          | some a₁ =>
+              have he₁ : encode d₁ x₁ ≠ none := by
+                intro h; have := hn₁.mpr h; rw [ha₁] at this; cases this
+              cases hx₁ : encode d₁ x₁ with
+              | none => exfalso; exact he₁ hx₁
+              | some e₁ =>
+                  rcases e₁ with ⟨n₁, s₁⟩
+                  cases ha₂ : encodeArray d₂ x₂ with
+                  | none =>
+                      have he₂ : encode d₂ x₂ = none := hn₂.mp ha₂
+                      simp only [he₂, Option.map]
+                  | some a₂ =>
+                      have he₂ : encode d₂ x₂ ≠ none := by
+                        intro h; have := hn₂.mpr h; rw [ha₂] at this; cases this
+                      cases hx₂ : encode d₂ x₂ with
+                      | none => exfalso; exact he₂ hx₂
+                      | some e₂ =>
+                          rcases e₂ with ⟨n₂, s₂⟩
+                          have h₁' : a₁.toList = List.ofFn s₁ := by
+                            rw [ha₁] at h₁
+                            rw [hx₁] at h₁
+                            simp only [Option.map] at h₁
+                            exact Option.some.inj h₁
+                          have h₂' : a₂.toList = List.ofFn s₂ := by
+                            rw [ha₂] at h₂
+                            rw [hx₂] at h₂
+                            simp only [Option.map] at h₂
+                            exact Option.some.inj h₂
+                          simp only [Option.map]
+                          rw [Array.toList_append, h₁', h₂']
+                          exact congrArg some (ofFn_concat s₁ s₂).symm
+  | alt d₁ d₂ ih₁ ih₂ =>
+      simp only [encodeArray, encode]
+      have h₁ := ih₁ x
+      have h₂ := ih₂ x
+      have hn₁ := (map_toList_eq_ofFn_none_iff (d := d₁) (x := x)) h₁
+      cases ha₁ : encodeArray d₁ x with
+      | none =>
+          have he₁ : encode d₁ x = none := hn₁.mp ha₁
+          simp only [he₁, Option.map]
+          exact h₂
+      | some a =>
+          have he₁ : encode d₁ x ≠ none := by
+            intro h
+            have := hn₁.mpr h
+            rw [ha₁] at this
+            cases this
+          simp only [Option.map]
+          cases hx : encode d₁ x with
+          | none => exfalso; exact he₁ hx
+          | some e =>
+              rcases e with ⟨n, s⟩
+              rw [ha₁] at h₁
+              simp only [Option.map] at h₁
+              simpa [hx] using h₁
+  | empty => simp [encodeArray, encode]
+  | pure x₀ => by_cases h : x = x₀ <;> simp [encodeArray, encode, h]
+  | byte => simp [encodeArray, encode, single]
+
+/-- `ByteArray.push` projects to `Array.push` on the backing data. -/
+theorem bpush_data (bs : ByteArray) (b : UInt8) : (bs.push b).data = bs.data.push b := by
+  rfl
+
+/-- `List.foldl` over `ByteArray.push` projects to `List.foldl` over `Array.push`
+on the backing data. `[propext, Quot.sound]`-free (`#print axioms` ⇒ none). -/
+theorem foldl_push_data (acc : ByteArray) (xs : List UInt8) :
+    (List.foldl (fun a b => a.push b) acc xs).data = List.foldl (fun a b => a.push b) acc.data xs := by
+  induction xs generalizing acc with
+  | nil => rfl
+  | cons b rest ih =>
+      rw [List.foldl_cons, List.foldl_cons]
+      rw [ih (acc.push b)]
+      rw [bpush_data]
+
+/-- `List.foldl` over `Array.push` is `acc ++ xs.toArray`. `[propext, Quot.sound]`-only. -/
+theorem foldl_push_append (acc : Array UInt8) (xs : List UInt8) :
+    List.foldl (fun a b => a.push b) acc xs = acc ++ xs.toArray := by
+  induction xs generalizing acc with
+  | nil => rw [List.foldl_nil, Array.append_empty]
+  | cons b rest ih =>
+      rw [List.foldl_cons, ih (acc.push b), List.toArray_cons]
+      apply Array.ext'
+      rw [Array.toList_append, Array.toList_append, Array.toList_push]
+      rw [Array.toList_append]
+      rw [List.append_assoc]
+
+/-- The byte-sequence packer is the `List.toArray` materialization:
+`encodeByteArrayBytes xs = ByteArray.mk xs.toArray`. `[propext, Quot.sound]`-only. -/
+theorem encodeByteArrayBytes_eq (xs : List UInt8) :
+    encodeByteArrayBytes xs = ByteArray.mk xs.toArray := by
+  apply ByteArray.ext
+  unfold encodeByteArrayBytes
+  rw [foldl_push_data ByteArray.empty xs]
+  change List.foldl (fun a b => a.push b) (#[] : Array UInt8) xs = (ByteArray.mk xs.toArray).data
+  rw [foldl_push_append (#[] : Array UInt8) xs]
+  rw [Array.empty_append]
 
 end Codec
