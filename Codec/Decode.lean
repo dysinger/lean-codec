@@ -351,4 +351,133 @@ theorem decodeFull_spec {α : Type} (p : Codec α) (h : ConsumesByte p)
         have hxy : ys = xs := huniq s hys hmem
         rw [hxy]
 
+/-! ## The genuine-suffix invariant
+
+Every result suffix `t` of `decode d s` is a *genuine* suffix of the input: the
+bytes `t.bytes` are exactly the input `s` with the first `t.consumed` bytes
+dropped (i.e. `bdrop t.consumed s`, reindexed across `n - (n - t.remaining) =
+t.remaining`). This is a property of `decode`'s own construction, not of the
+`Suffix` type — an *arbitrary* `Suffix n` need not be a suffix of `s` — and it is
+the transport bridge the packed carrier's `seq` case needs (see
+`Codec.Packed`). `[propext, Quot.sound]`-only. -/
+
+/-- The consumed count plus a not-yet-consumed index stays in bounds: for any
+suffix `t : Suffix n` and `i : Fin t.remaining`, `i.val + t.consumed < n`. This is
+the `Fin` bound that makes `t.bytes i = s ⟨i.val + t.consumed, ·⟩` well-formed.
+`[propext, Quot.sound]`-only. -/
+theorem suffix_consumed_lt {n : Nat} (t : Suffix n) (i : Fin t.remaining) :
+    i.val + t.consumed < n := by
+  have hlt : i.val < t.remaining := i.isLt
+  have hlem : t.remaining ≤ n := t.hle
+  have hc : t.consumed = n - t.remaining := rfl
+  omega
+
+/-- The genuine-suffix invariant, pointwise: every result suffix `t` of
+`decode d s` reads its `i`-th byte at position `i.val + t.consumed` of the input.
+Proved by induction on `d`; the `seq` case composes the two nested consumed
+counts by `Nat` arithmetic (`sub_sub_add`). `[propext, Quot.sound]`-only, zero
+`Classical.choice`. -/
+theorem decode_genuine_suffix_pointwise {α : Type} (d : Codec α) :
+    ∀ {n : Nat} (s : Bytes n) (x : α) (t : Suffix n), (x, t) ∈ decode d s →
+      ∀ (i : Fin t.remaining),
+        t.bytes i = s ⟨i.val + t.consumed, suffix_consumed_lt t i⟩ := by
+  induction d with
+  | iso i d ih =>
+      intro n s x t hm
+      rw [decode, List.mem_filterMap] at hm
+      rcases hm with ⟨pr, hmem, hm⟩
+      cases hj : i.apply pr.1 with
+      | none => simp [hj] at hm
+      | some y =>
+          simp [hj] at hm
+          rcases hm with ⟨hx, ht⟩
+          subst x
+          subst t
+          intro j
+          exact ih s pr.1 pr.2 hmem j
+  | seq d₁ d₂ ih₁ ih₂ =>
+      intro n s x t hm
+      rw [decode, List.mem_flatMap] at hm
+      rcases hm with ⟨pr₁, h1, h2⟩
+      rw [List.mem_flatMap] at h2
+      rcases h2 with ⟨pr₂, h3, h4⟩
+      replace h4 : x = (pr₁.1, pr₂.1) ∧ t = Suffix.trans pr₁.2 pr₂.2 := by simpa using h4
+      rcases h4 with ⟨hx, ht⟩
+      subst x
+      subst t
+      intro i
+      simp only [Suffix.trans, Suffix.consumed]
+      have hb := ih₂ pr₁.2.bytes pr₂.1 pr₂.2 h3 i
+      rw [hb]
+      have ha := ih₁ s pr₁.1 pr₁.2 h1 ⟨i.val + pr₂.2.consumed, by
+          have hi : i.val < pr₂.2.remaining := i.isLt
+          have hle : pr₂.2.remaining ≤ pr₁.2.remaining := pr₂.2.hle
+          have hc : pr₂.2.consumed = pr₁.2.remaining - pr₂.2.remaining := rfl
+          omega⟩
+      rw [ha]
+      congr 1
+      apply Fin.ext
+      dsimp
+      have hf : pr₁.2.consumed = n - pr₁.2.remaining := rfl
+      have he : pr₂.2.consumed = pr₁.2.remaining - pr₂.2.remaining := rfl
+      have ht₁ : pr₁.2.remaining ≤ n := pr₁.2.hle
+      have ht₂ : pr₂.2.remaining ≤ pr₁.2.remaining := pr₂.2.hle
+      omega
+  | alt d₁ d₂ ih₁ ih₂ =>
+      intro n s x t hm
+      rw [decode, List.mem_append] at hm
+      rcases hm with hm | hm
+      · intro j; exact ih₁ s x t hm j
+      · intro j; exact ih₂ s x t hm j
+  | empty =>
+      intro n s x t hm
+      simp [decode] at hm
+  | pure x₀ =>
+      intro n s x t hm
+      simp [decode] at hm
+      rcases hm with ⟨hx, ht⟩
+      subst x
+      subst t
+      intro i
+      simp only [Suffix.id, Suffix.consumed]
+      congr 1
+      apply Fin.ext
+      dsimp
+      omega
+  | byte =>
+      intro n s x t hm
+      rw [decode] at hm
+      by_cases h : n = 0
+      · simp [h] at hm
+      · simp [h] at hm
+        rcases hm with ⟨hx, ht⟩
+        subst x
+        subst t
+        intro i
+        simp only [Suffix.drop, Suffix.consumed]
+        unfold bdrop
+        congr 1
+        apply Fin.ext
+        dsimp
+        have hn : 1 ≤ n := Nat.pos_of_ne_zero h
+        omega
+
+/-- The genuine-suffix invariant, `bdrop` form: every result suffix `t` of
+`decode d s` has `t.bytes` equal to `bdrop (n - t.remaining) s`, transported
+across `n - (n - t.remaining) = t.remaining`. This is the direct `Bytes`-level
+form (derived from `decode_genuine_suffix_pointwise` by `Bytes.ext`) that the
+packed carrier's `seq` composition consumes. `[propext, Quot.sound]`-only. -/
+theorem decode_genuine_suffix {α : Type} (d : Codec α) :
+    ∀ {n : Nat} (s : Bytes n) (x : α) (t : Suffix n), (x, t) ∈ decode d s →
+      cast (congrArg Bytes (Nat.sub_sub_self t.hle)) (bdrop (n - t.remaining) s) = t.bytes := by
+  intro n s x t hm
+  apply Bytes.ext
+  intro i
+  rw [show cast (congrArg Bytes (Nat.sub_sub_self t.hle)) (bdrop (n - t.remaining) s) i
+        = (bdrop (n - t.remaining) s) ⟨i.val, by simp [Nat.sub_sub_self t.hle, i.isLt]⟩ from
+     cast_bytes_val' (Nat.sub_sub_self t.hle) (bdrop (n - t.remaining) s) i]
+  unfold bdrop
+  have hg := decode_genuine_suffix_pointwise d s x t hm i
+  simpa [Suffix.consumed] using hg.symm
+
 end Codec
