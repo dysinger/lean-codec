@@ -9,6 +9,52 @@
 
 ## Session log (this session)
 
+**Latest (this session): the Layer-2 trust seam and the bench/gate landed — all 11
+carrier-performance-tuning tasks are DONE.**
+
+- **Task 4.1 — `byteSlice` (Layer 2) landed** as `Codec/ByteSlice.lean` + `Codec/ByteSlice.c`,
+  wired through `lakefile.lean` (`target byteSliceO` → `buildLeanO`; `moreLinkObjs := #[byteSliceO]`
+  on `bench` only). Shape-2 extern: `@[extern "codec_byteSlice"]` with an elaborating Lean body
+  (`ByteArray.mk (a.data.extract i.toNat a.data.size)`), so `#print axioms Codec.byteSlice`
+  ⇒ **no axioms**. The emitted `.lake/build/ir/Codec/ByteSlice.c` is the GC-less shape:
+  `USize` → `size_t` (`lean_unbox_usize`), `ByteArray` → `lean_object *`, and the named call
+  `v_res_6_ = codec_byteSlice(v_a_3_, v_i_boxed_5_)`. The C (`codec_byteSlice`) copies the
+  suffix with one `memcpy` over `lean_sarray_cptr` (the public `lean.h` sarray API).
+- **Task 4.2 — trust contract documented verbatim** in `Codec/ByteSlice.lean` (F\*-vs-KaRaMeL
+  posture); Layer 2 **excluded** from the `#print axioms` gate (only Layer-1 laws checked).
+  Note: `byteSlice` is a **standalone seam** (no library caller — the proven `decodeFullArray`
+  keeps its axiom-clean `List.toArray.drop` body); "wired only onto a packed path" is a
+  how-to-use rule, not a current-wiring claim.
+- **Task 5.1 — bench ran** with a new Layer-2 lane `benchByteSlice`, value-checked **byte-for-
+  byte** against the Lean _body_ (`extract`), swept at ×1/×2/×4. `[measured]` (128 KiB linear
+  sweep): `byteSlice L2` **108695 MiB/s** (`575` ns/op moving `n/2` bytes) vs `calib memcpy` **30994 MiB/s**;
+  `fastEncodeRepeat` **30 MiB/s** vs `encodeRepeat` spec **32 MiB/s**. (The `byteSlice` lane
+  reports `bytesPerOp = n/2` — the bytes it moves — not the full `n`, a review fix. The 1 MiB
+  default sweep is slow because the `fastEncodeRepeat` value-check forces pointwise `Fin → UInt8` equality
+  over the nested-closure carrier — pre-existing, not a regression.)
+- **Task 5.2 — gate green**: `lake build` zero `sorry`/zero warnings; `#print axioms Codec.roundtrip`
+  ⇒ `[propext, Quot.sound]`; every Layer-1 law `[propext, Quot.sound]`-only.
+- **Task 5.3 — docs**: `README.md` adds a §Performance (two layers, measured figures);
+  `Bench.lean` adds the Layer-2 lane; `AGENTS.md` records the landing.
+
+**Post-landing (this session): independent review + the "5th move" synthesis.** A critical
+review found zero soundness issues but one Critical + three Warnings (untracked `.c` broke
+`nix build .#bench`; `byteSlice` was a dead seam whose prose overclaimed wiring; the bench
+throughput was 2× inflated by counting `n` bytes for an `n/2` copy; and the deeper lesson — the
+`@[extern]` C is invisible to Lean, so its trust is a runtime contract, not a "proof step"). All
+fixed and re-verified. The synthesis: four carriers (`List UInt8` → `Buffer`/`ByteArray` →
+`Bytes n` → packed `Array UInt8`/`Nat`) all cap at the accumulator floor; the seam is the only
+`memcpy`, so the next move is a **return-type + wiring** change, not a fifth carrier. Written up
+as `design-note-5th-move.md` (this change dir) and, after a from-scratch rewrite, as the new
+change **`partial-remainder-fast-path`** (validated, planning complete) — see its own `tasks.md`.
+
+The other open items remain: concrete-vector smoke checks (`#eval varintBytes 300`, …) can become
+a test lane during the `partial-remainder-fast-path` gate (its task 4.1/4.2).
+
+---
+
+## Earlier session log (decode refinements landed)
+
 **Latest (this session): the decode refinements landed — `decode`'s genuine-suffix
 invariant proved, `decodeArray_eq` and `decodeFullArray_spec` closed.**
 
@@ -158,7 +204,7 @@ fun i => arr[i]⟩ = ⟨n, s⟩` or the `Array.ofFn`-clean equivalent) and confi
       `Nat` (not `USize`), and the emitted `.lake/build/ir/Codec/Packed.c` does **not**
       lower it to `size_t`. The `decodeArray` `byte` case (C lines ~400–416) reads
       `v___x_90_ = lean_array_get_size(v_a_61_)`; `v___x_91_ = lean_nat_dec_lt(v_i_62_,
-    v___x_90_)` (boxed-`Nat` comparison); `v___x_94_ = lean_unsigned_to_nat(1u)` (box
+  v___x_90_)` (boxed-`Nat` comparison); `v___x_94_ = lean_unsigned_to_nat(1u)` (box
       the literal `1`); `v___x_95_ = lean_nat_add(v_i_62_, v___x_94_)` (boxed-`Nat` add);
       `v___x_93_ = lean_array_fget_borrowed(v_a_61_, v_i_62_)` (array read at the cursor).
       The cursor `v_i_62_ : lean_object *` is a bignum and its increment is `lean_nat_add`,
@@ -171,21 +217,21 @@ fun i => arr[i]⟩ = ⟨n, s⟩` or the `Array.ofFn`-clean equivalent) and confi
 
 ## 4. Layer 2 — the `@[extern]` named trust seam
 
-- [ ] 4.1 Re-introduce `byteSlice (a : ByteArray) (i : USize) : ByteArray` (a `memcpy`-
+- [x] 4.1 Re-introduce `byteSlice (a : ByteArray) (i : USize) : ByteArray` (a `memcpy`-
       style suffix copy; it does not exist in the current tree) as a fresh `@[extern]`
       seam, wired onto a packed path (never a `List`-re-materializing consumer).
-- [ ] 4.2 Document the trust contract verbatim (F\*-vs-KaRaMeL); **exclude** Layer 2 from
+- [x] 4.2 Document the trust contract verbatim (F\*-vs-KaRaMeL); **exclude** Layer 2 from
       the `#print axioms` gate.
 
 ## 5. Bench and gate
 
-- [ ] 5.1 Run the current `bench`, record the actual numbers (Layer 1 lanes, Layer 2
+- [x] 5.1 Run the current `bench`, record the actual numbers (Layer 1 lanes, Layer 2
       `byteSlice`, and the `memcpy` calibration) as the single source of truth. Tag each
       `[measured]` (or `[historical]`/`[target]` as applicable). Do **not** hand-copy any
       figure from a prior draft.
-- [ ] 5.2 `lake build` zero `sorry`/warnings; `#print axioms Codec.roundtrip` ⇒
+- [x] 5.2 `lake build` zero `sorry`/warnings; `#print axioms Codec.roundtrip` ⇒
       `[propext, Quot.sound]`; every Layer-1 law `#print axioms`-verified `[propext,
 Quot.sound]`-only. Bench byte-exact value checks (not length checks).
-- [ ] 5.3 Update `Bench.lean`, `README`, `AGENTS` to state the two layers honestly, the
+- [x] 5.3 Update `Bench.lean`, `README`, `AGENTS` to state the two layers honestly, the
       named trust seam, and the "result carrier, not the byte loop" lesson — preserving the
       `[D#]`/`[S#]` anchors.

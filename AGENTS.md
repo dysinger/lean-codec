@@ -129,26 +129,96 @@ cursor is `Nat` by the binding decision above).
 
 **Concrete order for next session (the Layer-2 trust seam + bench/gate):**
 
-1. **Task 4.1 — `@[extern]` `byteSlice` (Layer 2).** Re-introduce `byteSlice (a : ByteArray)
-(i : Nat) : ByteArray` (a `memcpy`-style suffix copy; does not exist in the tree) as a
-   fresh `@[extern]` seam, **wired onto a packed path** (never a
-   `List`-re-materializing consumer). It is a **named trust seam**: give it an _elaborating_
-   Lean body (shape 2, the stdlib `ByteArray.get` pattern) so `#print axioms` stays clean,
-   but the running C is **trusted, not proven**. This is a C-linking decision: the C symbol
-   (`codec_byteSlice`) must be provided by a `.c`/`.h` file linked into the `lake` build
-   (`lakefile.toml` supports a C source / `support` hook) — the `ByteArray.copySlice`/
-   `extract` externs in `Init/Data/ByteArray` (FFI, do-not-reduce) are the model to copy.
-2. **Task 4.2 — document the trust contract verbatim** (F\*-vs-KaRaMeL posture), and
-   **exclude Layer 2 from the `#print axioms` gate** (Layer 1 only stays `[propext,
-Quot.sound]`-only).
-3. **Tasks 5.x — bench + gate:** run the bench, record `[measured]` figures (never
-   hand-typed), keep byte-exact value checks, then `lake build` zero-`sorry` and
-   `#print axioms Codec.roundtrip` ⇒ `[propext, Quot.sound]`. Update `Bench.lean`/`README`
-   to state the two layers honestly (proven vs trusted) and keep the `[D#]`/`[S#]` anchors.
+**DONE this session.** Tasks 4.1, 4.2, 5.1, 5.2 (and the Layer-2 half of 5.3) landed:
 
-Reads/`decode` stay on `Bytes n`; **only the packed carrier + bulk shapes get the
-contiguous-buffer fast path, proved equal to the spec.** Read the change's own
-`openspec/changes/carrier-performance-tuning/tasks.md` session log for the finer log.
+1. **Task 4.1 — `@[extern]` `byteSlice` (Layer 2)** is in, as a fresh module
+   `Codec/ByteSlice.lean` + `Codec/ByteSlice.c`, wired via `lakefile.lean` (`target
+byteSliceO` → `buildLeanO`, `moreLinkObjs := #[byteSliceO]` on the `bench` exe only,
+   never the proven library). Signature `byteSlice (a : ByteArray) (i : USize) : ByteArray`
+   — shape-2 extern: `@[extern "codec_byteSlice"]` with an elaborating Lean body
+   (`ByteArray.mk (a.data.extract i.toNat a.data.size)`), so `#print axioms Codec.byteSlice`
+   reports **no axioms**. The emitted `.lake/build/ir/Codec/ByteSlice.c` is the GC-less
+   shape the design promised: `USize` → `size_t` (`lean_unbox_usize`), `ByteArray` →
+   borrowed `lean_object *`, and the call `v_res_6_ = codec_byteSlice(v_a_3_, v_i_boxed_5_)`
+   (a real C call, not the body). The C does one `memcpy` over `lean_sarray_cptr` via
+   `lean_alloc_sarray` + `lean_sarray_size` (the public `lean.h` sarray API).
+2. **Task 4.2 — trust contract documented verbatim** in `Codec/ByteSlice.lean`'s module
+   header (F\*-vs-KaRaMeL posture), and Layer 2 is **excluded** from the `#print axioms` gate
+   (only Layer 1 laws are verified `[propext, Quot.sound]`-only).
+3. **Task 5.1 — bench** has a new Layer-2 lane `benchByteSlice` (value-checked **byte-for-
+   byte** against the Lean _body_, never a length check), swept at ×1/×2/×4. Measured
+   `[measured]` (128 KiB linear sweep): `byteSlice L2` **108695 MiB/s** (`575` ns/op moving
+   `n/2` bytes) vs `calib memcpy` **30994 MiB/s**; `fastEncodeRepeat` **30 MiB/s** vs
+   `encodeRepeat` spec **32 MiB/s**. (The `byteSlice` lane now reports `bytesPerOp = n/2`,
+   the bytes it actually moves, not `n` — a review fix. The `fastEncodeRepeat` lane
+   value-checks byte-for-byte while `encodeRepeat` checks only length, so the 30/32 gap is
+   partly measurement asymmetry.) The 1 MiB default sweep is slow because the
+   `fastEncodeRepeat` value check forces pointwise `Fin → UInt8` equality over the
+   nested-closure carrier — pre-existing, not a regression; the 128 KiB sweep is the
+   recorded complete run. **`byteSlice` is a standalone seam** — no library-internal call
+   (the proven `decodeFullArray` keeps its axiom-clean `List.toArray.drop` body rather than
+   call the trusted `@[extern]`); the bench lane is the packed-path consumer that exercises it.
+4. **Task 5.2 — gate green**: `lake build` zero `sorry`/zero warnings;
+   `#print axioms Codec.roundtrip` ⇒ `[propext, Quot.sound]`; every Layer-1 law
+   `[propext, Quot.sound]`-only.
+
+**Remaining (5.3 final half + task-log close):** update `openspec` task checkboxes and the
+final `README`/`AGENTS` wording (the two-layer statement is in `README.md` §Performance;
+`Bench.lean` already states the Layer-2 lane honestly).
+
+**Critical review of the Layer-2 work (this session, COMPLETE).** An independent reviewer
+pulled no punches and found **zero soundness issues** (all proofs axiom-clean, C ABI and
+`memcpy` semantics match the Lean `byteSlice` body byte-for-byte, correct ref-counting) but
+**one Critical** and three Warnings, all since fixed and re-verified:
+
+1. **Critical — untracked `Codec/ByteSlice.c` breaks `nix build .#bench`** from a clean clone
+   (Nix `src = ./.` snapshots only git-tracked files). Fixed by `git add`ing the file.
+2. **`byteSlice` is a dead seam** — no library-internal caller (only the bench lane). Corrected
+   the prose: it is a _standalone_ seam; "wired only onto a packed path" is a how-to-use rule,
+   not a current-wiring claim.
+3. **`byteSlice` bench throughput was 2× inflated** — it passed `bytesPerOp = n` but copies only
+   the `n/2` suffix. Fixed to `n - n/2`; re-measured `[measured]` figures.
+4. **The trust seam is invisible to Lean** — the review's deeper lesson: `@[extern]` swaps only
+   emitted C, so `#print axioms` sees only the Lean body and the C is `[propext, Quot.sound]`-clean
+   _regardless_; calling `byteSlice`'s trust "the single proof step" was a category error (it is a
+   runtime contract, documented in prose, not a law).
+
+**The synthesis (this session): the four carriers already answered the question — carrier #5 is
+not a carrier.** `List UInt8` → `Buffer`/`ByteArray` → `Bytes n` → packed `Array UInt8`/`Nat` all
+cap at the _accumulator floor_ (~750 MiB/s) because a pure immutable value can't be built by
+`memcpy`; the only thing at `memcpy` speed (~80 GiB/s) is the trusted `@[extern]` `byteSlice`. The
+next move is **a return-type + wiring decision, not a new carrier**: keep the `Bytes n` spec, keep
+the proven packed decoder, and let `byteSlice` be the one `memcpy` that materializes a `ByteArray`
+remainder **on commit** (once per chosen result, never per backtracking branch). This is written up
+as the seed note `openspec/changes/carrier-performance-tuning/design-note-5th-move.md` and, after
+review + a from-scratch rewrite fixing three Criticals, as the new change
+**`openspec/changes/partial-remainder-fast-path`** (validated; planning complete).
+
+## Next session: implement `partial-remainder-fast-path`
+
+The plan (see `openspec/changes/partial-remainder-fast-path/`): wire `byteSlice` onto a
+**partial-remainder commit**. The packed decoder already returns `(value, Nat cursor)` (`decodeArray`);
+the missing piece is a single `memcpy` that turns a chosen cursor into a `ByteArray` remainder.
+
+**Concrete order:**
+
+1. **Task 1.x — definitions.** Add `commitRemainder (a : Array UInt8) (c : USize) : ByteArray :=
+byteSlice (ByteArray.mk a) c` in `Codec/ByteSlice.lean` — **`USize`-indexed on purpose** (matching
+   `byteSlice`'s index, so NO `Nat ↔ USize` roundtrip, NO `System.Platform.numBits` premise). Add
+   `decodeArrayFast := decodeArray` in `Codec/Packed.lean` (a documented rename, not a new decoder).
+2. **Task 2.x — the definitional law.** Prove `commitRemainder_spec : commitRemainder a c =
+ByteArray.mk (a.extract c.toNat a.size)` by `rfl`. The refinement to `decode d` stays the
+   existing `decodeArray_eq`; add **no** new equality to `decode d`.
+3. **Task 3.x — bench.** `benchCommitRemainder n` at a **mid-buffer** cursor `c = (n/3).toUSize`,
+   value-checked byte-for-byte, as a distinct Layer-2 lane.
+4. **Task 4.x — gate.** `lake build` zero `sorry`; `#print axioms Codec.roundtrip` ⇒ `[propext,
+Quot.sound]`; `#print axioms Codec.commitRemainder_spec` ⇒ `[propext, Quot.sound]` (definitional).
+   Run the bench, record `[measured]`. Update `README.md`/`AGENTS.md`.
+
+**Two invariants that must hold (do not re-litigate):** the `Bytes n` spec and its laws are
+untouched (the two carrier requirements in `codec`/`codec/byte-string` are **relaxed**, not removed,
+via MODIFIED deltas that carry over all existing scenarios); and the `byteSlice`/C trust is a runtime
+contract excluded from the axiom gate, never folded into a law.
 
 ## Critical review of the single-carrier change (COMPLETE)
 
