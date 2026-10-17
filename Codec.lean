@@ -25,3 +25,4 @@ import Codec.Encode
 import Codec.Sound
 import Codec.Combinators
 import Codec.VarBinary
+import Codec.Packed
