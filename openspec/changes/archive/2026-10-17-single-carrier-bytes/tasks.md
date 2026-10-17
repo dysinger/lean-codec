@@ -1,25 +1,23 @@
 # Tasks
 
-> **Session status (latest):** the change is **14/14 tasks complete and green** — the
+> **Session status (latest):** the change is **15/15 tasks complete and green** — the
 > whole tree is re-derived over the single length-indexed carrier `Bytes n := Fin n → UInt8`,
-> zero `sorry`, zero `Classical.choice` (`#print axioms Codec.roundtrip`, `Codec.varint`,
-> `Codec.decodeSepBy_spec` all report `[propext, Quot.sound]`; `lake build` and
-> `nix build .#checks.aarch64-darwin.lean .#bench` both green). This session landed
-> tasks 3.3 (Combinators over `Bytes n`), 4.1 (delete transfer tier), 4.2 (lakefile +
-> Bench), 4.3 (LEB128 varint over `Bytes n`), 5.1 (gate), 5.2 (README/AGENTS).
+> zero `sorry`, zero `Classical.choice`, **plus the post-review hardening of section 6**
+> (hyper-critical reviewer findings). This session landed 6.1–6.5: re-derived
+> `decodeFull_some`/`decodeFull_ne_none`/`decodeFull_spec` over the `Suffix` carrier
+> (closing the one "fully covered by theorems" gap — see `Codec/Decode.lean`), fixed the
+> stale `ByteArray` docstring, added the `decodeVarint` whole-buffer note, justified
+> `relChainl1_cast`/`relChainr1_cast` (`cases e; rfl`), and hardened the `Bench.lean`
+> `decodeFull`/`decodeFast` checks. All new laws report `[propext, Quot.sound]`
+> (`#print axioms Codec.decodeFull_spec` ⇒ `[propext, Quot.sound]`); `lake build` and
+> `lake build bench` both green; the bench runs byte-exactly.
 >
-> **Next: critical review before archive** (also recorded in `AGENTS.md` under
-> "Next: critical review"). The re-derivation is proof-critical; review in this order:
-> (1) `Codec/VarBinary.lean` backward `enc_dec`/`varintUnapply_inj` — the `Sigma.ext`+
-> `heq_of_eq`/`cast_heq`/`HEq.trans` reconstruction is the fragile part; re-verify concrete
-> LEB128 vectors (`0→[0]`, `128→[0x80,0x01]`, `300→[0xAC,0x02]`) by `#eval`, not just the
-> roundtrip theorem. (2) `encodeVarint_eq`/`decodeVarint_eq` became `rfl` aliases and
-> `decodeVarint` lost its absolute-offset argument — confirm that collapse is intended.
-> (3) Combinators keep their semantics (`sepBy` one-or-more, `chainl1`/`chainr1` operand
-> list types). (4) completeness of each `_spec` law (all-prefix enumeration). (5) deletion
-> completeness (grep for dangling `Buffer`/`ByteArray`/`Array UInt8`/old `decodeVarint … i`).
-> (6) README no longer claims a two-tier representation anywhere. (7) Bench lane scope per
-> spec 4.2. Then archive.
+> **Next: archive** (also recorded in `AGENTS.md` under "Next: critical review"). The
+> critical review is now complete: the proven core was verified green (zero `sorry`,
+> `[propext, Quot.sound]`-only, byte-exact LEB128), and the reviewer's one real gap
+> (`decodeFull`) plus four minor items are closed in section 6. The Nix `lean4-llvm`
+> override is retained intentionally (LLVM `@[extern]` remains a capability). The change
+> is ready to archive (`/opsx-archive`).
 
 > **Session status (previous):** tasks **3.1 and 3.2 are DONE** — the three remaining
 > `sorry`s are proven and `Codec/Sound.lean` builds clean (zero `sorry`, zero
@@ -243,3 +241,37 @@ hle : remaining ≤ n, bytes : Bytes remaining }` — the spec's
       defect, not the strategy" lesson, and update the `AGENTS.md` handoff (done/
       open) accordingly; verify the docs no longer reference `List UInt8`/`Buffer`/
       `ByteArray` as the substrate.
+
+## 6. Post-review hardening (hyper-critical reviewer findings)
+
+An adversarial review of the archived-gate state found the proven core green
+(zero `sorry`, `[propext, Quot.sound]`-only, byte-exact LEB128), with one real
+coverage gap and four minor polish items. This section closes them before
+archive.
+
+- [x] 6.1 Prove `decodeFull_spec`: the full-consumption repetition decoder
+      `decodeFull` agrees with `decodeRepeat` at empty remainder —
+      `decodeFull p h n s = some xs ↔ (xs, Suffix.empty n) ∈ decodeRepeat p h n s`
+      (and the `none`-case corollary `decodeFull p h n s = none ↔
+    (xs, Suffix.empty n) ∉ decodeRepeat p h n s` for all `xs`). Re-derive the
+      dropped `decodeFullStep_*` lemmas over the `Suffix` carrier as needed.
+      This replaces the docstring's unproved biconditional claim with a theorem
+      and removes the one real "fully covered by theorems" gap (reviewer MAJOR-1).
+- [x] 6.2 Fix the stale `ByteArray` illustrative type in `Codec/Codec.lean:24`
+      (the "why AST not typeclass" note) to use the current substrate spelling
+      (`Bytes` / `({n : Nat} × Bytes n)`). (reviewer MINOR-1)
+- [x] 6.3 Add a README sentence (or `Codec/VarBinary.lean` module note) that
+      `decodeVarint` now consumes a whole `Σ k, Bytes k` and prefix-decoding
+      (learn the unconsumed remainder) is the caller's responsibility, since the
+      old absolute-offset `a i` form was dropped in the single-carrier collapse.
+      (reviewer MINOR-2)
+- [x] 6.4 Add a one-line justification comment on `relChainl1_cast`/
+      `relChainr1_cast` (`cases e; rfl`) noting they rely on `splice`/`Rel`/
+      `relRepeat`/`foldl.apply` being genuinely cast-invariant via `Rel_cast`/
+      `relRepeat_cast`. (reviewer MINOR-3)
+- [x] 6.5 Soften the `Bench.lean` `benchDecodeFull`/`benchDecodeFast` docstrings
+      that claim value equality while the checks only assert length/remaining
+      (and, once 6.1 lands, assert the `decodeFull_spec` agreement directly
+      instead of the weak `xs.length` check). (reviewer MINOR-4)
+      **Note (ignored):** Nix still builds the `lean4-llvm` override; that is
+      intentional (LLVM `@[extern]` is retained as a capability, not removed).
