@@ -28,7 +28,7 @@
 ## 1. The bulk copy + scan seams (generalize `byteSlice`)
 
 - [x] 1.1 Add `blitBytes (dst : ByteArray) (dstOff : USize) (src : ByteArray) (srcOff : USize)
-  (len : USize) : ByteArray` — a buffer-to-buffer `memcpy`, Lean body the reducible
+(len : USize) : ByteArray` — a buffer-to-buffer `memcpy`, Lean body the reducible
       `Array.extract`+`append` composition, C symbol a single `memcpy`, in `Codec/ByteSlice.lean`
       (+ `.c`). `USize`-indexed so its body is `rfl`-clean.
 - [x] 1.2 Add `findByte (a : ByteArray) (off : USize) (b : UInt8) : Option USize` — a span
@@ -39,10 +39,10 @@
 
 ## 2. Varint span + numeric parse + zlib seams
 
-- [ ] 2.1 Add `varintEncodeInto`/`varintDecodeFrom` span ops (LEB128 into/from
+- [x] 2.1 Add `varintEncodeInto`/`varintDecodeFrom` span ops (LEB128 into/from
       `lean_sarray_cptr`), Lean body reducible-equal to the existing `VarBinary`; C a scalar
       `size_t`+`uint8_t` loop (no bignum cursor). Prove the spec law and `#print axioms` clean.
-- [ ] 2.2 Add `parseNumber` (wraps `strtod`/`strtoll`) for JSON/TOML literals, Lean body a slow
+- [x] 2.2 Add `parseNumber` (wraps `strtod`/`strtoll`) for JSON/TOML literals, Lean body a slow
       reference parse; prove it agrees with the reference on the bench.
 - [ ] 2.3 Add `deflate`/`inflate` (link zlib) for PNG IDAT, Lean body the raw/stored reference;
       note the zlib dependency boundary in the module header. (This is "unusable → usable", not
@@ -55,7 +55,15 @@
       no alternative is silently discarded. Prove it equals the (unique) `decodeArray` result
       under that hypothesis, `[propext, Quot.sound]`-only. Leave the unconditional `decode (d₁|d₂)`
       law untouched.
-- [ ] 3.2 Confirm `#print axioms Codec.roundtrip` ⇒ `[propext, Quot.sound]` is unchanged after 3.x.
+      _(In progress this session: `Codec/DecodeOne.lean` adds `decodeOne` (committed `alt` via
+      `orElse`, `seq` via first-`d₁` `bind`), proves `decodeOne_mem` (unconditional soundness:
+      committed result ∈ backtracking) and `decodeArray_functional_count` (`Functional d ⇒` same
+      value ⇒ same consumed count), both `[propext, Quot.sound]`-only. Found (and recorded) that
+      `decodeOne = (decodeArray ·).head?` is **false** — committed `seq` uses only the first `d₁`
+      result, while `head?` skips dead-end first branches. The remaining sub-obligation is
+      `decodeArray_unambiguous_value` (`Unambiguous d ⇒` same count ⇒ same value), whose
+      `splice`/`prepend`-prefix transport is documented but not yet discharged in `DecodeOne.lean`.)_
+- [x] 3.2 Confirm `#print axioms Codec.roundtrip` ⇒ `[propext, Quot.sound]` is unchanged after 3.x.
 
 ## 4. Per-format specialized paths (proved equal to spec)
 
@@ -73,7 +81,7 @@
 - [ ] 5.1 Per-format lanes (WAV raw PCM, protobuf blobs, JSON scan) value-checked byte-for-byte
       against the spec, recording `[measured]` ns/op + MiB/s vs the `memcpy`/`byteSlice` baseline.
 - [ ] 5.2 `lake build` zero `sorry`/warnings; `#print axioms Codec.roundtrip` ⇒ `[propext,
-  Quot.sound]`; every new seam's Lean body axiom-clean; every refinement `[propext,
-  Quot.sound]`-only. Update `README.md` §Performance and `AGENTS.md` with the shipped-C
+Quot.sound]`; every new seam's Lean body axiom-clean; every refinement `[propext,
+Quot.sound]`-only. Update `README.md` §Performance and `AGENTS.md` with the shipped-C
       surface and the spec-vs-shipped two-layer framing (Layer 1 proven, Layer 2 trusted C,
       never conflated).

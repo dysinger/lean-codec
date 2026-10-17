@@ -237,33 +237,50 @@ spec_.** The pure carriers cap ~16–32 MiB/s because a pure immutable value is 
 fold (boxed `UInt8`, boxed `Nat` cursor, `List` cons churn, nondeterminism plumbing); `byteSlice`
 runs ~55 GiB/s because a single `memcpy` is the only thing at that floor.
 
-**Progress this session: Task 1 (bulk copy + scan seams) DONE (3/13).** `blitBytes` (buffer-to-buffer
-`memcpy`) and `findByte` (`memchr`) are in `Codec/ByteSlice.lean` + `.c`, `USize`-indexed with
-reducible `Array`-spelled bodies; `blitBytes_spec` is axiom-free (`rfl`), `findByte_spec` is
-`[propext]` (`rfl`). Bench lanes value-check both byte-for-byte. `[measured]` (128 KiB): `blitBytes L2`
-23225 MiB/s vs `calib memcpy` 30033; `findByte L2` 697 ns/op. The `findByte` C initially returned
-`some idx` by the wrong boxing (`lean_box(idx+1)` instead of `lean_alloc_ctor(1,1,0)` +
-`lean_ctor_set(…, 0, lean_box_usize(idx))`) — caught by the value check, fixed and recorded in the
-`lean` skill. Gate: `lake build` zero `sorry`/warnings; `#print axioms Codec.roundtrip` ⇒
-`[propext, Quot.sound]`.
+**Progress: Tasks 1, 2.1, 2.2, 3.2 done (6/13); 3.1 substantially in progress.** Task 1 shipped
+`blitBytes`/`findByte`. This session shipped **Task 2.1** (`Codec/VarintFast.lean` + `.c`:
+`varintEncodeInto`/`varintDecodeFrom`, LEB128 span ops, `USize`-indexed, Lean body = `VarBinary`
+spec, C scalar loop; both `_spec` `rfl`-clean; bench value-checks byte-for-byte, enc ~10 ns vs pure
+147, dec ~27 vs 195) and **Task 2.2** (`Codec/NumParse.lean` + `.c`: `parseNumber
+(a : ByteArray) (off : USize) : Option (Nat × USize)`, longest-run decimal parse; Lean body a clean
+`decimalStep` over raw bytes, C a `strtoll`-shaped scalar accumulator; `parseNumber_spec` `rfl`-clean).
+**Scoping decision (recorded):** `parseNumber` takes a `ByteArray`, not `String`, because _every_
+`String` accessor (`toList`/`data`/`get`/`length`/`toNat?`) is `@[extern]` UTF-8-backed and leaks
+`Classical.choice`, breaking the `[propext, Quot.sound]` gate; the `strtod`/float half is deliberately
+out of scope (correctly-rounded decimal→`Float` reference is a second large seam), the integer span
+covers the structural parses. **Task 3.1** (`Codec/DecodeOne.lean`) defines `decodeOne` (committed
+`alt` via `orElse`, `seq` via first-`d₁` `bind`) and proves `decodeOne_mem` (unconditional soundness:
+committed result ∈ backtracking) + `decodeArray_functional_count` (`Functional d ⇒` same value ⇒ same
+count), both `[propext, Quot.sound]`-only. **Correctness finding (important, recorded):**
+`decodeOne = (decodeArray ·).head?` is **false** — committed `seq` uses only the first `d₁` result,
+while `.head?` skips dead-end first branches; the gated completeness is therefore pair-level
+(value+count) uniqueness, not a naive head-equality. **Task 3.2** confirmed the axiom gate is
+unchanged. Gate green throughout: zero `sorry`, zero warnings, `#print axioms Codec.roundtrip` ⇒
+`[propext, Quot.sound]`, every new law `[propext, Quot.sound]`-only.
 
 **Concrete order for next session (see `shipped-c-fast-path/tasks.md`):**
 
-1. **Task 2.x — varint span + numeric parse + zlib seams.** `varintEncodeInto`/`varintDecodeFrom`
-   (LEB128 into `lean_sarray_cptr`, no bignum cursor), `parseNumber` (`strtod`/`strtoll`), and
-   `deflate`/`inflate` (link zlib, PNG's IDAT). Each Lean body = spec; C trusted. **Decision to make
-   up-front:** consolidate all seams into one `.c`/object (simpler incremental rebuild) or one
-   `target … (pkg) : FilePath` per seam (cleaner isolation). The current `byteSliceO` target's
-   `buildLeanO oFile (Job.pure srcFile)` does **not** recompile its `.o` on a `.c` mtime change in
-   _incremental_ dev (needs `rm .lake/build/ByteSlice.o` or a clean `nix build .#bench`); new seams
-   must still be git-tracked before `nix build` sees them.
-2. **Task 3.x — deterministic decode under `Unambiguous`/`Functional`.** `decodeOne` committing
-   `|`, gated by `Functional d`/`Unambiguous d`, proved equal to the unique `decodeArray` result
-   under that hypothesis. The unconditional `decode (d₁|d₂)` law stays untouched.
-3. **Task 4.x/5.x — per-format paths + gate.** WAV (header + one `blitBytes` PCM), protobuf
-   (tag/varint + length-delimited blit), JSON/TOML scanner, PNG/QR — each proved `[propext,
-Quot.sound]`-equal to the spec or seam-backed. `lake build` zero `sorry`/warnings;
-   `#print axioms Codec.roundtrip` ⇒ `[propext, Quot.sound]`; bench value-checks every seam.
+1. **Finish Task 3.1 — `decodeArray_unambiguous_value`** (`Unambiguous d ⇒` two same-`count`
+   `decodeArray` results agree on the value): the remaining sub-obligation is the forward bridge
+   `(x, c) ∈ decodeArray d a i` → `Rel d x s₀` for the genuine consumed prefix `s₀` (via
+   `decodeArray_eq` + `decode_spec`) plus a `splice`/`prepend`-prefix-extraction lemma
+   (`splice hm s₁ s₂ ⟨i, ·⟩ = s₁ ⟨i, ·⟩` for `i < m` — the seed `splice_prefix_read` was written and
+   can be re-proved against `splice_apply` + `concat`; see `DecodeOne.lean`'s status note). No
+   `sorry`/`axiom` may ship: either close it or keep it honestly documented.
+2. **Task 4.1 — WAV** `wavDecode`/`wavEncode` (44-byte header + one `blitBytes`/`memcpy` PCM block),
+   proved `[propext, Quot.sound]`-equal to the generic `decode`/`encode` by a `decodeArray_eq`-style
+   lemma (uses only the already-shipped `blitBytes` seam — no new dependency).
+3. **Task 4.2 — protobuf** tag/varint loop + length-delimited `blitBytes` body, proved equal to the
+   spec; value-check byte-for-byte including the varint seam (2.1) and `parseNumber` (2.2).
+4. **Task 4.3 + 5.1** — JSON/TOML scanner (`findByte` delimiters + `parseNumber`), then per-format
+   bench lanes value-checked against the spec. **PNG/QR depend on the deferred zlib seam (2.3)** —
+   do them only after deciding the zlib Nix/dependency question.
+5. **Task 2.3 (zlib, deferred) — needs a decision first.** Linking zlib requires adding
+   `pkgs.zlib` to `devShells.default.packages` (`flake.nix`) _and_ `zlib` to `default.nix`'s
+   `nativeBuildInputs`, plus a custom lakefile `buildO` (not `buildLeanO`) with `-I <zlib include>`
+   `-lz`. Also unresolved: the honest Lean spec body (a stored-block-only reference + adler32, with
+   real deflate `none`/trust-only), and whether a full `dylib`-link story belongs in scope. **Ask the
+   user before pulling zlib into the Nix build.**
 
 **Two invariants that must hold (do not re-litigate):** the `Bytes n` spec and its laws are the
 single denotation and stay untouched; and the `@[extern]`/zlib trust is a runtime contract
