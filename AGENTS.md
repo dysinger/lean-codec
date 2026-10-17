@@ -101,40 +101,50 @@ hits ~500–700 MiB/s on the plain `cc`).
 `ofFn_concat`/`pushBytesFrom_eq` are **done** in `Codec/Encode.lean` (committed, all
 `[propext, Quot.sound]`-only). `Codec/Packed.lean` holds the **packed carrier
 definitions** (`decodeArray`, `decodeFullArray`, `encodeArray`, `encodeByteArrayBytes`,
-`consumedAbs`, `decodeArray_bounded`). **The encode refinements are now proved**:
-`encodeArray_eq` and `encodeByteArrayBytes_eq` close `[propext, Quot.sound]`-only
-(List-level readback `(encodeArray d x).map (·.toList) = (encode d x).map (List.ofFn ∘ snd)`,
-via `ofFn_concat` + `Array.toList_append`). The **decode refinements remain open** — see
-"next session" below.
+`consumedAbs`, `decodeArray_bounded`). **Both the encode _and_ decode refinements are now
+proved**: `encodeArray_eq`/`encodeByteArrayBytes_eq` (List-level readback, via
+`ofFn_concat` + `Array.toList_append`), and — this session's win —
+`decodeArray_eq`/`decodeFullArray_spec` (`[propext, Quot.sound]`-only, zero `sorry`). The
+decode side rests on the **genuine-suffix invariant of `decode`** (`decode_genuine_suffix`
+in `Codec/Decode.lean`): every result suffix `t` satisfies `t.bytes = bdrop t.consumed s`,
+proved pointwise (`decode_genuine_suffix_pointwise`, via a `suffix_consumed_lt` bound helper)
+then lifted to the `bdrop` form by `Bytes.ext`. The `seq` bridge goes through
+`decode_cast` (decode insensitive to a length cast — proved by `subst; simp`, _not_ the
+membership-bound spelling), `Suffix_cast_remaining`, `bdrop_consumedAbs_eq`, and
+`consumedAbs_cast_trans`, threading membership via `List.map_inj_left` on the `.flatten` of
+the two `flatMap`s.
+
+**Tasks 1.3 and 3.1 are DONE.** 3.1's IR inspection (`.lake/build/ir/Codec/Packed.c`) is
+**in**: the `Nat` cursor is boxed bignum (`lean_nat_dec_lt`/`lean_nat_add`/
+`lean_array_fget_borrowed` at C ~402–416, `lean_object *`), **not** `size_t` — so the
+"`USize` → `size_t` scalar with no backend" premise is **false/unverified** (the carrier
+cursor is `Nat` by the binding decision above).
 
 **Two binding decisions, already made (do not re-litigate):**
 
 1. **Cursor is `Nat`, not `USize`.** (unproven `System.Platform.numBits = 64` platform
    fact would break the `[propext, Quot.sound]`-only gate; `Nat` is the proof carrier;
-   the `size_t` question is answered by IR inspection, task 3.1.)
+   the `size_t` question is answered by IR inspection, task 3.1 — done, boxed bignum.)
 2. **Speed-run the implementation; gate _provability_ before volume.**
 
-**Concrete order for next session:**
+**Concrete order for next session (the Layer-2 trust seam + bench/gate):**
 
-1. **Prove the missing `decode` genuine-suffix invariant** — the one lemma that unblocks
-   `decodeArray_eq`'s `seq` case — and close `decodeArray_eq` / `decodeFullArray_spec`.
-   The invariant: every result suffix `t` of `decode d s` is a _genuine_ suffix,
-   `t.bytes = bdrop (n - t.remaining) s` (`∀ (x, t) ∈ decode d s, t.bytes = bdrop
-(n - t.remaining) s`, by induction on `d`). **Why this is the blocker:** the `seq`
-   case must equate the inner `decodeArray d₂ a c₁` (over `bdrop c₁ (arrayToBytes a)`) with
-   `decode d₂ t₁.bytes` (over `Bytes t₁.remaining`) — and `bdrop c₁ (arrayToBytes a) =
-cast … t₁.bytes` is **not** provable for an _arbitrary_ `Suffix t₁`; it is a property of
-   `decode`'s own construction, not of the `Suffix` type. The transport lemmas that compose
-   once it exists (`sub_sub_eq`, `bdrop_add`, `consumedAbs_remaining`, the cast-insensitive
-   `.remaining`) are already proved in `Codec/Packed.lean`. The `iso`/`alt`/`empty`/`pure`/
-   `byte` cases of `decodeArray_eq` also already close (`consumedAbs_id`/
-   `consumedAbs_drop_one` are the `@[simp]` byte-count bridge).
-2. **Task 3.1 IR inspection** — cite `.lake/build/ir/Codec/Packed.c` for whether the `Nat`
-   cursor lowers to `size_t`/bignum. (Current pre-inspection evidence: the `byte` case emits
-   `lean_nat_add`/`lean_nat_dec_lt`/`lean_array_fget_borrowed` — boxed bignum `lean_object *`,
-   **not** `size_t` — so the "`USize`→`size_t` scalar" claim is currently _unverified_ and
-   the `Nat` cursor does _not_ lower to `size_t`.)
-3. **Tasks 4.x / 5.x** — the `@[extern]` `byteSlice` trust seam, then bench + gate.
+1. **Task 4.1 — `@[extern]` `byteSlice` (Layer 2).** Re-introduce `byteSlice (a : ByteArray)
+(i : Nat) : ByteArray` (a `memcpy`-style suffix copy; does not exist in the tree) as a
+   fresh `@[extern]` seam, **wired onto a packed path** (never a
+   `List`-re-materializing consumer). It is a **named trust seam**: give it an _elaborating_
+   Lean body (shape 2, the stdlib `ByteArray.get` pattern) so `#print axioms` stays clean,
+   but the running C is **trusted, not proven**. This is a C-linking decision: the C symbol
+   (`codec_byteSlice`) must be provided by a `.c`/`.h` file linked into the `lake` build
+   (`lakefile.toml` supports a C source / `support` hook) — the `ByteArray.copySlice`/
+   `extract` externs in `Init/Data/ByteArray` (FFI, do-not-reduce) are the model to copy.
+2. **Task 4.2 — document the trust contract verbatim** (F\*-vs-KaRaMeL posture), and
+   **exclude Layer 2 from the `#print axioms` gate** (Layer 1 only stays `[propext,
+Quot.sound]`-only).
+3. **Tasks 5.x — bench + gate:** run the bench, record `[measured]` figures (never
+   hand-typed), keep byte-exact value checks, then `lake build` zero-`sorry` and
+   `#print axioms Codec.roundtrip` ⇒ `[propext, Quot.sound]`. Update `Bench.lean`/`README`
+   to state the two layers honestly (proven vs trusted) and keep the `[D#]`/`[S#]` anchors.
 
 Reads/`decode` stay on `Bytes n`; **only the packed carrier + bulk shapes get the
 contiguous-buffer fast path, proved equal to the spec.** Read the change's own
