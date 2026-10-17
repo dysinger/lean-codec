@@ -68,4 +68,19 @@ the proven Layer 1 carrier in `Codec.Packed`).
 def byteSlice (a : ByteArray) (i : USize) : ByteArray :=
   ByteArray.mk (a.data.extract i.toNat a.data.size)
 
+/-- The single `memcpy` commit: turn a `USize` consumed-count cursor into the
+`ByteArray` remainder `[c.toNat, a.size)` as a fresh contiguous `ByteArray`,
+materialized by one `byteSlice` (the Layer-2 trusted `memcpy`).
+
+This is the **first library consumer of the `byteSlice` trust seam**. It is
+`USize`-indexed to match `byteSlice`'s own index exactly, so its refinement law
+(`commitRemainder_spec` in `Codec.Packed`) is definitional — **no** `Nat ↔ USize`
+roundtrip and **no** `System.Platform.numBits` premise enter (the `Nat → USize`
+conversion happens once, at the call site, in the caller). Like `byteSlice`, it
+remains **excluded** from the `#print axioms` gate: the Lean body is
+axiom-clean, while the C `memcpy` it runs is a runtime contract invisible to
+Lean, documented in this module's header — never an axiom, never "no trust". -/
+def commitRemainder (a : Array UInt8) (c : USize) : ByteArray :=
+  byteSlice (ByteArray.mk a) c
+
 end Codec

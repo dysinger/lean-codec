@@ -106,6 +106,24 @@ unsafe def benchByteSlice (n : Nat) (reps : Nat) : IO Unit := do
     throw (IO.userError "byteSlice ≠ extract (value mismatch)")
   printLane "byteSlice L2  " n (dt / reps) (n - half)
 
+/-- The partial-remainder commit lane: `commitRemainder src c` (the single
+`byteSlice`/`memcpy` commit) at a **mid-buffer** `USize` cursor `c = (n / 3).toUSize`
+— the partial case the full-suffix `byteSlice` lane does not cover. Value-checks the
+committed `ByteArray` **byte-for-byte** against
+`ByteArray.mk (src.extract c.toNat src.size)` (never a length check), so a
+semantically wrong fast path fails at run time, not only at the trust contract.
+`bytesPerOp` is `n - n/3` (the bytes actually committed). A distinct Layer-2 lane. -/
+unsafe def benchCommitRemainder (n : Nat) (reps : Nat) : IO Unit := do
+  let src : Array UInt8 := Array.ofFn fun (_ : Fin n) => (1 : UInt8)
+  let third : Nat := n / 3
+  let c : USize := third.toUSize
+  -- spec: the definitional law `commitRemainder_spec` body (`extract` on `a`).
+  let spec : ByteArray := ByteArray.mk (src.extract third src.size)
+  let (r, dt) ← timeBatch reps fun _ => commitRemainder src c
+  if r != spec then
+    throw (IO.userError "commitRemainder ≠ extract (value mismatch)")
+  printLane "commitRemainder L2" n (dt / reps) (n - third)
+
 /-- The scalar-index read lane: reading `s ⟨i, ·⟩` is a structural indexed load on
 the length-indexed carrier (the one read the single substrate exposes). -/
 unsafe def benchScalarIndexRead (n : Nat) (reps : Nat) : IO Unit := do
@@ -269,6 +287,8 @@ unsafe def main (args : List String) : IO Unit := do
     Codec.Bench.benchEncodeRepeatIsolation size reps
     -- Layer-2 named trust seam: the `codec_byteSlice` memcpy suffix copy.
     Codec.Bench.benchByteSlice size reps
+    -- Layer-2 partial-remainder commit: mid-buffer `USize` cursor, value-checked.
+    Codec.Bench.benchCommitRemainder size reps
   -- Single-byte empty-remainder roundtrip.
   Codec.Bench.benchRoundtripByte reps
   -- Quadratic backtracking "many" decoder (kept small, paper §4.4).

@@ -414,13 +414,27 @@ never conflated:
   `#print axioms` acceptance and documented as the F\*-vs-KaRaMeL posture: the Lean
   body pins the meaning; the same-named C symbol is the isolated trust seam.
 
-  `byteSlice` is a **standalone seam**: in this change it has no library-internal
-  caller — the proven `decodeFullArray` (Layer 1) deliberately builds its suffix via
-  the `List.toArray.drop` transport (an axiom-clean body, not a trusted `@[extern]`),
-  and the bench lane is the packed-path consumer that exercises it. The "wired only
-  onto a packed path" rule is a _how-to-use_ constraint (never call it from a
-  `List`-re-materializing consumer), not a claim that it is already in the critical
-  path.
+  `byteSlice` is now the **trust seam for the partial-remainder commit**: the
+  `USize`-indexed `commitRemainder (a : Array UInt8) (c : USize) : ByteArray :=
+byteSlice (ByteArray.mk a) c` (also in `Codec/ByteSlice.lean`) is its first
+  library consumer — the single `memcpy` that turns a chosen consumed-count cursor
+  into a `ByteArray` remainder, with a **definitional** refinement law
+  `commitRemainder_spec` (`#print axioms` ⇒ no axioms) that carries **no**
+  `Nat ↔ USize` roundtrip and **no** `System.Platform.numBits` premise (the
+  `Nat → USize` conversion happens once, at the call site). The cursor-returning
+  decoder it commits against is the unchanged `decodeArray` (re-exposed as
+  `decodeArrayFast`, a documented rename), which performs **no** `byteSlice` during
+  decode — so a decode yielding `k` backtracking results does zero suffix copies,
+  and the one `memcpy` runs once, on the result the caller chooses. Full
+  backtracking is preserved (union `++` / `flatMap` cross-product); the `Bytes n`
+  spec and its laws are untouched.
+
+  The proven `decodeFullArray` (Layer 1) deliberately still builds its suffix via
+  the `List.toArray.drop` transport (an axiom-clean body, not a trusted
+  `@[extern]`), so Layer 2 remains distinct from and never conflated with Layer 1.
+  The "wired only onto a packed path" rule is a _how-to-use_ constraint (never call
+  the seam from a `List`-re-materializing consumer), not a claim that it is in the
+  spec's critical path.
 
 "No axiom" is **not** "no trust": Layer 1 is proven zero-C; Layer 2 is trusted C
 under a named contract. The `#print axioms` gate accepts only Layer 1; the bench
@@ -434,7 +448,13 @@ the **30994 MiB/s** `memcpy` calibration on the same machine (which moves the fu
 **32 MiB/s** `Bytes n` spec `encodeRepeat` at the same 128 KiB — though note the
 comparison is not perfectly controlled (the `fastEncodeRepeat` lane value-checks
 byte-for-byte while the `encodeRepeat` lane checks only length, so the gap is partly
-measurement asymmetry). The contiguous accumulator removes the nested `concat`
+measurement asymmetry). The partial-remainder commit `commitRemainder` (the
+`byteSlice` wrapper, committing the `n - n/3` suffix from a mid-buffer `USize`
+cursor) runs **~1450–3669 MiB/s** across the ×1/×2/×4 sweep (131072 bytes: `57452`
+ns/op, `[measured]` this session) — below raw `byteSlice` because each commit
+re-boxes `ByteArray.mk a` inside the timed loop, but value-checked byte-for-byte
+against `Array.extract` (a wrong C seam fails the bench, not just the trust
+contract). The contiguous accumulator removes the nested `concat`
 closure per element, but both Layer-1 lanes are far from the `byteSlice`/`memcpy`
 floor — the pure-carrier bulk write is the cost, and the result-carrier swap (not
 the byte loop) is the lever this change exercises.

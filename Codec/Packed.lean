@@ -3,6 +3,7 @@
 
 import Codec.Decode
 import Codec.Encode
+import Codec.ByteSlice
 
 /-!
 # The packed result carrier
@@ -69,6 +70,18 @@ def decodeArray {α : Type} (d : Codec α) (a : Array UInt8) (i : Nat) : List (�
       if h : i < a.size then
         [(a[i], i + 1)]
       else []
+
+/-- The cursor-returning decoder, re-exposed under a name that states the
+partial-remainder contract: `decodeArrayFast := decodeArray`. It is **not** a new
+decoder — `decodeArray` already returns `(value, consumed count)` pairs with *no*
+materialization during decode (each `byteSlice`/`memcpy` is deferred to a
+`commitRemainder` at commitment time, so a decode yielding `k` backtracking
+results does **zero** suffix copies during decode, not `k`). The `Nat` cursor is a
+fixed binding decision (see the module header and task 3.1): it is the proof
+carrier, kept `[propext, Quot.sound]`-clean; the `Nat → USize` conversion happens
+once at the call site when the caller commits a chosen cursor. -/
+def decodeArrayFast {α : Type} (d : Codec α) (a : Array UInt8) (i : Nat) : List (α × Nat) :=
+  decodeArray d a i
 
 /-! ## The packed full-consumption result -/
 
@@ -355,6 +368,19 @@ theorem decodeFullArray_spec {α : Type} (d : Codec α) (a : Array UInt8) (i : N
   cases hd : decode d (bdrop i (arrayToBytes a)) with
   | nil => simp
   | cons p tl => simp
+
+/-! ## Refinement: the partial-remainder commit is definitional -/
+
+/-- The partial-remainder commit is a definitional identity: `commitRemainder a c`
+is exactly `ByteArray.mk (a.extract c.toNat a.size)`. No `Nat ↔ USize` roundtrip
+the law needs to justify (the index is already `USize`, matching `byteSlice`'s own
+index), so **no** `System.Platform.numBits` premise enters. The `byteSlice`→C trust
+is a runtime contract invisible to Lean: `@[extern]` swaps only the emitted C, the
+Lean body still reduces, so `#print axioms Codec.commitRemainder_spec` reports
+`[propext, Quot.sound]` with no `byteSlice`-related axiom. `rfl`-clean. -/
+theorem commitRemainder_spec (a : Array UInt8) (c : USize) :
+    commitRemainder a c = ByteArray.mk (a.extract c.toNat a.size) := by
+  rfl
 
 /-! ## Refinement: the packed encoder equals the spec `encode` -/
 
