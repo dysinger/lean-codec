@@ -299,6 +299,59 @@ unsafe def benchDecodeFast (n : Nat) (reps : Nat) : IO Unit := do
   | _, _ => throw (IO.userError "decodeFast: expected one result")
   IO.println s!"decodeFast byte [{n}]: {dt / reps} ns/op"
 
+/-- The Layer-2 varint-span seam lane: `varintEncodeInto`/`varintDecodeFrom` (the
+`@[extern]` LEB128 span ops) are timed and **value-checked byte-for-byte** against
+their Lean bodies (the `VarBinary` spec). Encodes `n = 12345678` into an empty
+buffer and decodes back from offset `0`, asserting both the recovered value and the
+consumed count match the `varintBytes` spec. A wrong C (bad LEB128 loop, wrong
+offsets, wrong return boxing) fails the bench, not just the trust contract. -/
+unsafe def benchVarintSpan (reps : Nat) : IO Unit := do
+  let n : Nat := 12345678
+  let mut buf := ByteArray.empty
+  for _i in [0:10] do buf := buf.push (0 : UInt8)
+  -- spec: the Lean bodies `varintEncodeInto`/`varintDecodeFrom` reduce to.
+  let specEnc : ByteArray := varintEncodeInto buf 0 n
+  let specDec : Option (Nat × USize) := varintDecodeFrom specEnc 0
+  let (enc, dt1) ← timeBatch reps fun _ => varintEncodeInto buf 0 n
+  if enc != specEnc then
+    throw (IO.userError "varintEncodeInto ≠ spec body (value mismatch)")
+  let (dec, dt2) ← timeBatch reps fun _ => varintDecodeFrom enc 0
+  if dec != specDec then
+    throw (IO.userError "varintDecodeFrom ≠ spec body (value mismatch)")
+  match dec with
+  | some (v, k) =>
+      if v != n then throw (IO.userError "varint span: value mismatch")
+      if k.toNat != (varintBytes n).1 then
+        throw (IO.userError "varint span: consumed-count mismatch")
+  | none => throw (IO.userError "varint span: expected a decode result")
+  IO.println s!"varint span enc [{n}]: {dt1 / reps} ns/op"
+  IO.println s!"varint span dec [{n}]: {dt2 / reps} ns/op"
+
+/-- The Layer-2 numeric-parse seam lane: `parseNumber a off` (the `@[extern]`
+decimal-span primitive) is timed and **value-checked byte-for-byte** against its
+Lean body (the `decimalStep` scan). Parses the ASCII digit prefix `"12345678"` at
+offset `off = 2` (preceded by non-digit bytes), asserting the recovered value and
+consumed count. A wrong C (bad digit test, off-by-one stop, bad return boxing)
+fails the bench, not just the trust contract. -/
+unsafe def benchParseNumber (reps : Nat) : IO Unit := do
+  -- build the bytes: [0,0,'1','2','3','4','5','6','7','8','x','x']
+  let arr : Array UInt8 := Array.ofFn fun (i : Fin 12) =>
+    if i.val < 2 then (0 : UInt8)
+    else if i.val < 10 then (UInt8.ofNat (48 + (i.val - 1)))
+    else (120 : UInt8)
+  let a : ByteArray := ByteArray.mk arr
+  let off : USize := 2
+  let spec : Option (Nat × USize) := parseNumber a off
+  let (r, dt) ← timeBatch reps fun _ => parseNumber a off
+  if r != spec then
+    throw (IO.userError "parseNumber ≠ spec body (value mismatch)")
+  match r with
+  | some (v, k) =>
+      if v != 12345678 then throw (IO.userError "parseNumber: value mismatch")
+      if k.toNat != 8 then throw (IO.userError "parseNumber: consumed-count mismatch")
+  | none => throw (IO.userError "parseNumber: expected a parse result")
+  IO.println s!"parseNumber L2 [{off.toNat}]: {dt / reps} ns/op"
+
 /-- The LEB128 varbinary roundtrip over the length-indexed carrier: `decodeVarint
 (encodeVarint 12345678)` must recover the value. -/
 unsafe def benchRoundtripVarint (reps : Nat) : IO Unit := do
@@ -352,4 +405,8 @@ unsafe def main (args : List String) : IO Unit := do
   Codec.Bench.benchDecodeFast n reps
   -- LEB128 varbinary over the single carrier.
   Codec.Bench.benchRoundtripVarint reps
+  -- LEB128 span seams over the byte-array output (Layer 2, value-checked).
+  Codec.Bench.benchVarintSpan reps
+  -- Numeric-parse seam (Layer 2, value-checked).
+  Codec.Bench.benchParseNumber reps
   IO.println "done"

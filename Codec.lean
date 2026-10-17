@@ -27,3 +27,6 @@ import Codec.Combinators
 import Codec.VarBinary
 import Codec.Packed
 import Codec.ByteSlice
+import Codec.VarintFast
+import Codec.NumParse
+import Codec.DecodeOne
