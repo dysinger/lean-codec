@@ -612,7 +612,13 @@ decode→encode bijection and injectivity under those hypotheses. -/
 
 /-- `relChainl1` is insensitive to a length-cast of its byte string (the
 `relFunctional`/`relFunctional`-carrying transport the `_of_decode` laws need to
-conclude at the *input* length `n` rather than the decoder's `n - 0`). -/
+conclude at the *input* length `n` rather than the decoder's `n - 0`).
+
+`cases e` is sound (not hiding a mismatch) because every conjunct of `relChainl1`
+— the ``s = splice …`` equality, and the `Rel arg` / `relRepeat (Rel op)` /
+`foldl.apply` sub-relations — is definitionally transported through
+`cast (congrArg Bytes e)` (each reduces pointwise; cf. `Rel_cast`/`relRepeat_cast`
+in `Codec.Codec`). So the two sides are literally `rfl`. -/
 theorem relChainl1_cast {α β : Type} (f : Iso (α × (β × α)) α) (measure : α → Nat)
     (h : MeasureDecreases measure f) (arg : Codec α) (op : Codec β) (a : α)
     {n m : Nat} (e : n = m) (s : Bytes n) :
@@ -621,7 +627,8 @@ theorem relChainl1_cast {α β : Type} (f : Iso (α × (β × α)) α) (measure 
   rfl
 
 /-- `relChainr1` is insensitive to a length-cast of its byte string (the
-right-fold dual of `relChainl1_cast`). -/
+right-fold dual of `relChainl1_cast`); `cases e` is sound by the same
+cast-invariance argument as `relChainl1_cast`. -/
 theorem relChainr1_cast {α β : Type} (f : Iso ((α × β) × α) α) (measure : α → Nat)
     (h : MeasureDecreasesR measure f) (arg : Codec α) (op : Codec β) (a : α)
     {n m : Nat} (e : n = m) (s : Bytes n) :

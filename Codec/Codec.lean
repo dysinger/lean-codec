@@ -21,7 +21,7 @@ The combinators are:
 
 Note: `Codec` is an inductive *description* (an AST), not the paper's
 polymorphically-embedded typeclass. The typeclass reading would prevent the
-two interpreters from having types `decode : Codec α → ByteArray → …` and
+two interpreters from having types `decode : Codec α → {n : Nat} → Bytes n → …` and
 `encode : Codec α → α → …` (which require `Codec` to be a `Type → Type`
 constructor applied to a value type). This is the free-alternative / free-applicative
 encoding of syntax descriptions, and it is what makes `Rel`, `decode`, and

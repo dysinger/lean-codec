@@ -176,4 +176,179 @@ theorem decodeFull_zero {α : Type} (p : Codec α) (h : ConsumesByte p) (s : Byt
   unfold decodeFull
   rw [WellFounded.fix_eq]
 
+/-! ## The full-consumption law (`decodeFull` vs `decodeRepeat`)
+
+The full-consumption decoder and the all-prefix decoder agree at the single
+empty-remainder result. The forward direction (`decodeFull_some`) and the
+completeness direction (`decodeFull_ne_none`) are unconditional; the biconditional
+`decodeFull_spec` pins the returned list to `xs` given full-consumption uniqueness. -/
+
+/-- Forward soundness of `decodeFullStep`: if it returns `some ys`, then `ys = x :: xs`
+for some attached candidate `⟨(x, t), hm⟩` with a fully-consuming recursion
+`ih t.remaining t.bytes … = some xs`. Step-level bridge to `decodeRepeat`'s `flatMap`. -/
+theorem decodeFullStep_some {α : Type} (p : Codec α) (h : ConsumesByte p)
+    {n : Nat} (s : Bytes n)
+    (ih : (m : Nat) → (s' : Bytes m) → m < n → Option (List α)) :
+    ∀ (l : List { pr : α × Suffix n // pr ∈ decode p s }) (ys : List α),
+      decodeFullStep p h s ih l = some ys →
+        ∃ (x : α) (xs : List α) (t : Suffix n) (hm : (x, t) ∈ decode p s),
+          ⟨(x, t), hm⟩ ∈ l ∧
+            ih t.remaining t.bytes (h x s t hm) = some xs ∧ ys = x :: xs := by
+  intro l ys
+  induction l generalizing ys with
+  | nil => simp [decodeFullStep]
+  | cons hd tl ihL =>
+      rcases hd with ⟨⟨x, t⟩, hm⟩
+      rw [decodeFullStep]
+      cases ho : ih t.remaining t.bytes (h x s t hm) with
+      | none =>
+          intro h
+          rcases ihL _ h with ⟨x', xs', t', hm', hmem, hih', hys⟩
+          refine ⟨x', xs', t', hm', ?_, hih', hys⟩
+          rw [List.mem_cons]
+          right
+          exact hmem
+      | some xs₀ =>
+          intro h
+          simp only at h
+          cases h
+          refine ⟨x, xs₀, t, hm, ?_, ho, rfl⟩
+          simp
+
+/-- **Forward soundness**: if `decodeFull p h n s` returns `some xs`, then `xs` is a
+full-consumption result of `decodeRepeat` (`(xs, Suffix.empty n) ∈ decodeRepeat …`).
+Unconditional; well-founded induction on `n`. -/
+theorem decodeFull_some {α : Type} (p : Codec α) (h : ConsumesByte p) :
+    ∀ {n : Nat} (s : Bytes n) (xs : List α),
+      decodeFull p h n s = some xs → (xs, Suffix.empty n) ∈ decodeRepeat p h n s := by
+  intro n
+  induction n using Nat.strongRecOn with
+  | ind n ih =>
+      intro s xs he
+      unfold decodeFull at he
+      rw [WellFounded.fix_eq] at he
+      cases n with
+      | zero =>
+          simp at he
+          subst xs
+          rw [decodeRepeat_eq]
+          simp only [List.mem_cons]
+          left
+          apply congrArg (fun r : Suffix 0 => ([], r))
+          exact (Suffix.eq_empty_of_remaining_zero (Suffix.id 0 s) rfl).symm
+      | succ k =>
+          rw [decodeRepeat_eq]
+          rw [List.mem_cons]
+          right
+          rw [List.mem_flatMap]
+          rcases (decodeFullStep_some p h s (fun m s' hm => decodeFull p h m s') (decode p s).attach xs he) with
+            ⟨x, xs', t, hm, hmem, hih', hxs⟩
+          subst xs
+          refine ⟨⟨(x, t), hm⟩, hmem, ?_⟩
+          rw [List.mem_map]
+          refine ⟨(xs', Suffix.empty t.remaining), ?_, rfl⟩
+          have hlt : t.remaining < k + 1 := h x s t hm
+          exact ih t.remaining hlt t.bytes xs' hih'
+
+/-- `decodeFullStep` is `≠ none` whenever *some* candidate in the list has a
+fully-consuming recursion. (It returns the first such candidate; completeness only
+needs that it succeeds at all.) -/
+theorem decodeFullStep_ne_none {α : Type} (p : Codec α) (h : ConsumesByte p)
+    {n : Nat} (s : Bytes n)
+    (ih : (m : Nat) → (s' : Bytes m) → m < n → Option (List α)) :
+    ∀ (l : List { pr : α × Suffix n // pr ∈ decode p s }),
+      (∃ (x : α) (xs : List α) (t : Suffix n) (hm : (x, t) ∈ decode p s),
+        ⟨(x, t), hm⟩ ∈ l ∧ ih t.remaining t.bytes (h x s t hm) = some xs) →
+      decodeFullStep p h s ih l ≠ none := by
+  intro l
+  induction l with
+  | nil =>
+      intro hnone
+      rcases hnone with ⟨x, xs, t, hm, hmem, _⟩
+      cases hmem
+  | cons hd tl ihL =>
+      rcases hd with ⟨⟨x, t⟩, hm⟩
+      intro hex
+      rw [decodeFullStep]
+      cases ho : ih t.remaining t.bytes (h x s t hm) with
+      | none =>
+          rcases hex with ⟨x', xs', t', hm', hmem, hih'⟩
+          rw [List.mem_cons] at hmem
+          rcases hmem with hmem | hmem
+          · cases hmem
+            rw [ho] at hih'
+            cases hih'
+          · exact ihL ⟨x', xs', t', hm', hmem, hih'⟩
+      | some xs =>
+          simp
+
+/-- **Completeness**: if `xs` is a full-consumption result of `decodeRepeat`
+(`(xs, Suffix.empty n) ∈ decodeRepeat …`), then `decodeFull p h n s ≠ none`.
+Unconditional; well-founded induction on `n`. -/
+theorem decodeFull_ne_none {α : Type} (p : Codec α) (h : ConsumesByte p) :
+    ∀ {n : Nat} (s : Bytes n) (xs : List α),
+      (xs, Suffix.empty n) ∈ decodeRepeat p h n s → decodeFull p h n s ≠ none := by
+  intro n
+  induction n using Nat.strongRecOn with
+  | ind n ih =>
+      intro s xs hmem
+      unfold decodeFull
+      rw [WellFounded.fix_eq]
+      cases n with
+      | zero =>
+          change some [] ≠ none
+          simp
+      | succ k =>
+          rw [decodeRepeat_eq] at hmem
+          rw [List.mem_cons] at hmem
+          rcases hmem with hmem | hmem
+          · -- head case: (xs, Suffix.empty (k+1)) = ([], Suffix.id (k+1) s) impossible
+            cases hmem
+          · rw [List.mem_flatMap] at hmem
+            rcases hmem with ⟨a, hamem, hres⟩
+            rcases a with ⟨⟨x, t⟩, hm⟩
+            rw [List.mem_map] at hres
+            rcases hres with ⟨pr, hpr, hprmap⟩
+            rcases pr with ⟨xs', r⟩
+            have htrans : Suffix.trans t r = Suffix.empty (k + 1) := by
+              exact congrArg (fun pr : List α × Suffix (k+1) => pr.2) hprmap
+            have hr0 : r.remaining = 0 := by
+              have hrem := congrArg Suffix.remaining htrans
+              simpa [Suffix.trans, Suffix.empty] using hrem
+            have hr : r = Suffix.empty t.remaining := Suffix.eq_empty_of_remaining_zero r hr0
+            have hpr' : (xs', Suffix.empty t.remaining) ∈ decodeRepeat p h t.remaining t.bytes := by
+              rw [← hr]
+              exact hpr
+            have hlt : t.remaining < k + 1 := h x s t hm
+            have hne_t : decodeFull p h t.remaining t.bytes ≠ none := ih t.remaining hlt t.bytes xs' hpr'
+            cases ho : decodeFull p h t.remaining t.bytes with
+            | none => exact False.elim (hne_t ho)
+            | some ys =>
+                apply decodeFullStep_ne_none p h s (fun m s' hm => decodeFull p h m s') (decode p s).attach
+                refine ⟨x, ys, t, hm, ?_, ?_⟩
+                · exact List.mem_attach (decode p s) ⟨(x, t), hm⟩
+                · rw [ho]
+
+/-- The full-consumption law: `decodeFull p h n s = some xs` iff `xs` is the
+full-consumption result of `decodeRepeat p h n s` — **provided full consumption is
+unique**. The forward direction is unconditional (`decodeFull_some`); the reverse uses
+completeness (`decodeFull_ne_none`) plus the uniqueness hypothesis to pin the returned
+value to `xs`. -/
+theorem decodeFull_spec {α : Type} (p : Codec α) (h : ConsumesByte p)
+    (huniq : ∀ {x y : List α} {n : Nat} (s : Bytes n),
+      (x, Suffix.empty n) ∈ decodeRepeat p h n s →
+      (y, Suffix.empty n) ∈ decodeRepeat p h n s → x = y)
+    {n : Nat} (s : Bytes n) (xs : List α) :
+    decodeFull p h n s = some xs ↔ (xs, Suffix.empty n) ∈ decodeRepeat p h n s := by
+  constructor
+  · exact decodeFull_some p h s xs
+  · intro hmem
+    have hne : decodeFull p h n s ≠ none := decodeFull_ne_none p h s xs hmem
+    cases ho : decodeFull p h n s with
+    | none => exact False.elim (hne ho)
+    | some ys =>
+        have hys : (ys, Suffix.empty n) ∈ decodeRepeat p h n s := decodeFull_some p h s ys ho
+        have hxy : ys = xs := huniq s hys hmem
+        rw [hxy]
+
 end Codec

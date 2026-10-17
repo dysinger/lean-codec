@@ -399,7 +399,13 @@ The LEB128 read/write over the single length-indexed carrier. `encodeVarint n`
 returns the encoded bytes and their length (a `Sigma`); `decodeVarint bs` decodes
 one canonical varint from a whole byte string, returning the (unique) value —
 an `Option`, because the varint is unambiguous. There is no transfer to a
-`ByteArray`/`Array`/`Buffer` carrier; the packed run-model *is* `Bytes k`. -/
+`ByteArray`/`Array`/`Buffer` carrier; the packed run-model *is* `Bytes k`.
+
+Note: `decodeVarint` consumes a *whole* `Σ k, Bytes k` (the old absolute-offset
+`decodeVarint a i` form was dropped in the single-carrier collapse). Prefix-decoding
+— reading one varint off the head of a larger buffer and learning the unconsumed
+remainder — is therefore the caller's responsibility: split the input at the encoded
+length (or use `varintUnapply` on a length-indexed prefix) before recursing. -/
 
 /-- The LEB128 encode of `n` as a length-indexed byte string. -/
 def encodeVarint (n : Nat) : Sigma fun k => Bytes k := varintBytes n
