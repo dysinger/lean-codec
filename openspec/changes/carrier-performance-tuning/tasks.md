@@ -9,6 +9,38 @@
 
 ## Session log (this session)
 
+**Latest (this session): encode refinements landed, decode `seq` bridge blocked.**
+
+The four Layer-1 refinement laws are now: `encodeArray_eq` and
+`encodeByteArrayBytes_eq` **proved** (`[propext, Quot.sound]`-only, zero `sorry`,
+zero `Classical.choice`), plus a tranche of clean decode-side transport lemmas
+(`sub_sub_eq`, `bdrop_add`, `consumedAbs_remaining`). The encode proof uses the
+**List-level readback** form (`(encodeArray d x).map (·.toList) = (encode d x).map
+(List.ofFn ∘ snd)`) — the `Array.toList_ofFn` round-trip leaks `Classical.choice`,
+so the readback routes through `Array.toList` + `List.ofFn` + `ofFn_concat`
+(`Array.toList_append` in the `seq` leaf). The `none`-skeleton of the monadic
+`seq`/`alt` cases is bridged by `map_toList_eq_ofFn_none_iff` (`[propext]`-only);
+`encodeByteArrayBytes_eq` is `ByteArray.ext` + `List.foldl`-over-`push` projection
+(`bpush_data`/`foldl_push_data` — axiom-free) + `foldl_push_append` (`[propext,
+Quot.sound]`).
+
+**Decode side — genuine blocker identified (the design's "from scratch" bridge is
+real):** `decodeArray_eq`'s `iso`/`alt`/`empty`/`pure`/`byte` cases close cleanly
+(the `byte` head read is a `Fin`-index `omega`/`simp` reduction; `consumedAbs_id`/
+`consumedAbs_drop_one` are the `@[simp]` consumed-count bridge). The **`seq` case**
+requires the invariant that `decode`'s result suffix `t` is a _genuine_ suffix —
+`t.bytes = bdrop (n - t.remaining) s` — i.e. a `decode`-level lemma
+(`∀ (x, t) ∈ decode d s, t.bytes = bdrop t.consumed s`), **which does not yet
+exist**. Without it, `decodeArray d₂ a c₁` (over `bdrop c₁ (arrayToBytes a)`) cannot
+be equated with `decode d₂ t₁.bytes` (over `Bytes t₁.remaining`), because
+`bdrop c₁ (arrayToBytes a) = cast … t₁.bytes` is not provable for an _arbitrary_
+`Suffix t₁` — it is a property of `decode`'s own construction. The transport
+lemmas that compose once that invariant exists (`bdrop_add`, the cast-insensitive
+`.remaining`, the `consumedAbs` transitivity) are proved and in place; the open gap
+is precisely this `decode` genuine-suffix invariant.
+
+---
+
 Added `Codec/Packed.lean` (wired into the `Codec` root) with the packed
 carrier **definitions** and a first tranche of clean lemmas, `lake build` green
 with zero `sorry`/warnings:
@@ -50,15 +82,17 @@ fun i => arr[i]⟩ = ⟨n, s⟩` or the `Array.ofFn`-clean equivalent) and confi
 
 ## 1. Re-derive the packed `USize`-cursor decoder (full backtracking)
 
-- [ ] 1.1 Define `decodeArray : Codec α → Array UInt8 → USize → List (α × USize)`: read
+- [x] 1.1 Define `decodeArray : Codec α → Array UInt8 → USize → List (α × USize)`: read
       `a[i]` by `USize` index, thread `i + m` through `seq`, `alt` = `++` (union), `seq` =
       `flatMap` cross-product. The result `List (α × USize)` is the non-determinism
       multiplicity (retained); the packed carrier removes only the per-branch
       `Suffix`/`Bytes` closure. No list-peeling. (A greedy variant, if wanted, is a
       separate labeled `decodeGreedy`.)
-- [ ] 1.2 Define `decodeFullArray : … → Option (ByteArray × USize)`: packed suffix, body
+      _(Defined over `Nat` cursor — the surfaced cursor deviation; see session log.)_
+- [x] 1.2 Define `decodeFullArray : … → Option (ByteArray × USize)`: packed suffix, body
       `ByteArray.mk ((a.data.toList.drop i.toNat).toArray)` (list-materializing transport,
       **not** `copySlice`/`extract`), never `Option (List α × Suffix n)`.
+      _(Defined; cursor is `Nat`.)_
 - [ ] 1.3 Re-prove `decodeArray_eq` and `decodeFullArray_spec` against
       `decode : … → List (α × Suffix n)` **from scratch**: reconstruct
       `{ remaining := n - c, hle := Nat.sub_le n c, bytes := bdrop c s }` from the consumed
@@ -67,11 +101,11 @@ fun i => arr[i]⟩ = ⟨n, s⟩` or the `Array.ofFn`-clean equivalent) and confi
 
 ## 2. Re-derive the packed encoder
 
-- [ ] 2.1 Define `encodeArray : Codec α → α → Option (Array UInt8)` accumulating with
+- [x] 2.1 Define `encodeArray : Codec α → α → Option (Array UInt8)` accumulating with
       `ByteArray.push` (amortized O(n)); for the byte-sequence shape define
       `encodeByteArrayBytes : List UInt8 → ByteArray` (a `List UInt8` packer, **not** a
       general `Codec α` encoder).
-- [ ] 2.2 Re-prove `encodeArray_eq` / `encodeByteArrayBytes_eq` against `encode`, reusing
+- [x] 2.2 Re-prove `encodeArray_eq` / `encodeByteArrayBytes_eq` against `encode`, reusing
       the clean readback lemmas already in `Codec/Encode.lean` (`list_ofFn_getElem_clean`,
       `ofFn_concat`, `pushBytesFrom_eq`, `array_readback`). `[propext, Quot.sound]`-only.
 
@@ -97,7 +131,7 @@ fun i => arr[i]⟩ = ⟨n, s⟩` or the `Array.ofFn`-clean equivalent) and confi
       figure from a prior draft.
 - [ ] 5.2 `lake build` zero `sorry`/warnings; `#print axioms Codec.roundtrip` ⇒
       `[propext, Quot.sound]`; every Layer-1 law `#print axioms`-verified `[propext,
-    Quot.sound]`-only. Bench byte-exact value checks (not length checks).
+  Quot.sound]`-only. Bench byte-exact value checks (not length checks).
 - [ ] 5.3 Update `Bench.lean`, `README`, `AGENTS` to state the two layers honestly, the
       named trust seam, and the "result carrier, not the byte loop" lesson — preserving the
       `[D#]`/`[S#]` anchors.
