@@ -75,7 +75,7 @@ Recorded verbatim from the full review (`/tmp/lean-basen-review.md`); nothing is
       after `=` padding (padding is not enforced to be terminal).**
       `BaseN/Base32.lean` (`decodeN` ~190, `decode` ~545) and `BaseN/Base64.lean`
       (`decodeN` ~190, `decode` ~400): the padded-tail branches `match decodeN
-    rest` / `match decode rest` recursively decode _whatever remains_ after the
+  rest` / `match decode rest` recursively decode _whatever remains_ after the
       `=` group, with no check that `rest = []`. Roundtrip is unaffected (the
       encoder never emits this), so it is a _correctness-of-rejection_ gap. Fix:
       in each padded-tail branch, guard `rest = []` (decode only pads at the _whole
@@ -90,7 +90,7 @@ Recorded verbatim from the full review (`/tmp/lean-basen-review.md`); nothing is
       `flake.nix` has no `packages.bench` and `default.nix` has no `bench` target
       (codec has both). `nix build .#bench` doesn't exist. Add
       `packages.bench = _pkg.bench;` + a `bench = mkLakeBuild { targets = "bench";
-    mainProgram = "bench"; … }` in `default.nix`, or document it as dev-loop-only.
+  mainProgram = "bench"; … }` in `default.nix`, or document it as dev-loop-only.
 - [ ] 5.4 **`lakefile.lean` pins codec at `@ "master"`; template documents `@ "main"`.**
       `master` is correct today (codec's default branch), but the deviation is
       undocumented and a floating branch ref is non-reproducible outside the pinned
@@ -112,7 +112,7 @@ Recorded verbatim from the full review (`/tmp/lean-basen-review.md`); nothing is
 - [ ] 5.9 **`BaseN/Base2.lean` `valToBit` falls back to `49` (`'1'`)** for invalid
       input — asymmetric with `bitVal`'s `2` sentinel; worth a doc note.
 - [ ] 5.10 **Base16 case-insensitive decode is untested** (works — `decode "6f" = some
-    [111]`); add a lowercase vector to `Bench.lean`.
+  [111]`); add a lowercase vector to `Bench.lean`.
 - [ ] 5.11 **Base32/Base64 UInt8 `roundtrip` is ~160/~150 lines of near-verbatim
       re-derivation of `roundtripN`** — a future transport-lemma refactor could cut
       2× the surface.
@@ -124,3 +124,44 @@ Recorded verbatim from the full review (`/tmp/lean-basen-review.md`); nothing is
 - [ ] 5.13 **Exported laws named `byte0`/`byte1`/`byte2`/`byte3`/`byte4`** (bare
       lowercase, not lowerCamelCase), and base64 shadows base32's `byte0`/`byte1`
       within separate namespaces — no collision, but terse/conflicting for exported laws.
+
+## Status (next session — spit-shine, in progress)
+
+An in-progress edit to `BaseN/Base64.lean` starts task 5.1 (add `rest = []` guards
+in the two padded-tail branches of `decodeN`) but is **incomplete and uncommitted**
+(only `decodeN` done; `decodeN_cons4`, the UInt8 `decode`, and all of base32
+untouched). The build is **not** in a green state until 5.1 is finished. Do not
+commit a half-done 5.1.
+
+**Ordered plan:**
+
+1. **Finish 5.1 (terminal padding)** — the one real defect.
+   - base64: `decodeN` (started), `decodeN_cons4` equation, UInt8 `decode` — add
+     `h : rest = []` to the 1-byte (`= =`) and 2-byte (`=`) tail branches.
+   - base32: `decodeN` + `decodeN_cons8` + UInt8 `decode` — add `rest = []` to the
+     six padded-tail branches (1/2/3/4/5/6 pad cases).
+   - Re-run `lake build` (must stay green, zero sorry/warnings) and `#eval` verify
+     `decode "Zg==AAAA"` / `MY======AAAAAAAA` now return `none`.
+
+2. **5.2 AGENTS.md drift** — fix the two stale bullets (B32/B64 no longer "in
+   progress").
+
+3. **5.5 + 5.6 + 5.10 bench** — silence `#check`/`#eval` info noise, correct the
+   "decide/rfl" docstring, add a Base16 lowercase (`6f`) vector.
+
+4. **5.7 `smoke` coverage** — widen the runtime smoke to all seven bases.
+
+5. **5.8 dead `have`s** — remove unused `hle`/`hle'`/`hd0` in Base8/Base10.
+
+6. **5.3 + 5.4 + 5.12 build wiring** — wire `bench` as a flake/default.nix target;
+   note `@ master` vs `@ main`; one-line lake-manifest-vs-flake.lock note.
+
+7. **5.9 + 5.13** — Base2 `valToBit` fallback doc note; rename `byte0..byte4` to
+   lowerCamelCase in base32/64 (and update references).
+
+8. **5.11 (defer unless cheap)** — the base32/64 `roundtrip` near-verbatim
+   re-derivation; a transport-lemma refactor is optional polish, not required.
+
+Then, if time: **`basen-rfc-conformance-theorems`** (the substantive RFC
+conformance proofs — rejection, canonical form, converse/injectivity), which
+subsumes/extends the 5.x rejection work.
