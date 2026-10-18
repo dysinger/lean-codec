@@ -73,17 +73,22 @@ of `(value, remaining)` pairs — a relation (§5.1 `Parser (String → [(α, St
 **[D3] `|` is the paper's _backtracking union_, not committed choice.**
 `decode (d₁ | d₂) s = decode d₁ s ++ decode d₂ s`, matching `Rel (d₁ | d₂) = Rel d₁ ∨ Rel d₂` by construction.
 
-**[D4] Lossless capture — "allowed" bytes are _kept_, not discarded (no
-`ignore`).** The paper (§3.1) deliberately _discards_ optional bytes: its `ignore`
-maps _any_ run of blanks down to a single unit value and, on printing, emits a
-**fixed, single** representation back — so an arbitrary-length whitespace run is
-not preserved, and the isomorphism holds only "modulo equivalence classes" rather
-than literally. (`skipSpace`, `optSpace`/`sepSpace` in §6.3 are three concrete
-instantiations with slightly different re-emitted whitespace, but all share the
-same one-way-lossy shape.) We reject that weakening: a run of bytes a codec
-allows is _captured_ as a value and re-emitted verbatim (realized by repetition
-over a `subset p byte` step, not a new primitive). There is therefore **no
-`ignore` combinator in core**, and the strict inverse law holds unconditionally.
+**[D4] Lossless capture — a destructive constructor such as the paper's
+`ignore` is _impossible_ under strict isomorphism.** The paper (§3.1) deliberately
+_discards_ optional bytes: its `ignore` maps _any_ run of blanks down to a single
+unit value and, on printing, emits a **fixed, single** representation back — so an
+arbitrary-length whitespace run is not preserved, and the isomorphism holds only
+"modulo equivalence classes" rather than literally. (`skipSpace`, `optSpace`/
+`sepSpace` in §6.3 are three concrete instantiations, all sharing the same
+one-way-lossy shape.) Because every `codec` combinator is a **strict** partial
+isomorphism — `Iso.law` is a field, `apply a = some b ↔ unapply b = some a` — we
+**cannot follow the paper's destructive constructor**: a lossy `ignore` cannot
+inhabit `Iso`, since two distinct inputs mapping to one output make `unapply`
+unable to invert both. So instead of relaxing the law to admit `ignore`, a run of
+allowed bytes is _captured_ as a value and re-emitted verbatim (realized by
+repetition over a `subset p byte` step, not a new primitive). There is therefore
+**no `ignore` combinator in core**, and the strict inverse law holds
+unconditionally.
 
 **[D5] `|` needs no prefix-disjointness condition.** Some deterministic-parser
 designs require `|`'s branches to be _prefix-disjoint_ so at most one can match a
@@ -256,18 +261,29 @@ decoder and the denotation agree _by construction_. The cost is the paper's own
 admitted cost (§4.4): naive backtracking is exponential in the worst case; making
 it fast without changing what it means is a separate, later problem.
 
-### `[D4]` lossless capture — why we refuse to throw bytes away
+### `[D4]` lossless capture — why we cannot follow the paper's destructive constructor
 
 The paper's `ignore` maps _any_ run of whitespace down to a single value and, on
 printing, always emits _one_ (fixed) run back — `skipSpace` re-emits none,
 `optSpace`/`sepSpace` re-emit a single blank, but none of them preserves the
 original length. That is one-way loss: three spaces in, a fixed run out. The paper
 accepts this and says the inverse law holds only "modulo equivalence classes".
-`codec` wants the law to be **literally true**, which a lossy combinator makes
-impossible. So `codec` simply **has no `ignore`**: a run of optional bytes is
-_captured_ and re-emitted verbatim — same length, same bytes — so parse and print
-are a genuine byte-for-byte two-way street. Where the paper relaxes the law to
-keep `ignore`, `codec` relaxes nothing and drops `ignore` instead.
+
+`codec` cannot do that — not as a preference, but as a **consequence of the
+isomorphism itself**. Every `codec` building block is a strict partial
+isomorphism, and the inverse law is a _field_ you must supply to construct one. A
+lossy combinator like `ignore` cannot satisfy that field: it sends every run of
+whitespace (any length) to the same value, so `unapply` cannot recover which run came out of a given result. There is no round-trip at all — `decode "   "` and
+`decode ""` both give the same value, so `encode` cannot tell them apart and
+`encode (decode s) = s` fails for every non-canonical `s`. Because `codec` is
+isomorphic _by the type of its combinators_, it simply **cannot include
+`ignore`** — the constructor would not typecheck (no proof exists for it).
+
+So instead of following the paper's destructive combinator, a run of optional
+bytes is _captured_ and re-emitted verbatim — same length, same bytes — so parse
+and print are a genuine byte-for-byte two-way street. Where the paper relaxes the
+law to keep `ignore`, `codec` keeps the law _strict_ and therefore has no
+`ignore`.
 
 ### `[D5]` no prefix-disjointness gate
 
@@ -358,10 +374,11 @@ should look for these three readings, not for a `many` object.
 
 **Bottom line for a porter.** The paper gives the idea; `codec` makes it _honest_
 by (1) enforcing the inverse law as a type, (2) resting on bytes, (3) keeping the
-full backtracking semantics so the laws are unconditional, (4) refusing lossy
-combinators so nothing is silently dropped, and (5) making the description an
-ordinary value you can induct over. Reproduce those five points first; the rest
-is bookkeeping you can re-derive.
+full backtracking semantics so the laws are unconditional, (4) being strictly
+isomorphic — which _rules out_ the paper's destructive (`ignore`-shaped)
+constructors rather than needing to drop them by hand, and (5) making the
+description an ordinary value you can induct over. Reproduce those first; the
+rest is bookkeeping you can re-derive.
 
 ## The abstraction, in brief
 
