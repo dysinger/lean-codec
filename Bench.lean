@@ -435,25 +435,28 @@ def baGet (a : ByteArray) (i : Nat) : UInt8 :=
 `none` on overrun or a non-digit. Single scalar loop, no backtracking. -/
 def readNDigits (a : ByteArray) (i : Nat) (w : Nat) : Option (Nat × Nat) :=
   if i + w > a.size then none else
-    -- fold over the `w` digit positions; `st` is the running `(value, cursor)`
-    let step (st : Option (Nat × Nat)) (_pos : Nat) : Option (Nat × Nat) :=
-      st.bind fun (acc, j) =>
-        let c : Nat := (baGet a j).toNat
-        if 48 ≤ c ∧ c < 58 then some (acc * 10 + (c - 48), j + 1) else none
-    (List.range w).foldl step (some (0, i))
+    -- structural recursion over `w`; accumulator is a plain pair (no Option in
+    -- the middle of the loop, no List.range/foldl churn)
+    let rec go (k : Nat) (acc : Nat) (j : Nat) : Option (Nat × Nat) :=
+      match k with
+      | 0 => some (acc, j)
+      | k' + 1 =>
+          let c : Nat := (baGet a j).toNat
+          if 48 ≤ c ∧ c < 58 then go k' (acc * 10 + (c - 48)) (j + 1) else none
+    go w 0 i
 
 /-- Parse one or more ASCII decimal digits (the `1*DIGIT` fraction), returning
 the digit bytes and the advanced cursor. Scans forward from `i`, stopping at the
 first non-digit (after at least one digit) or the buffer end. -/
 def readDigits1 (a : ByteArray) (i : Nat) : Option (List UInt8 × Nat) :=
-  -- collect digits into `acc` (in order) while `j < a.size` and digit
+  -- collect digits with cons (O(n)), reverse once at the end
   let rec go (j : Nat) (acc : List UInt8) : Option (List UInt8 × Nat) :=
     if _h : j < a.size then
       let c := baGet a j
-      if c.toNat ≥ 48 ∧ c.toNat < 58 then go (j + 1) (acc ++ [c]) else
-        if acc.isEmpty then none else some (acc, j)
+      if c.toNat ≥ 48 ∧ c.toNat < 58 then go (j + 1) (c :: acc) else
+        if acc.isEmpty then none else some (acc.reverse, j)
     else
-      if acc.isEmpty then none else some (acc, j)
+      if acc.isEmpty then none else some (acc.reverse, j)
     termination_by a.size - j
     decreasing_by
       simp_wf
