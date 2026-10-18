@@ -28,8 +28,8 @@ without its proof, and the roundtrip — `encode d x = some s → (x, []) ∈ de
 description. Invertibility is enforced by the type system, not by a comment.
 
 `codec` also re-bases the idea from text (`String`/`Char`) onto **bytes**
-(`UInt8`), so it covers fixed-width integers, endianness, image files, and LEB128
-varints — with text rebuilt downstream, _on top of_ bytes.
+(`UInt8`), so it covers fixed-width integers, endianness, and image files — with
+text rebuilt downstream, _on top of_ bytes.
 
 The proofs live in the code (`Codec/*.lean`, each declaration documented in
 place) and the engineering state in `openspec/`; this document is the
@@ -137,16 +137,10 @@ witness the caller supplies.
 text vocabulary; on bytes they mislead, so they become `Codec`/`decode`/`encode`/
 `byte`. A rename only.
 
-**[S3] Core ships only the `byte` and `pure` `Codec` leaves, plus `varint` as an
-`Iso`, not a `Codec`.** Every concrete _format codec_ (`u8`/`utf8`/`lengthPrefix`/
-image demos/…) lives downstream (`lean-binary`, `lean-text`). One deliberate
-in-core exception, for a different reason: the LEB128 `varint` is an **`Iso`**
-(`Iso Nat (Σ k, Bytes k)`), not a `Codec` leaf — it ships in `Codec/VarBinary.lean`
-as a worked example of the `Iso` framework (the inverse law proved once,
-`[propext, Quot.sound]`-only), not as a format codec in the description AST. So
-nothing in core silently bakes in a format-specific _description_; the one
-concrete value in core is an `Iso`, and it is the demonstration that the
-framework is genuinely general.
+**[S3] Zero domain-specific leaf codecs.** Core ships only `byte` and `pure`;
+every concrete format (`u8`/`utf8`/`varint`/…) lives downstream (`lean-binary`,
+`lean-text`). Nothing in core can silently bake in a text- or machine-specific
+assumption.
 
 **[S4] `foldl`/`foldr` are _fresh_ well-founded derivations, not `inverse ∘ foldl ∘ inverse`.** The right-fold dual is a distinct definition (the obvious
 `inverse ∘ foldl ∘ inverse` is type-incoherent for the step type). Both take a
@@ -199,8 +193,7 @@ proved over the single `Bytes n`, because that one type is both what the proof a
 can reduce _and_ what lowers to a scalar indexed load. `decode d (s : Bytes n)` returns
 `List (α × Suffix n)` where a `Suffix n` carries the remaining length (a `m ≤ n` witness)
 and the remaining `Bytes m`; `encode d x` returns `Option ({n : Nat} × Bytes n)` — the
-encoded bytes and their length in one sigma. The LEB128 `varint` is `Iso Nat (Σ k, Bytes k)`,
-the same single carrier.
+encoded bytes and their length in one sigma.
 
 The single-carrier collapse is the fix for the defect that the earlier efficiency
 attempts shared: they split the carrier (a `List`/opaque `ByteArray` slab pair) and
@@ -234,7 +227,7 @@ other choice below is a consequence of making that move _honest_.
 ### `[D1]` bytes instead of characters — why it matters
 
 The paper's smallest unit is `Char`. For a tiny calculator language that is fine,
-but a _binary_ format — an image, a network packet, a varint — is not made of
+but a _binary_ format — an image, a network packet — is not made of
 characters; many of its bytes are not printable at all, and pretending everything
 is a `Char` forces you to smuggle binary data through a text type that fights you
 at every step. So `codec` moves the base unit down to a single byte and the base
@@ -417,10 +410,6 @@ structure Iso (α β : Type) where
 --   decode : Codec α → {n : Nat} → Bytes n → List (α × Suffix n)  -- all (value, rest) pairs
 --   encode : Codec α → α → Option ({n : Nat} × Bytes n)           -- partial, length + bytes
 
--- the LEB128 varint over the single carrier
---   varint : Iso Nat ({k : Nat} × Bytes k)
---   encodeVarint n : {k : Nat} × Bytes k ; decodeVarint : {k : Nat} × Bytes k → Option Nat
-
 -- the laws that make it a codec
 --   Rel d x s ↔ (x, Suffix.empty n) ∈ decode d s     (bidirectional)
 --   encode d x = some ⟨n, s⟩ → (x, Suffix.empty n) ∈ decode d s (roundtrip, unconditional)
@@ -434,11 +423,9 @@ description — no solver, no per-combinator gate, no prefix-disjointness condit
 
 - **`codec`** (this package): the pure framework — `Iso`, `Codec`, `Rel`, the two
   interpreters (the single `Bytes n` substrate), and the laws. **No
-  domain-specific leaf codecs** (not even `u8`). The one concrete value in core
-  is the LEB128 `varint` **`Iso`** (`Codec/VarBinary.lean`) — a worked example of
-  the `Iso` framework, not a description-AST leaf codec.
-- **`lean-binary`** (downstream): `u8`, `u16le`/`u16be`, … , `lengthPrefix`,
-  image/Protobuf demos, and the speed benchmark.
+  domain-specific leaf codecs** (not even `u8`).
+- **`lean-binary`** (downstream): `u8`, `u16le`/`u16be`, … , `varint`,
+  `lengthPrefix`, image/Protobuf demos, and the speed benchmark.
 - **`lean-text`** (downstream): `utf8` plus `text`/`identifier`/`whitespace` —
   the paper's §6 text domain, re-based on bytes.
 

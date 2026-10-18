@@ -71,15 +71,17 @@ reminder that the toolchain is _flake-scoped_, not host-global.)
     `Rel`/`relRepeat`, and the substrate/cast-commutation lemma library.
   - `Decode.lean` / `Encode.lean` — the backtracking decoder and partial encoder.
   - `Sound.lean` — the bidirectional + roundtrip laws (unconditional).
-  - `Combinators.lean`, `VarBinary.lean` — derived combinators and LEB128 varint.
+  - `Combinators.lean` — derived combinators (`many`, `*>`, `<*`, …).
 - **Executable/bench:** `Bench.lean`, wired through `lakefile.lean` and Nix
   `default.nix`/`flake.nix`.
 
 ## Active work (single carrier — archived; now `carrier-performance-tuning`)
 
-The core (`Codec`/`Decode`/`Encode`/`Sound`/`Combinators`/`VarBinary`) is
+The core (`Codec`/`Decode`/`Encode`/`Sound`/`Combinators`) is
 **re-derived over the single length-indexed substrate `Bytes n := Fin n → UInt8`**,
-`[propext, Quot.sound]`-only (no `Classical.choice`, zero `sorry`). The old transfer-tier
+`[propext, Quot.sound]`-only (no `Classical.choice`, zero `sorry`). (`VarBinary` was
+removed from core this session — LEB128 `varint` belongs in a downstream package,
+not the core spec/proof library.) The old transfer-tier
 modules (`DecodeArray`/`EncodeArray`/`DecodeByteArray`/`EncodeByteArray`/
 `DecodeByteArraySlice`/`EncodeByteArraySlice`/`ExternFastPath`/`Buffer`) are
 **deleted**. `single-carrier-bytes` is **archived** (19/19 tasks, `#print axioms

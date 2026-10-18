@@ -299,19 +299,6 @@ unsafe def benchDecodeFast (n : Nat) (reps : Nat) : IO Unit := do
   | _, _ => throw (IO.userError "decodeFast: expected one result")
   IO.println s!"decodeFast byte [{n}]: {dt / reps} ns/op"
 
-/-- The LEB128 varbinary roundtrip over the length-indexed carrier: `decodeVarint
-(encodeVarint 12345678)` must recover the value. -/
-unsafe def benchRoundtripVarint (reps : Nat) : IO Unit := do
-  let (encoded, dt1) ← timeBatch reps fun _ => encodeVarint 12345678
-  let (decoded, dt2) ← timeBatch reps fun _ => decodeVarint encoded
-  match decoded with
-  | some n =>
-      if n != 12345678 then
-        throw (IO.userError "roundtrip varint: mismatch")
-  | none => throw (IO.userError "roundtrip varint: expected a result")
-  IO.println s!"encodeVarint 12345678: {dt1 / reps} ns/op"
-  IO.println s!"decodeVarint 12345678: {dt2 / reps} ns/op"
-
 /-! ## TEMPORARY speed test: RFC 3339 date-time (AST-shaped, application-style)
 
 RFC 3339 is the Internet profile of ISO 8601 (`date-time` = `full-date "T"
@@ -596,8 +583,6 @@ unsafe def main (args : List String) : IO Unit := do
   -- Full-consumption repetition decoder + fused single-step decoder.
   Codec.Bench.benchDecodeFull m reps
   Codec.Bench.benchDecodeFast n reps
-  -- LEB128 varbinary over the single carrier.
-  Codec.Bench.benchRoundtripVarint reps
   -- TEMPORARY: ISO 8601 timestamp (AST-shaped) speed test.
   Codec.Bench.benchIso8601Encode reps
   Codec.Bench.benchIso8601Decode reps
