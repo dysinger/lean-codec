@@ -40,7 +40,7 @@
       (the reconstructed value naturally sits on the RHS); no behavioral change.
 - [x] 4.2 `byte_consumesByte`: no rename needed (snake_case theorem, consistent with
       `decode_spec`/`encode_rel`); its docstring already states "the `ConsumesByte
-    Codec.byte` witness", which is the framing the review flagged as ambiguous.
+  Codec.byte` witness", which is the framing the review flagged as ambiguous.
 
 ## 5. Gate
 

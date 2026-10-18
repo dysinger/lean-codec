@@ -204,7 +204,7 @@ fun i => arr[i]⟩ = ⟨n, s⟩` or the `Array.ofFn`-clean equivalent) and confi
       `Nat` (not `USize`), and the emitted `.lake/build/ir/Codec/Packed.c` does **not**
       lower it to `size_t`. The `decodeArray` `byte` case (C lines ~400–416) reads
       `v___x_90_ = lean_array_get_size(v_a_61_)`; `v___x_91_ = lean_nat_dec_lt(v_i_62_,
-  v___x_90_)` (boxed-`Nat` comparison); `v___x_94_ = lean_unsigned_to_nat(1u)` (box
+v___x_90_)` (boxed-`Nat` comparison); `v___x_94_ = lean_unsigned_to_nat(1u)` (box
       the literal `1`); `v___x_95_ = lean_nat_add(v_i_62_, v___x_94_)` (boxed-`Nat` add);
       `v___x_93_ = lean_array_fget_borrowed(v_a_61_, v_i_62_)` (array read at the cursor).
       The cursor `v_i_62_ : lean_object *` is a bignum and its increment is `lean_nat_add`,
