@@ -60,10 +60,14 @@ is given as `Rel :: [(α, String)]` (§4.3). `codec` targets binary, so the base
 unit is `UInt8`, the base string is a byte sequence, and `byte : Codec UInt8` is
 the `token` analogue. Text/Unicode is rebuilt downstream (`lean-text`) on top of
 bytes, not in core. **One byte-string type, one job** (see
-[Representations](#representations-one-length-indexed-byte-string)): the substrate
-is the single length-indexed `Bytes n := Fin n → UInt8`, which is structurally
-reducible for proofs **and** a scalar indexed load at runtime — there is no
-separate `List` spec and no `ByteArray` run-model slab.
+[Representations](#representations-one-length-indexed-byte-string)): the _spec_
+substrate is the single length-indexed `Bytes n := Fin n → UInt8`, which is
+structurally reducible for proofs **and** a scalar indexed load at runtime — there
+is no separate `List` spec and no `ByteArray` run-model slab _for the specification
+carrier_ (`decode`/`encode`/`Rel` and the laws). The packed (`Array UInt8`) and
+byte-slice (`ByteArray`) carriers in `Codec/Packed.lean`/`Codec/ByteSlice.lean` are
+proved-equal or trust-seam _implementations on top of_ that single spec — see
+[Performance](#performance-two-proof-layers-and-an-honest-ceiling).
 
 **[D2] The nondeterministic list decoder.** The paper's decoder returns a _list_
 of `(value, remaining)` pairs — a relation (§5.1 `Parser (String → [(α, String)])`,
@@ -133,10 +137,16 @@ witness the caller supplies.
 text vocabulary; on bytes they mislead, so they become `Codec`/`decode`/`encode`/
 `byte`. A rename only.
 
-**[S3] Zero domain-specific leaf codecs.** Core ships only `byte` and `pure`;
-every concrete format (`u8`/`varint`/`utf8`/…) lives downstream (`lean-binary`,
-`lean-text`). Nothing in core can silently bake in a text- or machine-specific
-assumption.
+**[S3] Core ships only the `byte` and `pure` `Codec` leaves, plus `varint` as an
+`Iso`, not a `Codec`.** Every concrete _format codec_ (`u8`/`utf8`/`lengthPrefix`/
+image demos/…) lives downstream (`lean-binary`, `lean-text`). One deliberate
+in-core exception, for a different reason: the LEB128 `varint` is an **`Iso`**
+(`Iso Nat (Σ k, Bytes k)`), not a `Codec` leaf — it ships in `Codec/VarBinary.lean`
+as a worked example of the `Iso` framework (the inverse law proved once,
+`[propext, Quot.sound]`-only), not as a format codec in the description AST. So
+nothing in core silently bakes in a format-specific _description_; the one
+concrete value in core is an `Iso`, and it is the demonstration that the
+framework is genuinely general.
 
 **[S4] `foldl`/`foldr` are _fresh_ well-founded derivations, not `inverse ∘ foldl ∘ inverse`.** The right-fold dual is a distinct definition (the obvious
 `inverse ∘ foldl ∘ inverse` is type-incoherent for the step type). Both take a
@@ -165,18 +175,21 @@ and partial encoding is preserved.
 
 ---
 
-## Representations — one length-indexed byte string
+## Representations — one length-indexed byte string (the spec substrate)
 
-`codec` uses **one** byte-string type, the length-indexed `Bytes n := Fin n → UInt8`. The
-length `n` is part of the _type_, so the byte count is known without an auxiliary
-length field. The read `s ⟨i, ·⟩` is a **structural indexed load** — it reduces under
-`simp`/`rfl`/`induction` for proofs and lowers to a scalar indexed load in the emitted
-IR. There is no second `List UInt8`/`Array`/`ByteArray`/`Buffer` carrier: the proof
-substrate **is** the run-model.
+`codec`'s **specification carrier** is one byte-string type, the length-indexed
+`Bytes n := Fin n → UInt8`. The length `n` is part of the _type_, so the byte count is
+known without an auxiliary length field. The read `s ⟨i, ·⟩` is a **structural indexed
+load** — it reduces under `simp`/`rfl`/`induction` for proofs and lowers to a scalar
+indexed load in the emitted IR. There is no second `List UInt8`/`Array`/`ByteArray`/
+`Buffer` carrier _for the spec_: every law is stated over `Bytes n`. (The packed
+`Array UInt8` and byte-slice `ByteArray` carriers exist only as proved-equal or
+trust-seam implementations on top of this spec — see
+[Performance](#performance-two-proof-layers-and-an-honest-ceiling).)
 
 |                    | **`Bytes n`** (`= Fin n → UInt8`)                                                             |
 | ------------------ | --------------------------------------------------------------------------------------------- |
-| **Job**            | the single proof substrate _and_ run-model                                                    |
+| **Job**            | the single _specification_ substrate (proof) and its scalar-read run-model                    |
 | **Shape**          | a length-indexed function; `s ⟨i, ·⟩` is a structural read, no `List` cons cell               |
 | **For the prover** | reducible under `simp`/`rfl`/`funext`; decidable equality is finitary (`funext` over `Fin n`) |
 | **At runtime**     | a scalar indexed load — the length `n` is a _type_ index, not a boxed `Nat`                   |
@@ -229,14 +242,16 @@ string to a byte list; text becomes a downstream concern (`utf8` maps `String`
 onto bytes) — on _top_ of bytes, not underneath. Nothing about the framework
 changes; only the ground floor does.
 
-The **substrate is the single length-indexed `Bytes n := Fin n → UInt8`**: it is
-a reducible, length-indexed function, so every `Fin`/`funext` lemma applies and
+The **spec substrate is the single length-indexed `Bytes n := Fin n → UInt8`**: it
+is a reducible, length-indexed function, so every `Fin`/`funext` lemma applies and
 every law is a finite induction, **and** it lowers to a scalar indexed load in the
-emitted IR — no second carrier, no transfer lemma. So there is one byte-string
-type assigned one job each: **`Bytes n` is both the proof substrate and the
-run-model** (the length is a _type_ index, not a boxed `Nat`). "The model you prove
-on" and "the model you run at speed" are the same thing — see
-[Representations](#representations-one-length-indexed-byte-string).
+emitted IR — no second carrier, no transfer lemma _for the laws_. So the
+_specification_ has one byte-string type: **`Bytes n` is the proof substrate and
+its own scalar-read run-model** (the length is a _type_ index, not a boxed `Nat`).
+"The model you prove on" and "the model you read at speed" are the same thing. (The
+packed `Array`/`ByteArray` carriers sit _above_ this substrate as proved-equal or
+trust-seam implementations; the laws never leave `Bytes n`.) — see
+[Representations](#representations-one-length-indexed-byte-string-the-spec-substrate).
 
 ### `[D2]` + `[D3]` the decoder returns a _list_, and `|` means "try both, keep
 
@@ -395,7 +410,7 @@ structure Iso (α β : Type) where
 --   | : Codec α → Codec α → Codec α      (backtracking union)
 --   empty / pure / byte                   (failure / fixed value / one byte)
 
--- the length-indexed byte string (the single proof substrate and run-model)
+-- the length-indexed byte string (the single spec substrate and its scalar read)
 --   Bytes n := Fin n → UInt8 ; s ⟨i, ·⟩ is a structural indexed load
 
 -- one description, two interpreters (the substrate is `Bytes n`)
@@ -419,9 +434,11 @@ description — no solver, no per-combinator gate, no prefix-disjointness condit
 
 - **`codec`** (this package): the pure framework — `Iso`, `Codec`, `Rel`, the two
   interpreters (the single `Bytes n` substrate), and the laws. **No
-  domain-specific leaf codecs** (not even `u8`).
-- **`lean-binary`** (downstream): `u8`, `u16le`/`u16be`, … , `varint`,
-  `lengthPrefix`, image/Protobuf demos, and the speed benchmark.
+  domain-specific leaf codecs** (not even `u8`). The one concrete value in core
+  is the LEB128 `varint` **`Iso`** (`Codec/VarBinary.lean`) — a worked example of
+  the `Iso` framework, not a description-AST leaf codec.
+- **`lean-binary`** (downstream): `u8`, `u16le`/`u16be`, … , `lengthPrefix`,
+  image/Protobuf demos, and the speed benchmark.
 - **`lean-text`** (downstream): `utf8` plus `text`/`identifier`/`whitespace` —
   the paper's §6 text domain, re-based on bytes.
 
