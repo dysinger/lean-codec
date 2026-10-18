@@ -44,11 +44,23 @@
       dispatching to the per-base lemmas (proved by `cases`)
 - [x] 4.2 Add a bench lane value-checking each base byte-for-byte (RFC 4648 §10
       for 16/32/64, hand vectors for 2/4/8/10) and the roundtrip laws
-- [ ] 4.3 Gate: `lake build` zero `sorry`/warnings; `#print axioms` on
+- [x] 4.3 Gate: `lake build` zero `sorry`/warnings; `#print axioms` on
       `BaseN.roundtrip` (and each `lemma_baseX_roundtrip`) reports only
       `[propext, Quot.sound]`; `nix flake check` green; commit + push `lean-basen`
-      — **blocked on the flake-injection half of 1.1**: `lake build` + `#print
-    axioms` are green, but `nix flake check`'s `checks.lean` needs the `codec`
-      dep and the sandbox has no `git`/network (`could not execute external process
-    'git'` when `require codec from git` clones); inject `codec-src` +
-      `codec-native` `.olean` as a flake input (see design.md "Next session")
+      — **done (this session)**: the flake-injection half of 1.1 is landed in
+      `lean-basen` (commit `9bdfd4b`, pushed). `codec` is a flake input
+      (`github:dysinger/lean-codec`, the correct shorthand) threaded as
+      `codecSrc` into `default.nix`, which copies the source into the writable
+      sandbox and rewrites `require codec from git …` → `require codec from
+    "./codec-src"`, so `lake build` builds codec from source with **no
+      `git clone`/network**. `lake build` zero sorry/warnings; `#print axioms
+    BaseN.roundtrip` + every `BaseN.Base{X}.roundtrip` = `[propext,
+    Quot.sound]`; `nix flake check` green (both `checks.lean` and
+      `checks.formatting`).
+
+**Remaining non-code caveat (not a proof/build issue):** `lean-codec` is
+**private**, so fetching the `github:` input needs a credential —
+`access-tokens = github.com=<token>` in `nix.conf` (or
+`nix --extra-access-tokens "github.com=$(gh auth token)" …`). No
+`--impure` is required. Once the repo is public, the credential is
+unnecessary and `nix flake check` is fully portable.

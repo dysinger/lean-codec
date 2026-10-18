@@ -88,14 +88,15 @@ reminder that the toolchain is _flake-scoped_, not host-global.)
   its state and next steps, and work in that repo's own `lake`/`nix develop`,
   not this one's. All seven bases are landed and proven, the facade dispatches
   `BaseN.roundtrip` over `B2..B64`, and `Bench.lean` value-checks them
-  byte-for-byte (`lake build bench` green, `#print axioms` =
-  `[propext, Quot.sound]` for every law). The **only** open item is task 4.3's
-  `nix flake check green`: `checks.lean` runs `lake build` in the Nix sandbox,
-  which `require codec from git`-clones the `codec` dep, but the sandbox has
-  neither `git` nor network (`could not execute external process 'git'`) — see
-  `openspec/changes/lean-basen/design.md` "Next session": inject `codec-src` +
-  `codec-native` `.olean` as a flake input (the task-1.1 injection half that was
-  never landed; `flake.nix` still has no `codec` input).
+  byte-for-byte. Task 4.3 (`nix flake check green`) is **done**: `codec` is now
+  a flake input (`github:dysinger/lean-codec`) threaded into `default.nix`, which
+  rewrites `require codec from git …` → a local `require codec from
+"./codec-src"` path dependency, so the sandboxed `lake build` needs no
+  `git clone`/network. `lake build` zero sorry/warnings, `#print axioms` =
+  `[propext, Quot.sound]` for every law, `nix flake check` (both `checks.lean`
+  and `checks.formatting`) green. (Only caveat: `lean-codec` is **private**, so
+  the `github:` input needs `access-tokens = github.com=<token>` in `nix.conf` —
+  no `--impure` required; disappears once the repo is public.)
 
 ## Active work (single carrier — archived; now `carrier-performance-tuning`)
 

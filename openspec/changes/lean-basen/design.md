@@ -112,28 +112,31 @@ Quot.sound]`, `nix flake check` green.
   three zero-padded decimal digits per byte, no sign. A sign convention for
   arbitrary-precision integers is out of scope for a byte-oriented codec.
 
-## Next session (2026-10-19): flake-input `codec` injection (the 4.3 gate)
+## Next session (2026-10-18): flake-input `codec` injection — DONE (task 4.3)
 
-All seven bases are landed and proven (`[propext, Quot.sound]`-only, zero
-`sorry`): Base2/4/8/10/16 plus **Base32 (task 2.3)** and **Base64 (task 2.4)**,
-each byte-exact against RFC 4648 §10 (16/32/64) or hand vectors (2/4/8/10). The
-facade (task 4.1) re-exports all seven and dispatches `BaseN.roundtrip` by
-`cases`; the bench lane (task 4.2) value-checks each base byte-for-byte plus the
-roundtrip laws and is wired as `lake build bench` (runs clean, exit 0).
-`#print axioms` on `BaseN.roundtrip` and every per-base `roundtrip` reports only
-`[propext, Quot.sound]`.
+The 4.3 gate is **landed and green** (lean-basen commit `9bdfd4b`, pushed). The
+flake-injection half of task 1.1 that blocked it is implemented:
 
-**Remaining: task 4.3's `nix flake check green` fails on `checks.lean` — a
-pre-existing infrastructure gap, not a proof issue.** The check derivation runs
-`lake build`, which `require codec from git`-clones the `codec` dependency from
-GitHub; the Nix sandbox has neither `git` (not in `nativeBuildInputs = [ lean4 ]`)
-nor network, so it dies at `codec: cloning …` → `could not execute external process
-'git'`. Task 1.1's flake-injection half (flake input `codec-src` + `codec-native`
-`.olean` artifacts per the `ecosystem` dependency-injection convention) was never
-landed: `flake.nix` still has only `nixpkgs`/`flake-utils`/`treefmt-nix`, no `codec`
-input. The fix (this session or a dedicated follow-up): inject `codec` as a flake
-input and thread its source/`.olean` into the `native`/`check` derivations so the
-sandbox build needs no `git clone` — mirroring how `ecosystem` describes the
-`codec`-dependency injection for every downstream leaf. (`lake build`, `lake build
-bench`, and `#print axioms` are already green; only the sandboxed `nix flake check`
-`checks.lean` is blocked.)
+- **`flake.nix`**: `codec` is now a flake input using the correct shorthand
+  `github:dysinger/lean-codec`, threaded as `codecSrc = codec.outPath` into
+  `default.nix`.
+- **`default.nix`**: `mkLakeBuild` copies `codecSrc` into the writable sandbox
+  (`cp -r` + `chmod -R u+w`) and rewrites the `require codec from git …` line to
+  `require codec from "./codec-src"` before `lake build`, so Lake builds codec
+  from source as a **local path dependency** — no `git clone`, no network, no
+  pre-built `.olean` needed.
+- **`flake.lock`**: locked `codec` to `88e4c36`.
+
+`lake build` zero sorry/warnings; `#print axioms BaseN.roundtrip` and every
+`BaseN.Base{X}.roundtrip` = `[propext, Quot.sound]`; `nix flake check` green
+(both `checks.lean` and `checks.formatting`). The hook (`.githooks/pre-commit`,
+`nix fmt`) is in place and passes.
+
+**Remaining caveat (privacy, not a build/proof issue):** `dysinger/lean-codec` is
+still **private**, so fetching the `github:` input needs a credential. The pure
+(no-`--impure`) form is `nix --extra-access-tokens "github.com=$(gh auth token)"
+flake check`, or equivalently `access-tokens = github.com=<token>` in `nix.conf`.
+`--impure` is **not** required — that earlier misdiagnosis came from the private
+repo's 404 on the anonymous `github:` fetcher, which falls through to the macOS
+keychain only in impure mode. Once `lean-codec` is made public, the credential is
+unnecessary and the flake is fully portable.
