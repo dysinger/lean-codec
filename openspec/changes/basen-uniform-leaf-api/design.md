@@ -2,105 +2,94 @@
 
 ## Context
 
-See `proposal.md` — Why. All seven `basen` bases share one shape: a `Nat`-level
-fixed-width digit codec (`encodeN`/`decodeN`) plus a `UInt8` lift that is
-verbatim-duplicated seven times (`encode`/`decode`/`roundtrip` + the
-`toByte_valTo*`/`*_lt_256` correspondence lemma). This change factors that lift
-once so a leaf is _only_ its digit math.
+See `proposal.md` — Why. `Codec` must pervade the stack: every format is a
+`Codec α` value decoded/encoded by the single `Codec.decode`/`Codec.encode`.
+The one missing leaf is `satisfy` (a guarded byte); everything else is existing
+combinators + the repetition layer.
 
 ## Goals / Non-Goals
 
 **Goals:**
 
-- One shared lift: `encode = lift.enc encodeN`, `decode = lift.dec decodeN`,
-  `roundtrip` proved once, parameterized by the `Nat`-level codec + per-digit facts.
-- Seven bases reduced to a `Nat`-level codec + a digit bijection.
+- One core addition: `satisfy : (UInt8 → Bool) → Codec UInt8`.
+- A derived run combinator (`takeWhile p`) over `satisfy`, via `decodeRepeat`/
+  `encodeRepeat`.
+- `basen` bases as `Codec (List UInt8)` values inheriting the uniform operations.
 
 **Non-Goals:**
 
-- No core-`Codec` change, no new primitives, no behavior change.
-- **No BE/LE, fixed-width, or `varint` codecs** — neither here nor in core `codec`.
-  These arrive later in their own packages (varint → a `vbin` package, etc.), not
-  in `basen` and not baked into `codec`. This is `basen`-internal only.
+- No BE/LE/fixed-width/varint/text/tagged-sum/lookahead in core (downstream only).
+- No result-shape change (`List`/`Option` stay). No error-position type yet.
 
 ## Decisions
 
-### D1 — The shared shape is a `List Nat` codec lifted pointwise
-
-Every base is `encodeN bs = bs.flatMap (fun b => digitList b)` and `decodeN` a
-group-and-fold, i.e. a `Nat`-level codec of `List Nat`. The `UInt8` lift is:
+### D1 — `satisfy` is `UInt8`-bound and the only new constructor
 
 ```lean
--- generic, in one place
-def liftEncode (codeWord : Nat → List Nat) (bs : List UInt8) : List UInt8 :=
-  bs.flatMap (fun b => (codeWord b.toNat).map toByte)
-
-def liftDecode (codeWordInv : List Nat → Option (Nat × List Nat))
-    (bs : List UInt8) : Option (List UInt8) :=
-  -- traverse bs, map each byte to its codeWordInv at Nat level, lift results
+| satisfy : (UInt8 → Bool) → Codec UInt8
 ```
 
-The key fact that makes the lift correct for _all_ bases is the already-proved
-per-base invariant: **every digit byte is ASCII `< 256`**, so
-`(toByte n).toNat = n` (via `UInt8.toNat_ofNat'` + `Nat.mod_eq_of_lt`) and
-`UInt8.ofNat_toNat`. This is exactly the `toByte_valTo*`/`*_lt_256` lemma
-currently copied per base, lifted to one parameterized lemma.
+- `Rel (satisfy p) b s = (p b = true ∧ s = single b)`.
+- `decode (satisfy p) s`: first byte `b` with `p b` → `[(b, Suffix.drop 1 s)]`,
+  else `[]`.
+- `encode (satisfy p) b`: `some ⟨1, single b⟩` if `p b`, else `none`.
 
-### D2 — Each base supplies a `Nat`-level `codeWord` + bijection
+It is `UInt8`-bound because the substrate is `Bytes n := Fin n → UInt8`; it is the
+byte-token-with-guard. A single digit (e.g. one hex nibble) is a valid `satisfy`
+decode — no even-length forcing at the primitive level.
 
-Each `BaseN.BaseX` keeps and exposes:
+### D2 — Runs are derived, not constructors
 
-- its digits (`bitsOf`/`bitsVal`, `nibbles`, octal/10 triples, 5-bit/6-bit blocks),
-- `encodeN`/`decodeN` (the `Nat`-level codec, unchanged),
-- the per-digit `<->val` bijection and `*valid`/`*_lt_256` facts (already present),
+Variable-length tokens are `takeWhile p` / `many (satisfy p)`, realized by the
+existing `decodeRepeat`/`encodeRepeat` over `satisfy`. This is what makes varint
+(`takeWhile highBitSet` + a fold `iso`), UTF-8 (a code-unit byte run + a decoder
+`iso`), and alphabet strings expressible. No new constructor for "run"; the
+repetition layer already exists for exactly this.
 
-and _delegates_ the `UInt8` surface to the shared lift. Its `roundtrip` becomes
-`liftRoundtrip (encodeN) (decodeN) (decodeN_encodeN …) …` — or, more directly,
-the `roundtripN` theorem each base already proves is _transported_ by the lift
-to `roundtrip (UInt8)` once.
+### D3 — `basen` bases are `Codec` values
 
-### D3 — The `Nat ↔ UInt8 <256` bridge is proved once
+`base16 : Codec (List UInt8)`, `base32 : Codec (List UInt8)`, `base64 :
+Codec (List UInt8)`, and base2/4/8/10 likewise, composed from `satisfy`/`count`/
+`many`/`iso`/`alt`. The `Nat`-level digit math stays (as `iso`s), but the bespoke
+`UInt8` `encode`/`decode` and the duplicated lifts are deleted; roundtrip is the
+inherited `Codec.roundtrip`.
 
-One theorem `liftCodeWord_lt_256 : (∀ b < 256, codeWord b ⊆ ascii<256) → …`
-captures the `toByte`/`.toNat` transparency; each base supplies the
-`codeWord b < 256` fact (already `valTo*_lt_256`). No base re-proves the
-`UInt8.ofNat`/`toNat` plumbing.
+### D4 — Terminal padding (5.1) is preserved
 
-### D4 — The 5.1 terminal-padding fix is orthogonal and preserved
+base32/64's `=`-must-be-terminal rule lives in the block `iso`/`alt` structure
+(the pad branch requires the run to be empty afterward). The existing 5.1
+`rest = []` guards are kept in the block decoders.
 
-base32/64's `rest = []` guards stay in their `decodeN` (`Nat` level, untouched);
-the lift does not affect them. The lift's `decode` is total over `decodeN`'s
-`Option`, so rejection is whatever `decodeN` says.
+### D5 — Result shapes unchanged
+
+`decode : Codec α → Bytes n → List (α × Suffix n)` and `encode : Codec α → α →
+Option (Σ n, Bytes n)` keep their paper shapes (`[D2]`/`[D3]`). "Only the codec
+changes" is about _codec values_ and the two uniform operations, not a result
+rewrite. No error-position type is added now.
 
 ## Risks / Trade-offs
 
-- **[Generic `decode` lift is slightly less direct than hand-unrolled]** — the
-  lift's `decode` is a `List`-traversal with an `Option`-fold; the per-base
-  hand-rolled `decode` is replaced by it. If the lift makes a proof _harder_ for
-  a specific base (e.g. base32/64's block recursion), that base may keep a
-  thinner bespoke `decode` for the `Nat` level while _still_ sharing the `UInt8`
-  lift — the point is to share the `UInt8`↔`Nat` bridge, not to force one
-  `decode` body.
-- **[Not over-abstracting]** — do not add `satisfy`/`sum`/fixed-width now; keep
-  the lift restricted to what the seven bases actually share. If a clean lift
-  does not fall out, we stop and re-scope (the goal is _less_ code, not a
-  clever abstraction).
+- **[`satisfy` in the AST adds proof surface to every law]** — `Rel`/`decode`/
+  `decodeFast`/`encode`/`decode_spec`/`bidir`/`roundtrip` each gain a `satisfy`
+  case; this is the real, bounded work, done `[propext, Quot.sound]`-only.
+- **[Run combinator is a derived, well-founded definition]** — it reuses
+  `decodeRepeat`/`encodeRepeat` (already proven); no new recursion theory.
+- **[base16 "one digit" vs "pairs"]** — `satisfy` decodes one nibble; the _pair_
+  grouping is a `count 2`/`iso` above it. This keeps the primitive total and
+  honors single-digit hex.
 
 ## Migration Plan
 
-1. Add `BaseN/Lift.lean` (or `BaseN/Core.lean`) with `liftEncode`/`liftDecode`
-   and the one `Nat↔UInt8<256` bridge lemma, proved `[propext, Quot.sound]`.
-2. Re-express `BaseN.Base2/4/8/10/16` as the lift + their `Nat` codec/`codeWord`;
-   verify `lake build` and byte-exact vectors unchanged.
-3. Re-express `BaseN.Base32/64` (the block-recursing two) — sharing the `UInt8`
-   bridge while keeping their `Nat`-level block `decodeN`; preserve the 5.1
-   terminal-padding guards.
-4. Delete the seven duplicated `UInt8` lifts and `toByte_valTo*`/`*_lt_256`
-   lemmas; update `BaseN.lean` facade and `Bench.lean` imports if names move.
-5. Gate: `lake build` zero `sorry`/warnings; `#print axioms BaseN.roundtrip` and
-   each `BaseN.Base{X}.roundtrip` = `[propext, Quot.sound]`; byte-exact vectors
-   still `rfl`; `nix flake check` green; commit + push.
+1. Core: add `satisfy`; extend `Rel`, `decode`, `decodeFast`, `encode`, and
+   `Sound` laws; gate `lake build` + `#print axioms`.
+2. Add `takeWhile`/`many (satisfy p)` as a derived combinator via
+   `decodeRepeat`/`encodeRepeat`.
+3. Remake the seven `basen` bases as `Codec (List UInt8)` values; delete bespoke
+   `encode`/`decode`; preserve 5.1.
+4. Update `Bench.lean` to `Codec.decode baseXCodec …`; gate zero `sorry`/
+   warnings, `[propext, Quot.sound]`, `nix flake check` green; commit + push.
 
 ## Open Questions
 
-None — this is a pure de-duplication; behavior and laws are unchanged.
+None — resolved: one `satisfy` primitive, runs derived, result shapes unchanged,
+no BE/LE/varint/fixed-width in core.

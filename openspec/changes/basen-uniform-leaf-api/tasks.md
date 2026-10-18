@@ -1,37 +1,42 @@
 # Tasks
 
-## 1. Shared lift
+## 1. Core: add `satisfy`
 
-- [ ] 1.1 Add `BaseN/Lift.lean` (or `BaseN/Core.lean`) with `liftEncode`/`liftDecode`
-      and the one `Nat↔UInt8<256` bridge lemma (`toByte n …`, `.toNat` transparency
-      for `n < 256`), proved `[propext, Quot.sound]`-only.
+- [ ] 1.1 Add constructor `satisfy : (UInt8 → Bool) → Codec UInt8` to
+      `Codec/Codec.lean`.
+- [ ] 1.2 Add the `Rel`/`decode`/`decodeFast`/`encode` cases for `satisfy`
+      (`Rel (satisfy p) b s = p b = true ∧ s = single b`; decode one byte iff
+      `p b` else `[]`; encode iff `p b` `some ⟨1, single b⟩` else `none`).
+- [ ] 1.3 Extend the `Sound` laws (`decode_spec`, `bidir`, `roundtrip`,
+      `encode_rel`) with the `satisfy` case; `[propext, Quot.sound]`-only, zero
+      `sorry`. Gate `lake build` + `#print axioms Codec.roundtrip`.
 
-## 2. Re-express the simple bases via the lift
+## 2. Derived run combinator
 
-- [ ] 2.1 `BaseN/Base2` — supply `Nat` digit codec + bijection; inherit `UInt8`
-      `encode`/`decode`/`roundtrip` from the lift; delete its bespoke `UInt8` lift
-      and `toByte_valTo*`.
-- [ ] 2.2 `BaseN/Base4` — same.
-- [ ] 2.3 `BaseN/Base8` — same (keep the `> 255` overflow rejection in `decodeN`).
-- [ ] 2.4 `BaseN/Base10` — same (keep overflow rejection).
-- [ ] 2.5 `BaseN/Base16` — same (keep case-insensitive decode).
+- [ ] 2.1 Add `takeWhile p` / `many (satisfy p)` as a derived combinator using
+      `decodeRepeat`/`encodeRepeat` (no new constructor), for alphabet runs and
+      variable-length tokens (varint, UTF-8).
 
-## 3. Re-express the block bases via the lift (preserve 5.1)
+## 3. `basen` bases as `Codec` values
 
-- [ ] 3.1 `BaseN/Base32` — share the `UInt8` lift/bridge; keep its `Nat`-level block
-      `decodeN` + the terminal-padding (`rest = []`) guards from 5.1.
-- [ ] 3.2 `BaseN/Base64` — same; keep the in-progress `rest = []` guards (finish the
-      5.1 fix across `decodeN`/`decodeN_cons*`/`decode`).
+- [ ] 3.1 `base16 : Codec (List UInt8)` — `satisfy isHexDigit` run + pair/byte
+      `iso`, single-digit decode honored.
+- [ ] 3.2 `base2/4/8/10` as `Codec (List UInt8)` values (fixed-width digit
+      `count`/`iso`).
+- [ ] 3.3 `base32/base64 : Codec (List UInt8)` — alphabet `satisfy` runs + block
+      `iso` + pad `alt`, preserving the 5.1 terminal-padding (`rest = []`).
+- [ ] 3.4 Delete the seven bespoke `encode`/`decode` + duplicated `Nat↔UInt8`
+      lifts; each base's roundtrip is `Codec.roundtrip`.
 
 ## 4. Facade + bench + gate
 
-- [ ] 4.1 Update `BaseN.lean` facade imports if names move; ensure all seven bases
-      still re-export `encode`/`decode`/`roundtrip`.
-- [ ] 4.2 `Bench.lean` byte-exact vectors still `rfl`; no import churn.
-- [ ] 4.3 `lake build` zero `sorry`/warnings; `#print axioms BaseN.roundtrip` and each
-      `BaseN.Base{X}.roundtrip` = `[propext, Quot.sound]`; `nix flake check` green;
-      commit + push.
+- [ ] 4.1 `BaseN.lean` facade re-exports the seven `Codec` values.
+- [ ] 4.2 `Bench.lean` calls `Codec.decode baseXCodec …`; byte-exact vectors
+      still `rfl`.
+- [ ] 4.3 `lake build` zero `sorry`/warnings; `#print axioms` `[propext,
+    Quot.sound]` for every law; `nix flake check` green; commit + push.
 
-## Out of scope (recorded so it cannot drift)
+## Non-Goals (permanent)
 
-- No `Codec/` change; no `satisfy`/`sum`; no BE/LE; no fixed-width; no `varint`.
+- No BE/LE/fixed-width/`varint`/text/tagged-`sum`/lookahead in core; no
+  `decode`/`encode` result-shape change; no error-position type.
