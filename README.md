@@ -469,11 +469,11 @@ parses at a few hundred ns/op where the equivalent `clang -O2` C parser is ~10 n
 
 The consequence, recorded as a standing decision: **pure-Lean codecs are the spec
 and accepted at ~20–40× C speed**; the only C-speed regions are the generic
-`memcpy`/`memchr` seams above; and genuinely latency-critical work whose hot loop
-is arithmetic (TLS crypto, numeric parsing) is **FFI'd**, not written in Lean. The
-packed carrier removes the _result_ allocation (nested `concat` closures per
-element) — a real, proved-equal win — but it does **not** move the per-element
-scalar arithmetic off the boxed heap, so it does not close the gap to C.
+`memcpy`/`memchr` seams above; anything whose hot loop is arithmetic (say, numeric
+parsing) is a downstream FFI concern, not a core codec. The packed carrier removes
+the _result_ allocation (nested `concat` closures per element) — a real,
+proved-equal win — but it does **not** move the per-element scalar arithmetic off
+the boxed heap, so it does not close the gap to C.
 
 Measured (current `bench`, `[measured]`, never hand-typed; all figures are the
 bench's own, and note the toolchain does not stabilize wall-clock well — see the
