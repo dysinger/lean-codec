@@ -262,101 +262,18 @@ FFI'd (OpenSSL/etc.), and 20-byte header parsing is irrelevant to TLS throughput
 
 ## Next session: review fixes (independent review, README already fixed)
 
-An independent reviewer (this session) gave the README a full rewrite (done — see
-`README.md`; the [D#]/[S#] citation/precision slips, the Layer-2 framing, and the
-honest-ceiling section are now fixed). The **code/proof** actions from that review
-are captured as tasks below; they are NOT yet done, and nothing below should be
-silently marked complete without proof.
+An independent reviewer (this session) gave the README a full rewrite (done,
+committed). The **code/proof** actions from that review — plus a comparative audit
+of the F\* `codec` (`../fstar-codec`) against the paper and our stated
+departures/strengthenings — are tracked in the openspec change
+**`review-polish-proof-doc`** (`openspec/changes/review-polish-proof-doc/tasks.md`),
+not here. Pointer only; the ledger lives in openspec.
 
-1. **`Codec/Packed.lean` `decodeArray_bounded` docstring contradiction.** The
-   docstring claims the consumed count is "at most `a.size`" and the decoder
-   "never overruns", but the theorem only proves `i ≤ c` (the lower bound). Either
-   (a) rename/rewrite the docstring to "the cursor never moves backward"/"at least
-   `i`", or (b) actually prove and state the upper bound `c ≤ a.size` (which follows
-   from `consumedAbs` + `Suffix.hle`). Real documented-guarantee mismatch; fix it.
-2. **`Codec/DecodeOne.lean` module header understates the unproven dependency.**
-   Header item 2 says "the committed decoder then equals the unique result" in
-   present tense, but that consequence depends on the still-unproven
-   `decodeArray_unambiguous_value`. Reword to future/conditional tense matching the
-   status note (lines ~199-207), then actually prove the lemma (forward bridge
-   `(x,c) ∈ decodeArray → Rel d x s₀` via `decodeArray_eq` + `decode_spec`, plus the
-   `splice`/`prepend` prefix extraction). This is the one genuine proof gap in the
-   repo; close it or keep it explicitly conditional.
-3. **Layer-2 seam boundary conditions — reconcile at the spec level, not just
-   "trusted C".** For `blitBytes`/`byteSlice`/`findByte`, spell out the out-of-range
-   clamping semantics of the Lean body (`Array.extract`/`Array.findIdx?` on
-   `off ≥ size`, `len` overflow) and make the `ByteSlice.c` comments assert the
-   _identical_ semantics clause-by-clause (or add a `#eval`/bench equivalence smoke
-   test over the out-of-range cases). The current "mirrors `Array.extract` bounds"
-   is an unverified belief about stdlib behavior; turn it into a checkable contract.
-4. (Already recorded in the shipped-c-fast-path task ledger) Re-scope `shipped-c-fast-path`:
-   drop Tasks 2.3/4.x (per-format C) — see the stale-plan note below.
-
-## Next session: implement `shipped-c-fast-path` (Task 2 onward) — NOTE: the plan
-
-below predates the "all codecs pure-Lean, no per-format C" decision and is stale.
-Re-scope `shipped-c-fast-path` before continuing: Tasks 2.3/4.x (WAV/protobuf/JSON/
-zlib decoders, per-format C seams) are **out of scope for the core library and for
-any C**; `VarintFast`/`NumParse` were already removed from core this session.
-
-Planning is complete and validated for the **active change** `shipped-c-fast-path`
-(`openspec/changes/shipped-c-fast-path/`, proposal/specs/design/tasks). The strategic
-conclusion from the independent review, now recorded as the anchor: **do not make the generic
-pure `Bytes n` interpreter fast — it is the spec and stays slow; make the _shipped C_ fast via
-`@[extern]` seams + per-format specialized decoders/encoders, and prove _agreement with the slow
-spec_.** The pure carriers cap ~16–32 MiB/s because a pure immutable value is built by a per-element
-fold (boxed `UInt8`, boxed `Nat` cursor, `List` cons churn, nondeterminism plumbing); `byteSlice`
-runs ~55 GiB/s because a single `memcpy` is the only thing at that floor.
-
-**Progress: Tasks 1, 2.1, 2.2, 3.2 done (6/13); 3.1 substantially in progress.** Task 1 shipped
-`blitBytes`/`findByte`. This session shipped **Task 2.1** (`Codec/VarintFast.lean` + `.c`:
-`varintEncodeInto`/`varintDecodeFrom`, LEB128 span ops, `USize`-indexed, Lean body = `VarBinary`
-spec, C scalar loop; both `_spec` `rfl`-clean; bench value-checks byte-for-byte, enc ~10 ns vs pure
-147, dec ~27 vs 195) and **Task 2.2** (`Codec/NumParse.lean` + `.c`: `parseNumber
-(a : ByteArray) (off : USize) : Option (Nat × USize)`, longest-run decimal parse; Lean body a clean
-`decimalStep` over raw bytes, C a `strtoll`-shaped scalar accumulator; `parseNumber_spec` `rfl`-clean).
-**Scoping decision (recorded):** `parseNumber` takes a `ByteArray`, not `String`, because _every_
-`String` accessor (`toList`/`data`/`get`/`length`/`toNat?`) is `@[extern]` UTF-8-backed and leaks
-`Classical.choice`, breaking the `[propext, Quot.sound]` gate; the `strtod`/float half is deliberately
-out of scope (correctly-rounded decimal→`Float` reference is a second large seam), the integer span
-covers the structural parses. **Task 3.1** (`Codec/DecodeOne.lean`) defines `decodeOne` (committed
-`alt` via `orElse`, `seq` via first-`d₁` `bind`) and proves `decodeOne_mem` (unconditional soundness:
-committed result ∈ backtracking) + `decodeArray_functional_count` (`Functional d ⇒` same value ⇒ same
-count), both `[propext, Quot.sound]`-only. **Correctness finding (important, recorded):**
-`decodeOne = (decodeArray ·).head?` is **false** — committed `seq` uses only the first `d₁` result,
-while `.head?` skips dead-end first branches; the gated completeness is therefore pair-level
-(value+count) uniqueness, not a naive head-equality. **Task 3.2** confirmed the axiom gate is
-unchanged. Gate green throughout: zero `sorry`, zero warnings, `#print axioms Codec.roundtrip` ⇒
-`[propext, Quot.sound]`, every new law `[propext, Quot.sound]`-only.
-
-**Concrete order for next session (see `shipped-c-fast-path/tasks.md`):**
-
-1. **Finish Task 3.1 — `decodeArray_unambiguous_value`** (`Unambiguous d ⇒` two same-`count`
-   `decodeArray` results agree on the value): the remaining sub-obligation is the forward bridge
-   `(x, c) ∈ decodeArray d a i` → `Rel d x s₀` for the genuine consumed prefix `s₀` (via
-   `decodeArray_eq` + `decode_spec`) plus a `splice`/`prepend`-prefix-extraction lemma
-   (`splice hm s₁ s₂ ⟨i, ·⟩ = s₁ ⟨i, ·⟩` for `i < m` — the seed `splice_prefix_read` was written and
-   can be re-proved against `splice_apply` + `concat`; see `DecodeOne.lean`'s status note). No
-   `sorry`/`axiom` may ship: either close it or keep it honestly documented.
-2. **Task 4.1 — WAV** `wavDecode`/`wavEncode` (44-byte header + one `blitBytes`/`memcpy` PCM block),
-   proved `[propext, Quot.sound]`-equal to the generic `decode`/`encode` by a `decodeArray_eq`-style
-   lemma (uses only the already-shipped `blitBytes` seam — no new dependency).
-3. **Task 4.2 — protobuf** tag/varint loop + length-delimited `blitBytes` body, proved equal to the
-   spec; value-check byte-for-byte including the varint seam (2.1) and `parseNumber` (2.2).
-4. **Task 4.3 + 5.1** — JSON/TOML scanner (`findByte` delimiters + `parseNumber`), then per-format
-   bench lanes value-checked against the spec. **PNG/QR depend on the deferred zlib seam (2.3)** —
-   do them only after deciding the zlib Nix/dependency question.
-5. **Task 2.3 (zlib, deferred) — needs a decision first.** Linking zlib requires adding
-   `pkgs.zlib` to `devShells.default.packages` (`flake.nix`) _and_ `zlib` to `default.nix`'s
-   `nativeBuildInputs`, plus a custom lakefile `buildO` (not `buildLeanO`) with `-I <zlib include>`
-   `-lz`. Also unresolved: the honest Lean spec body (a stored-block-only reference + adler32, with
-   real deflate `none`/trust-only), and whether a full `dylib`-link story belongs in scope. **Ask the
-   user before pulling zlib into the Nix build.**
-
-**Two invariants that must hold (do not re-litigate):** the `Bytes n` spec and its laws are the
-single denotation and stay untouched; and the `@[extern]`/zlib trust is a runtime contract
-excluded from the axiom gate, never folded into a law (the C is invisible to Lean; `#print axioms`
-sees only the pure body).
+`shipped-c-fast-path` is **archived as abandoned**
+(`openspec/changes/archive/2026-10-18-shipped-c-fast-path/`) — its per-format C plan
+was misguided (contradicts "all codecs pure-Lean, no per-format C"). The only
+still-live item from it, the `decodeArray_unambiguous_value` proof, is carried
+forward in `review-polish-proof-doc`.
 
 ## Critical review of the single-carrier change (COMPLETE)
 
