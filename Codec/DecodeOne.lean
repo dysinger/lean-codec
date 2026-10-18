@@ -64,6 +64,12 @@ def decodeOne {α : Type} (d : Codec α) (a : Array UInt8) (i : Nat) : Option (�
         some (a[i], i + 1)
       else
         none
+  | Codec.satisfy p =>
+      if h : i < a.size then
+        let b := a[i]
+        if p b then some (b, i + 1) else none
+      else
+        none
 
 /-- **Unconditional soundness** of the committed decoder: every result it returns
 is a genuine backtracking result of `decodeArray`. The `seq` case is why this is
@@ -145,6 +151,18 @@ theorem decodeOne_mem {α : Type} (d : Codec α) (a : Array UInt8) (i c : Nat) (
         rcases h with ⟨hx, hc⟩
         subst x c
         simp [hlt]
+      · simp [hlt] at h
+  | satisfy p =>
+      intro h
+      simp only [decodeOne, decodeArray] at h ⊢
+      by_cases hlt : i < a.size
+      · simp [hlt] at h
+        by_cases hp : p a[i]
+        · simp [hp] at h
+          rcases h with ⟨hx, hc⟩
+          subst x c
+          simp [hlt, hp]
+        · simp [hp] at h
       · simp [hlt] at h
 
 /-- Under `Functional d`, one value determines one consumed count: two

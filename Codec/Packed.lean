@@ -70,6 +70,11 @@ def decodeArray {α : Type} (d : Codec α) (a : Array UInt8) (i : Nat) : List (�
       if h : i < a.size then
         [(a[i], i + 1)]
       else []
+  | Codec.satisfy p =>
+      if h : i < a.size then
+        let b := a[i]
+        if p b then [(b, i + 1)] else []
+      else []
 
 /-- The cursor-returning decoder, re-exposed under a name that states the
 partial-remainder contract: `decodeArrayFast := decodeArray`. It is **not** a new
@@ -121,6 +126,7 @@ def encodeArray {α : Type} (d : Codec α) (x : α) : Option (Array UInt8) :=
   | Codec.empty => none
   | Codec.pure x₀ => if x = x₀ then some #[] else none
   | Codec.byte => some #[x]
+  | Codec.satisfy p => if p x then some #[x] else none
 
 /-! ## Refinement lemmas -/
 
@@ -203,6 +209,18 @@ theorem decodeArray_bounded {α : Type} (d : Codec α) (a : Array UInt8) (i c : 
         subst x c
         exact Nat.le_succ i
       · simp [h] at hc
+  | satisfy p =>
+      intro hc
+      rw [decodeArray] at hc
+      by_cases h : i < a.size
+      · simp [h] at hc
+        by_cases hp : p a[i]
+        · simp [hp] at hc
+          rcases hc with ⟨hx, hc⟩
+          subst x c
+          exact Nat.le_succ i
+        · simp [hp] at hc
+      · simp [h] at hc
 
 /-- The packed decoder never overruns the buffer **when started inside it**: for
 `i ≤ a.size`, every result's consumed count `c` is at most `a.size`. This is the
@@ -262,6 +280,18 @@ theorem decodeArray_bounded_upper {α : Type} (d : Codec α) (a : Array UInt8) (
         rcases hc with ⟨hx, hc⟩
         subst x c
         omega
+      · simp [h] at hc
+  | satisfy p =>
+      intro hc
+      rw [decodeArray] at hc
+      by_cases h : i < a.size
+      · simp [h] at hc
+        by_cases hp : p a[i]
+        · simp [hp] at hc
+          rcases hc with ⟨hx, hc⟩
+          subst x c
+          omega
+        · simp [hp] at hc
       · simp [h] at hc
 
 /-! ## Transport lemmas for the decode refinement
@@ -419,6 +449,26 @@ theorem decodeArray_eq {α : Type} (d : Codec α) (a : Array UInt8) (i : Nat) :
         · exact (consumedAbs_drop_one a i (bdrop i (arrayToBytes a)) h).symm
       · have hn : (a.size - i) = 0 := Nat.sub_eq_zero_of_le (Nat.le_of_not_gt h)
         simp [h, hn]
+  | satisfy p =>
+      simp only [decodeArray, decode]
+      by_cases h : i < a.size
+      · have hn : (a.size - i) ≠ 0 := by omega
+        by_cases hp : p (a[i])
+        · have hp' : p ((bdrop i (arrayToBytes a)) ⟨0, Nat.pos_of_ne_zero hn⟩) = true := by
+            dsimp [bdrop, arrayToBytes]
+            simpa using hp
+          simp [h, hn, hp, hp']
+          constructor
+          · dsimp [arrayToBytes, bdrop]
+            congr 1
+            omega
+          · exact (consumedAbs_drop_one a i (bdrop i (arrayToBytes a)) h).symm
+        · have hnp : p ((bdrop i (arrayToBytes a)) ⟨0, Nat.pos_of_ne_zero hn⟩) = false := by
+            dsimp [bdrop, arrayToBytes]
+            simpa using hp
+          simp [h, hn, hp, hnp]
+      · have hn : (a.size - i) = 0 := Nat.sub_eq_zero_of_le (Nat.le_of_not_gt h)
+        simp [h, hn]
 
 /-- The packed full-consumption decoder equals the *first* spec `decode` result,
 with its suffix packed as a `ByteArray` and its consumed count read back. (The
@@ -558,6 +608,7 @@ theorem encodeArray_eq {α : Type} (d : Codec α) (x : α) :
   | empty => simp [encodeArray, encode]
   | pure x₀ => by_cases h : x = x₀ <;> simp [encodeArray, encode, h]
   | byte => simp [encodeArray, encode, single]
+  | satisfy p => by_cases h : p x <;> simp [encodeArray, encode, single, h]
 
 /-- `ByteArray.push` projects to `Array.push` on the backing data. -/
 theorem bpush_data (bs : ByteArray) (b : UInt8) : (bs.push b).data = bs.data.push b := by

@@ -763,4 +763,45 @@ theorem encodeChainr1_injective_of_unambiguous {α β : Type} (f : Iso ((α × �
   have hrely : relChainr1 f measure h arg op y s := encodeChainr1_rel f measure h arg op y hy
   exact hd s hrelx hrely
 
+/-! ## The derived run combinator `takeWhile`
+
+`takeWhile p` is `many (satisfy p)` — a maximal run of bytes each satisfying `p` —
+realized over the existing repetition layer, **not** a new `Codec` constructor.
+It is the variable-length-token primitive: an alphabet run (`takeWhile isHexDigit`),
+a varint (`takeWhile highBitSet` + a fold `iso`), a UTF-8 code-unit run. Like
+`sepBy`/`chainl1`, it is a *relation, a decoder, an encoder* triple (there is no
+finite `many` node to embed), and its laws are inherited (`decodeRepeat_spec` /
+`encodeRepeat_rel`) with zero new induction. -/
+
+/-- The denotation of `takeWhile p`: `relRepeat` over the step `Rel (satisfy p)`. -/
+def relTakeWhile (p : UInt8 → Bool) : List UInt8 → (n : Nat) → Bytes n → Prop :=
+  relRepeat (Rel (Codec.satisfy p))
+
+/-- The decoder for `takeWhile p`: the productive repetition decoder over the
+`satisfy p` step. Total (the `satisfyConsumesByte` witness is its productivity
+proof), and enumerates every run of `p`-satisfying bytes (all prefixes, the full
+backtracking union of `many (satisfy p)`). -/
+def decodeTakeWhile (p : UInt8 → Bool) {n : Nat} (s : Bytes n) : List (List UInt8 × Suffix n) :=
+  decodeRepeat (Codec.satisfy p) (satisfyConsumesByte p) n s
+
+/-- The encoder for `takeWhile p`: encode each byte via `satisfy p`, structural on
+the value list (no productivity witness needed, as with every `encodeRepeat`). -/
+def encodeTakeWhile (p : UInt8 → Bool) (bs : List UInt8) : Option (Sigma fun n => Bytes n) :=
+  encodeRepeat (Codec.satisfy p) bs
+
+/-- The bidirectional law for `takeWhile`, inherited from `decodeRepeat_spec`: a
+`takeWhile p` result is exactly a `relTakeWhile p` prefix plus the remainder. -/
+theorem decodeTakeWhile_spec (p : UInt8 → Bool) :
+    ∀ (bs : List UInt8) (n : Nat) (s : Bytes n) (r : Suffix n),
+      (bs, r) ∈ decodeTakeWhile p s ↔
+        ∃ s₀ : Bytes (n - r.remaining), s = r.prepend s₀ ∧ relTakeWhile p bs (n - r.remaining) s₀ :=
+  decodeRepeat_spec (Codec.satisfy p) (satisfyConsumesByte p)
+
+/-- Encoder soundness for `takeWhile`, inherited from `encodeRepeat_rel`: any run
+the `takeWhile` encoder prints is in `relTakeWhile p`. -/
+theorem encodeTakeWhile_rel (p : UInt8 → Bool) :
+    ∀ (bs : List UInt8) {n : Nat} {s : Bytes n},
+      encodeTakeWhile p bs = some ⟨n, s⟩ → relTakeWhile p bs n s :=
+  encodeRepeat_rel (Codec.satisfy p)
+
 end Codec

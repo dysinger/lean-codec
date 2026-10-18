@@ -34,6 +34,7 @@ def encode {α : Type} (d : Codec α) (x : α) : Option (Sigma fun n => Bytes n)
   | Codec.empty => none
   | Codec.pure x₀ => if x = x₀ then some ⟨0, emptyBytes⟩ else none
   | Codec.byte => some ⟨1, single x⟩
+  | Codec.satisfy p => if p x then some ⟨1, single x⟩ else none
 
 /-! ## The total encoder for repetition -/
 

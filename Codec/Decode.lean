@@ -41,6 +41,11 @@ def decode {α : Type} (d : Codec α) {n : Nat} (s : Bytes n) : List (α × Suff
   | Codec.byte =>
       if h : n = 0 then []
       else [(s ⟨0, Nat.pos_of_ne_zero h⟩, Suffix.drop 1 s)]
+  | Codec.satisfy p =>
+      if h : n = 0 then []
+      else
+        let b := s ⟨0, Nat.pos_of_ne_zero h⟩
+        if p b then [(b, Suffix.drop 1 s)] else []
 
 /-- The **fused** decoder: a `flatMap`/`map`-fused re-staging of `decode` that does not
 re-traverse the singleton result of a `seq` pair (the inner ``flatMap (…) [((x, y), t₂)]``
@@ -58,6 +63,11 @@ def decodeFast {α : Type} (d : Codec α) {n : Nat} (s : Bytes n) : List (α × 
   | Codec.byte =>
       if h : n = 0 then []
       else [(s ⟨0, Nat.pos_of_ne_zero h⟩, Suffix.drop 1 s)]
+  | Codec.satisfy p =>
+      if h : n = 0 then []
+      else
+        let b := s ⟨0, Nat.pos_of_ne_zero h⟩
+        if p b then [(b, Suffix.drop 1 s)] else []
 
 /-- `decodeFast` equals `decode` for every description and input. Proved by induction
 on `d`; the only non-trivial case is `seq`, where the fused `map` equals the spec's
@@ -82,6 +92,9 @@ theorem decodeFast_eq {α : Type} (d : Codec α) :
       intro n s
       simp [decodeFast, decode]
   | byte =>
+      intro n s
+      simp [decodeFast, decode]
+  | satisfy p =>
       intro n s
       simp [decodeFast, decode]
 
@@ -136,6 +149,23 @@ theorem byteConsumesByte : ConsumesByte Codec.byte := by
     subst t
     simp [Suffix.drop]
     omega
+
+/-- The `satisfy` primitive is productive: whenever it decodes (which it does
+only for a first byte satisfying `p`), it consumes exactly one byte. This is the
+`ConsumesByte` witness that makes `decodeRepeat (satisfy p) _` total — the
+productivity fact behind the derived `takeWhile p` run combinator. -/
+theorem satisfyConsumesByte (p : UInt8 → Bool) : ConsumesByte (Codec.satisfy p) := by
+  intro x n s t hmem
+  by_cases h : n = 0
+  · simp [decode, h] at hmem
+  · simp [decode, h] at hmem
+    by_cases hb : p (s ⟨0, Nat.pos_of_ne_zero h⟩)
+    · simp [hb] at hmem
+      rcases hmem with ⟨hx, ht⟩
+      subst t
+      simp [Suffix.drop]
+      omega
+    · simp [hb] at hmem
 
 /-! ## The full-consumption repetition decoder
 
@@ -461,6 +491,26 @@ theorem decode_genuine_suffix_pointwise {α : Type} (d : Codec α) :
         dsimp
         have hn : 1 ≤ n := Nat.pos_of_ne_zero h
         omega
+  | satisfy p =>
+      intro n s x t hm
+      rw [decode] at hm
+      by_cases h : n = 0
+      · simp [h] at hm
+      · simp [h] at hm
+        by_cases hb : p (s ⟨0, Nat.pos_of_ne_zero h⟩)
+        · simp [hb] at hm
+          rcases hm with ⟨hx, ht⟩
+          subst x
+          subst t
+          intro i
+          simp only [Suffix.drop, Suffix.consumed]
+          unfold bdrop
+          congr 1
+          apply Fin.ext
+          dsimp
+          have hn : 1 ≤ n := Nat.pos_of_ne_zero h
+          omega
+        · simp [hb] at hm
 
 /-- The genuine-suffix invariant, `bdrop` form: every result suffix `t` of
 `decode d s` has `t.bytes` equal to `bdrop (n - t.remaining) s`, transported

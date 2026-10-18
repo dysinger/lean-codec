@@ -2,18 +2,18 @@
 
 ## 1. Core: add `satisfy`
 
-- [ ] 1.1 Add constructor `satisfy : (UInt8 → Bool) → Codec UInt8` to
+- [x] 1.1 Add constructor `satisfy : (UInt8 → Bool) → Codec UInt8` to
       `Codec/Codec.lean`.
-- [ ] 1.2 Add the `Rel`/`decode`/`decodeFast`/`encode` cases for `satisfy`
+- [x] 1.2 Add the `Rel`/`decode`/`decodeFast`/`encode` cases for `satisfy`
       (`Rel (satisfy p) b s = p b = true ∧ s = single b`; decode one byte iff
       `p b` else `[]`; encode iff `p b` `some ⟨1, single b⟩` else `none`).
-- [ ] 1.3 Extend the `Sound` laws (`decode_spec`, `bidir`, `roundtrip`,
+- [x] 1.3 Extend the `Sound` laws (`decode_spec`, `bidir`, `roundtrip`,
       `encode_rel`) with the `satisfy` case; `[propext, Quot.sound]`-only, zero
       `sorry`. Gate `lake build` + `#print axioms Codec.roundtrip`.
 
 ## 2. Derived run combinator
 
-- [ ] 2.1 Add `takeWhile p` / `many (satisfy p)` as a derived combinator using
+- [x] 2.1 Add `takeWhile p` / `many (satisfy p)` as a derived combinator using
       `decodeRepeat`/`encodeRepeat` (no new constructor), for alphabet runs and
       variable-length tokens (varint, UTF-8).
 
@@ -34,7 +34,7 @@
 - [ ] 4.2 `Bench.lean` calls `Codec.decode baseXCodec …`; byte-exact vectors
       still `rfl`.
 - [ ] 4.3 `lake build` zero `sorry`/warnings; `#print axioms` `[propext,
-    Quot.sound]` for every law; `nix flake check` green; commit + push.
+  Quot.sound]` for every law; `nix flake check` green; commit + push.
 
 ## Non-Goals (permanent)
 

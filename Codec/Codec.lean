@@ -47,6 +47,12 @@ inductive Codec : Type → Type 1
     pure {α : Type} [DecidableEq α] : α → Codec α
   | /-- The primitive byte description (`token`, re-based onto `UInt8`). -/
     byte : Codec UInt8
+  | /-- The byte-token-with-guard: `satisfy p` relates a byte `b` to `single b`
+    exactly when `p b = true`. `decode` consumes one byte iff `p b`, else `[]`;
+    `encode` emits one byte iff `p b`, else `none`. The single substrate-touching
+    leaf beyond `byte`; no BE/LE/fixed-width/`varint`/text/tagged-sum constructor
+    exists or will be added. -/
+    satisfy : (UInt8 → Bool) → Codec UInt8
 
 namespace Codec
 
@@ -218,6 +224,7 @@ def Rel {α : Type} (d : Codec α) (x : α) {n : Nat} (s : Bytes n) : Prop :=
   | Codec.empty => False
   | Codec.pure x₀ => x = x₀ ∧ n = 0
   | Codec.byte => ∃ h : n = 1, h ▸ s = single x
+  | Codec.satisfy p => p x = true ∧ ∃ h : n = 1, h ▸ s = single x
 
 /-- The unique byte string of length `0` is `emptyBytes`. -/
 theorem emptyBytes_unique {n : Nat} (s : Bytes n) (hn : n = 0) : hn ▸ s = emptyBytes := by
@@ -257,6 +264,11 @@ theorem Rel_pure {α : Type} [DecidableEq α] (x₀ x : α) {n : Nat} (s : Bytes
 /-- `byte` relates `b` to `single b` exactly. -/
 theorem Rel_byte (b : UInt8) {n : Nat} (s : Bytes n) :
     Rel Codec.byte b s ↔ ∃ h : n = 1, h ▸ s = single b :=
+  Iff.rfl
+
+/-- `satisfy p` relates `b` to `single b` exactly when `p b` holds. -/
+theorem Rel_satisfy (p : UInt8 → Bool) (b : UInt8) {n : Nat} (s : Bytes n) :
+    Rel (Codec.satisfy p) b s ↔ p b = true ∧ ∃ h : n = 1, h ▸ s = single b :=
   Iff.rfl
 
 /-- `Rel` is insensitive to a length-cast of its byte string (`cast (congrArg Bytes e)`,

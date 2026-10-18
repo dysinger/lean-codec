@@ -88,6 +88,14 @@ theorem encode_rel {α : Type} (d : Codec α) (x : α) :
       cases hs
       rw [Rel_byte]
       exact ⟨rfl, rfl⟩
+  | satisfy p =>
+      intro n s he
+      by_cases hp : p x
+      · have hs : (⟨1, (single x : Bytes 1)⟩ : Sigma fun k => Bytes k) = ⟨n, s⟩ := by simpa [encode, hp] using he
+        cases hs
+        rw [Rel_satisfy]
+        exact ⟨hp, rfl, rfl⟩
+      · simp [encode, hp] at he
 
 /-- The sequential decoder threads the remaining bytes: `((x, y), r)` is a result
 of `seq d₁ d₂` exactly when `(x, t₁)` is a result of `d₁` and `(y, t₂)` of `d₂`
@@ -314,6 +322,85 @@ theorem decode_spec {α : Type} (d : Codec α) (x : α) :
             rw [hn1] at hdrop
             rw [hs]
             exact hdrop.symm
+  | satisfy p =>
+      intro n s r
+      by_cases hn : n = 0
+      · subst n
+        have hr0 : r.remaining = 0 := by
+          have := r.hle
+          omega
+        simp [decode, Rel, hr0]
+      · have hnpos : 0 < n := Nat.pos_of_ne_zero hn
+        by_cases hp : p (s ⟨0, hnpos⟩)
+        · rw [decode]
+          simp [hn, hp]
+          constructor
+          · intro h
+            rcases h with ⟨hx, hr⟩
+            subst x
+            subst r
+            refine ⟨cast (congrArg Bytes (Nat.sub_sub_self (Nat.succ_le_of_lt hnpos)).symm) (single (s ⟨0, hnpos⟩)), ?_, ?_⟩
+            · simpa using (prepend_drop_single hn s).symm
+            · rw [Rel_satisfy]
+              exact ⟨hp, rel_byte_cast (Nat.sub_sub_self (Nat.succ_le_of_lt hnpos)) (s ⟨0, hnpos⟩)⟩
+          · intro h
+            rcases h with ⟨s₀, hs, hrel⟩
+            rw [Rel_satisfy] at hrel
+            rcases hrel with ⟨hpx, hn1, hs₀⟩
+            -- hn1 : n - r.remaining = 1, hs₀ : hn1 ▸ s₀ = single x
+            have hs₀' : s₀ = cast (congrArg Bytes hn1.symm) (single x) := cast_bytes_eq_single hn1 s₀ x hs₀
+            constructor
+            · -- x = s ⟨0, hnpos⟩
+              rw [hs]
+              rw [prepend_apply]
+              unfold concat
+              have hne : n - r.remaining ≠ 0 := by
+                rw [hn1]
+                decide
+              have hlt : 0 < n - r.remaining := Nat.pos_of_ne_zero hne
+              rw [cast_fin_symm]
+              · dsimp
+                have hb : s₀ ⟨0, hlt⟩ = x := by
+                  rw [hs₀']
+                  rw [cast_bytes_val' (e := hn1.symm)]
+                  dsimp
+                  rfl
+                simp [hb]
+                intro hzero
+                have : n - r.remaining = 1 := hn1
+                rw [hzero] at this
+                contradiction
+              · omega
+            · -- r = Suffix.drop 1 s
+              have hdrop : Suffix.drop (n - r.remaining) (r.prepend s₀) = r := drop_prepend r s₀
+              rw [hn1] at hdrop
+              rw [hs]
+              exact hdrop.symm
+        · have hdec : decode (Codec.satisfy p) s = [] := by
+            simp [decode, hn, hp]
+          rw [hdec]
+          constructor
+          · intro h
+            cases h
+          · intro h
+            rcases h with ⟨s₀, hs, hrel⟩
+            rw [Rel_satisfy] at hrel
+            rcases hrel with ⟨hpx, hn1, hs₀⟩
+            have hne : n - r.remaining ≠ 0 := by rw [hn1]; decide
+            have hlt : 0 < n - r.remaining := Nat.pos_of_ne_zero hne
+            have hs₀' : s₀ = cast (congrArg Bytes hn1.symm) (single x) := cast_bytes_eq_single hn1 s₀ x hs₀
+            have hb' : s₀ ⟨0, hlt⟩ = x := by
+              rw [hs₀']
+              rw [cast_bytes_val' (e := hn1.symm)]
+              rfl
+            have hs' : s ⟨0, hnpos⟩ = (r.prepend s₀) ⟨0, hnpos⟩ := by rw [hs]
+            have hpp : s ⟨0, hnpos⟩ = x := by
+              rw [hs']
+              rw [prepend_prefix_read r s₀ ⟨0, hnpos⟩ hlt]
+              exact hb'
+            have hpx' : p (s ⟨0, hnpos⟩) = true := by
+              exact hpp ▸ hpx
+            exact False.elim (hp hpx')
 
 theorem bidir {α : Type} (d : Codec α) (x : α) (n : Nat) (s : Bytes n) :
     Rel d x s ↔ (x, Suffix.empty n) ∈ decode d s := by
@@ -593,6 +680,13 @@ theorem encode_ne_none {α : Type} (d : Codec α) (x : α) {n : Nat} (s : Bytes 
       rcases hrel with ⟨h, hs⟩
       subst h
       simp
+  | satisfy p =>
+      intro hrel
+      rw [encode]
+      rw [Rel_satisfy] at hrel
+      rcases hrel with ⟨hp, h, hs⟩
+      subst h
+      simp [hp]
 
 theorem encode_of_decode {α : Type} (d : Codec α) (hd : Functional d) (x : α)
     {n : Nat} {s : Bytes n} (hdcd : (x, Suffix.empty n) ∈ decode d s) : encode d x = some ⟨n, s⟩ := by
