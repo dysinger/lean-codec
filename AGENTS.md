@@ -74,6 +74,19 @@ reminder that the toolchain is _flake-scoped_, not host-global.)
   - `Combinators.lean` — derived combinators (`many`, `*>`, `<*`, …).
 - **Executable/bench:** `Bench.lean`, wired through `lakefile.lean` and Nix
   `default.nix`/`flake.nix`.
+- **Downstream ecosystem (sibling repos, not in this tree):** each verified
+  format/protocol is its own git repo, initialized from
+  `lean-nix-flake-template`, prefix-dropped internally (`lean-basen` → package
+  `basen`/module `BaseN`; `lean-vbin` → `vbin`; …), depending on `codec` by
+  flake-input + `require codec from git` injection (never vendored), and
+  inheriting the single-`Bytes n`-substrate + `[propext, Quot.sound]`-only
+  discipline. The full ordering/layering is the `port-fstar-stack-to-lean`
+  change's `ecosystem` spec (`openspec/changes/port-fstar-stack-to-lean/specs/`).
+  **The active downstream is `lean-basen`** (sibling dir `../lean-basen`), the
+  base-2/4/8/10/16/32/64 package — consult
+  `openspec/changes/lean-basen/` (proposal / design / tasks / `rfc4648.md`) for
+  its state and next steps, and work in that repo's own `lake`/`nix develop`,
+  not this one's.
 
 ## Active work (single carrier — archived; now `carrier-performance-tuning`)
 
