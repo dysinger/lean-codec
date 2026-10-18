@@ -52,15 +52,14 @@
       (`github:dysinger/lean-codec`, the correct shorthand) threaded as
       `codecSrc` into `default.nix`, which copies the source into the writable
       sandbox and rewrites `require codec from git …` → `require codec from
-    "./codec-src"`, so `lake build` builds codec from source with **no
+  "./codec-src"`, so `lake build` builds codec from source with **no
       `git clone`/network**. `lake build` zero sorry/warnings; `#print axioms
-    BaseN.roundtrip` + every `BaseN.Base{X}.roundtrip` = `[propext,
-    Quot.sound]`; `nix flake check` green (both `checks.lean` and
+  BaseN.roundtrip` + every `BaseN.Base{X}.roundtrip` = `[propext,
+  Quot.sound]`; `nix flake check` green (both `checks.lean` and
       `checks.formatting`).
 
-**Remaining non-code caveat (not a proof/build issue):** `lean-codec` is
-**private**, so fetching the `github:` input needs a credential —
-`access-tokens = github.com=<token>` in `nix.conf` (or
-`nix --extra-access-tokens "github.com=$(gh auth token)" …`). No
-`--impure` is required. Once the repo is public, the credential is
-unnecessary and `nix flake check` is fully portable.
+**Caveat resolved (this session):** `lean-codec` was **private**, which meant
+fetching the `github:` input needed `access-tokens = github.com=<token>` in
+`nix.conf` (no `--impure`, but a credential). The repo is now **public**, so
+`nix flake check` runs green with a plain invocation — no token, no
+`--impure`, fully portable.

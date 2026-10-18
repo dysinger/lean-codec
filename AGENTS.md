@@ -94,9 +94,8 @@ reminder that the toolchain is _flake-scoped_, not host-global.)
 "./codec-src"` path dependency, so the sandboxed `lake build` needs no
   `git clone`/network. `lake build` zero sorry/warnings, `#print axioms` =
   `[propext, Quot.sound]` for every law, `nix flake check` (both `checks.lean`
-  and `checks.formatting`) green. (Only caveat: `lean-codec` is **private**, so
-  the `github:` input needs `access-tokens = github.com=<token>` in `nix.conf` —
-  no `--impure` required; disappears once the repo is public.)
+  and `checks.formatting`) green. (`lean-codec` is now **public**, so the
+  `github:` input fetches anonymously — no token, no `--impure`.)
 
 ## Active work (single carrier — archived; now `carrier-performance-tuning`)
 

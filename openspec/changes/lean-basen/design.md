@@ -132,11 +132,9 @@ flake-injection half of task 1.1 that blocked it is implemented:
 (both `checks.lean` and `checks.formatting`). The hook (`.githooks/pre-commit`,
 `nix fmt`) is in place and passes.
 
-**Remaining caveat (privacy, not a build/proof issue):** `dysinger/lean-codec` is
-still **private**, so fetching the `github:` input needs a credential. The pure
-(no-`--impure`) form is `nix --extra-access-tokens "github.com=$(gh auth token)"
-flake check`, or equivalently `access-tokens = github.com=<token>` in `nix.conf`.
-`--impure` is **not** required — that earlier misdiagnosis came from the private
-repo's 404 on the anonymous `github:` fetcher, which falls through to the macOS
-keychain only in impure mode. Once `lean-codec` is made public, the credential is
-unnecessary and the flake is fully portable.
+**Caveat (resolved this session):** `dysinger/lean-codec` was **private**, so
+fetching the `github:` input needed a credential (`access-tokens = github.com=
+<token>` or `nix --extra-access-tokens "github.com=$(gh auth token)" …` — no
+`--impure`, but a credential). The repo is now **public** (`gh repo edit
+… --visibility public`), so `nix flake check` runs green with a plain
+invocation: no token, no `--impure`, fully portable.
