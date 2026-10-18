@@ -1,5 +1,21 @@
 # Tasks
 
+> **ABANDONED (this session).** This change was **misguided**. Its central plan —
+> ship per-format specialized decoders/encoders (WAV, protobuf, JSON, PNG, QR) and
+> per-format C seams (zlib `deflate`/`inflate`, numeric-parse) — runs directly
+> counter to the settled direction: **all codecs are pure Lean**; the only C is a
+> small fixed set of **generic bulk byte-movement seams** (`byteSlice`/`blitBytes`/
+> `findByte`/`commitRemainder` = `memcpy`/`memchr`); there is **no per-format C and
+> no C that parses digits/numbers/fields**. The generic seams this change _did_ ship
+> (`blitBytes`, `findByte`) are fine and stay; the per-format half is abandoned. The
+> format-oriented seams it added (`VarintFast`, `NumParse`) and the in-core `VarBinary`
+> were since **removed** from core (they belong in downstream packages). The one still-live
+> item — `decodeArray_unambiguous_value` (Task 3.1's outstanding half) — is carried forward
+> independently, not under this change.
+>
+> Archived rather than completed; spec deltas NOT synced (the per-format requirements
+> they add are themselves part of the misguided scope).
+
 > The plan: keep the pure `Bytes n` interpreter as the slow spec, and ship a fast C
 > surface — `@[extern]` seams (each `byteSlice`-shaped: reducible Lean body + trusted
 > C) plus per-format specialized decoders/encoders, all proved `[propext, Quot.sound]`-equal
