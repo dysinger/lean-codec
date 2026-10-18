@@ -299,59 +299,6 @@ unsafe def benchDecodeFast (n : Nat) (reps : Nat) : IO Unit := do
   | _, _ => throw (IO.userError "decodeFast: expected one result")
   IO.println s!"decodeFast byte [{n}]: {dt / reps} ns/op"
 
-/-- The Layer-2 varint-span seam lane: `varintEncodeInto`/`varintDecodeFrom` (the
-`@[extern]` LEB128 span ops) are timed and **value-checked byte-for-byte** against
-their Lean bodies (the `VarBinary` spec). Encodes `n = 12345678` into an empty
-buffer and decodes back from offset `0`, asserting both the recovered value and the
-consumed count match the `varintBytes` spec. A wrong C (bad LEB128 loop, wrong
-offsets, wrong return boxing) fails the bench, not just the trust contract. -/
-unsafe def benchVarintSpan (reps : Nat) : IO Unit := do
-  let n : Nat := 12345678
-  let mut buf := ByteArray.empty
-  for _i in [0:10] do buf := buf.push (0 : UInt8)
-  -- spec: the Lean bodies `varintEncodeInto`/`varintDecodeFrom` reduce to.
-  let specEnc : ByteArray := varintEncodeInto buf 0 n
-  let specDec : Option (Nat × USize) := varintDecodeFrom specEnc 0
-  let (enc, dt1) ← timeBatch reps fun _ => varintEncodeInto buf 0 n
-  if enc != specEnc then
-    throw (IO.userError "varintEncodeInto ≠ spec body (value mismatch)")
-  let (dec, dt2) ← timeBatch reps fun _ => varintDecodeFrom enc 0
-  if dec != specDec then
-    throw (IO.userError "varintDecodeFrom ≠ spec body (value mismatch)")
-  match dec with
-  | some (v, k) =>
-      if v != n then throw (IO.userError "varint span: value mismatch")
-      if k.toNat != (varintBytes n).1 then
-        throw (IO.userError "varint span: consumed-count mismatch")
-  | none => throw (IO.userError "varint span: expected a decode result")
-  IO.println s!"varint span enc [{n}]: {dt1 / reps} ns/op"
-  IO.println s!"varint span dec [{n}]: {dt2 / reps} ns/op"
-
-/-- The Layer-2 numeric-parse seam lane: `parseNumber a off` (the `@[extern]`
-decimal-span primitive) is timed and **value-checked byte-for-byte** against its
-Lean body (the `decimalStep` scan). Parses the ASCII digit prefix `"12345678"` at
-offset `off = 2` (preceded by non-digit bytes), asserting the recovered value and
-consumed count. A wrong C (bad digit test, off-by-one stop, bad return boxing)
-fails the bench, not just the trust contract. -/
-unsafe def benchParseNumber (reps : Nat) : IO Unit := do
-  -- build the bytes: [0,0,'1','2','3','4','5','6','7','8','x','x']
-  let arr : Array UInt8 := Array.ofFn fun (i : Fin 12) =>
-    if i.val < 2 then (0 : UInt8)
-    else if i.val < 10 then (UInt8.ofNat (48 + (i.val - 1)))
-    else (120 : UInt8)
-  let a : ByteArray := ByteArray.mk arr
-  let off : USize := 2
-  let spec : Option (Nat × USize) := parseNumber a off
-  let (r, dt) ← timeBatch reps fun _ => parseNumber a off
-  if r != spec then
-    throw (IO.userError "parseNumber ≠ spec body (value mismatch)")
-  match r with
-  | some (v, k) =>
-      if v != 12345678 then throw (IO.userError "parseNumber: value mismatch")
-      if k.toNat != 8 then throw (IO.userError "parseNumber: consumed-count mismatch")
-  | none => throw (IO.userError "parseNumber: expected a parse result")
-  IO.println s!"parseNumber L2 [{off.toNat}]: {dt / reps} ns/op"
-
 /-- The LEB128 varbinary roundtrip over the length-indexed carrier: `decodeVarint
 (encodeVarint 12345678)` must recover the value. -/
 unsafe def benchRoundtripVarint (reps : Nat) : IO Unit := do
@@ -364,6 +311,249 @@ unsafe def benchRoundtripVarint (reps : Nat) : IO Unit := do
   | none => throw (IO.userError "roundtrip varint: expected a result")
   IO.println s!"encodeVarint 12345678: {dt1 / reps} ns/op"
   IO.println s!"decodeVarint 12345678: {dt2 / reps} ns/op"
+
+/-! ## TEMPORARY speed test: RFC 3339 date-time (AST-shaped, application-style)
+
+RFC 3339 is the Internet profile of ISO 8601 (`date-time` = `full-date "T"
+full-time`). The grammar (ABNF in section 5.6) is:
+
+    date-fullyear   = 4DIGIT
+    date-month      = 2DIGIT  ; 01-12
+    date-mday       = 2DIGIT  ; 01-28/29/30/31 by month+leap-year
+    time-hour       = 2DIGIT  ; 00-23
+    time-minute     = 2DIGIT  ; 00-59
+    time-second     = 2DIGIT  ; 00-58/59/60 (leap second)
+    time-secfrac    = "." 1*DIGIT
+    time-numoffset  = ("+" / "-") time-hour ":" time-minute
+    time-offset     = "Z" / time-numoffset
+    partial-time    = time-hour ":" time-minute ":" time-second [time-secfrac]
+    full-date       = date-fullyear "-" date-month "-" date-mday
+    full-time       = partial-time time-offset
+    date-time       = full-date "T" full-time
+
+`T`/`Z` may be lowercase `t`/`z` (RFC 3339 §5.6 NOTE; generators SHOULD emit
+uppercase). The hour MUST be 00-23 (not 24); day is validated against the
+month/year with leap-year (Appendix C); the second may be 60 (leap second).
+
+The point of this section is to answer, with real numbers on *this* machine:
+**does the packed/fast path actually beat the pure spec for a structured value**,
+or is the measured ceiling real? Nothing here is part of the proven core; it is a
+throwaway measurement, drafted so it can later be lifted into a separate package
+verbatim (the `Timestamp` AST + `parse`/`print` live here only for the bench). -/
+
+/-- The RFC 3339 `date-time` AST, exactly what an application would define. The
+fraction (`secfrac`) is kept as the raw digit list (arbitrary precision per
+`1*DIGIT`, so a fixed `Nat` can't hold it), and the offset is a tagged union of
+`Z` (UTC) or a nonzero `±HH:MM` numeric offset (in minutes east of UTC, signed). -/
+structure Timestamp where
+  year : Nat
+  month : Nat
+  day : Nat
+  hour : Nat
+  minute : Nat
+  second : Nat
+  secfrac : List UInt8          -- the digits after the '.', e.g. ['5','2'] — empty = none
+  utc : Bool                     -- true = 'Z', false = numeric offset
+  offsetMin : Int                -- numeric offset in minutes (east-positive), valid when ¬utc
+  deriving Repr, Inhabited, BEq
+
+/-- Reference value (`1985-04-12T23:20:50.52Z`, RFC 3339 §5.8 example 1). -/
+def sampleTimestamp : Timestamp :=
+  ⟨1985, 4, 12, 23, 20, 50, [UInt8.ofNat 53, UInt8.ofNat 50], true, 0⟩
+
+/-- The decimal digits of `n` (most-significant first) as ASCII bytes. -/
+def digits (n : Nat) : List UInt8 := Id.run do
+  let mut acc : List UInt8 := []
+  let mut m := n
+  if m = 0 then
+    acc := [UInt8.ofNat 48]
+  else
+    while m > 0 do
+      acc := (UInt8.ofNat (48 + m % 10)) :: acc
+      m := m / 10
+  acc
+
+/-- Pad a digit list on the left with ASCII `'0'` to width `w`. -/
+def padLeft (w : Nat) (ds : List UInt8) : List UInt8 :=
+  (List.replicate (w - ds.length) (UInt8.ofNat 48)) ++ ds
+
+/-- RFC 3339 Appendix C leap-year test: a year is a leap year iff divisible by 4
+and (not divisible by 100 or divisible by 400). -/
+def isLeapYear (y : Nat) : Bool :=
+  y % 4 = 0 ∧ (y % 100 ≠ 0 ∨ y % 400 = 0)
+
+/-- Days in a month (1-12), with the leap-year February rule (§5.7). -/
+def daysInMonth (y : Nat) (m : Nat) : Nat :=
+  match m with
+  | 1 | 3 | 5 | 7 | 8 | 10 | 12 => 31
+  | 4 | 6 | 9 | 11 => 30
+  | 2 => if isLeapYear y then 29 else 28
+  | _ => 0
+
+/-- The numeric-offset suffix `±HH:MM` (east-positive minutes). -/
+def offsetBytes (offMin : Int) : List UInt8 :=
+  let sign : UInt8 := if offMin < 0 then 45 else 43
+  let absMin : Nat := Int.natAbs offMin
+  let hh := absMin / 60
+  let mm := absMin % 60
+  [sign] ++ padLeft 2 (digits hh) ++ [58] ++ padLeft 2 (digits mm)
+
+/-- The full date-time byte list (uppercase `T`/`Z`, the SHOULD form), for
+`print`. Fraction is emitted only when non-empty. -/
+def timestampBytes (t : Timestamp) : List UInt8 :=
+  padLeft 4 (digits t.year) ++ [45] ++ padLeft 2 (digits t.month) ++ [45]
+  ++ padLeft 2 (digits t.day) ++ [84]
+  ++ padLeft 2 (digits t.hour) ++ [58] ++ padLeft 2 (digits t.minute) ++ [58]
+  ++ padLeft 2 (digits t.second)
+  ++ (if t.secfrac.isEmpty then [] else [46] ++ t.secfrac)
+  ++ (if t.utc then [90] else offsetBytes t.offsetMin)
+
+/-- **Print** (encode): the application-style fast path — write the exact byte
+list into a fresh `ByteArray` with `Array.push` (the `@[extern]` contiguous
+append). This is the hot path an app would ship; nothing here touches the `Codec`
+AST or an `Iso` proof. -/
+unsafe def printTimestamp (t : Timestamp) : ByteArray := Id.run do
+  let mut bs : ByteArray := ByteArray.empty
+  for b in timestampBytes t do
+    bs := bs.push b
+  bs
+
+/-- The pure *spec* encode over the length-indexed `Bytes` carrier (the slow
+denotation this fast path is compared against): build the same byte list, then
+read it back into `Bytes k` via the proven `encodeByteArrayBytes`. -/
+def specEncodeTimestamp (t : Timestamp) : Sigma fun k => Bytes k :=
+  let arr := (encodeByteArrayBytes (timestampBytes t)).toList.toArray
+  (⟨arr.size, fun i => arr[i.val]⟩)
+
+/-- Total byte accessor: `baGet a i` is `a[i]` when in range, else `0`. Used so
+the parse stays total without threading `i < a.size` proofs through every
+exact-width read (bounded reads already check `i + w ≤ a.size`). -/
+def baGet (a : ByteArray) (i : Nat) : UInt8 :=
+  if h : i < a.size then a[i] else 0
+
+/-- **Parse** core: read exactly `w` ASCII decimal digits at `i` into a `Nat`.
+`none` on overrun or a non-digit. Single scalar loop, no backtracking. -/
+def readNDigits (a : ByteArray) (i : Nat) (w : Nat) : Option (Nat × Nat) :=
+  if i + w > a.size then none else
+    -- fold over the `w` digit positions; `st` is the running `(value, cursor)`
+    let step (st : Option (Nat × Nat)) (_pos : Nat) : Option (Nat × Nat) :=
+      st.bind fun (acc, j) =>
+        let c : Nat := (baGet a j).toNat
+        if 48 ≤ c ∧ c < 58 then some (acc * 10 + (c - 48), j + 1) else none
+    (List.range w).foldl step (some (0, i))
+
+/-- Parse one or more ASCII decimal digits (the `1*DIGIT` fraction), returning
+the digit bytes and the advanced cursor. Scans forward from `i`, stopping at the
+first non-digit (after at least one digit) or the buffer end. -/
+def readDigits1 (a : ByteArray) (i : Nat) : Option (List UInt8 × Nat) :=
+  -- collect digits into `acc` (in order) while `j < a.size` and digit
+  let rec go (j : Nat) (acc : List UInt8) : Option (List UInt8 × Nat) :=
+    if _h : j < a.size then
+      let c := baGet a j
+      if c.toNat ≥ 48 ∧ c.toNat < 58 then go (j + 1) (acc ++ [c]) else
+        if acc.isEmpty then none else some (acc, j)
+    else
+      if acc.isEmpty then none else some (acc, j)
+    termination_by a.size - j
+    decreasing_by
+      simp_wf
+      omega
+  go i []
+
+/-- Read a literal ASCII byte `b` (`-`, `:`, `T`, `Z`): succeeds iff the byte at
+`i` equals `b`. -/
+def readLiteral (a : ByteArray) (i : Nat) (b : UInt8) : Option Nat :=
+  if baGet a i = b then some (i + 1) else none
+
+/-- Validate the date/time fields per §5.6-§5.7: month 01-12, hour 00-23,
+minute 00-59, second 00-59 (60 allowed only as a leap second at month end), and
+day within `daysInMonth`. The ast-level ranges are checked here (the parse is
+total and returns `none` on any violation). -/
+def validFields (t : Timestamp) : Bool :=
+  1 ≤ t.month ∧ t.month ≤ 12 ∧
+  t.hour ≤ 23 ∧ t.minute ≤ 59 ∧
+  (t.second ≤ 59 ∨ t.second = 60) ∧
+  t.day ≥ 1 ∧ t.day ≤ daysInMonth t.year t.month
+
+/-- **Parse** (decode): the application-style fast path — one linear pass with
+exact-length digit reads and literal separators, tolerating lowercase `t`/`z`.
+Returns the `Timestamp` AST and the consumed count, or `none` on any structural
+or range violation. -/
+def parseTimestamp (a : ByteArray) : Option (Timestamp × Nat) := do
+  let (year, i1) ← readNDigits a 0 4
+  let i2 ← readLiteral a i1 45
+  let (month, i3) ← readNDigits a i2 2
+  let i4 ← readLiteral a i3 45
+  let (day, i5) ← readNDigits a i4 2
+  -- time separator: 'T' or 't'
+  let tsep := baGet a i5
+  if tsep ≠ 84 ∧ tsep ≠ 116 then none else
+  let (hour, i7) ← readNDigits a (i5 + 1) 2
+  let i8 ← readLiteral a i7 58
+  let (minute, i9) ← readNDigits a i8 2
+  let i10 ← readLiteral a i9 58
+  let (second, i11) ← readNDigits a i10 2
+  -- optional fraction: '.' 1*DIGIT (a missing fraction means none)
+  let (frac, i12) : List UInt8 × Nat :=
+    if baGet a i11 = 46 then
+      match readDigits1 a (i11 + 1) with
+      | some pr => pr
+      | none => ([], i11 + 1)
+    else ([], i11)
+  -- offset: 'Z'/'z' or ±HH:MM
+  let b0 := baGet a i12
+  if b0 = 90 ∨ b0 = 122 then
+    let t : Timestamp := ⟨year, month, day, hour, minute, second, frac, true, 0⟩
+    if validFields t then some (t, i12 + 1) else none
+  else if b0 = 43 ∨ b0 = 45 then
+    let (oh, i14) ← readNDigits a (i12 + 1) 2
+    let i15 ← readLiteral a i14 58
+    let (om, i16) ← readNDigits a i15 2
+    let offMag := oh * 60 + om
+    let offMin : Int := if b0 = 45 then - Int.ofNat offMag else Int.ofNat offMag
+    let t : Timestamp := ⟨year, month, day, hour, minute, second, frac, false, offMin⟩
+    if validFields t then some (t, i16) else none
+  else none
+
+/-- End-to-end encode lane: `printTimestamp` vs `specEncodeTimestamp`, both
+value-checked byte-for-byte against the expected bytes of `sampleTimestamp`. -/
+unsafe def benchIso8601Encode (reps : Nat) : IO Unit := do
+  let expected : List UInt8 := timestampBytes sampleTimestamp
+  let (fast, dt1) ← timeBatch reps fun _ => printTimestamp sampleTimestamp
+  let (spec, dt2) ← timeBatch reps fun _ => specEncodeTimestamp sampleTimestamp
+  if (fast.toList : List UInt8) != expected then
+    throw (IO.userError "fast iso8601 encode: wrong bytes")
+  if (List.ofFn spec.2 : List UInt8) != expected then
+    throw (IO.userError "spec iso8601 encode: wrong bytes")
+  printLane "iso8601 encode fast" expected.length (dt1 / reps) expected.length
+  printLane "iso8601 encode spec" expected.length (dt2 / reps) expected.length
+
+/-- End-to-end decode lane: `parseTimestamp` parses the encoded bytes back to the
+AST, value-checked against `sampleTimestamp`. Also exercises a numeric-offset
+example (`1996-12-19T16:39:57-08:00`) and a lowercase-`t`/`z` variant. -/
+unsafe def benchIso8601Decode (reps : Nat) : IO Unit := do
+  let encoded := printTimestamp sampleTimestamp
+  let (r, dt) ← timeBatch reps fun _ => parseTimestamp encoded
+  match r with
+  | some (t, c) =>
+      if t != sampleTimestamp then
+        throw (IO.userError "fast iso8601 decode: value mismatch")
+      if c != encoded.size then
+        throw (IO.userError "fast iso8601 decode: consumed length mismatch")
+  | none => throw (IO.userError "fast iso8601 decode: expected a parse")
+  -- A second, structural example (offset + lowercase t/z), parsed once for value.
+  let offBytes : List UInt8 :=
+    padLeft 4 (digits 1996) ++ [45] ++ padLeft 2 (digits 12) ++ [45] ++ padLeft 2 (digits 19)
+    ++ [116] ++ padLeft 2 (digits 16) ++ [58] ++ padLeft 2 (digits 39) ++ [58]
+    ++ padLeft 2 (digits 57) ++ [45] ++ padLeft 2 (digits 8) ++ [58] ++ padLeft 2 (digits 0)
+  let offBA : ByteArray := ByteArray.mk offBytes.toArray
+  match parseTimestamp offBA with
+  | some (t, _) =>
+      if t.year != 1996 ∨ t.month != 12 ∨ t.day != 19 ∨ t.hour != 16 ∨ t.minute != 39
+         ∨ t.second != 57 ∨ t.utc ∨ t.offsetMin != -480 then
+        throw (IO.userError "iso8601 offset example: value mismatch")
+  | none => throw (IO.userError "iso8601 offset example: expected a parse")
+  printLane "iso8601 decode fast" encoded.size (dt / reps) encoded.size
 
 end Codec.Bench
 
@@ -405,8 +595,7 @@ unsafe def main (args : List String) : IO Unit := do
   Codec.Bench.benchDecodeFast n reps
   -- LEB128 varbinary over the single carrier.
   Codec.Bench.benchRoundtripVarint reps
-  -- LEB128 span seams over the byte-array output (Layer 2, value-checked).
-  Codec.Bench.benchVarintSpan reps
-  -- Numeric-parse seam (Layer 2, value-checked).
-  Codec.Bench.benchParseNumber reps
+  -- TEMPORARY: ISO 8601 timestamp (AST-shaped) speed test.
+  Codec.Bench.benchIso8601Encode reps
+  Codec.Bench.benchIso8601Decode reps
   IO.println "done"
