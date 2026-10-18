@@ -226,7 +226,44 @@ the `USize`-indexed `commitRemainder` (`byteSlice` wrapper), with a definitional
 MODIFIED deltas that carry over all existing scenarios); and the `byteSlice`/C trust is a runtime
 contract excluded from the axiom gate, never folded into a law.
 
-## Next session: implement `shipped-c-fast-path` (Task 2 onward)
+## Findings (this session): pure-Lean parsing has a hard ~20-40x-off-C ceiling
+
+Goal was "very fast encode/decode", tested against an RFC 3339 date-time (the
+canary: if a 23-byte fixed-shape timestamp can't be C-fast in Lean, the TLS-HTTP
+buildup can't either). Measured after several optimization passes, and **the
+result is a toolchain ceiling, not a code-quality issue** (confirmed three ways —
+IR inspection, a `sum64` probe, and a failed optimization pass):
+
+- **`Nat`/`UInt8`/`UInt64` arithmetic is boxed** in Lean 4.34.1's C backend
+  (`lean_nat_mul`/`add`/`sub`, `lean_uint8_to_nat`, `lean_uint64_*` — all
+  `lean_object*` heap calls). A pure-Lean `sum64` loop lowers to `instAddUInt64`/
+  `instMulUInt64` (boxed). There is **no** pure-Lean escape (`@[implemented_by]`,
+  `native_decide`, `bv_decide` are reflection/compile-time, not unboxed runtime).
+- **`USize` is the only raw scalar (`size_t`), and only as an `@[extern]` argument**;
+  as soon as it's stored in a `Prod`/`Option` field it re-boxes (`lean_box_usize`),
+  and `USize.toNat` at each boundary adds bignum churn. Rewriting the parser to a
+  `USize` cursor made it **slower** (206→~440ns) for this reason.
+- **Pure-Lean `parseTimestamp` ≈ 200-400 ns/op vs ~10 ns/op for the C `strptime`
+  equivalent (~20-40x off).** `encode` via `ByteArray.push` is already amortized;
+  pre-sizing (`emptyWithCapacity`) didn't help. No pure-Lean code reshaping closes
+  the gap because the boxed digit math (`acc*10+digit`) is irreducible inside Lean.
+- **Benchmark numbers here are noisy (±2x with machine load/thermal).** The `calib
+memcpy` baseline itself swung 66↔300 ns across runs; cross-check against it
+  before believing any single `[measured]` figure, and don't micro-optimize under
+  an unstable baseline.
+
+**Decision (do not re-litigate):** all codecs are **pure Lean**; C is only the
+generic bulk byte-movement seams (`byteSlice`/`blitBytes`/`findByte`/`commitRemainder`
+= `memcpy`/`memchr`). **No per-format C, no C that parses digits/numbers/fields.**
+Pure-Lean codecs are accepted at ~20-40x off C; for TLS-later the crypto is
+FFI'd (OpenSSL/etc.), and 20-byte header parsing is irrelevant to TLS throughput.
+
+## Next session: implement `shipped-c-fast-path` (Task 2 onward) — NOTE: the plan
+
+below predates the "all codecs pure-Lean, no per-format C" decision and is stale.
+Re-scope `shipped-c-fast-path` before continuing: Tasks 2.3/4.x (WAV/protobuf/JSON/
+zlib decoders, per-format C seams) are **out of scope for the core library and for
+any C**; `VarintFast`/`NumParse` were already removed from core this session.
 
 Planning is complete and validated for the **active change** `shipped-c-fast-path`
 (`openspec/changes/shipped-c-fast-path/`, proposal/specs/design/tasks). The strategic
