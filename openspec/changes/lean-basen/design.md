@@ -112,40 +112,28 @@ Quot.sound]`, `nix flake check` green.
   three zero-padded decimal digits per byte, no sign. A sign convention for
   arbitrary-precision integers is out of scope for a byte-oriented codec.
 
-## Next session (2026-10-19): Base32, Base64, then facade + bench + gate
+## Next session (2026-10-19): flake-input `codec` injection (the 4.3 gate)
 
-Five of seven bases are landed and proven (`[propext, Quot.sound]`-only, zero
-`sorry`): Base16 (§8), Base8, Base10, Base2, Base4. The remaining `lean-basen`
-work, in order:
+All seven bases are landed and proven (`[propext, Quot.sound]`-only, zero
+`sorry`): Base2/4/8/10/16 plus **Base32 (task 2.3)** and **Base64 (task 2.4)**,
+each byte-exact against RFC 4648 §10 (16/32/64) or hand vectors (2/4/8/10). The
+facade (task 4.1) re-exports all seven and dispatches `BaseN.roundtrip` by
+`cases`; the bench lane (task 4.2) value-checks each base byte-for-byte plus the
+roundtrip laws and is wired as `lake build bench` (runs clean, exit 0).
+`#print axioms` on `BaseN.roundtrip` and every per-base `roundtrip` reports only
+`[propext, Quot.sound]`.
 
-1. **Base64 (task 2.4)** — the RFC-faithful `encodeN`/`decodeN` definitions, the
-   alphabet bijection (`b64ToVal ∘ valToB64 = id`), and the byte-extraction
-   identities (F* `lemma_b64_byte0..2`) were written this session and are
-   `omega`-provable; what remained is the `decodeN_triple`/`single`/`pair` and
-   `roundtripN` final steps (the `simp [encodeN, decodeN]` over-reduction produced
-   an `omega`-unfriendly goal) plus the `UInt8` surface. Resume there. The
-   proven technique for the 4-range alphabet bijection: prove
-   `valToB64_not_pad` via `exact decide_eq_false_iff_not.mpr (by omega)` after
-   `by_cases` on each range, and close the `62`/`63` tail with
-   `rcases (show i = 62 ∨ i = 63 by omega) with rfl | rfl <;> decide`. For the
-   decode roundtrip, drive the proof with `rw`-chains (not `simp [decodeN]`, which
-   splits the `&&`/`if` into `true = true ∧ …` residue) and finish with `omega` on
-   the reduced byte-extraction forms.
-
-2. **Base32 (task 2.3)** — same 5-bit cross-byte bit-slicing as base64 but 5-bytes
-   → 8-chars and five pad cases (pad_count 0/1/3/4/6); port `fstar-basen`
-   `Data.BaseN.Base32` verbatim (its `decode_base32_group` + `b32_val`), prove the
-   `lemma_b32_byte0..4` extraction identities with `omega` (like `byte0..2`), and
-   apply the same `by_cases`-per-range alphabet technique over the `A-Z2-7` alphabet.
-
-3. **Facade (task 4.1)** — un-comment `BaseN.Base32`/`BaseN.Base64` imports,
-   restore `B32`/`B64` to the `Base` inductive (currently scoped to
-   B2/B4/B8/B10/B16), and extend `BaseN.roundtrip`'s `cases`.
-
-4. **Bench lane (task 4.2)** — value-check each base byte-for-byte against RFC
-   4648 §10 (16/32/64) and hand vectors (2/4/8/10); the vectors are pinned in
-   `rfc4648.md`.
-
-5. **Gate (task 4.3)** — `lake build` zero `sorry`/warnings; `#print axioms` on
-   `BaseN.roundtrip` and each `lemma_baseX_roundtrip` = `[propext, Quot.sound]`;
-   `nix flake check` green; commit + push `lean-basen`.
+**Remaining: task 4.3's `nix flake check green` fails on `checks.lean` — a
+pre-existing infrastructure gap, not a proof issue.** The check derivation runs
+`lake build`, which `require codec from git`-clones the `codec` dependency from
+GitHub; the Nix sandbox has neither `git` (not in `nativeBuildInputs = [ lean4 ]`)
+nor network, so it dies at `codec: cloning …` → `could not execute external process
+'git'`. Task 1.1's flake-injection half (flake input `codec-src` + `codec-native`
+`.olean` artifacts per the `ecosystem` dependency-injection convention) was never
+landed: `flake.nix` still has only `nixpkgs`/`flake-utils`/`treefmt-nix`, no `codec`
+input. The fix (this session or a dedicated follow-up): inject `codec` as a flake
+input and thread its source/`.olean` into the `native`/`check` derivations so the
+sandbox build needs no `git clone` — mirroring how `ecosystem` describes the
+`codec`-dependency injection for every downstream leaf. (`lake build`, `lake build
+bench`, and `#print axioms` are already green; only the sandboxed `nix flake check`
+`checks.lean` is blocked.)

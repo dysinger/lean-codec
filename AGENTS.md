@@ -86,7 +86,16 @@ reminder that the toolchain is _flake-scoped_, not host-global.)
   base-2/4/8/10/16/32/64 package — consult
   `openspec/changes/lean-basen/` (proposal / design / tasks / `rfc4648.md`) for
   its state and next steps, and work in that repo's own `lake`/`nix develop`,
-  not this one's.
+  not this one's. All seven bases are landed and proven, the facade dispatches
+  `BaseN.roundtrip` over `B2..B64`, and `Bench.lean` value-checks them
+  byte-for-byte (`lake build bench` green, `#print axioms` =
+  `[propext, Quot.sound]` for every law). The **only** open item is task 4.3's
+  `nix flake check green`: `checks.lean` runs `lake build` in the Nix sandbox,
+  which `require codec from git`-clones the `codec` dep, but the sandbox has
+  neither `git` nor network (`could not execute external process 'git'`) — see
+  `openspec/changes/lean-basen/design.md` "Next session": inject `codec-src` +
+  `codec-native` `.olean` as a flake input (the task-1.1 injection half that was
+  never landed; `flake.nix` still has no `codec` input).
 
 ## Active work (single carrier — archived; now `carrier-performance-tuning`)
 

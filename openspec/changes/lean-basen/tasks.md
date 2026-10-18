@@ -19,11 +19,11 @@
       `"foobar"→"666F6F626172"`) — vectors corrected to RFC 4648 uppercase
 - [x] 2.2 Port `Data.BaseN.Base08` to `BaseN.Base8` (octal, 3 digits/byte) +
       roundtrip, and verify byte-exact against hand vectors
-- [ ] 2.3 Port `Data.BaseN.Base32` to `BaseN.Base32` (`A-Z2-7`, `=` padding) +
+- [x] 2.3 Port `Data.BaseN.Base32` to `BaseN.Base32` (`A-Z2-7`, `=` padding) +
       roundtrip, verify against RFC 4648 §10 (`""→""`, `"f"→"MY======"`,
       `"fo"→"MZXQ===="`, `"foo"→"MZXW6==="`, `"foob"→"MZXW6YQ="`,
       `"fooba"→"MZXW6YTB"`, `"foobar"→"MZXW6YTBOI======"`)
-- [ ] 2.4 Port `Data.BaseN.Base64` to `BaseN.Base64` (`A-Za-z0-9+/`, `=` padding) +
+- [x] 2.4 Port `Data.BaseN.Base64` to `BaseN.Base64` (`A-Za-z0-9+/`, `=` padding) +
       roundtrip, verify against RFC 4648 §10 (`""→""`, `"f"→"Zg=="`, `"fo"→"Zm8="`,
       `"foo"→"Zm9v"`, `"foob"→"Zm9vYg=="`, `"fooba"→"Zm9vYmE="`,
       `"foobar"→"Zm9vYmFy"`)
@@ -39,12 +39,16 @@
 
 ## 4. Facade, bench lane, and gate
 
-- [ ] 4.1 Add the `BaseN` facade re-exporting all seven bases + an inductive
+- [x] 4.1 Add the `BaseN` facade re-exporting all seven bases + an inductive
       `Base := B2 | B4 | B8 | B10 | B16 | B32 | B64` and a single `roundtrip` theorem
-      dispatching to the per-base lemmas (proved by `cases`) — **partial**: facade +
-      `roundtrip` done for B2/B4/B8/B10/B16; B32/B64 blocked on tasks 2.3/2.4
-- [ ] 4.2 Add a bench lane value-checking each base byte-for-byte (RFC 4648 §10
+      dispatching to the per-base lemmas (proved by `cases`)
+- [x] 4.2 Add a bench lane value-checking each base byte-for-byte (RFC 4648 §10
       for 16/32/64, hand vectors for 2/4/8/10) and the roundtrip laws
 - [ ] 4.3 Gate: `lake build` zero `sorry`/warnings; `#print axioms` on
       `BaseN.roundtrip` (and each `lemma_baseX_roundtrip`) reports only
       `[propext, Quot.sound]`; `nix flake check` green; commit + push `lean-basen`
+      — **blocked on the flake-injection half of 1.1**: `lake build` + `#print
+    axioms` are green, but `nix flake check`'s `checks.lean` needs the `codec`
+      dep and the sandbox has no `git`/network (`could not execute external process
+    'git'` when `require codec from git` clones); inject `codec-src` +
+      `codec-native` `.olean` as a flake input (see design.md "Next session")
