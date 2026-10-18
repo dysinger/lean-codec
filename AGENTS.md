@@ -260,20 +260,47 @@ generic bulk byte-movement seams (`byteSlice`/`blitBytes`/`findByte`/`commitRema
 Pure-Lean codecs are accepted at ~20-40x off C; for TLS-later the crypto is
 FFI'd (OpenSSL/etc.), and 20-byte header parsing is irrelevant to TLS throughput.
 
-## Next session: review fixes (independent review, README already fixed)
+## Session status: `review-polish-proof-doc` DONE (archived)
 
-An independent reviewer (this session) gave the README a full rewrite (done,
-committed). The **code/proof** actions from that review — plus a comparative audit
-of the F\* `codec` (`../fstar-codec`) against the paper and our stated
-departures/strengthenings — are tracked in the openspec change
-**`review-polish-proof-doc`** (`openspec/changes/review-polish-proof-doc/tasks.md`),
-not here. Pointer only; the ledger lives in openspec.
+An independent reviewer gave the README a full rewrite (committed earlier). The
+**code/proof** actions from that review — plus the comparative F\* audit — are now
+**all landed** and the change is **archived** as
+`openspec/changes/archive/2026-10-18-review-polish-proof-doc/`. Pointer only (the
+ledger lives in openspec); the summary below records what actually landed this
+session:
+
+1. **`decodeArray_bounded` docstring** (`Codec/Packed.lean`) no longer claims
+   "at most `a.size`"/"never overruns" (that was false: `pure x` returns `(x, i)`
+   for _any_ `i`). It now states the proved `i ≤ c` monotonicity fact, and the
+   missing upper bound is proved as `decodeArray_bounded_upper` under the
+   load-bearing `i ≤ a.size` precondition.
+2. **`decodeArray_unambiguous_value` is now PROVED** (`Codec/DecodeOne.lean`),
+   `[propext, Quot.sound]`-only — the genuine outstanding proof gap is closed. The
+   forward bridge: `decodeArray_eq` + `decode_spec` give `Rel d x s₀`; same count
+   pins `t₁.remaining = t₂.remaining`; `decode_genuine_suffix_pointwise` +
+   `Suffix.ext` pin `t₁ = t₂`; then the new `splice_prefix_read`/
+   `prepend_prefix_read`/`prepend_prefix_eq` lemmas (`Codec/Codec.lean`) extract
+   equal prefixes, and `Unambiguous d` forces value equality. The `DecodeOne`
+   header is restored to present tense ("the committed decoder _equals_ the unique
+   result").
+3. **Layer-2 `blitBytes` trust seam fixed.** Its Lean body previously appended
+   `Array.extract`s (variable-length results on "src too short"/"off past end"),
+   which did **not** match its C or its prose intent. The body is now the clamped
+   full-`dst` window replacement (`dc := min dstOff n`, `sc := min srcOff slen`,
+   `lc := min len (min (n-dc) (slen-sc))`), matching the C; `blitBytes_spec` stays
+   `rfl`. The C's clamps are overflow-stable (`copyLen > n - dstOff` etc., not
+   `dstOff + copyLen > n`), and a new `benchSeamBoundaries` lane value-checks all
+   three seams (`byteSlice`/`blitBytes`/`findByte`) on the out-of-range cases.
+4. **F\* comparative audit** delivered as
+   `openspec/changes/archive/2026-10-18-review-polish-proof-doc/fstar-comparison.md`,
+   tabulating paper-vs-Lean-vs-F\* across `[D1]`–`[D8]`/`[S1]`–`[S6]`. Confirmed: the
+   F\* `codec` is far more deviant (8-field `codec a` record, Z3-discharged
+   roundtrip, `wfcv`/`rest_cond`, ASCII-only `text` `% 256`, Pulse layer) than the
+   Lean port, which keeps the paper's `Iso`/`Rel` core.
 
 `shipped-c-fast-path` is **archived as abandoned**
 (`openspec/changes/archive/2026-10-18-shipped-c-fast-path/`) — its per-format C plan
-was misguided (contradicts "all codecs pure-Lean, no per-format C"). The only
-still-live item from it, the `decodeArray_unambiguous_value` proof, is carried
-forward in `review-polish-proof-doc`.
+was misguided (contradicts "all codecs pure-Lean, no per-format C").
 
 ## Critical review of the single-carrier change (COMPLETE)
 

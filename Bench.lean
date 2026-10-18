@@ -140,12 +140,19 @@ unsafe def benchBlitBytes (n : Nat) (reps : Nat) : IO Unit := do
   let dstOff : USize := (n / 8).toUSize
   let srcOff : USize := (n / 4).toUSize
   let len : USize := (n / 2).toUSize
-  -- spec: the Lean body `blitBytes` reduces to (`Array.extract` + `append`).
+  -- spec: the Lean body `blitBytes` reduces to (clamped cursor/run + `extract`
+  -- + `append`), with `dc`/`sc`/`lc` the destination/source cursors and the
+  -- copied run, each clamped as `Array.extract` clamps its bounds.
+  let n' := dst.data.size
+  let slen := src.data.size
+  let dc := min dstOff.toNat n'
+  let sc := min srcOff.toNat slen
+  let lc := min len.toNat (min (n' - dc) (slen - sc))
   let spec : ByteArray :=
     ByteArray.mk
-      (dst.data.extract 0 dstOff.toNat
-        ++ src.data.extract srcOff.toNat (srcOff.toNat + len.toNat)
-        ++ dst.data.extract (dstOff.toNat + len.toNat) dst.data.size)
+      (dst.data.extract 0 dc
+        ++ src.data.extract sc (sc + lc)
+        ++ dst.data.extract (dc + lc) dst.data.size)
   let (r, dt) ← timeBatch reps fun _ => blitBytes dst dstOff src srcOff len
   if r != spec then
     throw (IO.userError "blitBytes ≠ extract+append (value mismatch)")
@@ -173,6 +180,51 @@ unsafe def benchFindByte (n : Nat) (reps : Nat) : IO Unit := do
   if spec != some (n / 2).toUSize then
     throw (IO.userError "findByte: expected sentinel at n/2")
   IO.println s!"findByte L2   [{n}]: {dt / reps} ns/op"
+
+/-- **Layer-2 boundary smoke test** — value-checks all three trust seams against
+their Lean bodies across the out-of-range cases (empty source, `off` at/past
+either end, `len` past the end), so the "matches byte-for-byte on every input"
+claim is *checkable*, not asserted. Uses a small fixed buffer so the cases are
+exact and cheap; each `≠ none` failure names the seam and the case. -/
+unsafe def benchSeamBoundaries : IO Unit := do
+  let a5 : ByteArray := ByteArray.mk (#[1,2,3,4,5] : Array UInt8)
+  let a3 : ByteArray := ByteArray.mk (#[9,9,9] : Array UInt8)
+  -- byteSlice: suffix [i, size) with i clamped to [0, size].
+  for i in [0, 2, 5, 6] do
+    let got := byteSlice a5 (i.toUSize)
+    let spec := ByteArray.mk (a5.data.extract (i.toUSize).toNat a5.data.size)
+    if got != spec then
+      throw (IO.userError s!"byteSlice boundary mismatch at i={i}")
+  -- findByte: scan [off, size) with off clamped to [0, size]; none when off ≥ size.
+  for off in [0, 3, 5, 6] do
+    let got := findByte a5 (off.toUSize) 4
+    let spec : Option USize :=
+      match Array.findIdx? (fun x => x == (4 : UInt8)) (a5.data.extract (off.toUSize).toNat a5.data.size) with
+      | some j => some (off.toUSize + j.toUSize)
+      | none => none
+    if got != spec then
+      throw (IO.userError s!"findByte boundary mismatch at off={off}")
+  -- blitBytes: full-length dst with clamped destination/source cursors and run.
+  let cases : List (Nat × Nat × Nat) :=
+    [ (1, 0, 3)     -- normal window
+    , (1, 0, 5)     -- src too short (len 5, src size 3) ⇒ run clamped to 2
+    , (6, 0, 3)     -- dstOff past end ⇒ dc clamped to 5
+    , (1, 6, 3)     -- srcOff past end ⇒ sc clamped to 3 ⇒ run 0
+    , (1, 0, 10)    -- len past dst end ⇒ run clamped
+    , (1, 0, 0)     -- len 0 ⇒ unchanged dst
+    ]
+  for (dstOff, srcOff, len) in cases do
+    let got := blitBytes a5 (dstOff.toUSize) a3 (srcOff.toUSize) (len.toUSize)
+    let n' := a5.data.size
+    let slen := a3.data.size
+    let dc := min (dstOff.toUSize).toNat n'
+    let sc := min (srcOff.toUSize).toNat slen
+    let lc := min (len.toUSize).toNat (min (n' - dc) (slen - sc))
+    let spec : ByteArray :=
+      ByteArray.mk (a5.data.extract 0 dc ++ a3.data.extract sc (sc + lc) ++ a5.data.extract (dc + lc) n')
+    if got != spec then
+      throw (IO.userError s!"blitBytes boundary mismatch at dstOff={dstOff} srcOff={srcOff} len={len}")
+  IO.println "seam boundaries OK (byteSlice/findByte/blitBytes out-of-range value-checks)"
 
 /-- The scalar-index read lane: reading `s ⟨i, ·⟩` is a structural indexed load on
 the length-indexed carrier (the one read the single substrate exposes). -/
@@ -583,6 +635,8 @@ unsafe def main (args : List String) : IO Unit := do
   -- Full-consumption repetition decoder + fused single-step decoder.
   Codec.Bench.benchDecodeFull m reps
   Codec.Bench.benchDecodeFast n reps
+  -- Layer-2 seam boundary smoke test (out-of-range value-checks).
+  Codec.Bench.benchSeamBoundaries
   -- TEMPORARY: ISO 8601 timestamp (AST-shaped) speed test.
   Codec.Bench.benchIso8601Encode reps
   Codec.Bench.benchIso8601Decode reps

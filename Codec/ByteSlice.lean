@@ -86,10 +86,30 @@ def commitRemainder (a : Array UInt8) (c : USize) : ByteArray :=
 /--
 The Layer-2 named trust seam: a buffer-to-buffer `memcpy` blit. `blitBytes dst
 dstOff src srcOff len` copies `len` bytes from `src[srcOff .. srcOff+len)` into
-`dst[dstOff .. dstOff+len)`, returning a fresh `ByteArray` with the rest of `dst`
-unchanged.
+`dst[dstOff .. dstOff+len)`, returning a fresh `ByteArray` of the **full length of
+`dst`** with the rest of `dst` unchanged.
 
-The Lean body below is the *specification* — the `Array.extract`+`append`
+**Boundary (out-of-range) semantics — clause by clause.** All four indices/`len`
+are clamped exactly as `Array.extract` clamps its `start`/`stop` bounds to
+`[0, size]` (an `off ≥ size` yields an empty span; a `stop` past the end is
+truncated; `stop ≤ start` is empty). Concretely the body computes, in `Nat`:
+
+  * `n := dst.data.size`, `slen := src.data.size`;
+  * `dc := min dstOff.toNat n` (destination cursor, clamped into `[0, n]`);
+  * `sc := min srcOff.toNat slen` (source cursor, clamped into `[0, slen]`);
+  * `lc := min len.toNat (min (n - dc) (slen - sc))` (the copied run, clamped to
+    fit *both* the destination window `[dc, n)` and the source `[sc, slen)`).
+
+and produces the length-`n` byte string
+`dst[0,dc) ++ src[sc, sc+lc) ++ dst[dc+lc, n)` — the whole of `dst` with the
+`[dc, dc+lc)` window overwritten by `src[sc, sc+lc)`.  `byteSlice`/`findByte` are
+the suffix/`memchr` peers with the *same* `[0, size]` start-clamp (documented on
+each below).  `blitBytes` is the one seam with a **named `lc`** shared between
+its middle and trailing parts, because a window replacement (unlike `byteSlice`
+`'s bare suffix) must agree on the *copied length* across both the middle and the
+suffix; this is what makes the C's single `memcpy` match the body term-for-term.
+
+The Lean body below is the *specification* — an `Array.extract`+`append`
 composition over the backing `data` (reducible, so its `blitBytes_spec` law closes
 by `rfl`, `[propext, Quot.sound]`-only, no added axiom). The `@[extern
 "codec_blitBytes"]` attribute makes the *running* C call the matching `codec_blitBytes`
@@ -101,10 +121,15 @@ The indices are `USize` so the body is `rfl`-clean (no `Nat ↔ USize` roundtrip
 @[extern "codec_blitBytes"]
 def blitBytes (dst : ByteArray) (dstOff : USize) (src : ByteArray) (srcOff : USize)
     (len : USize) : ByteArray :=
+  let n := dst.data.size
+  let slen := src.data.size
+  let dc := min dstOff.toNat n
+  let sc := min srcOff.toNat slen
+  let lc := min len.toNat (min (n - dc) (slen - sc))
   ByteArray.mk
-    (dst.data.extract 0 dstOff.toNat
-      ++ src.data.extract srcOff.toNat (srcOff.toNat + len.toNat)
-      ++ dst.data.extract (dstOff.toNat + len.toNat) dst.data.size)
+    (dst.data.extract 0 dc
+      ++ src.data.extract sc (sc + lc)
+      ++ dst.data.extract (dc + lc) n)
 
 /--
 The Layer-2 named trust seam: a span `memchr` scan. `findByte a off b` returns
@@ -123,17 +148,21 @@ def findByte (a : ByteArray) (off : USize) (b : UInt8) : Option USize :=
   | none => none
 
 /-- The `blitBytes` refinement is a definitional identity: the result is `dst`
-with its `[dstOff, dstOff+len)` slice replaced by `src[srcOff, srcOff+len)`. The
-`USize` indices carry no `Nat ↔ USize` roundtrip the law must justify, so
-`#print axioms Codec.blitBytes_spec` reports `[propext, Quot.sound]` with no
-`blitBytes`-related axiom. `rfl`-clean. -/
+with its `[dc, dc+lc)` slice (where `dc`/`lc` are the destination-destined cursor
+and the copied run, both clamped as `Array.extract` clamps its bounds) replaced by
+`src[sc, sc+lc)`. The `USize` indices carry no `Nat ↔ USize` roundtrip the law must
+justify, so `#print axioms Codec.blitBytes_spec` reports `[propext, Quot.sound]`
+with no `blitBytes`-related axiom. `rfl`-clean. -/
 theorem blitBytes_spec (dst : ByteArray) (dstOff : USize) (src : ByteArray) (srcOff : USize)
     (len : USize) :
     blitBytes dst dstOff src srcOff len =
       ByteArray.mk
-        (dst.data.extract 0 dstOff.toNat
-          ++ src.data.extract srcOff.toNat (srcOff.toNat + len.toNat)
-          ++ dst.data.extract (dstOff.toNat + len.toNat) dst.data.size) := by
+        (dst.data.extract 0 (min dstOff.toNat dst.data.size)
+          ++ src.data.extract (min srcOff.toNat src.data.size)
+              (min srcOff.toNat src.data.size + min len.toNat (min (dst.data.size - min dstOff.toNat dst.data.size) (src.data.size - min srcOff.toNat src.data.size)))
+          ++ dst.data.extract
+              (min dstOff.toNat dst.data.size + min len.toNat (min (dst.data.size - min dstOff.toNat dst.data.size) (src.data.size - min srcOff.toNat src.data.size)))
+              dst.data.size) := by
   rfl
 
 /-- The `findByte` refinement is a definitional identity: `findByte a off b` is

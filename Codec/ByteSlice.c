@@ -30,11 +30,31 @@ LEAN_EXPORT lean_obj_res codec_byteSlice(lean_obj_arg a, size_t i) {
 //
 // Behind `@[extern "codec_blitBytes"]` Lean primitive
 // `Codec.blitBytes (dst : ByteArray) (dstOff : USize) (src : ByteArray)
-// (srcOff : USize) (len : USize) : ByteArray`. Contract: copy `len` bytes from
-// `src[srcOff..srcOff+len)` into `dst[dstOff..dstOff+len)`, returning the full
-// length of `dst` as a fresh ByteArray (prefix/suffix unchanged); the middle
-// window is a single `memcpy`. TRUSTED, NOT PROVEN (Layer 2, excluded from the
-// `#print axioms` gate); must match the Lean body byte-for-byte on every input.
+// (srcOff : USize) (len : USize) : ByteArray`.
+//
+// Contract — identical to the Lean body (`ByteSlice.lean`), clause by clause.
+// The Lean body computes, in `Nat`, with `n := dst.data.size`, `slen :=
+// src.data.size`:
+//   dc := min dstOff.toNat n            (destination cursor, clamped to [0, n])
+//   sc := min srcOff.toNat slen          (source cursor, clamped to [0, slen])
+//   lc := min len.toNat (min (n-dc) (slen-sc))   (copied run, clamped to fit both)
+// and returns `dst[0,dc) ++ src[sc,sc+lc) ++ dst[dc+lc,n)` — the full length `n`
+// of `dst`, with the `[dc, dc+lc)` window overwritten by `src[sc, sc+lc)`.
+// `lc` is the single shared copied-length: the window replacement must agree on
+// `lc` across the middle and the trailing part.
+//
+// The code below reproduces exactly those three clamps:
+//   dc   = `dstOff > n  ? n     : dstOff`         (mirrors `min dstOff n`)
+//   copyLen = clamped first by `n - dc` (dst side), then by `slen - sc` (src side)
+//   sc   = `srcOff > slen ? slen : srcOff`        (mirrors `min srcOff slen`)
+//   copyLen = `min(len, n-dc, slen-sc)`            (= the body's `lc`)
+// and materializes `n` bytes = full `dst` with `[dc, dc+copyLen)` overwritten by
+// `src[sc, sc+copyLen)` (a single `memcpy` of the untouched prefix/suffix back to
+// back plus one window `memcpy`).
+//
+// TRUSTED, NOT PROVEN (Layer 2, excluded from the `#print axioms` gate); must
+// match the Lean body byte-for-byte on every input, including every out-of-range
+// clamp above (empty source, `off` at/past either end, `len` past the end).
 LEAN_EXPORT lean_obj_res codec_blitBytes(lean_obj_arg dst, size_t dstOff,
                                           lean_obj_arg src, size_t srcOff,
                                           size_t len) {
@@ -43,13 +63,16 @@ LEAN_EXPORT lean_obj_res codec_blitBytes(lean_obj_arg dst, size_t dstOff,
     // Clamp the copied run to avoid reading past `src` or writing past `dst`;
     // this mirrors the `Array.extract` bounds in the Lean body (which truncate
     // at the array end). The Lean body is total in the same sense: `extract`
-    // clamps its stop index.
+    // clamps its stop index. The `> n - dstOff` / `> slen - srcOff` forms are
+    // used (not `dstOff + copyLen > n`) so the comparison is overflow-stable
+    // even for a pathological `len` near `SIZE_MAX` — the Lean `Nat` never wraps
+    // (`min len (n - dc) (slen - sc)`), so the C must not either.
     if (dstOff > n) dstOff = n;
-    if (dstOff + copyLen > n) copyLen = n - dstOff;
+    if (copyLen > n - dstOff) copyLen = n - dstOff;
     {
         size_t slen = lean_sarray_size(src);
         if (srcOff > slen) srcOff = slen;
-        if (srcOff + copyLen > slen) copyLen = slen - srcOff;
+        if (copyLen > slen - srcOff) copyLen = slen - srcOff;
     }
     lean_obj_res r = lean_alloc_sarray(1, n, n);
     if (n > 0) {

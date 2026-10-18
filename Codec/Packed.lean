@@ -144,8 +144,13 @@ theorem consumedAbs_drop_one (a : Array UInt8) (i : Nat) (s : Bytes (a.size - i)
   dsimp [consumedAbs, Suffix.drop]
   omega
 
-/-- The packed decoder never overruns the buffer: every result's consumed count is
-at most `a.size` (and at least the starting cursor `i`). `[propext, Quot.sound]`-only. -/
+/-- The packed decoder never moves the cursor **backward**: every result's consumed
+count `c` is at least the starting cursor `i`. This is the unconditional monotonicity
+fact. Note the *upper* bound `c ≤ a.size` — the "never overruns" guarantee — is **not**
+unconditional: `pure x` returns `(x, i)` for *any* `i`, so a cursor already past the end
+(`i > a.size`) yields `c = i > a.size`. The upper bound therefore needs the `i ≤ a.size`
+precondition and is stated separately in `decodeArray_bounded_upper`.
+`[propext, Quot.sound]`-only. -/
 theorem decodeArray_bounded {α : Type} (d : Codec α) (a : Array UInt8) (i c : Nat)
     (x : α) :
     (x, c) ∈ decodeArray d a i → i ≤ c := by
@@ -197,6 +202,66 @@ theorem decodeArray_bounded {α : Type} (d : Codec α) (a : Array UInt8) (i c : 
         rcases hc with ⟨hx, hc⟩
         subst x c
         exact Nat.le_succ i
+      · simp [h] at hc
+
+/-- The packed decoder never overruns the buffer **when started inside it**: for
+`i ≤ a.size`, every result's consumed count `c` is at most `a.size`. This is the
+"never overruns" upper bound the packed carrier enjoys a valid cursor — the
+consumed count is `i + ((a.size - i) - t.remaining)` for a genuine suffix `t` (with
+`t.remaining ≤ a.size - i`), so it is bounded by `i + (a.size - i) = a.size`. The
+`i ≤ a.size` precondition is load-bearing: without it `pure x` yields `c = i > a.size`
+(see `decodeArray_bounded`). `[propext, Quot.sound]`-only. -/
+theorem decodeArray_bounded_upper {α : Type} (d : Codec α) (a : Array UInt8) (i c : Nat)
+    (x : α) (hi : i ≤ a.size) :
+    (x, c) ∈ decodeArray d a i → c ≤ a.size := by
+  induction d generalizing i c with
+  | iso j d ih =>
+      intro hc
+      rw [decodeArray, List.mem_filterMap] at hc
+      rcases hc with ⟨pr, hmem, hm⟩
+      have hc : c = pr.2 := by
+        cases hj : j.apply pr.1 with
+        | none => simp [hj] at hm
+        | some y =>
+            simp [hj] at hm
+            exact hm.2.symm
+      subst c
+      exact ih i pr.2 pr.1 hi hmem
+  | seq d₁ d₂ ih₁ ih₂ =>
+      intro hc
+      rw [decodeArray, List.mem_flatMap] at hc
+      rcases hc with ⟨pr₁, h1, h2⟩
+      rw [List.mem_flatMap] at h2
+      rcases h2 with ⟨pr₂, h3, h4⟩
+      replace h4 : x = (pr₁.1, pr₂.1) ∧ c = pr₂.2 := by simpa using h4
+      rcases h4 with ⟨hx, hc2⟩
+      subst c
+      have hb1 := ih₁ i pr₁.2 pr₁.1 hi h1
+      have hb2 := ih₂ pr₁.2 pr₂.2 pr₂.1 hb1 h3
+      exact hb2
+  | alt d₁ d₂ ih₁ ih₂ =>
+      intro hc
+      rw [decodeArray, List.mem_append] at hc
+      rcases hc with hc | hc
+      · exact ih₁ i c x hi hc
+      · exact ih₂ i c x hi hc
+  | empty =>
+      intro hc
+      simp [decodeArray] at hc
+  | pure x₀ =>
+      intro hc
+      simp [decodeArray] at hc
+      rcases hc with ⟨hx, hc⟩
+      subst x c
+      exact hi
+  | byte =>
+      intro hc
+      rw [decodeArray] at hc
+      by_cases h : i < a.size
+      · simp [h] at hc
+        rcases hc with ⟨hx, hc⟩
+        subst x c
+        omega
       · simp [h] at hc
 
 /-! ## Transport lemmas for the decode refinement

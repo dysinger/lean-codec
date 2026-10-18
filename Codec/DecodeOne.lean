@@ -27,11 +27,12 @@ mirror the `decodeFull_spec` template (`Codec.Decode`):
    `none` even when `decodeArray` has a result — e.g. the first `d₁` result is a
    dead end for `seq` — which is exactly why completeness needs a gate.)
 
-2. **Gated** — under `Unambiguous d`, two `decodeArray` results that consume the
-   same count agree on the value; under `Functional d`, one value determines one
-   count. Together these pin `decodeArray d a i` to at most one result, and the
-   committed decoder then *equals* the unique result, with nothing silently
-   discarded.
+2. **Gated** — under `Functional d` (one value determines one count), the
+   `decodeArray_functional_count` lemma pins the consumed count; under
+   `Unambiguous d`, two `decodeArray` results that consume the same count agree
+   on the value (`decodeArray_unambiguous_value`, proved below). Together these
+   pin `decodeArray d a i` to at most one result, and the committed decoder then
+   *equals* the unique result, with nothing silently discarded.
 
 The unconditional `decode (d₁ | d₂) s = decode d₁ s ++ decode d₂ s` law is **not
 touched** — `decode`/`decodeArray` remain the full backtracking union; `decodeOne`
@@ -193,18 +194,68 @@ theorem decodeArray_functional_count {α : Type} (d : Codec α) (hd : Functional
   unfold consumedAbs
   rw [hrem]
 
-/-
-## Status note (remaining proof work)
+/-- Under `Unambiguous d`, two `decodeArray` results that consume the **same** count
+agree on the value. This is the second half of the pair-uniqueness gate for `decodeOne`
+(the first half, `decodeArray_functional_count`, pins the count under `Functional d`).
 
-`decodeOne` + `decodeOne_mem` + `decodeArray_functional_count` are proved above,
-`[propext, Quot.sound]`-only. The *second* half of the pair-uniqueness gate —
-`Unambiguous d ⇒` two same-`count` `decodeArray` results agree on the value — is the
-remaining sub-obligation for Task 3.1. Its forward bridge is: `(x₁, c) ∈ decodeArray
-d a i` transports (via `decodeArray_eq` + `decode_spec`) to `Rel d x₁ s₀₁` for the
-genuine consumed prefix `s₀₁`, and the same count pins `s₀₁ = s₀₂` (as the two
-`(a.size - i) - remaining`-length prefixes of the same input) before `Unambiguous`
-forces `x₁ = x₂`. The `splice`/`prepend`-prefix extraction that discharges `s₀₁ = s₀₂`
-is the outstanding step; it is tracked in the task ledger, not silently dropped.
--/
+The forward bridge: `(x₁, c) ∈ decodeArray d a i` transports (via `decodeArray_eq` +
+`decode_spec`) to `Rel d x₁ s₀₁` for a genuine consumed prefix `s₀₁`; the *same* count
+`c` pins both `consumedAbs a i t₁ = c = consumedAbs a i t₂`, hence `t₁.remaining =
+t₂.remaining`, and the genuine-suffix invariant (`decode_genuine_suffix_pointwise`,
+read pointwise at one index and closed by `omega`) then pins the remainders `t₁ = t₂`
+(via `Suffix.ext`). Once `t₁ = t₂`, `t.prepend s₀₁ = t.prepend s₀₂`
+forces the prefixes `s₀₁ = s₀₂` (`prepend_prefix_eq`), and `Unambiguous d` forces
+`x₁ = x₂`. `[propext, Quot.sound]`-only, zero `sorry`, zero `Classical.choice`. -/
+theorem decodeArray_unambiguous_value {α : Type} (d : Codec α) (hd : Unambiguous d)
+    (a : Array UInt8) (i : Nat) :
+    ∀ {x₁ x₂ : α} {c : Nat},
+      (x₁, c) ∈ decodeArray d a i → (x₂, c) ∈ decodeArray d a i → x₁ = x₂ := by
+  intro x₁ x₂ c hmem₁ hmem₂
+  rw [decodeArray_eq d a i] at hmem₁ hmem₂
+  rw [List.mem_map] at hmem₁ hmem₂
+  rcases hmem₁ with ⟨p₁, hp₁, hp₁'⟩
+  rcases hmem₂ with ⟨p₂, hp₂, hp₂'⟩
+  rcases p₁ with ⟨x₁', t₁⟩
+  rcases p₂ with ⟨x₂', t₂⟩
+  have hp₁'' : (x₁', consumedAbs a i t₁) = (x₁, c) := by simpa using hp₁'
+  have hp₂'' : (x₂', consumedAbs a i t₂) = (x₂, c) := by simpa using hp₂'
+  have hx₁' : x₁' = x₁ := congrArg Prod.fst hp₁''
+  have hx₂' : x₂' = x₂ := congrArg Prod.fst hp₂''
+  have hc₁ : consumedAbs a i t₁ = c := congrArg Prod.snd hp₁''
+  have hc₂ : consumedAbs a i t₂ = c := congrArg Prod.snd hp₂''
+  -- same consumed count ⇒ same remaining length
+  have hrem : t₁.remaining = t₂.remaining := by
+    have hcons : consumedAbs a i t₁ = consumedAbs a i t₂ := by rw [hc₁, hc₂]
+    unfold consumedAbs at hcons
+    have ht₁ : t₁.remaining ≤ a.size - i := t₁.hle
+    have ht₂ : t₂.remaining ≤ a.size - i := t₂.hle
+    omega
+  -- the genuine-suffix invariant pins the remainders equal: t₁ = t₂
+  have hbytes : cast (congrArg Bytes hrem) t₁.bytes = t₂.bytes := by
+    apply Bytes.ext
+    intro j
+    have hg₁ := decode_genuine_suffix_pointwise d (bdrop i (arrayToBytes a)) x₁' t₁ hp₁ ⟨j.val, by omega⟩
+    have hg₂ := decode_genuine_suffix_pointwise d (bdrop i (arrayToBytes a)) x₂' t₂ hp₂ j
+    have hc : t₁.consumed = t₂.consumed := by
+      unfold Suffix.consumed
+      rw [hrem]
+    rw [cast_bytes_val' (e := hrem) t₁.bytes j]
+    rw [hg₁, hg₂]
+    unfold bdrop
+    congr 1
+    apply Fin.ext
+    dsimp
+    omega
+  have ht : t₁ = t₂ := Suffix.ext hrem hbytes
+  -- decode_spec: each result carries a genuine consumed prefix with Rel
+  rcases (decode_spec d x₁' (bdrop i (arrayToBytes a)) t₁).1 hp₁ with ⟨s₀₁, hpre₁, hrel₁⟩
+  rcases (decode_spec d x₂' (bdrop i (arrayToBytes a)) t₂).1 hp₂ with ⟨s₀₂, hpre₂, hrel₂⟩
+  subst t₁
+  have hpre : t₂.prepend s₀₁ = t₂.prepend s₀₂ := by
+    exact hpre₁.symm.trans hpre₂
+  have hs₀ : s₀₁ = s₀₂ := prepend_prefix_eq t₂ s₀₁ s₀₂ hpre
+  rw [hs₀] at hrel₁
+  have hxv : x₁' = x₂' := hd s₀₂ hrel₁ hrel₂
+  rw [← hx₁', ← hx₂', hxv]
 
 end Codec

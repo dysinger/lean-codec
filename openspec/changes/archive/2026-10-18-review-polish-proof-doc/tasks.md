@@ -7,7 +7,7 @@ F\* audit.
 
 ## 1. Truthful run-model documentation
 
-- [ ] 1.1 In `Codec/Packed.lean`, fix the `decodeArray_bounded` docstring so it
+- [x] 1.1 In `Codec/Packed.lean`, fix the `decodeArray_bounded` docstring so it
       does not claim "at most `a.size`"/"never overruns": either rewrite it to the
       proved fact (`i ≤ c`, the cursor never moves backward), or prove and state
       the upper bound `c ≤ a.size` (via `consumedAbs` + `Suffix.hle`). Verify with
@@ -15,12 +15,12 @@ F\* audit.
 
 ## 2. The `decodeOne` uniqueness proof (the genuine gap)
 
-- [ ] 2.1 Reword the `Codec/DecodeOne.lean` module header so the "committed decoder
+- [x] 2.1 Reword the `Codec/DecodeOne.lean` module header so the "committed decoder
       then equals the unique result" consequence is conditional on the
       still-unproven `decodeArray_unambiguous_value` (future/conditional tense),
       matching the existing status note. Verify the header no longer asserts an
       unproven fact.
-- [ ] 2.2 Prove `decodeArray_unambiguous_value` (`Unambiguous d ⇒` two
+- [x] 2.2 Prove `decodeArray_unambiguous_value` (`Unambiguous d ⇒` two
       same-`count` `decodeArray` results agree on the value): the forward bridge
       `(x, c) ∈ decodeArray d a i → Rel d x s₀` via `decodeArray_eq` +
       `decode_spec`, plus the `splice`/`prepend` prefix-extraction lemma
@@ -31,7 +31,7 @@ F\* audit.
 
 ## 3. Layer-2 seam boundary reconciliation
 
-- [ ] 3.1 For `byteSlice`/`blitBytes`/`findByte`, write down the out-of-range
+- [x] 3.1 For `byteSlice`/`blitBytes`/`findByte`, write down the out-of-range
       clamping semantics of the Lean body (`Array.extract`/`Array.findIdx?` on
       `off ≥ size`, `len` past end) and make `Codec/ByteSlice.c`'s contract
       comments assert the _identical_ semantics clause-by-clause, or add a
@@ -40,7 +40,7 @@ F\* audit.
 
 ## 4. Comparative F\* audit
 
-- [ ] 4.1 Review `../fstar-codec` (its `AUDIT.md`, `README.md`, and `src/`) for the
+- [x] 4.1 Review `../fstar-codec` (its `AUDIT.md`, `README.md`, and `src/`) for the
       gap between the paper and _our_ stated departures/strengthenings in `README.md`
       ([D1]–[D8]/[S1]–[S6]), and record how close vs how far the F\* implementation
       is relative to the Lean port. Expected finding to confirm: the F\* `codec` is
@@ -53,5 +53,5 @@ F\* audit.
 
 ## 5. Gate
 
-- [ ] 5.1 `lake build` zero `sorry`/warnings; `#print axioms Codec.roundtrip` ⇒
+- [x] 5.1 `lake build` zero `sorry`/warnings; `#print axioms Codec.roundtrip` ⇒
       `[propext, Quot.sound]`; every new law `[propext, Quot.sound]`-only.

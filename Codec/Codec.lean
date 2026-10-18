@@ -589,6 +589,47 @@ theorem bdrop_splice {n m : Nat} (hm : m ≤ n) (s₁ : Bytes m) (s₂ : Bytes (
     · simp [hlt]
   · omega
 
+/-- Reading the *prefix* region of a `splice hm s₁ s₂` recovers the prefix `s₁`:
+for any `i : Fin n` with `i.val < m`, `splice hm s₁ s₂ i = s₁ ⟨i.val, ·⟩`. This is
+`bdrop_splice`'s dual (the ``drop``-of-``splice`` recovers the suffix; this recovers
+the *prefix*) — the length-indexed spelling of the old `take (m) (s₁ ++ s₂) = s₁`.
+It is the transport `decodeArray_unambiguous_value` needs to show two same-length
+decoded prefixes of one input agree. `[propext, Quot.sound]`-only. -/
+theorem splice_prefix_read {n m : Nat} (hm : m ≤ n) (s₁ : Bytes m) (s₂ : Bytes (n - m))
+    (i : Fin n) (hi : i.val < m) :
+    splice hm s₁ s₂ i = s₁ ⟨i.val, hi⟩ := by
+  rw [splice_apply]
+  unfold concat
+  rw [cast_fin_symm]
+  · dsimp
+    simp [hi]
+  · exact splice_add hm
+
+/-- Reading the *prefix* region of a `t.prepend s₀` recovers the prefix `s₀`: for
+`i : Fin n` with `i.val < n - t.remaining`, `(t.prepend s₀) i = s₀ ⟨i.val, ·⟩`. This
+re-states `splice_prefix_read` at the `Suffix.prepend` level (`prepend` is the `splice`
+with prefix `s₀` and suffix `cast … t.bytes`). `[propext, Quot.sound]`-only. -/
+theorem prepend_prefix_read {n : Nat} (t : Suffix n) (s₀ : Bytes (n - t.remaining))
+    (i : Fin n) (hi : i.val < n - t.remaining) :
+    t.prepend s₀ i = s₀ ⟨i.val, hi⟩ := by
+  unfold Suffix.prepend
+  exact splice_prefix_read (Nat.sub_le n t.remaining) s₀ (cast (congrArg Bytes (Nat.sub_sub_self t.hle).symm) t.bytes) i hi
+
+/-- `Suffix.prepend` is injective in its prefix argument: two prefixes that
+`prepend` (onto the *same* suffix `t`) to equal whole strings are themselves equal.
+This is the "take the consumed prefix" step that, once `t₁ = t₂` is known, turns
+`t.prepend s₀₁ = t.prepend s₀₂` into `s₀₁ = s₀₂` — the same-type, cast-free half of
+`decodeArray_unambiguous_value`. `[propext, Quot.sound]`-only. -/
+theorem prepend_prefix_eq {n : Nat} (t : Suffix n) (s₀₁ s₀₂ : Bytes (n - t.remaining)) :
+    t.prepend s₀₁ = t.prepend s₀₂ → s₀₁ = s₀₂ := by
+  intro h
+  apply Bytes.ext
+  intro i
+  have hr := congrFun h ⟨i.val, Nat.lt_of_lt_of_le i.isLt (Nat.sub_le n t.remaining)⟩
+  rw [prepend_prefix_read t s₀₁ ⟨i.val, Nat.lt_of_lt_of_le i.isLt (Nat.sub_le n t.remaining)⟩ i.isLt] at hr
+  rw [prepend_prefix_read t s₀₂ ⟨i.val, Nat.lt_of_lt_of_le i.isLt (Nat.sub_le n t.remaining)⟩ i.isLt] at hr
+  exact hr
+
 /-- Reconstructing a `Bytes n` from a `splice hm s₁ s₂` split by dropping the prefix and
 re-prepending it gives back the originals: `s = (Suffix.drop m s).prepend s₁` (with `s₁`
 transported to the `n - (n - m)` length `Suffix.prepend` expects). Used by `decode_spec`'s
