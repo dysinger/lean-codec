@@ -258,6 +258,38 @@ generic bulk byte-movement seams (`byteSlice`/`blitBytes`/`findByte`/`commitRema
 Pure-Lean codecs are accepted at ~20-40x off C; for TLS-later the crypto is
 FFI'd (OpenSSL/etc.), and 20-byte header parsing is irrelevant to TLS throughput.
 
+## Next session: review fixes (independent review, README already fixed)
+
+An independent reviewer (this session) gave the README a full rewrite (done — see
+`README.md`; the [D#]/[S#] citation/precision slips, the Layer-2 framing, and the
+honest-ceiling section are now fixed). The **code/proof** actions from that review
+are captured as tasks below; they are NOT yet done, and nothing below should be
+silently marked complete without proof.
+
+1. **`Codec/Packed.lean` `decodeArray_bounded` docstring contradiction.** The
+   docstring claims the consumed count is "at most `a.size`" and the decoder
+   "never overruns", but the theorem only proves `i ≤ c` (the lower bound). Either
+   (a) rename/rewrite the docstring to "the cursor never moves backward"/"at least
+   `i`", or (b) actually prove and state the upper bound `c ≤ a.size` (which follows
+   from `consumedAbs` + `Suffix.hle`). Real documented-guarantee mismatch; fix it.
+2. **`Codec/DecodeOne.lean` module header understates the unproven dependency.**
+   Header item 2 says "the committed decoder then equals the unique result" in
+   present tense, but that consequence depends on the still-unproven
+   `decodeArray_unambiguous_value`. Reword to future/conditional tense matching the
+   status note (lines ~199-207), then actually prove the lemma (forward bridge
+   `(x,c) ∈ decodeArray → Rel d x s₀` via `decodeArray_eq` + `decode_spec`, plus the
+   `splice`/`prepend` prefix extraction). This is the one genuine proof gap in the
+   repo; close it or keep it explicitly conditional.
+3. **Layer-2 seam boundary conditions — reconcile at the spec level, not just
+   "trusted C".** For `blitBytes`/`byteSlice`/`findByte`, spell out the out-of-range
+   clamping semantics of the Lean body (`Array.extract`/`Array.findIdx?` on
+   `off ≥ size`, `len` overflow) and make the `ByteSlice.c` comments assert the
+   _identical_ semantics clause-by-clause (or add a `#eval`/bench equivalence smoke
+   test over the out-of-range cases). The current "mirrors `Array.extract` bounds"
+   is an unverified belief about stdlib behavior; turn it into a checkable contract.
+4. (Already recorded in the shipped-c-fast-path task ledger) Re-scope `shipped-c-fast-path`:
+   drop Tasks 2.3/4.x (per-format C) — see the stale-plan note below.
+
 ## Next session: implement `shipped-c-fast-path` (Task 2 onward) — NOTE: the plan
 
 below predates the "all codecs pure-Lean, no per-format C" decision and is stale.

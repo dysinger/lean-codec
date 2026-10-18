@@ -43,25 +43,30 @@ relative to the paper, and why.
 This is the canonical, complete record of every place `codec` departs from the
 paper (a _departure_ — an observable-semantics change) or completes it (a
 _strengthening_ — no observable-semantics change). Each entry cites the paper's
-§/quote and the Lean symbol that implements it, so a porter can read this one
-list and know exactly what to reproduce. Anchors `[D1]`–`[D8]` and `[S1]`–`[S6]`
-are stable cross-reference targets, shared with the code and the design docs.
+§ and the Lean symbol that implements it, so a porter can read this one list and
+know exactly what to reproduce. Anchors `[D1]`–`[D8]` and `[S1]`–`[S6]` are stable
+cross-reference targets, shared with the code and the design docs.
+
+Section numbers below refer to the paper's own sectioning as reproduced in
+`PAPER.md` (the paper uses a mix of `§n` and `§n.m`; where a fact lives in a
+subsection we cite the subsection).
 
 ### Departures (observable-semantics changes)
 
 **[D1] `String`/`Char` → bytes — bytes become the base unit.**
-The paper's concrete syntax is textual: `Rel :: [(α, String)]` (§4.1 the decoder
-is `String → [(α, String)]`) and `token :: δ Char` (§4.3). `codec` targets
-binary, so the base unit is `UInt8`, the base string is a byte sequence, and
-`byte : Codec UInt8` is the `token` analogue. Text/Unicode is rebuilt downstream
-(`lean-text`) on top of bytes, not in core. **One byte-string type, one job**
-(see [Representations](#representations-one-length-indexed-byte-string)): the
-substrate is the single length-indexed `Bytes n := Fin n → UInt8`, which is
-structurally reducible for proofs **and** a scalar indexed load at runtime — there
-is no separate `List` spec and no `ByteArray` run-model slab.
+The paper's concrete syntax is textual. The decoder is `Parser (String → [(α,
+String)])` (§5.1) and the primitive token is `token` over `Char`; the value graph
+is given as `Rel :: [(α, String)]` (§4.3). `codec` targets binary, so the base
+unit is `UInt8`, the base string is a byte sequence, and `byte : Codec UInt8` is
+the `token` analogue. Text/Unicode is rebuilt downstream (`lean-text`) on top of
+bytes, not in core. **One byte-string type, one job** (see
+[Representations](#representations-one-length-indexed-byte-string)): the substrate
+is the single length-indexed `Bytes n := Fin n → UInt8`, which is structurally
+reducible for proofs **and** a scalar indexed load at runtime — there is no
+separate `List` spec and no `ByteArray` run-model slab.
 
 **[D2] The nondeterministic list decoder.** The paper's decoder returns a _list_
-of `(value, remaining)` pairs — a relation (§4.1 `Parser (String → [(α, String)])`,
+of `(value, remaining)` pairs — a relation (§5.1 `Parser (String → [(α, String)])`,
 §4.3 "decoding … the graph"). `codec` keeps it that way: `decode` returns all
 `(value, remainder)` pairs, and `|` is list concatenation.
 
@@ -69,13 +74,16 @@ of `(value, remaining)` pairs — a relation (§4.1 `Parser (String → [(α, St
 `decode (d₁ | d₂) s = decode d₁ s ++ decode d₂ s`, matching `Rel (d₁ | d₂) = Rel d₁ ∨ Rel d₂` by construction.
 
 **[D4] Lossless capture — "allowed" bytes are _kept_, not discarded (no
-`ignore`).** The paper (§3.1, §6.3) deliberately _discards_ optional bytes
-(`ignore`/`skipSpace` map arbitrary whitespace to a single blank and back), and
-therefore abandons a strict isomorphism in favor of "modulo equivalence classes".
-We reject that weakening: a run of bytes a codec allows is _captured_ as a value
-and re-emitted verbatim (realized by repetition over a `subset p byte` step, not a
-new primitive). There is therefore **no `ignore` combinator in core**, and the
-strict inverse law holds unconditionally.
+`ignore`).** The paper (§3.1) deliberately _discards_ optional bytes: its `ignore`
+maps _any_ run of blanks down to a single unit value and, on printing, emits a
+**fixed, single** representation back — so an arbitrary-length whitespace run is
+not preserved, and the isomorphism holds only "modulo equivalence classes" rather
+than literally. (`skipSpace`, `optSpace`/`sepSpace` in §6.3 are three concrete
+instantiations with slightly different re-emitted whitespace, but all share the
+same one-way-lossy shape.) We reject that weakening: a run of bytes a codec
+allows is _captured_ as a value and re-emitted verbatim (realized by repetition
+over a `subset p byte` step, not a new primitive). There is therefore **no
+`ignore` combinator in core**, and the strict inverse law holds unconditionally.
 
 **[D5] `|` needs no prefix-disjointness condition.** Some deterministic-parser
 designs require `|`'s branches to be _prefix-disjoint_ so at most one can match a
@@ -134,13 +142,17 @@ structural isos.
 repetition denotation is the least relation closed under the `nil`/`cons` rules;
 an induction principle makes "least fixpoint" a theorem rather than a claim.
 
-**[S6] Unbounded `many` is _semantic_, not a `Codec` value.** An infinite
-description cannot be a finite AST node (a strict, finite tree cannot contain an
-endless repetition), so repetition lives as three separate artifacts — a
-denotation, a decoder, and an encoder — rather than a single `many` value. The
-paper's named repetition combinators (`sepBy`, `chainl1`/`chainr1`) are re-derived
-over those three; they
-do **not** exist as bare `Codec`-building symbols.
+**[S6] Unbounded `many` is _semantic_, not a `Codec` value — a strictness
+consequence, not a naming choice.** The paper is a **lazy** language, so `Rel`'s
+meaning "will generate and concatenate infinite lists" (§4.3) and its named
+combinators (`many`, `sepBy`, `chainl1`/`chainr1`) are ordinary **values**. Lean is
+**strict**: a finite AST node cannot contain an unbounded repetition, so `codec`
+does not try. Repetition lives instead as **three separate artifacts** — a
+denotation (`relRepeat`), a decoder (`decodeRepeat`), and an encoder — rather than
+a single `many` value; the paper's `sepBy`/`chainl1`/`chainr1` are re-derived over
+those three and do **not** exist as bare `Codec`-building symbols. This is the
+same semantic content, but it is a _language_ difference (laziness vs strictness),
+not merely a cosmetic naming change.
 
 Everything else is **kept**, and kept strongly: `Rel` is preserved as the
 _specification_ (decoding is the paper's full relation, nothing narrowed on top),
@@ -247,14 +259,15 @@ it fast without changing what it means is a separate, later problem.
 ### `[D4]` lossless capture — why we refuse to throw bytes away
 
 The paper's `ignore` maps _any_ run of whitespace down to a single value and, on
-printing, always emits _one_ space. That is one-way loss: three spaces in, one
-space out. The paper accepts this and says the inverse law holds only "modulo
-equivalence classes". `codec` wants the law to be **literally true**, which a
-lossy combinator makes impossible. So `codec` simply **has no `ignore`**: a run of
-optional bytes is _captured_ and re-emitted verbatim — same length, same bytes —
-so parse and print are a genuine byte-for-byte two-way street. Where the paper
-relaxes the law to keep `ignore`, `codec` relaxes nothing and drops `ignore`
-instead.
+printing, always emits _one_ (fixed) run back — `skipSpace` re-emits none,
+`optSpace`/`sepSpace` re-emit a single blank, but none of them preserves the
+original length. That is one-way loss: three spaces in, a fixed run out. The paper
+accepts this and says the inverse law holds only "modulo equivalence classes".
+`codec` wants the law to be **literally true**, which a lossy combinator makes
+impossible. So `codec` simply **has no `ignore`**: a run of optional bytes is
+_captured_ and re-emitted verbatim — same length, same bytes — so parse and print
+are a genuine byte-for-byte two-way street. Where the paper relaxes the law to
+keep `ignore`, `codec` relaxes nothing and drops `ignore` instead.
 
 ### `[D5]` no prefix-disjointness gate
 
@@ -330,15 +343,16 @@ measure, not just a recursive function.
 proved
 
 "Zero or more" is the one place a description would have to be _infinite_. A
-strict language cannot hold an infinite description, so `codec` does not try:
-`many` is **not** a node at all. Its three uses are spelled out directly — the
-_meaning_ (a relation that is the _least_ thing closed under "empty, or one more
-element"), the _decoder_ (which requires each step to consume a byte so it
-terminates), and the _encoder_ (which recurses on the value list, so it needs no
-condition). `[S5]` proves "least fixpoint" rather than asserting it; `[S6]` notes
-the naming consequence — there is no `sepBy`/`sepBy1`/`some`/`many1` symbol, and
-the `sepBy` triple has "one or more" (non-empty) semantics. A porter should look
-for these three readings, not for a `many` object.
+**strict** language cannot hold an infinite description (the paper, being lazy,
+can), so `codec` does not try: `many` is **not** a node at all. Its three uses are
+spelled out directly — the _meaning_ (a relation that is the _least_ thing closed
+under "empty, or one more element"), the _decoder_ (which requires each step to
+consume a byte so it terminates), and the _encoder_ (which recurses on the value
+list, so it needs no condition). `[S5]` proves "least fixpoint" rather than
+asserting it; `[S6]` records the structural consequence of strictness — there is
+no `sepBy`/`sepBy1`/`some`/`many1` **value**, only the relation/decoder/encoder
+triple, and the `sepBy` triple has "one or more" (non-empty) semantics. A porter
+should look for these three readings, not for a `many` object.
 
 ---
 
@@ -394,7 +408,11 @@ description — no solver, no per-combinator gate, no prefix-disjointness condit
 - **`lean-text`** (downstream): `utf8` plus `text`/`identifier`/`whitespace` —
   the paper's §6 text domain, re-based on bytes.
 
-## Performance — two proof layers
+## Performance — two proof layers, and an honest ceiling
+
+The speed story has three parts: a packed result carrier (Layer 1), a generic
+bulk-byte trust seam (Layer 2), and a **hard ceiling on pure-Lean parsing** that
+the first two do not remove.
 
 The packed result carrier (see `Codec/Packed.lean`) gives the interpreter a
 contiguous-buffer fast path, in **two layers with distinct proof status** that are
@@ -406,61 +424,64 @@ never conflated:
   `encodeByteArrayBytes_eq`), each `[propext, Quot.sound]`-only, zero
   `Classical.choice`, zero `sorry`. These are the **only** layer admitted to the
   `#print axioms` gate.
-- **Layer 2 — a named trust seam.** `byteSlice (a : ByteArray) (i : USize)` (in
-  `Codec/ByteSlice.lean`) is a `memcpy`-style suffix copy whose **Lean body**
-  elaborates and reduces (so `#print axioms Codec.byteSlice` reports no axioms — the
-  proof sees the proof-only body), but whose **running C** (`codec_byteSlice` in
-  `Codec/ByteSlice.c`) is **trusted, not proven**. Layer 2 is **excluded** from the
-  `#print axioms` acceptance and documented as the F\*-vs-KaRaMeL posture: the Lean
-  body pins the meaning; the same-named C symbol is the isolated trust seam.
+- **Layer 2 — a named trust seam.** `byteSlice` / `blitBytes` / `findByte` /
+  `commitRemainder` (in `Codec/ByteSlice.lean`) are `memcpy`/`memchr`-style byte
+  operations. Each is `@[extern "…"]` with an **elaborating Lean body** that pins
+  the intended meaning and reduces in proofs — but the **running C** in
+  `Codec/ByteSlice.c` is **trusted, not proven**.
 
-  `byteSlice` is now the **trust seam for the partial-remainder commit**: the
-  `USize`-indexed `commitRemainder (a : Array UInt8) (c : USize) : ByteArray :=
-byteSlice (ByteArray.mk a) c` (also in `Codec/ByteSlice.lean`) is its first
-  library consumer — the single `memcpy` that turns a chosen consumed-count cursor
-  into a `ByteArray` remainder, with a **definitional** refinement law
-  `commitRemainder_spec` (`#print axioms` ⇒ no axioms) that carries **no**
-  `Nat ↔ USize` roundtrip and **no** `System.Platform.numBits` premise (the
-  `Nat → USize` conversion happens once, at the call site). The cursor-returning
-  decoder it commits against is the unchanged `decodeArray` (re-exposed as
-  `decodeArrayFast`, a documented rename), which performs **no** `byteSlice` during
-  decode — so a decode yielding `k` backtracking results does zero suffix copies,
-  and the one `memcpy` runs once, on the result the caller chooses. Full
-  backtracking is preserved (union `++` / `flatMap` cross-product); the `Bytes n`
-  spec and its laws are untouched.
+  An important, frequently-misread point: `#print axioms <seam>` reporting
+  "no axioms" is **by construction** and says **nothing about the C**. `@[extern]`
+  swaps only the _emitted_ C; Lean's kernel sees only the pure body, so the axiom
+  check cannot see the C symbol at all. The body being `[propext, Quot.sound]`-clean
+  is a fact about the _spec_, not evidence that the C implements it. Layer 2 is
+  therefore **excluded** from the `#print axioms` acceptance entirely, and its
+  contract is a named prose promise — "the C matches the Lean body byte-for-byte" —
+  that is re-checked empirically (byte-for-byte value checks in the bench), never
+  proved. "No axiom" is **never** "no trust."
 
-  The proven `decodeFullArray` (Layer 1) deliberately still builds its suffix via
-  the `List.toArray.drop` transport (an axiom-clean body, not a trusted
-  `@[extern]`), so Layer 2 remains distinct from and never conflated with Layer 1.
-  The "wired only onto a packed path" rule is a _how-to-use_ constraint (never call
-  the seam from a `List`-re-materializing consumer), not a claim that it is in the
-  spec's critical path.
+  The seams are **generic** bulk byte movement, not semantic parsers: `byteSlice`
+  (suffix `memcpy`), `blitBytes` (buffer-to-buffer `memcpy`), `findByte` (`memchr`),
+  and `commitRemainder` (a `USize`-indexed `byteSlice` wrapper). There is **no C
+  that parses digits, numbers, fields, or format structure** — all codecs are pure
+  Lean; the C surface stops at "copy/scan these raw bytes." (This is a hard design
+  rule, not an implementation detail.)
 
-"No axiom" is **not** "no trust": Layer 1 is proven zero-C; Layer 2 is trusted C
-under a named contract. The `#print axioms` gate accepts only Layer 1; the bench
-value-checks both byte-for-byte, so a semantically-wrong fast path fails at run time.
+The proven `decodeFullArray` (Layer 1) deliberately still builds its suffix via
+the `List.toArray.drop` transport (an axiom-clean body, not a trusted
+`@[extern]`), so Layer 2 remains distinct from and never conflated with Layer 1.
+A "named trust seam" boundary that is only _believed_ to match `Array.extract`'s
+out-of-range clamping — not yet reconciled clause-by-clause at the spec level — is
+an open contract to tighten, not a proof gap to hide: see the engineering ledger
+for the reconciliation task.
 
-Measured (current `bench`, 128 KiB linear sweep `[measured]`, never hand-typed;
-all figures are the bench's own): the Layer-2 `byteSlice` suffix copy of the
-`n/2` suffix runs **108695 MiB/s** (`575` ns/op moving `n/2` bytes at 128 KiB) vs
-the **30994 MiB/s** `memcpy` calibration on the same machine (which moves the full
-`n` bytes); the proven Layer-1 bulk `fastEncodeRepeat` runs **30 MiB/s** vs the
-**32 MiB/s** `Bytes n` spec `encodeRepeat` at the same 128 KiB — though note the
-comparison is not perfectly controlled (the `fastEncodeRepeat` lane value-checks
-byte-for-byte while the `encodeRepeat` lane checks only length, so the gap is partly
-measurement asymmetry). The partial-remainder commit `commitRemainder` (the
-`byteSlice` wrapper, committing the `n - n/3` suffix from a mid-buffer `USize`
-cursor) runs **~1450–3669 MiB/s** across the ×1/×2/×4 sweep (131072 bytes: `57452`
-ns/op, `[measured]` this session) — below raw `byteSlice` because each commit
-re-boxes `ByteArray.mk a` inside the timed loop, but value-checked byte-for-byte
-against `Array.extract` (a wrong C seam fails the bench, not just the trust
-contract). The contiguous accumulator removes the nested `concat`
-closure per element, but both Layer-1 lanes are far from the `byteSlice`/`memcpy`
-floor — the pure-carrier bulk write is the cost, and the result-carrier swap (not
-the byte loop) is the lever this change exercises.
-The carrier swap removes the _result_ allocation; near-C speed of the general
-interpreter for arbitrary `α` on real workloads (JSON/PNG/protobuf) is out of scope
-here.
+### The honest ceiling (what two layers do _not_ buy)
+
+Measured this session, the **pure-Lean** interpreter — even the packed Layer-1
+carrier — bottoms out around **20–40× slower than hand-written C**, and this is a
+_compiler-backend_ limit, not a code-shape limit. `Nat`/`UInt8`/`UInt64` arithmetic
+all lower to boxed, heap-allocating operations (`lean_nat_mul`, `lean_uint8_to_nat`,
+`instAddUInt64`), and `USize` is an unboxed `size_t` **only as an `@[extern]`
+argument**, never once it is stored in a returned product/`Option`. There is no
+pure-Lean escape: rewriting a parser to thread a `USize` cursor made it _slower_.
+The concrete canary — an RFC 3339 date-time (`parse`/`print` over a `ByteArray`) —
+parses at a few hundred ns/op where the equivalent `clang -O2` C parser is ~10 ns/op.
+
+The consequence, recorded as a standing decision: **pure-Lean codecs are the spec
+and accepted at ~20–40× C speed**; the only C-speed regions are the generic
+`memcpy`/`memchr` seams above; and genuinely latency-critical work whose hot loop
+is arithmetic (TLS crypto, numeric parsing) is **FFI'd**, not written in Lean. The
+packed carrier removes the _result_ allocation (nested `concat` closures per
+element) — a real, proved-equal win — but it does **not** move the per-element
+scalar arithmetic off the boxed heap, so it does not close the gap to C.
+
+Measured (current `bench`, `[measured]`, never hand-typed; all figures are the
+bench's own, and note the toolchain does not stabilize wall-clock well — see the
+engineering ledger on benchmark noise): the Layer-2 `byteSlice`/`blitBytes`/
+`findByte` seams run at the `memcpy`/`memchr` floor (tens of GiB/s moving bulk
+bytes), while the pure-Lean bulk `fastEncodeRepeat`/`encodeRepeat` and the RFC 3339
+`parse`/`print` sit in the tens-of-MiB/s / hundreds-of-ns range — around the
+boxed-scalar floor, as above.
 
 ## Getting started
 
