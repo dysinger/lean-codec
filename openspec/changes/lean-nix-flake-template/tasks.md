@@ -30,7 +30,7 @@
 
 ## 3. Publish
 
-- [ ] 3.1 `git init` + commit the clean tree at `../lean-nix-flake-template` and
+- [x] 3.1 `git init` + commit the clean tree at `../lean-nix-flake-template` and
       push to `github:dysinger/lean-nix-flake-template`
-- [ ] 3.2 Verify a downstream init works end to end: `nix flake init -t
+- [x] 3.2 Verify a downstream init works end to end: `nix flake init -t
 github:dysinger/lean-nix-flake-template` in a scratch dir → `nix build` green
