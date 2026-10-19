@@ -88,7 +88,23 @@ reminder that the toolchain is _flake-scoped_, not host-global.)
   its state and next steps, and work in that repo's own `lake`/`nix develop`,
   not this one's. All seven bases are landed and proven, the facade dispatches
   `BaseN.roundtrip` over `B2..B64`, and `Bench.lean` value-checks them
-  byte-for-byte. Task 4.3 (`nix flake check green`) is **done**: `codec` is now
+  byte-for-byte.
+
+  **`basen-uniform-leaf-api` (active change) is in flight: the seven bases are
+  being re-expressed as `Codec` values over `satisfy`/`count`/`iso` + the
+  repetition layer, deleting the bespoke `encode`/`decode`.** As of the
+  2026-10-19 handoff, core tasks 1.1–3.0 (`satisfy`, `takeWhile`, `BaseN.Bridge`)
+  and **task 3.1 (Base8, the template) are DONE** — `02db214` in `../lean-basen`
+  proves `count_satisfy_unambiguous`/`octElem_unambiguous`/`relOct_unambiguous`/
+  `octDecodeFull_unambiguous` and the inherited `roundtrip`, all `[propext,
+Quot.sound]`-only, zero `sorry`. **Remaining: 3.2–3.7 (six more bases), then
+  4.1 facade / 4.2 bench / 4.3 gate.** The facade `BaseN.lean` is currently RED
+  (still calls the deleted bespoke `Base8.encode`/`decode`/`roundtrip`). Next
+  session replicates the proven Base8 recipe (see the `lean` skill's new
+  unambiguity entries); consult `openspec/changes/basen-uniform-leaf-api/tasks.md`
+  for the concrete order. Work in `../lean-basen`'s own `nix develop`, not this one's.
+
+  Task 4.3 (`nix flake check green`) is **done**: `codec` is now
   a flake input (`github:dysinger/lean-codec`) threaded into `default.nix`, which
   rewrites `require codec from git …` → a local `require codec from
 "./codec-src"` path dependency, so the sandboxed `lake build` needs no

@@ -1,10 +1,46 @@
 # Tasks
 
+> ## Next step (2026-10-19, handoff) — 3.1 IS DONE; replicate 3.2–3.7, then facade/bench/gate
+>
+> **This session landed (committed):** task 3.1 is **complete** — `02db214` in
+> `../lean-basen` proves, zero `sorry`, all `[propext, Quot.sound]`-only:
+> `Unambiguous_satisfy`, `Rel_count_satisfy_len`, `count_satisfy_unambiguous`,
+> `Unambiguous_iso`, `octElem_unambiguous`, `Rel_octElem_len`,
+> `relOct_unambiguous`, `octDecodeFull_unambiguous`, and the inherited `roundtrip`
+> (`encodeOct bs = some ⟨n,s⟩ → decodeFull octElem octConsumesByte n s = some bs`).
+> The `∀ᵉ`-gating `huniq` for `decodeFull_spec` is `octDecodeFull_unambiguous`,
+> proved via `decodeRepeat_spec` `.1` ×2 + `prepend_prefix_eq` + `relOct_unambiguous`.
+> `#print axioms` on all four `_unambiguous`/`roundtrip` laws ⇒ `[propext, Quot.sound]`.
+> `lake build BaseN.Base8` green. **The template is now fully established** — replicate
+> it, don't re-derive.
+>
+> **Concrete order for next session:**
+>
+> 1. **3.2 Base2** — `count 8 (satisfy bitChar)` + `bitsVal`/`bitsOf` iso (MSB-first),
+>    then the exact `count_satisfy_unambiguous`/`Unambiguous_iso`/`relRepeat`-unambig/
+>    `roundtrip` chain (now a known recipe).
+> 2. **3.3 Base4** — mirror Base8 with 4 quartets/byte.
+> 3. **3.5 Base16** — `count 2 (satisfy hexChar)` + pair/byte iso; delete bespoke encode/decode.
+> 4. **3.4 Base10** — `takeWhile isDigit` run + block iso, no pad (the variable-width
+>    case: reuse `relTakeWhile`/`decodeTakeWhile`/`encodeTakeWhile` + a fold iso).
+> 5. **3.6/3.7 Base32/Base64** — alphabet run + block iso + terminal-`=` pad `alt`
+>    preserving 5.1 (`rest = []`); hardest (padding), do last.
+> 6. **4.1 facade** — `BaseN.lean` rewire (currently RED: calls deleted bespoke
+>    `Base8.encode`/`decode`/`roundtrip`).
+> 7. **4.2/4.3 bench + gate** — `Bench.lean` `Codec.decode`/`decodeRepeat` per base;
+>    zero `sorry`/warnings, axioms `[propext, Quot.sound]`, `nix flake check` green.
+>
+> **Key new proof facts this session (now in the `lean` skill):** `count k (satisfy p)`
+> unambiguity by induction (length-pin `Rel_count_len` + `splice_prefix_read`@0 head +
+> `bdrop_splice` tail); `Fin.val`-of-`⟨0,·⟩` needs `by simp` (no `norm_num`); `cases b`
+> before `rw [relRepeat_cons] at hb`; keep `m=3`/`m=0` as `have`s and close with `omega`
+> (don't `subst` the contradictory length).
+
 > ## Next step (2026-10-19, end of session) — FINISH 3.1, THEN REPLICATE
 >
 > **Session just landed (committed):** `octBlockIso.law` for Base8 is PROVED and
 > clean (`c97fec0` in `../lean-basen`; `1a0df55` in this repo). `lake build
-> BaseN.Base8` is green, zero `sorry`/warnings. The `Codec`-value rewrite of
+BaseN.Base8` is green, zero `sorry`/warnings. The `Codec`-value rewrite of
 > `BaseN/Base8.lean` is in place: `octDigit`, `octBlockApply`/`octBlockUnapply` + a
 > **separate `octBlockIso_law` theorem** (the fix for the old inline-`law` friction),
 > `octToVal_ofNat_valToOct`, `oct_decompose_unique`, `oct_sum_eq`, generic
@@ -13,8 +49,9 @@
 > `decodeOct`/`encodeOct`/`relOct`.
 >
 > **Remaining for 3.1 (in dependency order):**
+>
 > 1. `octElem_unambiguous : Unambiguous octElem` — not yet done. `Rel (iso i d) x s
->    ↔ ∃ a, i.apply a = some x ∧ Rel d a s`; `count 3 (satisfy p)` reads a *fixed*
+↔ ∃ a, i.apply a = some x ∧ Rel d a s`; `count 3 (satisfy p)` reads a _fixed_
 >    3-byte prefix of `s`, so `Rel (count 3 …) a s` and `… b s` pin `a = b` (prove
 >    `count k (satisfy p)` unambiguous by induction on `k` via `Rel_satisfy` + the
 >    prefix is the single byte `s ⟨0, ·⟩`); then `octBlockIso.apply a = some x` and
@@ -25,7 +62,7 @@
 > 2. `relOct_unambiguous : relUnambiguous (Rel octElem)` — induction on the list via
 >    `relRepeat_cons` + `octElem_unambiguous` at the head + IH at the tail.
 > 3. `roundtrip (bs) : Option.bind (encodeOct bs) (fun ⟨n,s⟩ => decodeFull octElem
->    octConsumesByte n s) = some bs` — via `encodeRepeat_rel` → `decodeRepeat_spec`
+octConsumesByte n s) = some bs` — via `encodeRepeat_rel` → `decodeRepeat_spec`
 >    full-consumption → `decodeFull_ne_none` → `decodeFull_spec` (needs the `huniq`
 >    = `relOct_unambiguous`). This is the inherited-roundtrip law.
 > 4. (Optional, only if the facade will expose `List`-level) thread `BaseN.Bridge`
@@ -33,6 +70,7 @@
 >
 > **Then replicate the identical pattern** (each base needs its own block `Iso` law +
 > digit-uniqueness + productivity + unambiguous + roundtrip):
+>
 > - **3.2 Base2** (`count 8 (satisfy bitChar)` + `bitsVal`/`bitsOf` iso, MSB-first)
 > - **3.3 Base4** (mirror Base8, 4 quartets/byte)
 > - **3.5 Base16** (`count 2 (satisfy hexChar)` + pair/byte iso; DELETE bespoke
@@ -44,7 +82,7 @@
 > **Then 4.1 (facade) — currently BROKEN:** `BaseN.lean`/`Bench.lean` still call the
 > deleted bespoke `Base8.encode`/`decode`/`roundtrip`; full `lake build` is red until
 > all seven bases rewire. 4.2 bench, 4.3 gate (`nix flake check`).
->
+
 ---
 
 > **Checkpoint (2026-10-19, late):** parts 1–2 (`satisfy` + `takeWhile`) and 3.0
@@ -62,14 +100,13 @@
 > witness. The `octConsumesByte` proof goes through
 > `productive_iff_consumesByte` rather than a `count 3`-level `decode` induction.
 >
-> **Still open for 3.1 (do not mark done yet):** the *roundtrip* theorem (the
+> **Still open for 3.1 (do not mark done yet):** the _roundtrip_ theorem (the
 > `decodeFull`-level law `decode (encode bs) = some bs`), which needs the
 > uniqueness hypothesis (`Unambiguous octElem`) threaded through
 > `encodeRepeat_rel` + `decodeRepeat_spec` + `decodeFull_spec`. This is the next
 > proof. The **facade `BaseN.lean`/`Bench.lean` are still on the old bespoke
 > `Base8.encode`/`decode` surface**, so `lake build` (full) is currently broken
 > until tasks 3.2–4.1 rewire all seven bases and the facade.
-
 
 ## 1. Core: add `satisfy`
 
@@ -106,7 +143,7 @@ elem <consumeWitness>`, `encodeBase := encodeRepeat elem`; the roundtrip is the
 > **Boundary:** the `Bytes n ↔ List UInt8` bridge is `BaseN.Bridge` (landed).
 
 - [x] 3.0 Add the `BaseN.Bridge` `Bytes n ↔ List UInt8` module (landed).
-- [ ] 3.1 **Base8** (simplest fixed-width: 3 octal digits/byte) — establish the
+- [x] 3.1 **Base8** (simplest fixed-width: 3 octal digits/byte) — establish the
       template: `octElem : Codec UInt8` (3-char `iso`+`count`), `octConsumesByte`,
       run triple, `roundtrip` inherited. `lake build` green.
 - [ ] 3.2 **Base2** (8 bits/byte) — `count 8 (satisfy bitChar)` + `bitsVal`/`bitsOf`
