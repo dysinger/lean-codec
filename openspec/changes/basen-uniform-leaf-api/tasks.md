@@ -1,5 +1,16 @@
 # Tasks
 
+> **Checkpoint (2026-10-19):** parts 1–2 (`satisfy` + `takeWhile`) and 3.0
+> (`BaseN.Bridge`, landed in `../lean-basen`) are done. The hard per-base lemmas
+> for Base8 are _proven_ (draft module — `valToOct_of_octToVal` converse,
+> `trioOct_unique` decomposition uniqueness, `trioOct_reconstruct`), but the
+> `octTripleIso.law` proof still has mechanical `simp`/naming friction (see §3.1
+> below) and was not folded into `Base8.lean` (reverted to keep the tree green).
+> Next session: finish `octTripleIso.law` cleanly (extract the three `octValid`
+> conjuncts before `simp` consumes `hv`; lift `toByte n = b` to `n = b.toNat` via
+> `congrArg UInt8.toNat` + `Nat.mod_eq_of_lt`), then replicate the identical
+> pattern to base2/4/10/16 (fixed-width) and 32/64 (padded).
+
 ## 1. Core: add `satisfy`
 
 - [x] 1.1 Add constructor `satisfy : (UInt8 → Bool) → Codec UInt8` to
