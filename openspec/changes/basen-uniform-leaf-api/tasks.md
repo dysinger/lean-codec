@@ -1,15 +1,28 @@
 # Tasks
 
-> **Checkpoint (2026-10-19):** parts 1–2 (`satisfy` + `takeWhile`) and 3.0
-> (`BaseN.Bridge`, landed in `../lean-basen`) are done. The hard per-base lemmas
-> for Base8 are _proven_ (draft module — `valToOct_of_octToVal` converse,
-> `trioOct_unique` decomposition uniqueness, `trioOct_reconstruct`), but the
-> `octTripleIso.law` proof still has mechanical `simp`/naming friction (see §3.1
-> below) and was not folded into `Base8.lean` (reverted to keep the tree green).
-> Next session: finish `octTripleIso.law` cleanly (extract the three `octValid`
-> conjuncts before `simp` consumes `hv`; lift `toByte n = b` to `n = b.toNat` via
-> `congrArg UInt8.toNat` + `Nat.mod_eq_of_lt`), then replicate the identical
-> pattern to base2/4/10/16 (fixed-width) and 32/64 (padded).
+> **Checkpoint (2026-10-19, late):** parts 1–2 (`satisfy` + `takeWhile`) and 3.0
+> (`BaseN.Bridge`) are done. **Task 3.1's hard proof (`octBlockIso.law`) is now
+> PROVED and compiling clean** — the `Codec`-value Base8 is landed in
+> `../lean-basen/BaseN/Base8.lean` (`octDigit`, `octBlockApply`/`octBlockUnapply`
+> with `octBlockIso_law`, `octElem : Codec UInt8`, `octConsumesByte`,
+> `decodeOct`/`encodeOct`/`relOct` run triple), zero `sorry`/warnings on
+> `lake build BaseN.Base8`. The key lemmas that closed the prior friction: a
+> total `octBlockApply`/`octBlockUnapply` pair with a _separate_ `octBlockIso_law`
+> theorem (not an inline structure `law`), `octToVal_ofNat_valToOct`,
+> `oct_decompose_unique` (division via `congrArg` on `/64` then `%64/8`),
+> `oct_sum_eq` (`Nat.div_add_mod` + `omega`), and generic `Productive_iso`/
+> `Productive_seq_left`/`Productive_count_succ` lemmas for the `ConsumesByte`
+> witness. The `octConsumesByte` proof goes through
+> `productive_iff_consumesByte` rather than a `count 3`-level `decode` induction.
+>
+> **Still open for 3.1 (do not mark done yet):** the *roundtrip* theorem (the
+> `decodeFull`-level law `decode (encode bs) = some bs`), which needs the
+> uniqueness hypothesis (`Unambiguous octElem`) threaded through
+> `encodeRepeat_rel` + `decodeRepeat_spec` + `decodeFull_spec`. This is the next
+> proof. The **facade `BaseN.lean`/`Bench.lean` are still on the old bespoke
+> `Base8.encode`/`decode` surface**, so `lake build` (full) is currently broken
+> until tasks 3.2–4.1 rewire all seven bases and the facade.
+
 
 ## 1. Core: add `satisfy`
 
