@@ -162,16 +162,16 @@ elem <consumeWitness>`, `encodeBase := encodeRepeat elem`; the roundtrip is the
       `satisfy isDigit` run + block `iso` (no `=` padding).
 - [x] 3.5 **Base16** (2 hex digits/byte) — `count 2 (satisfy isHexDigit)` + pair/byte
       `iso`; run triple; roundtrip inherited. Delete bespoke `encode`/`decode`.
-- [ ] 3.6 **Base32** (5-bit alphabet, `=` padding) — alphabet run + block `iso` +
+- [x] 3.6 **Base32** (5-bit alphabet, `=` padding) — alphabet run + block `iso` +
       terminal-pad `alt` preserving 5.1 (`rest = []`).
-- [ ] 3.7 **Base64** (6-bit alphabet, `=` padding) — same as Base32 with 64-alphabet.
+- [x] 3.7 **Base64** (6-bit alphabet, `=` padding) — same as Base32 with 64-alphabet.
 
 ## 4. Facade + bench + gate
 
-- [ ] 4.1 `BaseN.lean` facade re-exports the seven `Codec` values / run triples.
-- [ ] 4.2 `Bench.lean` calls `Codec.decode`/`decodeRepeat` per base; byte-exact
+- [x] 4.1 `BaseN.lean` facade re-exports the seven `Codec` values / run triples.
+- [x] 4.2 `Bench.lean` calls `Codec.decode`/`decodeRepeat` per base; byte-exact
       vectors still `rfl`.
-- [ ] 4.3 `lake build` zero `sorry`/warnings; `#print axioms` `[propext,
+- [x] 4.3 `lake build` zero `sorry`/warnings; `#print axioms` `[propext,
 Quot.sound]` for every law; `nix flake check` green; commit + push.
 
 ## Non-Goals (permanent)
