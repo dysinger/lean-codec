@@ -1,5 +1,52 @@
 # Tasks
 
+> ## Next step (2026-10-19, end of session) — FINISH 3.1, THEN REPLICATE
+>
+> **Session just landed (committed):** `octBlockIso.law` for Base8 is PROVED and
+> clean (`c97fec0` in `../lean-basen`; `1a0df55` in this repo). `lake build
+> BaseN.Base8` is green, zero `sorry`/warnings. The `Codec`-value rewrite of
+> `BaseN/Base8.lean` is in place: `octDigit`, `octBlockApply`/`octBlockUnapply` + a
+> **separate `octBlockIso_law` theorem** (the fix for the old inline-`law` friction),
+> `octToVal_ofNat_valToOct`, `oct_decompose_unique`, `oct_sum_eq`, generic
+> `Productive_iso`/`Productive_seq_left`/`Productive_count_succ`/
+> `Productive_count_satisfy_succ`, `octElem`, `octConsumesByte`,
+> `decodeOct`/`encodeOct`/`relOct`.
+>
+> **Remaining for 3.1 (in dependency order):**
+> 1. `octElem_unambiguous : Unambiguous octElem` — not yet done. `Rel (iso i d) x s
+>    ↔ ∃ a, i.apply a = some x ∧ Rel d a s`; `count 3 (satisfy p)` reads a *fixed*
+>    3-byte prefix of `s`, so `Rel (count 3 …) a s` and `… b s` pin `a = b` (prove
+>    `count k (satisfy p)` unambiguous by induction on `k` via `Rel_satisfy` + the
+>    prefix is the single byte `s ⟨0, ·⟩`); then `octBlockIso.apply a = some x` and
+>    `.apply a = some y` give `x = y` by `Option.some.inj`. **Extract `Rel_seq`'s
+>    split first** (`m = 1` from `Rel_satisfy`'s `∃ h : n = 1`) before `simp`
+>    consumes the witnesses — see the skill note on extracting conjuncts first.
+>    (A previous attempt got stuck exactly here and left a `sorry` — reverted.)
+> 2. `relOct_unambiguous : relUnambiguous (Rel octElem)` — induction on the list via
+>    `relRepeat_cons` + `octElem_unambiguous` at the head + IH at the tail.
+> 3. `roundtrip (bs) : Option.bind (encodeOct bs) (fun ⟨n,s⟩ => decodeFull octElem
+>    octConsumesByte n s) = some bs` — via `encodeRepeat_rel` → `decodeRepeat_spec`
+>    full-consumption → `decodeFull_ne_none` → `decodeFull_spec` (needs the `huniq`
+>    = `relOct_unambiguous`). This is the inherited-roundtrip law.
+> 4. (Optional, only if the facade will expose `List`-level) thread `BaseN.Bridge`
+>    `decodeAll`/`encodeAll` to state the `List UInt8 → Option (List UInt8)` roundtrip.
+>
+> **Then replicate the identical pattern** (each base needs its own block `Iso` law +
+> digit-uniqueness + productivity + unambiguous + roundtrip):
+> - **3.2 Base2** (`count 8 (satisfy bitChar)` + `bitsVal`/`bitsOf` iso, MSB-first)
+> - **3.3 Base4** (mirror Base8, 4 quartets/byte)
+> - **3.5 Base16** (`count 2 (satisfy hexChar)` + pair/byte iso; DELETE bespoke
+>   `encode`/`decode`)
+> - **3.4 Base10** (variable-width: `takeWhile isDigit` run + block `iso`, no pad)
+> - **3.6/3.7 Base32/Base64** (alphabet run + block iso + terminal-`=` pad `alt`
+>   preserving 5.1 `rest = []`)
+>
+> **Then 4.1 (facade) — currently BROKEN:** `BaseN.lean`/`Bench.lean` still call the
+> deleted bespoke `Base8.encode`/`decode`/`roundtrip`; full `lake build` is red until
+> all seven bases rewire. 4.2 bench, 4.3 gate (`nix flake check`).
+>
+---
+
 > **Checkpoint (2026-10-19, late):** parts 1–2 (`satisfy` + `takeWhile`) and 3.0
 > (`BaseN.Bridge`) are done. **Task 3.1's hard proof (`octBlockIso.law`) is now
 > PROVED and compiling clean** — the `Codec`-value Base8 is landed in
