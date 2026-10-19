@@ -33,7 +33,9 @@ byte-token-with-guard. `satisfy p` relates a byte `b` to `single b` exactly when
 
 Variable-length tokens (alphabet runs, varint, UTF-8, JSON string bodies) SHALL
 be a maximal run of `satisfy p`, realized by the existing repetition layer
-(`decodeRepeat`/`encodeRepeat`/`many`), not a new `Codec` constructor.
+(`relRepeat`/`decodeRepeat`/`encodeRepeat`, exposed as the derived `takeWhile p`
+run combinator), **not** a new `Codec` constructor. `many` is a derived recursive
+combinator (paper §3.4), never an AST node.
 
 #### Scenario: A varint is a run with a terminator
 

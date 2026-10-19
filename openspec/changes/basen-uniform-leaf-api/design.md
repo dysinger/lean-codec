@@ -94,75 +94,65 @@ rewrite. No error-position type is added now.
 None — resolved: one `satisfy` primitive, runs derived, result shapes unchanged,
 no BE/LE/varint/fixed-width in core.
 
-## Decision (2026-10-18) — a whole-list base is a `Codec (List UInt8)` _value_, so
+## Decision (2026-10-18, superseded 2026-10-19) — `many` does **not** become a
 
-`many` must become an AST constructor (most correct reading)
+constructor; the variable-width run primitive is `takeWhile` (`satisfy_many0`)
 
-The design's D2/D3 assumed "`base16 : Codec (List UInt8)`" could be composed from
-`satisfy`/`count`/`many`/`iso`/`alt` **without** a new core constructor. That is
-**false**: the only `Codec (List α)` producers are `count n p` (exactly `n`) and
-`manyUpTo n p` (at most `n`) — both _bounded_ — and unbounded `many` lives only in
-the `decodeRepeat`/`encodeRepeat`/`relRepeat` triple (via a `ConsumesByte` witness),
-**not** the AST. Because `decode : Codec α → Bytes n → List (α × Suffix n)` is a
-_total function_ (not the paper's relation), a plain `many` node is non-total for an
-empty-matching step. So tasks 3.x/4.x as written are **unrealizable without
-restoring `many` to the AST**. The most correct reading of the spec ("each base is
-a `Codec (List UInt8)` value, roundtrip inherited from `Codec.roundtrip`") requires:
+The earlier "Decision (2026-10-18)" concluded that `base16 : Codec (List UInt8)`
+requires restoring `many` to the AST. That reading was **wrong**, on the authority
+of both the paper and the F* reference:
 
-### New core constructor `many` (adds scope beyond "one `satisfy`")
+- **The paper (`PAPER.md` §3.4)** never makes `many` a syntax-description
+  constructor. The elementary descriptions are exactly `token` and `pure`; `many`
+  is a _derived recursive combinator_ over the existing combinators —
+  `many p = nil $ pure () | cons $ p ∗ many p` — parallel in structure to
+  `parseMany`/`printMany`. Its denotation is the least fixpoint, which is exactly
+  what `relRepeat` already captures in `Codec.lean`.
+- _*The F* reference (`fstar-codec`)_* has no `many` combinator at all. The
+  variable-width run is a _specialized leaf_ over a byte predicate,
+  `satisfy_many0 f` / `satisfy_many1 f` (aliased `many0`/`many1`): a `let rec`
+  `satisfy_run_scan f bs` that scans a maximal leading run of the _finite_ input
+  byte list, consuming one byte per step. No `Productive`/`ConsumesByte` witness
+  is needed, because the recursion is over the finite input buffer, not over an
+  arbitrary `p`'s denotation. `fstar-basen` encodes base16/32/64 with `count`
+  (fixed blocks) + `satisfy_many` (alphabet runs) + hand-rolled block/pad decoders.
+
+Restoring `many` to the Lean AST is not merely unnecessary — it is
+**type-theoretically impossible** in Lean: the `many` constructor would need a
+`Productive p` field, and `Productive p := ∀ x n s, Rel p x s → n ≠ 0` forms the
+definition-order cycle `Codec.many → Productive → Rel → Codec`. Lean rejects
+mixed `inductive`/`def` `mutual` blocks, and `Rel : … → Prop` is universe-`Prop`
+while `Codec α` is `Sort 1`, so `mutual inductive Codec + Rel` is rejected too.
+
+### Correct resolution: `takeWhile` is the run primitive; `many` stays out of the AST
+
+The Lean core **already has the correct primitive**. `takeWhile p` in
+`Combinators.lean` is the `satisfy_many0` analogue, already productive by
+construction and `[propext, Quot.sound]`-clean:
 
 ```lean
-| many {α : Type} : (p : Codec α) → Productive p → Codec (List α)
+relTakeWhile p   = relRepeat (Rel (satisfy p))
+decodeTakeWhile p = decodeRepeat (satisfy p) (satisfyConsumesByte p)
+encodeTakeWhile p = encodeRepeat (satisfy p)
 ```
 
-`Productive p := ∀ x n s, Rel p x s → n ≠ 0` is already defined in `Codec.lean`
-(no import cycle). The `many` cases reuse the existing repetition machinery:
+It is a `rel`/`decode`/`encode` **triple** (like `sepBy`/`chainl1`), not a
+`Codec` node. So the bases are composed exactly as the paper and F* do:
 
-- `Rel (many p h) xs n s := relRepeat (Rel p) xs n s` (clean, `relRepeat` in `Codec.lean`).
-- `encode (many p h) xs := encodeRepeat p xs` (clean, `encodeRepeat` needs no witness).
-- `decode (many p h) s := <productive repetition decoder>`.
+- **fixed-width blocks** → `count n (satisfy p)` (a genuine `Codec (List UInt8)` value),
+- **variable-width alphabet runs** → `takeWhile p` (the productive run triple),
+- **block→byte grouping / digit math** → `iso` (with the `Nat`-level lifts), and
+- **padding / disjoint alternatives** → `alt`, with terminal-`=` (5.1) preserved by
+  the pad branch requiring an empty run afterward.
 
-### The one real obstacle: `Productive` (in `Codec.lean`) vs `ConsumesByte`
+Each base therefore is either a genuine `Codec (List UInt8)` value where it is
+bounded (`count`), or a run triple where it is unbounded (`takeWhile`), in both
+cases inheriting the **already-proved** `decodeRepeat_spec`/`encodeRepeat_rel`/
+`relRepeat_*` laws rather than a fresh `Codec.roundtrip` induction.
 
-(in `Decode.lean`) — the `decode` case
+### Non-change to core
 
-`decodeRepeat p h'` demands `h' : ConsumesByte p := ∀ x n s t, (x,t) ∈ decode p s →
-t.remaining < n`. The bridge `Productive p ↔ ConsumesByte p`
-(`productive_iff_consumesByte`) needs `decode_spec` + `bidir` (**`Sound.lean`**),
-which postdate `decode` — a genuine import cycle if `decode`'s `many` case calls
-`decodeRepeat`. Resolution (pick **A1**):
-
-- **A1 (preferred)** — define a `Productive`-indexed repetition decoder
-  `decodeMany (p) (h : Productive p) n s` in `Decode.lean` whose well-founded step is
-  guarded by a _local_ "productive steps shorten" lemma proved with
-  `decode_genuine_suffix` (already in `Decode.lean`, proved _before_ `Sound`, `[propext,
-Quot.sound]`-only), not by `decode_spec`. Then `decode (many p h) s := decodeMany p h n s`,
-  and the `many` case of `decode_spec` closes by the _already-proved_ `decodeRepeat_spec`
-  (via `productive_iff_consumesByte`, now available in `Sound.lean`).
-- A2 (rejected) — move `ConsumesByte`/`decodeRepeat` into `Codec.lean`: impossible,
-  `ConsumesByte` mentions `decode`.
-
-### Every `induction d` law must become `Codec.rec` (type-changing constructor)
-
-`many : Codec α → Codec (List α)` changes the value type, so the following (all
-currently `induction d`) must be converted to `Codec.rec` with a type-indexed
-motive `(α : Type) → Codec α → …`, then gain a `many` case:
-
-- `encode_rel`, `decode_spec` (+ derived `bidir`, `decode_encode`, `roundtrip`),
-  `decodeFast_eq`, `decode_genuine_suffix_pointwise` (and anything else matching
-  `induction d`). The `many` cases are **free**: they `rw` through
-  `decodeRepeat_spec`/`encodeRepeat_rel`/`relRepeat_cons`/`relRepeat_nil`.
-
-### Order of implementation (next session)
-
-1. Add `many` + `Rel`/`encode`/`encode` cases; define `decodeMany`; thread
-   `decode`/`decodeFast` cases.
-2. Convert the `induction d` laws to `Codec.rec`; add `many` cases closed by the
-   repetition lemmas. `#print axioms Codec.roundtrip` ⇒ `[propext, Quot.sound]`.
-3. Rewrite the seven bases as `Codec (List UInt8)` values (`count`/`many`/`iso`/`alt`
-   over `satisfy`), deleting the bespoke `encode`/`decode`; roundtrip = `Codec.roundtrip`.
-4. Facade + bench + `nix flake check`.
-
-This is a **proof-critical core re-derivation** (not a downstream composition), so it
-should carry its own fresh review, exactly like the `single-carrier-bytes` re-derivation
-it extends.
+No new constructor is added. `satisfy` (already committed, `77c1c54`) is the only
+core addition; `takeWhile` (also committed) is the only derived run. The laws stay
+`induction d` (no `Codec.rec` conversion, since no type-changing constructor exists).
+`#print axioms Codec.roundtrip` remains `[propext, Quot.sound]`.
