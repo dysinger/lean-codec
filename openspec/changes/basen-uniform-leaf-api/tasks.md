@@ -1,40 +1,49 @@
 # Tasks
 
-> ## Next step (2026-10-19, handoff) — 3.1 IS DONE; replicate 3.2–3.7, then facade/bench/gate
+> ## Next step (2026-10-19, session) — 3.2/3.3/3.4/3.5 DONE; REMAINING 3.6/3.7 + 4.x
 >
-> **This session landed (committed):** task 3.1 is **complete** — `02db214` in
-> `../lean-basen` proves, zero `sorry`, all `[propext, Quot.sound]`-only:
-> `Unambiguous_satisfy`, `Rel_count_satisfy_len`, `count_satisfy_unambiguous`,
-> `Unambiguous_iso`, `octElem_unambiguous`, `Rel_octElem_len`,
-> `relOct_unambiguous`, `octDecodeFull_unambiguous`, and the inherited `roundtrip`
-> (`encodeOct bs = some ⟨n,s⟩ → decodeFull octElem octConsumesByte n s = some bs`).
-> The `∀ᵉ`-gating `huniq` for `decodeFull_spec` is `octDecodeFull_unambiguous`,
-> proved via `decodeRepeat_spec` `.1` ×2 + `prepend_prefix_eq` + `relOct_unambiguous`.
-> `#print axioms` on all four `_unambiguous`/`roundtrip` laws ⇒ `[propext, Quot.sound]`.
-> `lake build BaseN.Base8` green. **The template is now fully established** — replicate
-> it, don't re-derive.
+> **This session landed (committed in `../lean-basen`):** tasks 3.2 (Base2), 3.3
+> (Base4), 3.5 (Base16), 3.4 (Base10) are each re-expressed as `Codec (List
+UInt8)` values over `satisfy`/`count`/`iso` + the productive repetition triple,
+> deleting the bespoke `encode`/`decode`. All `roundtrip`/`_unambiguous` laws
+> `#print axioms` ⇒ `[propext, Quot.sound]`, zero `sorry`/warnings, `lake build
+BaseN.Base{2,4,10,16}` green. Commits `78a954f` (Base2/4/16 + Common) and
+> `974fd90` (Base10).
 >
-> **Concrete order for next session:**
+> **New shared module `BaseN/Common.lean`** factors the generic lemmas each base
+> was otherwise going to re-derive verbatim:
+> `Productive_iso`/`Productive_seq_left`/`Productive_count_succ`/`Productive_satisfy`,
+> `Productive_count_satisfy_succ`, `Unambiguous_satisfy`, `Rel_count_satisfy_len`,
+> `count_satisfy_unambiguous`, `Unambiguous_iso`. Base2/4/10/16 all `open
+BaseN.Common` and reuse these; Base8 still has its own copies (done/committed
+> before Common existed — do not churn it).
 >
-> 1. **3.2 Base2** — `count 8 (satisfy bitChar)` + `bitsVal`/`bitsOf` iso (MSB-first),
->    then the exact `count_satisfy_unambiguous`/`Unambiguous_iso`/`relRepeat`-unambig/
->    `roundtrip` chain (now a known recipe).
-> 2. **3.3 Base4** — mirror Base8 with 4 quartets/byte.
-> 3. **3.5 Base16** — `count 2 (satisfy hexChar)` + pair/byte iso; delete bespoke encode/decode.
-> 4. **3.4 Base10** — `takeWhile isDigit` run + block iso, no pad (the variable-width
->    case: reuse `relTakeWhile`/`decodeTakeWhile`/`encodeTakeWhile` + a fold iso).
-> 5. **3.6/3.7 Base32/Base64** — alphabet run + block iso + terminal-`=` pad `alt`
->    preserving 5.1 (`rest = []`); hardest (padding), do last.
-> 6. **4.1 facade** — `BaseN.lean` rewire (currently RED: calls deleted bespoke
->    `Base8.encode`/`decode`/`roundtrip`).
-> 7. **4.2/4.3 bench + gate** — `Bench.lean` `Codec.decode`/`decodeRepeat` per base;
->    zero `sorry`/warnings, axioms `[propext, Quot.sound]`, `nix flake check` green.
+> **The remaining hard work (3.6/3.7) is now precisely diagnosed:** the fixed-width
+> bases have element `Codec UInt8` (one byte per element), so `iso blockIso (count
+k (satisfy digit))` has a clean bijective block `Iso`. Base32/64 are
+> cross-byte bit-packing (5 bytes = 40 bits = 8 five-bit chars; 3 bytes = 24 bits
+> = 4 six-bit chars), so the element is `Codec (List UInt8)` (5/3 bytes) via `iso
+blockIso (count 8 (satisfy b32OrPad))`. The block `Iso.law` needs **both**
+> directions:
 >
-> **Key new proof facts this session (now in the `lean` skill):** `count k (satisfy p)`
-> unambiguity by induction (length-pin `Rel_count_len` + `splice_prefix_read`@0 head +
-> `bdrop_splice` tail); `Fin.val`-of-`⟨0,·⟩` needs `by simp` (no `norm_num`); `cases b`
-> before `rw [relRepeat_cons] at hb`; keep `m=3`/`m=0` as `have`s and close with `omega`
-> (don't `subst` the contradictory length).
+> - **forward** `unapply bs = cs → apply cs = bs` — proven, reuses the existing
+>   `byte0`..`byte4` extraction identities (base32) / the base64 analogue.
+> - **backward** `apply cs = bs → unapply bs = cs` — **encode-injectivity /
+>   char reconstruction**: recover each `cᵢ = valToB32(σᵢ(bs))` from the bytes.
+>   This is genuinely NEW work: the existing code only proves `decode ∘ encode
+= id` (`decodeN (encodeN bs) = some bs`), never `encode ∘ decode = id` on
+>   valid input, which is exactly the `Iso.law` backward direction.
+>
+> **How to finish it (do NOT reach for bespoke, do NOT use `by_contra`/`Classical`/
+> `sorry`):** prove per-shape reconstruction by `by_cases` on each `cᵢ = 61` and
+> `b32Valid cᵢ` condition in `apply`, closing impossible branches with `simp at
+h` + `omega`; recover each `b32ToVal cᵢ` from the byte identities read in
+> reverse; then apply a `char_eq_valToB32_of_valid` lemma (`c.toNat = valToB32 i`
+> when valid and `b32ToVal c.toNat = i`). Shapes: base32 = 1/2/3/4/5-byte tails
+> (5 lemmas), base64 = 1/2/3-byte tails (3 lemmas). Then 4.1 facade (delete the
+> `Base8.encode`/`decode` refs, rewire to the `*Elem`/`decode*`/`encode*`/`roundtrip`
+> triple per base), 4.2 bench (`Codec.decode`/`decodeRepeat` per base; byte-exact
+> vectors still `rfl`), 4.3 gate (`nix flake check` green).
 
 > ## Next step (2026-10-19, end of session) — FINISH 3.1, THEN REPLICATE
 >
@@ -146,12 +155,12 @@ elem <consumeWitness>`, `encodeBase := encodeRepeat elem`; the roundtrip is the
 - [x] 3.1 **Base8** (simplest fixed-width: 3 octal digits/byte) — establish the
       template: `octElem : Codec UInt8` (3-char `iso`+`count`), `octConsumesByte`,
       run triple, `roundtrip` inherited. `lake build` green.
-- [ ] 3.2 **Base2** (8 bits/byte) — `count 8 (satisfy bitChar)` + `bitsVal`/`bitsOf`
+- [x] 3.2 **Base2** (8 bits/byte) — `count 8 (satisfy bitChar)` + `bitsVal`/`bitsOf`
       `iso`; run triple; roundtrip inherited. Delete bespoke `encode`/`decode`.
-- [ ] 3.3 **Base4** (4 quartets/byte) — mirror Base8 with 4 chars/byte.
-- [ ] 3.4 **Base10** (decimal digits/byte, variable width but byte-oriented) —
+- [x] 3.3 **Base4** (4 quartets/byte) — mirror Base8 with 4 chars/byte.
+- [x] 3.4 **Base10** (decimal digits/byte, variable width but byte-oriented) —
       `satisfy isDigit` run + block `iso` (no `=` padding).
-- [ ] 3.5 **Base16** (2 hex digits/byte) — `count 2 (satisfy isHexDigit)` + pair/byte
+- [x] 3.5 **Base16** (2 hex digits/byte) — `count 2 (satisfy isHexDigit)` + pair/byte
       `iso`; run triple; roundtrip inherited. Delete bespoke `encode`/`decode`.
 - [ ] 3.6 **Base32** (5-bit alphabet, `=` padding) — alphabet run + block `iso` +
       terminal-pad `alt` preserving 5.1 (`rest = []`).
