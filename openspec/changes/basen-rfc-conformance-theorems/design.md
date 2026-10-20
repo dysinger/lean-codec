@@ -158,36 +158,52 @@ The **run-level** case — a `=`-terminated block _followed by another_ block �
 some […]`), because `count 4 (satisfy b64OrPad)` fixes the _byte window_ (4),
 not the _value length_. A guard is therefore **required**, not optional.
 
-**How the guard is expressed (this is the key design decision, resolved here):**
-the terminal-pad property is a _list-decomposition_ fact — a decoded
+**How the guard is expressed (RESOLVED — mechanism 1, flattened):** the
+terminal-pad property is a _list-decomposition_ fact — a decoded
 `List (List UInt8)` must have shape `[full, full, …, full, tail]` where at most
 the **last** block may be padded and a padded block may not be followed by
-anything. Two acceptable mechanisms, in order of preference:
+anything. This change implements the guard as **mechanism 1 (split the block
+run into `fullBlock*` + optional terminal `tail`)**, with the value type kept as
+a **flattened `List (List UInt8)`** (no public type break):
 
-1. **Restructure the block run** (preferred, no new constructor): express the
-   base32/64 whole-string codec as `many fullBlock` then _at most one_ `tailBlock`
-   — i.e. split the padded base into a **full-block element** (5 bytes → 8 chars /
-   3 bytes → 4 chars, no `=`) decoded by `decodeRepeat`, followed by an **optional
-   tail block** (the 1–4-byte / 1–2-byte tails) expressed with the existing
-   `alt`/`seq`/`empty` combinators. This makes "no data after `=`" structural:
-   a tail block only ever appears at the end by construction. The value type
-   becomes a two-part result (`List (List UInt8) × Option (List UInt8)` or a
-   flattened equivalent), so the roundtrip/converse statements are re-phrased;
-   the element-level `iso` laws and unambiguity transfers unchanged to each part.
-2. **Whole-input post-condition theorem** (only if 1 is too invasive): keep
-   `b32Elem`/`b64Elem` as-is and prove a _theorem_ that `decodeFull` returns
-   `none` whenever the input decomposes into a padded block followed by data.
-   This does **not** change `decodeFull`'s semantics; it refutes the
-   trailing-data input after the fact. It preserves the current value type and
-   roundtrip, but is a heavier invariant to state and prove (it must reason about
-   the `decodeRepeat`/`decodeFull` fixpoint directly).
+- **Grammar-correct, not filtered.** The whole-string decoder is expressed as
+  `many fullBlock` _then at most one_ `tailBlock`, where `fullBlock` is the
+  full-width element (base32 5 bytes → 8 chars / base64 3 bytes → 4 chars) with
+  `=` **rejected in the element itself** (`satisfy` restricted to the alphabet,
+  no pad byte), and `tailBlock` is the 1–4-byte / 1–2-byte tail (`optional`).
+  Because a tail can only appear _once, at the end_, "data after a terminal `=`"
+  is **not expressible**: the grammar has no inhabitant for `Zg==AAAA` (the
+  `=`-block is forced to be the terminal tail, and `AAAA` cannot follow it).
+  Rejection is therefore _definitional_ at the `Rel` level — no post-hoc
+  predicate, no second pass.
+- **Flattened value.** The two-part result (`List (List UInt8) × Option (List UInt8)`)
+  is folded back to `List (List UInt8)` by a small append `Iso`, so the public
+  `roundtrip : List (List UInt8) → …` / `encodeB32` / `encodeB64` / `decodeFull
+… = some [[…],[…]]` statements keep their shape (only the _realizing_ decoder/
+  encoder change to the split grammar). The element-level block `iso` laws and
+  unambiguity facts are reused verbatim for `fullBlock` and `tailBlock`.
 
-Either way the guard is **`Bool`-valued** (a decidable predicate on the decoded
-list / input), never a `Prop` quantified over `∀ (i : Fin k), …`, so the
-rejection proofs stay constructive (`[propext, Quot.sound]`-only, no
+**Two rejected mechanisms (recorded, with reasons):**
+
+1. ~~**Whole-input post-condition theorem** ("mechanism 2")~~ — **unsound as
+   specified**: it claims to keep `decodeFull`'s semantics _and_ prove
+   `decodeFull … "Zg==AAAA" = none`, but the current decoder _computes_ `some`
+   (measured), so the theorem is unprovable (it would force `none = some`). A
+   post-condition over the unchanged `decodeFull` cannot refute a case the
+   decoder accepts. Dropped; the guard must be a _code_ change.
+2. ~~**Post-hoc filter over the same `b64Elem` run** ("mechanism 3")~~ — correct
+   but strictly worse: it requires **decoding the malformed input to completion
+   and then re-scanning the materialized `List (List UInt8)`**, i.e. a second
+   pass paid _after_ the accept work (for `Zg==AAAA…` it decodes every block
+   then discards). The split grammar above has **no second pass** — the
+   malformed branch is already dead in the structural recursion — and hides
+   nothing in a filter. Slower and less honest; dropped.
+
+The guard in the split grammar is **not a `Bool`** you evaluate: it is the
+`seq`/`optional` _constructor_ itself (a tail can only be terminal by structure),
+so rejection stays constructive (`[propext, Quot.sound]`-only, no
 `Classical.choice` — see the `lean` skill's `by_contra` prohibition). Roundtrip
-is unaffected under mechanism 1 (the encoder emits pad only terminally) and
-unchanged under mechanism 2.
+is re-proved over the split grammar (the encoder emits pad only terminally).
 
 ### D4 — Rejection proofs reduce to the block `iso` laws + `decodeFull` induction
 
@@ -200,6 +216,17 @@ facts and the block `iso` laws. The run-level _trailing-data_ class is proved
 structurally rejected, and the theorem is then an unfold of `decodeFull` (for
 mechanism 1, the tail block simply cannot consume trailing data; for mechanism
 2, the post-condition theorem _is_ the proof).
+
+**Implementation note (verified this session):** `decodeFull`/`Rel {{x}}Elem` are
+**not** `Decidable`-reducible under `decide` (they are `WellFounded.fix` recursion /
+a non-`Decidable` `Rel`), so the concrete value-check vectors **cannot** be closed
+by `decide` — only `native_decide` (which leaks an axiom we must not put into a
+proved theorem). The gate-clean proofs therefore go through `decodeFull_spec` +
+`decodeRepeat_spec` + `relRepeat` + `encode_rel`, with each block `Rel` obtained
+from the encoder. The single missing primitive is a **forward `rel_count_satisfy`
+lemma** (`Rel (count k (satisfy p)) l s` from `s = byte-image of l` + `∀ b ∈ l, p b`),
+which every concrete rejection/canonical proof needs; prove it once (in
+`BaseN.Common`) and reuse for all seven bases.
 
 ### D5 — Converse and injectivity follow from roundtrip + unambiguity (+ `Rel` induction)
 
@@ -255,11 +282,10 @@ is not this change's job.)
 ## Risks / Trade-offs
 
 - **[The run-level terminal-pad guard is the single highest-risk item]** → the
-  mechanism (D3) must be settled _before_ the rejection/canonical theorems that
-  depend on it. Mechanism 1 (split full-block run + optional tail) is preferred
-  but changes the value type and re-phrases roundtrip/converse; mechanism 2
-  (post-condition theorem) preserves the value type but is a heavier
-  `decodeFull`-fixpoint invariant. Both are `Bool`-valued and constructive.
+  mechanism is **resolved** (D3): split grammar `fullBlock* + optional tail`,
+  flattened to `List (List UInt8)`. The unsound "post-condition theorem" and the
+  slower "second-pass filter" are both rejected and recorded. Re-proving
+  roundtrip/unambiguity/converse over the split grammar is priced into task 1.2.
 - **[Exhaustive "valid iff canonical" iff-theorem is large]** → target it as the
   _sum_ of the three families (D2), not a single monster induction.
 - **[Two result shapes (`List UInt8` vs `List (List UInt8)`)]** → the facade
@@ -278,9 +304,10 @@ is not this change's job.)
 1. Re-anchor the `basen` spec delta and the `lean-basen` task ledger to the
    `Codec`-value surface (this change's own spec delta does it; the `lean-basen`
    ledger's "spit-shine" plan is marked superseded).
-2. **Resolve the D3 guard mechanism** for base32/64 (full-block-run + optional
-   tail, or post-condition theorem). This is the very first implementation
-   decision; settle it before any theorem depends on it.
+2. **Resolve the D3 guard mechanism** for base32/64 — **RESOLVED here**: split
+   grammar `fullBlock* + optional tail`, flattened to `List (List UInt8)`
+   (see D3). No value-type break; the two rejected alternatives (unsound
+   post-condition theorem, slower second-pass filter) are recorded above.
 3. Implement the guard; re-prove base32/64 roundtrip if mechanism 1 changes the
    value type, then prove the run-level terminal-padding rejection theorem.
 4. Add canonical-encoding theorems per base (alphabet + terminal pad).
@@ -294,8 +321,8 @@ is not this change's job.)
 
 ## Open Questions
 
-- **D3 mechanism (full-block+tail vs post-condition)** is the one real design
-  fork; it is decided at implementation time (step 2) based on how invasive the
-  value-type change is for the facade/converse proofs. Everything else is pinned:
-  the RFC rules are in `rfc4648.md`; base2/4/8/10 semantics are this package's own
-  spec. Base16 case-insensitivity is a recorded non-goal (D8), not an open question.
+- **None open.** The D3 mechanism is resolved (split grammar `fullBlock* +
+optional tail`, flattened — see D3 above); the rejected alternatives are
+  recorded. Everything else is pinned: the RFC rules are in `rfc4648.md`;
+  base2/4/8/10 semantics are this package's own spec. Base16 case-insensitivity
+  is a recorded non-goal (D8), not an open question.

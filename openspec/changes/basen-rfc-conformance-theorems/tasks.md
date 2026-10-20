@@ -21,19 +21,24 @@ level_, the current code **accepts** a `=`-terminated block followed by another
 block: `count 4 (satisfy b64OrPad)` fixes the 4-byte _window_, not the value
 length, so `decodeFull b64Elem … "Zg==AAAA"` is `some […]`. A guard is mandatory.
 
-- [ ] 1.1 **Resolve the guard mechanism** (design D3): prefer splitting the
-      base32/64 run into a full-block prefix (no `=`, `decodeRepeat` over the
-      full 5-byte/3-byte block element) + an **optional terminal tail block**
-      (the 1–4 byte / 1–2 byte tails) via `seq`/`alt`/`empty`; fall back to a
-      whole-input post-condition theorem if the value-type change is too
-      invasive. The guard is `Bool`-valued (constructive).
-- [ ] 1.2 Implement the guard. Under mechanism 1 (value-type change) this
-      re-derives **all** of the following over the new value type, not just
-      `roundtrip`: `roundtrip`, `b32DecodeFull_unambiguous`/
-      `b64DecodeFull_unambiguous` (the full-consumption uniqueness witness
-      `decodeFull_spec` needs), the converse (task 4.1), and injectivity (task
-      4.2). Under mechanism 2 (post-condition theorem) the value type is
-      unchanged and only the new rejection theorem is added.
+- [x] 1.1 **Resolve the guard mechanism** (design D3): **RESOLVED — mechanism 1,
+      flattened.** Split the base32/64 run into `fullBlock*` (full-width element,
+      `=` rejected in the element via `satisfy {b32,b64}Valid`) + an **optional
+      terminal tail** (1–4 byte / 1–2 byte tails) via `seq`/`optional`/`subset`,
+      flattened back to `List (List UInt8)` (no value-type break). Rejected:
+      the unsound "post-condition theorem" (cannot prove `= none` for a case the
+      decoder accepts) and the slower "second-pass filter" (decodes-then-discards,
+      hides the invariant in a `Bool` check).
+- [ ] 1.2 Implement the guard. Under mechanism 1-flattened: define
+      `b32FullElem`/`b64FullElem` (full-width, `=` rejected in the element) and
+      `b32TailElem`/`b64TailElem` (strict tail, value length 1–4 / 1–2), the
+      whole-string relation `full* (tail)?` flattened to `List (List UInt8)`,
+      the realizing `decodeB32Strict`/`decodeB64Strict` + `encodeB32`/`encodeB64`,
+      and re-derive over the new value path: `roundtrip`,
+      `b32DecodeFull_unambiguous`/`b64DecodeFull_unambiguous` (the
+      full-consumption uniqueness witness `decodeFull_spec` needs), plus the
+      converse (task 4.1) and injectivity (task 4.2). The flat value type
+      `List (List UInt8)` is unchanged, so the public API shape survives.
 - [ ] 1.3 Prove the run-level rejection theorem: `Codec.decodeFull … = none` for
       the trailing-data class (base64 `"Zg==AAAA"`, base32
       `"MY======" · "AAAAAAAA"`), and for each pad shape (base32 1–5 byte tails;
@@ -69,7 +74,7 @@ Per base, restore the F* `decode_*_invalid` family, stated as
 ## 4. Converse / uniqueness theorems
 
 - [ ] 4.1 Per base: `Codec.decodeFull {x}Elem {x}ConsumesByte n s = some ys →
-    encode{X} ys = some ⟨n, s⟩` (and the `encodeB{X}` analogue for 32/64),
+  encode{X} ys = some ⟨n, s⟩` (and the `encodeB{X}` analogue for 32/64),
       via `Codec.decodeFull_spec` + `{x}DecodeFull_unambiguous` + `encodeRepeat_rel`.
 - [ ] 4.2 Per base: `encode{X} bs = encode{X} bs' → bs = bs'`
       (and the `encodeB{X}` analogue), via roundtrip to both sides +
@@ -89,8 +94,8 @@ Per base, restore the F* `decode_*_invalid` family, stated as
       re-expressed as a `Bytes n` literal — closing review findings 5.1, 5.7
       (5.10 base16-lowercase is a recorded non-goal, not a vector).
 - [ ] 5.2 `lake build` zero `sorry`/warnings; `#print axioms` = `[propext,
-    Quot.sound]` for every new theorem (all seven bases + facade); `nix flake
-    check` green.
+  Quot.sound]` for every new theorem (all seven bases + facade); `nix flake
+  check` green.
 - [ ] 5.3 Commit + push `lean-basen`; update `openspec/changes/lean-basen/`
       (mark review tasks 5.1/5.7/5.10 closed by this change; retire the
       bespoke-surface bullets as superseded by `basen-uniform-leaf-api`).
