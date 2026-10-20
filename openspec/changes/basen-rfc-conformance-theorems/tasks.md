@@ -66,18 +66,18 @@
 - [x] 3.2 (core) Base32: `decodeB32Strict "MY======"+"AAAAAAAA" = none`
       (`rejects_trailing`, `[propext]`-only). Remaining: invalid char,
       pad-in-illegal-position, wrong arity, and each pad-shape vector.
-- [ ] 3.3 Fixed-width bases: the F* rejection family per base (base16 non-hex +
+- [x] 3.3 Fixed-width bases: the F* rejection family per base (base16 non-hex +
       lowercase + odd arity; base2/4/8/10 invalid alphabet + wrong arity +
       base8/10 overflow), as `Codec.decodeFull … = none`.
 
 ## 4. Canonical + converse + injectivity
 
-- [ ] 4.1 Fixed-width bases: `encode{X}` alphabet-only (every byte satisfies the
+- [x] 4.1 Fixed-width bases: `encode{X}` alphabet-only (every byte satisfies the
       digit predicate).
-- [ ] 4.2 Base32/64: `encodeStrict` alphabet-or-pad, pad exactly the terminal
+- [x] 4.2 Base32/64: `encodeStrict` alphabet-or-pad, pad exactly the terminal
       tail's RFC arity, `=` never precedes non-`=`.
 - [ ] 4.3 Per base: `decode … = some v → encode v = some ⟨n, s⟩` (converse).
-- [ ] 4.4 Per base: `encode v = encode v' → v = v'` (injectivity).
+- [x] 4.4 Per base: `encode v = encode v' → v = v'` (injectivity).
 - [ ] 4.5 Facade `BaseN`: the `Base`-dispatched `decode_encode_inverse`/
       `encode_injective` (net-new), `cases` over all seven, three shapes.
 
