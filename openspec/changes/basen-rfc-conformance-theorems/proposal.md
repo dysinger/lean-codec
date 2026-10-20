@@ -57,16 +57,18 @@ encoder is `encode{X}`/`encodeB{X}` — plus the one decoder fix they expose:
 2. **Decode totality (rejection)** — `Codec.decodeFull … = none` on every
    malformed input: a byte outside the alphabet (base16: outside the uppercase
    canonical alphabet — see the case-insensitivity non-goal below), `=` in an
-   illegal (non-terminal) position, wrong whole-string arity, and — the code
-   fix — any data after the terminal `=` run. This restores the F* reference's
-   `decode_*_invalid`/`bad_pad`/`bad_length` lemma family that the port dropped,
-   re-derived over the run-level decoder.
+   illegal (non-terminal) position, wrong whole-string arity, and — the type
+   fix — any data after the terminal `=` run. For base32/64, the value type is
+   changed to the terminal-tail inductive `B32`/`B64`, so the malformed class is
+   _unrepresentable_ (there is no term for "tail then more data"); rejection is
+   the absence of an inhabitant, not a post-hoc filter. This restores the F*
+   reference's `decode_*_invalid`/`bad_pad`/`bad_length` lemma family.
 
-3. **Converse / canonical uniqueness** — `decodeFull … = some ys → encode ys
-reproduces the input` (whenever the decoder accepts `xs`, it is the _unique_
+3. **Converse / canonical uniqueness** — `decodeFull … = some v → encode v
+reproduces the input` (whenever the decoder accepts a value, it is the _unique_
    canonical encoding and re-encodes byte-exactly), together with
-   `encode`-injectivity on the block/list value. Combined with roundtrip this
-   makes `encode` and `decode` a partial isomorphism with `encode` injective.
+   `encode`-injectivity on the value. Combined with roundtrip this makes
+   `encode` and `decode` a partial isomorphism with `encode` injective.
 
 ## Capabilities
 
@@ -82,7 +84,9 @@ reproduces the input` (whenever the decoder accepts `xs`, it is the _unique_
   `sorry`, over the `Codec`-value / `Bytes n` substrate.
 - `basen`: proves the **run-level terminal-padding** property the block-`iso`
   canonical check does not cover (RFC 4648 §3.2: no data after the terminal
-  `=`), for base32 and base64, via a run-level guard.
+  `=`), for base32 and base64, by **making the shape unrepresentable**: the
+  value type is the terminal-tail inductive `B32`/`B64`, so there is no term
+  for a tail followed by data.
 
 ### Modified Capabilities
 
@@ -96,12 +100,12 @@ reproduces the input` (whenever the decoder accepts `xs`, it is the _unique_
 ## Impact
 
 - **Code**: the padded bases' whole-input rejection of trailing data after `=`
-  requires a run-level guard (the block `iso` already rejects _intra-block_
-  non-terminal `=`; the _cross-block_ case is accepted by the current code and
-  must be fixed). The guard is expressed by splitting the run into a full-block
-  prefix + an optional terminal tail block (using `seq`/`alt`/`empty`), or a
-  whole-input post-condition theorem — see `design.md` §D3. Either is
-  `Bool`-valued and constructive.
+  is fixed by **re-typing**: `List (List UInt8)` is replaced by the terminal-tail
+  inductive `B32`/`B64` (design §D0), realized as a derived strict run triple
+  (`relStrict`/`decodeStrict`/`encodeStrict`) — see `design.md`. Rejection is
+  **structural** (the illegal shape has no inhabitant), there is no flattening
+  (no bijective `B64 → List (List UInt8)` exists), and the lenient `List (List
+UInt8)` codecs are deleted.
 - **Base16 case-insensitivity** (RFC 4648 §8: a decoder MUST accept both cases)
   is an **explicit non-goal** of this change: the `Codec`-value `hexElem` is a
   strict uppercase bijection, and a case-insensitive decoder is not expressible

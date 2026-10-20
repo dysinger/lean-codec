@@ -10,319 +10,250 @@ F* reference (`fstar-basen`) that this package ports from proves a
 `decode_*_invalid`/`pad_first`/`bad_length` rejection family per base; the Lean
 port has never stated one.
 
+This change goes further than "prove rejection": it **replaces the base32/64
+value type** so that the forbidden shape (a `=`-terminated block followed by
+more data) is **not representable at all**, rather than rejected by a rule.
+
+## The core idea: the value type must make illegal states _unrepresentable_
+
+The current base32/64 value type is `List (List UInt8)` — a loose "list of
+blocks". It is exactly the wrong type: it can hold `[[0x66], [0, 0, 0]]` (a
+1-byte tail followed by a 3-byte full block) with no type-level objection. RFC
+4648 §3.2 forbids this (`=` is terminal), so `List (List UInt8)` **admits an
+illegal state by construction**. No guard, filter, or post-condition over that
+type can be "perfect" — they all _detect and discard_ an already-constructed
+illegal value.
+
+The perfect fix is a **value type where the forbidden shape cannot be written**.
+Base32/64 get an inductive value type whose _tail_ constructors are terminal
+(no continuation field), so "data after a tail" has no term:
+
+```lean
+-- base64: full 3-byte blocks, then at most one terminal tail of 1 or 2 bytes
+inductive B64 where
+  | empty
+  | full  (b0 b1 b2 : UInt8) (rest : B64)   -- a full block, then more
+  | tail1 (b0 : UInt8)                       -- terminal 1-byte tail
+  | tail2 (b0 b1 : UInt8)                    -- terminal 2-byte tail
+
+-- base32: full 5-byte blocks, then at most one terminal tail of 1–4 bytes
+inductive B32 where
+  | empty
+  | full  (b0 b1 b2 b3 b4 : UInt8) (rest : B32)
+  | tail1 (b0 : UInt8) | tail2 (b0 b1 : UInt8)
+  | tail3 (b0 b1 b2 : UInt8) | tail4 (b0 b1 b2 b3 : UInt8)
+```
+
+Because `tail1`/`tail2` have no destination, the _only_ way to represent "a
+1-byte block then a 3-byte block" is `full 0 0 0 (tail1 0x66)` — the **valid**
+ordering. `Zg==AAAA` (`[[0x66],[0,0,0]]`) has **no inhabitant** in `B64`. This
+is "types and theorems dictate impossibility": the decoder's type
+`Bytes n → Option B64` makes malformed input return `none` (nothing to invent),
+and every `some v : B64` _is_ canonical by construction.
+
 ### The actual surface (read this before any statement)
 
 Each base is a `Codec` value over `satisfy`/`count`/`iso` plus the productive
-repetition layer. Everything is indexed by the `codec` substrate `Bytes n :=
-Fin n → UInt8`.
+repetition layer, indexed by the `codec` substrate `Bytes n := Fin n → UInt8`.
+After this change the bases split into **three** groups by value type:
 
-Two groups:
-
-- **Fixed-width bases (2, 4, 8, 10, 16):** element is `Codec UInt8`; the run
-  triple is `decode{X} : Bytes n → List (List UInt8 × Suffix n)`,
-  `encode{X} : List UInt8 → Option (Sigma fun n => Bytes n)`, and
-  `roundtrip (bs : List UInt8) {n : Nat} {s : Bytes n}`. The whole-input
-  decoder is `Codec.decodeFull {x}Elem {x}ConsumesByte n s : Option (List UInt8)`.
-- **Block bases (32, 64):** element is `Codec (List UInt8)` (a 5-byte / 3-byte
-  block). The run triple is `decodeB32`/`decodeB64 :
-Bytes n → List (List (List UInt8) × Suffix n)`,
-  `encodeB32`/`encodeB64 : List (List UInt8) → Option (Sigma fun n => Bytes n)`,
-  and `roundtrip (bs : List (List UInt8))`. The whole-input decoder is
-  `Codec.decodeFull b32Elem b32ConsumesByte n s : Option (List (List UInt8))`
-  (and the base64 analogue).
+- **Fixed-width bases (2, 4, 8, 10, 16):** element `Codec UInt8` (one byte per
+  element); the run triple `decode{X} : Bytes n → List (List UInt8 × Suffix n)`,
+  `encode{X} : List UInt8 → Option (Sigma fun n => Bytes n)`, `roundtrip
+(bs : List UInt8)`, whole-input decoder `Codec.decodeFull {x}Elem
+{x}ConsumesByte n s : Option (List UInt8)`. These are **unchanged** — `List
+UInt8` is their right type and they have no padding/tail concept.
+- **Base64:** **new value type `B64`** (above). The strict run triple
+  `relB64Strict : B64 → {n} → Bytes n → Prop`,
+  `decodeB64Strict : Bytes n → Option B64`,
+  `encodeB64Strict : B64 → Option (Sigma fun n => Bytes n)`. The old
+  `b64Elem : Codec (List UInt8)` / `decodeB64` / `encodeB64` / `relB64` are
+  **deleted** (together with the `bb46230` post-hoc filter).
+- **Base32:** **new value type `B32`** (above), with the analogous
+  `relB32Strict`/`decodeB32Strict`/`encodeB32Strict`; the old lenient
+  `b32Elem`/`decodeB32`/`encodeB32`/`relB32` are **deleted**.
 
 There is **no** `encode : List UInt8 → List UInt8` / `decode : List UInt8 →
-Option (List UInt8)` facade anymore — that was deleted in
-`basen-uniform-leaf-api`. All conformance statements are expressed with
-`Codec.decodeFull` (the existing whole-input decoder from `codec`) and the
-`encode{X}`/`encodeB{X}` encoders over `Bytes n`.
-
-### What is already proved (do not re-prove)
-
-- Per-base **roundtrip** (`decodeFull (encode bs) = some bs`), all
-  `[propext, Quot.sound]`-only.
-- Per-base **unambiguity** (`{x}DecodeFull_unambiguous`), used as the
-  full-consumption uniqueness hypothesis by `Codec.decodeFull_spec`.
-- The **block `iso` canonical check**: `b32BlockApply`/`b64BlockApply` (and the
-  fixed-width `{x}BlockApply`) already reject a block whose characters do not
-  re-encode to themselves (`b32BlockUnapply bs = some cs`), so _intra-block_
-  canonicality — including `=` in a non-terminal position within a block — is
-  enforced by construction inside the element.
-
-What is **not** proved, and is this change's work, is the _whole-input_ layer
-above the element: alphabet-soundness of the encoder output, the run-level
-rejection classes, and the converse/injectivity. **Base16 case-insensitivity is
-explicitly out of scope** (see D8): the shipped `hexElem` is a strict
-uppercase bijection, and a lowercase-accepting decoder is _not_ a `Codec` value
-over a strict `Iso` — see the non-goals.
+Option (List UInt8)` facade anymore (deleted in `basen-uniform-leaf-api`), and
+nobody re-introduces one. The strict base32/64 codecs are **run triples** (the
+`sepBy`/`takeWhile` pattern), **not** `Codec` values — unbounded `many` is not
+an AST node, and a padded block run is not a fixed-width `count k (satisfy p)`.
 
 ### Ground truth the plan must respect (verified against shipped code)
 
-- `b64Elem = Codec.iso b64BlockIso (count 4 (Codec.satisfy b64OrPad))` where
-  `b64OrPad b = b64Valid b.toNat || b.toNat = 61`. The `count 4` window is a
-  **fixed 4-byte** consumption: padding shortens the _decoded value_ (1/2/3
-  bytes), it does **not** shorten the _byte window_ (still 4). A 2-char `==`
-  block and a 4-char block both consume 4 input bytes.
-- Therefore `decodeFull b64Elem b64ConsumesByte 8 ["Zg==AAAA"]` is `some
-[f, 0, 0, 0]` — the trailing-data-after-terminal-`=` case is **accepted by the
-  current code, deterministically**, not an empirical unknown.
-
-This grounds D3 (the guard is mandatory) and D4 (the rejection lemma for this
-class must be proved _after_ the guard is in place, not by a consumption-length
-argument that does not hold).
+- The current `b64Elem = Codec.iso b64BlockIso (count 4 (Codec.satisfy
+b64OrPad))` with `b64OrPad b = b64Valid b.toNat || b.toNat = 61`. `count 4`
+  fixes the **byte window**, not the decoded value length, so
+  `decodeFull b64Elem b64ConsumesByte 8 "Zg==AAAA"` is `some [[0x66],[0,0,0]]`
+  — the trailing-data-after-terminal-`=` case is **accepted deterministically**,
+  because the value type `List (List UInt8)` cannot forbid it. This grounds the
+  type replacement: the fix is not a guard on this type, it is a better type.
+- Fixed-width roundtrips and unambiguities are `[propext, Quot.sound]`-proved
+  and are **not** re-proved.
 
 ## Goals / Non-Goals
 
 **Goals:**
 
+- Replace base32/64's `List (List UInt8)` value with the terminal-tail
+  inductive `B32`/`B64`, so **illegal states are unrepresentable**.
 - Three theorem families per base, `[propext, Quot.sound]`-only, zero `sorry`:
-  1. **Canonical encoding** (alphabet-only output; terminal-only padding at the
-     whole-input level).
-  2. **Decode totality** (reject every malformed input class at the
-     `decodeFull` level).
-  3. **Converse / uniqueness** (`decodeFull … = some ys` reproduces the input
-     under `encode`; `encode` injective on its value).
-- The one decoder property they expose — **run-level terminal padding** (RFC
-  4648 §3.2: a `=` appears only at the very end of the whole input, never
-  followed by another block) — is **accepted by the current code** (see the
-  ground-truth note), so a code fix is **mandatory**, and the proof comes after.
-- Bench-lane vectors closing review findings 5.1, 5.7, 5.10.
+  1. **Canonical encoding** — every encoded byte is in the alphabet; for
+     base32/64 the `=` pads are exactly the RFC arity of the (unique) terminal
+     tail, and appear nowhere else.
+  2. **Rejection** — `decode… = none` on every malformed input.
+  3. **Converse / uniqueness** — `decode = some v → encode v = input`, and
+     `encode` injective.
+- For base32/64 the rejection is **structural**: malformed input → `none`
+  because **no `B32`/`B64` term** represents it, proved by showing the grammar
+  relation has no inhabiting value (not by a filter or a `Bool` test).
 
 **Non-Goals:**
 
-- No substrate/carrier change (`Bytes n` and `List UInt8` stay).
-- No C seam, no `Classical.choice`, no `sorry`, no new axioms.
-- **No new `Codec` constructor** for the padding guard — express it with the
-  existing `seq`/`alt`/`empty`/`satisfy`/`iso`/`count`/`decodeRepeat`
-  combinators, or as a whole-input post-condition theorem (see D3).
-- **Base16 case-insensitivity is out of scope** (D8): the `Codec`-value
-  `hexElem` is uppercase-only by design, and widening it to accept lowercase
-  would break the strict block `Iso`/`Unambiguous` as currently stated.
-- No change to base2/4/8/10 _semantics_ (their own spec; just the same
-  rejection/canonical _discipline_).
-- No re-proving the block-level `iso` laws or the roundtrip/unambiguity laws —
-  those are done.
+- No substrate change (`Bytes n` stays); no C seam, no `Classical.choice`, no
+  `sorry`, no new axioms.
+- **No new `Codec` constructor.** The strict base32/64 run is a _run triple_
+  (`relStrict`/`decodeStrict`/`encodeStrict`), not a `Codec` value.
+- **No flattening.** There is no map `B64 → List (List UInt8)` that is a
+  bijective `Iso` (a tail can't be distinguished from a full block after the
+  fact). The flat type is simply **gone** for base32/64.
+- **Base16 case-insensitivity is out of scope** (D8): `hexElem` is a strict
+  uppercase bijection.
 
 ## Decisions
 
-### D1 — Express "decode" as `Codec.decodeFull`, not a new facade
+### D0 — Replace the base32/64 value type with a terminal-tail inductive (the whole fix)
 
-The subject of every rejection/converse theorem is the **whole-input decoder**
-`Codec.decodeFull {x}Elem {x}ConsumesByte n s`, for `x` ∈
-{`bit`, `quartet`, `oct`, `dig`, `hex`} over `List UInt8` result and
-{`b32`, `b64`} over `List (List UInt8)` result. "`decode xs = none`" is stated
-as `Codec.decodeFull … (Bytes.ofList xs) = none`; "`decode xs = some ys`" as
-`Codec.decodeFull … s = some ys`. We do **not** introduce a fresh
-`decode : List UInt8 → Option (List UInt8)` facade; `decodeFull` already
-coincides with the old whole-input semantics (it requires the full suffix to be
-consumed), and it is the law-governed surface (`Codec.decodeFull_spec`).
+`List (List UInt8)` admits `[[0x66],[0,0,0]]`; `B64`/`B32` above do not. This is
+the single change that makes illegal states impossible, and it subsumes every
+prior "guard mechanism" (split grammar, post-condition, filter) — there is no
+guard, there is a **type**. It is the honest realization of "perfection": the
+compiler itself rejects the illegal shape.
 
-Rationale: keep one decoder surface (the proved one), and avoid re-introducing
-the deleted bespoke facade this change-chain just removed.
+### D1 — The strict base32/64 codec is a run triple, not a `Codec` value
 
-### D2 — Three theorem families, not one "full characterization" mega-lemma
+Because a padded block run is `full* (tail)?` and unbounded `many` is not a
+`Codec` AST node (see the `lean` skill §3), the strict decoder/encoder are a
+**run triple** exactly like `relSepBy`/`decodeSepBy`/`encodeSepBy` and
+`relTakeWhile`/`decodeTakeWhile`/`encodeTakeWhile`:
 
-Per base, add:
+- `relB64Strict : B64 → {n : Nat} → Bytes n → Prop` — structural recursion with
+  **no** separate "terminal-pad" predicate (the shape is in the value).
+- `decodeB64Strict {n} (s : Bytes n) : Option B64` — returns `none` unless `s`
+  is a canonical base64 string; driven by the result type's constructors.
+- `encodeB64Strict (v : B64) : Option (Sigma fun n => Bytes n)` — a structural
+  fold; canonical output _forced_ by the input type.
 
-- **Canonical encoding** — for the fixed-width bases, `encode{X}` output is
-  alphabet-only (each byte satisfies the digit predicate); for base32/64,
-  `encodeB{X}` output is alphabet-or-pad, with the pad run terminal and of
-  exactly the RFC arity for the block length. Formally: for base64, a block of
-  length 1 encodes to `2 chars + "=="`, length 2 to `3 chars + "="`, length 3
-  to `4 chars` (no `=`), and `=` never precedes a non-`=` in the whole output.
-- **Rejection** — one `theorem` per class (`decodeFull … = none`): alphabet
-  rejection (byte outside the alphabet), pad-position rejection (`=` where a
-  data char is required), arity rejection (whole-input byte count not a whole
-  number of code words), overflow rejection (base8/10 digit triple `> 255`),
-  and — the new one — **run-level trailing-data rejection** (a `=`-terminated
-  block followed by any further data), for the padded bases.
-- **Converse / uniqueness** — `decodeFull … = some ys → encode ys = input`
-  (canonical inverse) and `encode bs = encode bs' → bs = bs'` (injectivity).
+(The `decodeB32Strict`/`encodeB32Strict`/`relB32Strict` analogues similarly.)
 
-Rationale: three focused families mirror the F* reference, keep each proof
-simple, and let the bench lane value-check each class independently. A single
-exhaustive "decode valid iff canonical" iff-theorem is assembled from these
-families, not proved as one induction.
+### D2 — The block `Iso`s are arity-fixed and `=`-free on the full block
 
-### D3 — The padded base fix is a **mandatory** run-level guard, not `rest = []`
+Each block shape is a **genuine bijection** at a fixed arity (no `b64OrPad`
+leniency, no `=`-accepting full block):
 
-The historical (`basen-uniform-leaf-api`-era) plan was to add `rest = []` to the
-old bespoke `decodeN`/`decode` tail branches. **That code is gone.** The current
-padded element is `{b32,b64}Elem = iso {b32,b64}BlockIso (count {8,4}
-(satisfy {b32,b64}OrPad))`, and `decodeFull`/`decodeB32`/`decodeB64` run
-`decodeRepeat {b32,b64}Elem …` over fixed-width windows.
+- base64 full: `Iso (UInt8 × UInt8 × UInt8) (List UInt8)` — 3 bytes ↔ 4
+  alphabet chars (no `=`).
+- base64 tail1: `Iso UInt8 (List UInt8)` — 1 byte ↔ `2 chars + "=="`.
+- base64 tail2: `Iso (UInt8 × UInt8) (List UInt8)` — 2 bytes ↔ `3 chars + "="`.
+- base32 full/tail1..tail4 analogously (5 bytes ↔ 8 chars; `n` bytes ↔ `1+⌈8n/5⌉`
+  chars + pad).
 
-The block `iso` already rejects `=` in a non-terminal _intra-block_ position.
-The **run-level** case — a `=`-terminated block _followed by another_ block — is
-**accepted by the current code** (verified: `decodeFull b64Elem … "Zg==AAAA" =
-some […]`), because `count 4 (satisfy b64OrPad)` fixes the _byte window_ (4),
-not the _value length_. A guard is therefore **required**, not optional.
+These are _restrictions_ of the existing `b64BlockUnapply`/`b64BlockApply` (the
+digit math and the `byte0..byte4` extraction identities are reused verbatim);
+the `=` is part of the tail `Iso`'s output so it cannot leak into a full block
+or a non-terminal position. Each has its `law` proved by the existing per-shape
+`b64BlockDecodeLenient_unapply_*` forward identities plus the reverse
+`*ToVal_valTo*` reconstruction (the already-proved `b64ToVal_valToB64`/
+`valToB64_b64ToVal_of_valid` facts).
 
-**How the guard is expressed (RESOLVED — mechanism 1, flattened):** the
-terminal-pad property is a _list-decomposition_ fact — a decoded
-`List (List UInt8)` must have shape `[full, full, …, full, tail]` where at most
-the **last** block may be padded and a padded block may not be followed by
-anything. This change implements the guard as **mechanism 1 (split the block
-run into `fullBlock*` + optional terminal `tail`)**, with the value type kept as
-a **flattened `List (List UInt8)`** (no public type break):
+### D3 — Rejection is proved by _absence of an inhabitant_, with the decode derived
 
-- **Grammar-correct, not filtered.** The whole-string decoder is expressed as
-  `many fullBlock` _then at most one_ `tailBlock`, where `fullBlock` is the
-  full-width element (base32 5 bytes → 8 chars / base64 3 bytes → 4 chars) with
-  `=` **rejected in the element itself** (`satisfy` restricted to the alphabet,
-  no pad byte), and `tailBlock` is the 1–4-byte / 1–2-byte tail (`optional`).
-  Because a tail can only appear _once, at the end_, "data after a terminal `=`"
-  is **not expressible**: the grammar has no inhabitant for `Zg==AAAA` (the
-  `=`-block is forced to be the terminal tail, and `AAAA` cannot follow it).
-  Rejection is therefore _definitional_ at the `Rel` level — no post-hoc
-  predicate, no second pass.
-- **Flattened value.** The two-part result (`List (List UInt8) × Option (List UInt8)`)
-  is folded back to `List (List UInt8)` by a small append `Iso`, so the public
-  `roundtrip : List (List UInt8) → …` / `encodeB32` / `encodeB64` / `decodeFull
-… = some [[…],[…]]` statements keep their shape (only the _realizing_ decoder/
-  encoder change to the split grammar). The element-level block `iso` laws and
-  unambiguity facts are reused verbatim for `fullBlock` and `tailBlock`.
+`decodeB64Strict ("Zg==AAAA" : Bytes 8) = none` is proved by showing there is
+**no** `v : B64` with `relB64Strict v (bytes 8)` consuming all 8 bytes. That is
+a **type-directed** argument: the only `B64` terms consuming 8 chars are
+`full … (empty)` (one block) or `full … (full … ·)` (two blocks) etc.; the
+`Zg==` prefix can only be matched by `tail1 0x66` (terminal), which leaves
+`AAAA` unconsumed — so no term exists. Mechanically this descends through
+`decodeFull_spec` + the run's own relation lemmas + `encode_rel` + a single
+forward **`rel_count_satisfy`** lemma (proved once in `BaseN.Common`, see D5),
+so the per-block `Rel` facts are obtained from the _encoder_, never assumed.
+No `native_decide`, no `hf` hypothesis, no `Classical.choice`.
 
-**Two rejected mechanisms (recorded, with reasons):**
+### D4 — Three theorem families, not one mega-lemma
 
-1. ~~**Whole-input post-condition theorem** ("mechanism 2")~~ — **unsound as
-   specified**: it claims to keep `decodeFull`'s semantics _and_ prove
-   `decodeFull … "Zg==AAAA" = none`, but the current decoder _computes_ `some`
-   (measured), so the theorem is unprovable (it would force `none = some`). A
-   post-condition over the unchanged `decodeFull` cannot refute a case the
-   decoder accepts. Dropped; the guard must be a _code_ change.
-2. ~~**Post-hoc filter over the same `b64Elem` run** ("mechanism 3")~~ — correct
-   but strictly worse: it requires **decoding the malformed input to completion
-   and then re-scanning the materialized `List (List UInt8)`**, i.e. a second
-   pass paid _after_ the accept work (for `Zg==AAAA…` it decodes every block
-   then discards). The split grammar above has **no second pass** — the
-   malformed branch is already dead in the structural recursion — and hides
-   nothing in a filter. Slower and less honest; dropped.
+Per base add (all `[propext, Quot.sound]`-only):
 
-The guard in the split grammar is **not a `Bool`** you evaluate: it is the
-`seq`/`optional` _constructor_ itself (a tail can only be terminal by structure),
-so rejection stays constructive (`[propext, Quot.sound]`-only, no
-`Classical.choice` — see the `lean` skill's `by_contra` prohibition). Roundtrip
-is re-proved over the split grammar (the encoder emits pad only terminally).
+- **Canonical encoding** — fixed-width: `encode{X}` output is alphabet-only;
+  base32/64: `encodeStrict` output is alphabet-or-pad with the pad exactly the
+  terminal tail's RFC arity.
+- **Rejection** — one `theorem` per malformed class (`decode… = none`).
+- **Converse / uniqueness** — `decode = some v → encode v = input`, and
+  `encode` injective.
 
-### D4 — Rejection proofs reduce to the block `iso` laws + `decodeFull` induction
+The exhaustive "valid iff canonical" iff is the **sum** of these families, not a
+single induction.
 
-Because each alphabet is a finite byte set and each rejection class is a
-decidable `if`/`match` guard, the rejection theorems reduce to unfolding
-`Codec.decodeFull`/`decodeRepeat` and discharging with `decide`/`omega`, reusing
-the already-proved `{x}ToVal_valTo{X}`/`valTo{X}_valid`/`valTo{X}_not_pad`
-facts and the block `iso` laws. The run-level _trailing-data_ class is proved
-**after** the D3 guard is in place: the guard makes the malformed class
-structurally rejected, and the theorem is then an unfold of `decodeFull` (for
-mechanism 1, the tail block simply cannot consume trailing data; for mechanism
-2, the post-condition theorem _is_ the proof).
+### D5 — The one new generic lemma: forward `rel_count_satisfy`
 
-**Implementation note (verified this session):** `decodeFull`/`Rel {{x}}Elem` are
-**not** `Decidable`-reducible under `decide` (they are `WellFounded.fix` recursion /
-a non-`Decidable` `Rel`), so the concrete value-check vectors **cannot** be closed
-by `decide` — only `native_decide` (which leaks an axiom we must not put into a
-proved theorem). The gate-clean proofs therefore go through `decodeFull_spec` +
-`decodeRepeat_spec` + `relRepeat` + `encode_rel`, with each block `Rel` obtained
-from the encoder. The single missing primitive is a **forward `rel_count_satisfy`
-lemma** (`Rel (count k (satisfy p)) l s` from `s = byte-image of l` + `∀ b ∈ l, p b`),
-which every concrete rejection/canonical proof needs; prove it once (in
-`BaseN.Common`) and reuse for all seven bases.
+Every concrete rejection/canonical/converse proof needs a **forward**
+`Rel (count k (satisfy p)) l s` fact from `s = byte-image of l` plus
+`∀ b ∈ l, p b`. This is the single missing primitive (the backward
+`decodeRepeat_spec`/`relRepeat` direction exists); prove it once in
+`BaseN.Common`, parameterized by `p` and `k`, and reuse for all seven bases.
+(It carries the `(k+1)-1 = k` length-cast gotcha documented in the `lean` skill.)
 
-### D5 — Converse and injectivity follow from roundtrip + unambiguity (+ `Rel` induction)
+### D6 — Proofs live next to the per-base code (no new module)
 
-`decodeFull s = some ys → encode ys = ⟨_, s⟩`: use `Codec.decodeFull_spec` with
-the already-proved `{x}DecodeFull_unambiguous` (which gives the uniqueness
-hypothesis `decodeFull_spec` needs) to get `relRepeat (Rel {x}Elem) ys s`, then
-`encodeRepeat_rel` to get `encode ys = some ⟨n, s⟩`. Note the intermediate
-step is **element-level `Rel` induction**: `encodeRepeat_rel` needs
-`Rel`-level facts about each element (`encode p x = some t → Rel p x t`), which
-follow from the existing `encode_rel`/`Rel_iso`/`Rel_count_satisfy` lemmas — so
-this is provable but carries more `Rel`-bridge steps than a one-line chain
-(`relRepeat_cast`/`relRepeat_cons`/`Rel_iso`) suggests. `encode`-injectivity is
-the companion: `encode bs = encode bs'`, apply roundtrip to both sides to get
-`decodeFull (encode bs) = some bs = some bs'`, then `Option.some.inj` /
-`{x}DecodeFull_unambiguous` to conclude `bs = bs'`.
+The fixed-width families stay in their `BaseN.BaseX` namespaces; `B32`/`B64` and
+their strict run triples + theorems live in `BaseN.Base32`/`BaseN.Base64`. The
+facade `BaseN` (currently no dispatch theorem) gains **net-new** `Base`-indexed
+`encode_injective`/`decode_rejects`/`decode_encode_inverse` dispatch, written per
+shape and `cases`-ed over `Base` (three shapes: `List UInt8`, `B32`, `B64`).
 
-### D6 — Proofs live next to the existing per-base code (no new module)
-
-Each base keeps its own `*ToVal_valTo*`/`valTo{X}_valid`/`valTo{X}_not_pad`
-helper style; the three new families are added to the same `BaseN.BaseX`
-namespace. The facade `BaseN` currently has **no `roundtrip` dispatch theorem**
-(only the `inductive Base` + module re-exports), so the `Base`-indexed
-`encode_injective`/`decode_rejects`/`decode_encode_inverse` dispatch added here
-is **net-new**, written per result shape (`List UInt8` vs `List (List UInt8)`)
-and `cases`-ed over `Base`. No new module, no new import surface.
-
-### D7 — Bench lane value-checks every new law with concrete vectors
+### D7 — Bench lane value-checks every law with concrete vectors
 
 `Bench.lean` gains, per base, an `example`/`#eval` for each rejection class and
-the converse, using the F* reference's concrete vectors (base64 invalid `!`,
-pad-first, bad-length, `Zg==AAAA` trailing-data; base32 `MY======AAAAAAAA`;
-base8/10 overflow triples) — each re-expressed as a `Bytes n` literal via an
-explicit `Bytes.ofList`-style helper (a new, tiny helper; see task 5.1). This
-closes 5.1 (non-terminal padding) and 5.7 (smoke subset). **Base16 lowercase
-`6f` is _not_ a vector here** (it is out of scope per D8); 5.10 is closed by an
-explicit **non-goal note** rather than a passing vector.
+the converse, using the F* vectors (base64 `!`, pad-first, bad-length,
+`Zg==AAAA`; base32 `MY======AAAAAAAA`; base8/10 overflow), each re-expressed as
+a `Bytes n` literal via a `Bytes.ofList` helper.
 
 ### D8 — Base16 case-insensitivity is out of scope
 
-RFC 4648 §8 says a base16 _decoder_ MUST accept both cases, but the shipped
-`hexElem` is a strict **uppercase** `Iso` (`hexToNibble` returns `16` for
-`a`–`f`), and a lowercase-accepting decoder is _deliberately not_ part of the
-`Codec` value (its module header states this). Making it case-insensitive would
-require a `satisfy` + _normalizing_ `iso` that is **not a bijection** (two
-inputs `A`/`a` map to one nibble), which breaks the strict block `Iso.law` and
-`Unambiguous` as currently stated. This change therefore **does not** add a
-lowercase `6f` vector or a case-insensitivity theorem; it records the
-case-insensitivity as an explicit non-goal and re-scopes the base16 rejection
-vectors to the uppercase canonical alphabet. (A future change could add a
-separate case-normalizing _facade_ decoder outside the `Codec` value, but that
-is not this change's job.)
+RFC 4648 §8 wants a _decoder_ to accept both cases, but `hexElem` is a strict
+uppercase `Iso`; a case-insensitive decoder is not a bijection and is recorded
+as a non-goal (lowercase `6f` is a _rejection_, not an accepted alias).
 
 ## Risks / Trade-offs
 
-- **[The run-level terminal-pad guard is the single highest-risk item]** → the
-  mechanism is **resolved** (D3): split grammar `fullBlock* + optional tail`,
-  flattened to `List (List UInt8)`. The unsound "post-condition theorem" and the
-  slower "second-pass filter" are both rejected and recorded. Re-proving
-  roundtrip/unambiguity/converse over the split grammar is priced into task 1.2.
-- **[Exhaustive "valid iff canonical" iff-theorem is large]** → target it as the
-  _sum_ of the three families (D2), not a single monster induction.
-- **[Two result shapes (`List UInt8` vs `List (List UInt8)`)]** → the facade
-  `Base`-dispatched converse/injectivity must handle both; write the dispatch
-  per shape and `cases` over `Base`, not a single polymorphic statement.
-- **[Base16 case-insensitivity is a deliberate gap vs RFC §8]** → recorded as an
-  explicit non-goal (D8), not silently dropped; the rejection vectors are
-  uppercase-only.
-- **[Overlapping with the existing open review tasks 5.1/5.7/5.10]** → this
-  change _implements_ 5.1/5.7 (re-anchored to the Codec-value surface) and
-  records 5.10 as a non-goal; the other 5.x polish items remain open in the
-  `lean-basen` change.
+- **[Public type change is the entire point]** → base32/64 value type changes
+  from `List (List UInt8)` to `B32`/`B64`; this is deliberate (illegal states
+  unrepresentable), and the facade/bench adapt (three shapes). No silent
+  backward-compat shim: the lenient codecs are deleted.
+- **[Base32 5-shape / base64 3-shape block `Iso` laws]** → each tail arity
+  needs its own bijection law; reuse the existing digit identities read
+  forward and in reverse (do not use `by_contra`).
+- **[Three result shapes]** → the facade dispatch handles `List UInt8`, `B32`,
+  `B64` separately.
+- **[Base16 case-insensitivity]** → recorded as a non-goal (D8).
 
 ## Migration Plan
 
-1. Re-anchor the `basen` spec delta and the `lean-basen` task ledger to the
-   `Codec`-value surface (this change's own spec delta does it; the `lean-basen`
-   ledger's "spit-shine" plan is marked superseded).
-2. **Resolve the D3 guard mechanism** for base32/64 — **RESOLVED here**: split
-   grammar `fullBlock* + optional tail`, flattened to `List (List UInt8)`
-   (see D3). No value-type break; the two rejected alternatives (unsound
-   post-condition theorem, slower second-pass filter) are recorded above.
-3. Implement the guard; re-prove base32/64 roundtrip if mechanism 1 changes the
-   value type, then prove the run-level terminal-padding rejection theorem.
-4. Add canonical-encoding theorems per base (alphabet + terminal pad).
-5. Add rejection theorems per base (restore the F* `decode_*_invalid` family
-   over `decodeFull`).
-6. Add converse + injectivity theorems per base, and the net-new `Base`-dispatched
-   facade versions.
-7. Extend `Bench.lean` with rejection/canonical/converse vectors (including a
-   `Bytes.ofList` helper); gate with `lake build` (zero sorry/warnings),
+1. Delete the lenient base32/64 codecs and the `bb46230` filter (revert to the
+   pre-filter state, then remove `b32Elem`/`b64Elem`/`decodeB*`/`encodeB*`/
+   `relB*`).
+2. Define `B32`/`B64` and the arity-fixed block `Iso`s (D2).
+3. Implement the strict run triples `relStrict`/`decodeStrict`/`encodeStrict`
+   over `B32`/`B64` (D1).
+4. Prove rejection (`Zg==AAAA` etc. → `none`) with the decode derived (D3);
+   prove strict roundtrip + unambiguity + converse + injectivity.
+5. Add canonical/rejection/converse theorems per fixed-width base (D4).
+6. Add the net-new `Base`-dispatched facade versions (D6).
+7. Extend `Bench.lean` (D7); gate with `lake build` (zero sorry/warnings),
    `#print axioms` = `[propext, Quot.sound]`, `nix flake check` green.
 
 ## Open Questions
 
-- **None open.** The D3 mechanism is resolved (split grammar `fullBlock* +
-optional tail`, flattened — see D3 above); the rejected alternatives are
-  recorded. Everything else is pinned: the RFC rules are in `rfc4648.md`;
-  base2/4/8/10 semantics are this package's own spec. Base16 case-insensitivity
-  is a recorded non-goal (D8), not an open question.
+- **None open.** The value type is resolved (`B32`/`B64` terminal-tail
+  inductives); the strict codec is a run triple over them; rejection is
+  structural (absence of an inhabitant); no flattening, no filter, no
+  post-condition. Base16 case-insensitivity is a recorded non-goal (D8).

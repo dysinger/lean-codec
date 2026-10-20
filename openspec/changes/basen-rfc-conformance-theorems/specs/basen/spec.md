@@ -19,23 +19,24 @@ with the same rejection/canonical discipline applied.
 
 Each `BaseN` decoder — the whole-input decoder
 `Codec.decodeFull {x}Elem {x}ConsumesByte n s` (for the fixed-width bases, the
-`{x}Elem` run over `Bytes n`; for base32/64, the `b32Elem`/`b64Elem` run) —
-SHALL return `none` for **every** input `s` that is not a valid encoding for
-that base. "Not valid" SHALL mean _any one_ of: (a) a byte outside the base's
-alphabet (for base16, outside the **uppercase canonical** alphabet `0-9A-F` —
-lowercase `a-f` is _not_ accepted by the `Codec` value, which is a strict
-uppercase bijection; see the non-goal below); (b) for the padded
-bases (base32/base64), a `=` in an illegal position — including a `=` in the
-first/second/third data position of any block, a lone/partial `=` group, or
-**any data after the terminal `=`**; (c) a wrong arity (a whole-input byte count
-that is not a whole number of that base's code words); and (d) a value that
-overflows the reconstructed byte (e.g. a base8/10 digit triple `> 255`). The
-rejection SHALL be proved (`Codec.decodeFull … = none`) for each class,
-`[propext, Quot.sound]`-only, not merely true by construction. One class —
-trailing data after a terminal `=` (RFC 4648 §3.2) — is a **code** change (the
-padded bases' run-level guard, see `design.md` §D3): the other classes are
-already rejected by construction (block `iso`/`satisfy`/arity/overflow) and
-need only the proving theorem.
+`{x}Elem` run over `Bytes n` with value `List UInt8`; for base32/64, the
+**strict** decoder `decodeB32Strict`/`decodeB64Strict` over the terminal-tail
+value `B32`/`B64`, see `design.md` §D0/D1) — SHALL return `none` for **every**
+input `s` that is not a valid encoding for that base. "Not valid" SHALL mean
+_any one_ of: (a) a byte outside the base's alphabet (for base16, outside the
+**uppercase canonical** alphabet `0-9A-F` — lowercase `a-f` is _not_ accepted by
+the `Codec` value, which is a strict uppercase bijection; see the non-goal
+below); (b) for the padded bases (base32/base64), a `=` in an illegal position
+— including a `=` in the first/second/third data position of any block, a
+lone/partial `=` group, or **any data after the terminal `=`**; (c) a wrong
+arity (a whole-input byte count that is not a whole number of that base's code
+words); and (d) a value that overflows the reconstructed byte (e.g. a base8/10
+digit triple `> 255`). The rejection SHALL be proved (`… = none`),
+`[propext, Quot.sound]`-only, **structurally** — for the run-level
+trailing-data class, the value type `B32`/`B64` makes the malformed shape
+**unrepresentable**, so there is _no inhabiting value_, and `= none` follows
+from the absence of any full-consumption witness, not from a post-hoc filter
+that decodes the malformed input and discards it.
 
 #### Scenario: A byte outside the alphabet is rejected
 
@@ -46,11 +47,14 @@ need only the proving theorem.
 
 #### Scenario: Illegal or non-terminal padding is rejected
 
-- **WHEN** a padded-base whole-input decoder is applied to a `Bytes n` where `=`
+- **WHEN** a padded-base strict decoder is applied to a `Bytes n` where `=`
   appears in an illegal position — the first position of a block, a lone partial
   pad group, or followed by any non-`=` data (`"Zg==AAAA"`, `"MY======AAAAAAAA"`
   as the terminal-`=`-then-data two-block case)
-- **THEN** the result is `none` (the `=` is terminal-only per RFC 4648 §3.2).
+- **THEN** the result is `none` (the `=` is terminal-only per RFC 4648 §3.2),
+  **structurally** — the value type `B64`/`B32` has no term representing
+  trailing data, so the rejection is the absence of an inhabiting value, never a
+  post-decode filter.
 
 #### Scenario: Wrong arity is rejected
 
@@ -69,36 +73,37 @@ need only the proving theorem.
 ### Requirement: The encoder is canonical
 
 For each base, the encoder (`encode{X}` over `List UInt8` for the fixed-width
-bases, `encodeB{X}` over `List (List UInt8)` for base32/64) SHALL be the RFC 4648
-(or this package's own spec) **canonical** form: every output byte is in the
-base's alphabet, and for the padded bases the `=` pad characters appear **only**
-in the terminal positions with exactly the RFC §4.7/§6.7 pad count for the input
-block's length. Formally, for base32/base64, a block of fixed byte length encodes
-to exactly the RFC tail (base32 byte length → pad count: 1→6, 2→4, 3→3, 4→1,
-5→0; base64: 1→2, 2→1, 3→0) and `=`
-never precedes a non-`=` byte in the whole output; for base16/2/4/8/10 (no
-padding) every output byte is an alphabet character.
+bases, the **strict** `encodeStrict` over the terminal-tail value `B32`/`B64`
+for base32/64) SHALL be the RFC 4648 (or this package's own spec) **canonical**
+form: every output byte is in the base's alphabet, and for the padded bases the
+`=` pad characters appear **only** in the terminal tail with exactly the RFC
+§4.7/§6.7 pad count for the tail's length. Formally, for base32/base64, a
+tail of byte length `k` encodes to exactly the RFC pad run (base32 byte length
+→ pad count: 1→6, 2→4, 3→3, 4→1, 5→0; base64: 1→2, 2→1, 3→0) and `=` never
+precedes a non-`=` byte in the whole output; for base16/2/4/8/10 (no padding)
+every output byte is an alphabet character.
 
 #### Scenario: Encoded output uses only the alphabet
 
-- **WHEN** `encode{X}`/`encodeB{X}` is applied to a value
+- **WHEN** `encode{X}`/`encodeStrict` is applied to a value
 - **THEN** there is a theorem that every element byte of the result satisfies
   the base's digit predicate (the RFC §4/§6/§8 table, or the hand alphabet for
   base2/4/8/10), with `=` permitted only for the padded bases.
 
 #### Scenario: Padding is terminal and arity-correct
 
-- **WHEN** base32/base64 encode a block of a given byte length
+- **WHEN** base32/base64 encode a terminal tail of a given byte length
 - **THEN** the output's `=` characters occupy exactly the RFC tail for that
   byte length, stated as **byte length → pad count**: base32 1→6, 2→4, 3→3,
   4→1, 5→0; base64 1→2, 2→1, 3→0 — and appear only at the very end of the
-  block, never followed by data — as a theorem, not an observation.
+  output, never followed by data — as a theorem, not an observation.
 
 ### Requirement: Decode is the unique canonical inverse
 
 For each base, the whole-input decoder SHALL be the **unique** inverse of the
-encoder: whenever `Codec.decodeFull {x}Elem {x}ConsumesByte n s` returns
-`some ys`, the encoder `encode{X} ys`/`encodeB{X} ys` reproduces `s`
+encoder: whenever the decoder (`Codec.decodeFull {x}Elem {x}ConsumesByte n s`
+for the fixed-width bases; the strict `decodeStrict` for base32/64) returns
+`some v`, the encoder `encode{X} v`/`encodeStrict v` reproduces `s`
 byte-for-byte, and the encoder is injective on its value. Combined with the
 existing roundtrip law (`decodeFull (encode bs) = some bs`), this makes the
 encoder and decoder a partial isomorphism with a single canonical
@@ -106,16 +111,16 @@ representation per value.
 
 #### Scenario: A successful decode re-encodes to the input
 
-- **WHEN** `Codec.decodeFull {x}Elem {x}ConsumesByte n s = some ys` for some
-  `s, ys`
-- **THEN** `encode{X} ys`/`encodeB{X} ys = some ⟨n, s⟩` (a theorem, proved
+- **WHEN** the whole-input decoder (`Codec.decodeFull {x}Elem {x}ConsumesByte n s`,
+  or the **strict** `decodeStrict` for base32/64) returns `some v` for some `s, v`
+- **THEN** `encode{X} v`/`encodeStrict v = some ⟨n, s⟩` (a theorem, proved
   `[propext, Quot.sound]`-only).
 
 #### Scenario: Encoding is injective
 
-- **WHEN** `encode{X} bs = encode{X} bs'` (or the `encodeB{X}` analogue) for
-  values `bs, bs'`
-- **THEN** `bs = bs'` (each valid encoding identifies exactly one value).
+- **WHEN** `encode{X} v = encode{X} v'` (or the strict `encodeStrict` analogue)
+  for values `v, v'`
+- **THEN** `v = v'` (each valid encoding identifies exactly one value).
 
 ### Requirement: The conformance laws are gated like the roundtrip laws
 

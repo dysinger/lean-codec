@@ -82,7 +82,12 @@ findings marked **superseded** are re-derived in
       `decodeN`/`decode` tail branches no longer exist; the block `iso` in
       `b32BlockApply`/`b64BlockApply` enforces intra-block canonicality. The
       **run-level** terminal-padding property (a `=`-terminated block followed by
-      data) is now `basen-rfc-conformance-theorems` task 1.x.
+      data) is now `basen-rfc-conformance-theorems` task 1.x. _(History: commit
+      `bb46230` in `../lean-basen` attempted a **post-hoc filter**
+      `decodeB64Strict = decodeFull; if b64TerminalPad bs …` and a rejection
+      theorem assuming `hf : decodeFull … = some …`; that approach was re-evaluated
+      as the design's rejected "mechanism 3" and is superseded by the structural
+      split-grammar plan — see `basen-rfc-conformance-theorems` design D3/task 1.1a.)_
 - [x] 5.7 **`smoke` (runtime) covers only base32/base64, not all seven bases.** —
       the rewrite removed the runtime `smoke`; the bench lane now value-checks all
       seven at the block `iso` level. The rejection-class vectors moved to
