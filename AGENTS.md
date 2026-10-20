@@ -56,12 +56,17 @@ reminder that the toolchain is _flake-scoped_, not host-global.)
   with a layman "why"):** `README.md`.
 - **Engineering state & task ledger (spec-driven):** `openspec/`. Every change
   lives under `openspec/changes/` as proposal / spec delta / design / tasks. The
-  **active change is `shipped-c-fast-path`** (planning done — keep the pure `Bytes n`
-  spec slow, ship fast C via `@[extern]` seams + per-format specialized decoders,
-  each proved `[propext, Quot.sound]`-equal to the spec) — consult
-  `openspec/changes/shipped-c-fast-path/tasks.md` for the current task status and
-  next steps. History ("we used to / reverted / this session") belongs in that
-  ledger, **never** in this file or the README.
+  **active change is `basen-rfc-conformance-theorems`** (planning done — the
+  re-anchored RFC 4648 conformance plan for `lean-basen`: rejection / canonical
+  encoding / converse-injectivity theorems over the `Codec`-value surface; the
+  first implementation step is the **D3 run-level terminal-padding guard** for
+  base32/64, whose mechanism — full-block-run + optional tail vs. post-condition
+  theorem — must be settled before any theorem) — consult
+  `openspec/changes/basen-rfc-conformance-theorems/{tasks,design}.md` for the
+  task status and next steps. The companion `lean-basen` change (seven
+  `Codec`-value bases, done) is complete except seven mechanical polish items.
+  History ("we used to / reverted / this session") belongs in that ledger,
+  **never** in this file or the README.
   (`single-carrier-bytes` is archived as
   `openspec/changes/archive/2026-10-17-single-carrier-bytes`; `carrier-performance-tuning`
   is complete 11/11; `partial-remainder-fast-path` is complete 7/7.)
@@ -90,19 +95,15 @@ reminder that the toolchain is _flake-scoped_, not host-global.)
   `BaseN.roundtrip` over `B2..B64`, and `Bench.lean` value-checks them
   byte-for-byte.
 
-  **`basen-uniform-leaf-api` (active change) is in flight: the seven bases are
-  being re-expressed as `Codec` values over `satisfy`/`count`/`iso` + the
-  repetition layer, deleting the bespoke `encode`/`decode`.** As of the
-  2026-10-19 handoff, core tasks 1.1–3.0 (`satisfy`, `takeWhile`, `BaseN.Bridge`)
-  and **task 3.1 (Base8, the template) are DONE** — `02db214` in `../lean-basen`
-  proves `count_satisfy_unambiguous`/`octElem_unambiguous`/`relOct_unambiguous`/
-  `octDecodeFull_unambiguous` and the inherited `roundtrip`, all `[propext,
-Quot.sound]`-only, zero `sorry`. **Remaining: 3.2–3.7 (six more bases), then
-  4.1 facade / 4.2 bench / 4.3 gate.** The facade `BaseN.lean` is currently RED
-  (still calls the deleted bespoke `Base8.encode`/`decode`/`roundtrip`). Next
-  session replicates the proven Base8 recipe (see the `lean` skill's new
-  unambiguity entries); consult `openspec/changes/basen-uniform-leaf-api/tasks.md`
-  for the concrete order. Work in `../lean-basen`'s own `nix develop`, not this one's.
+  **`basen-uniform-leaf-api` is ARCHIVED (complete): all seven bases are
+  re-expressed as `Codec` values over `satisfy`/`count`/`iso` + the repetition
+  layer, deleting the bespoke `encode`/`decode`.** The facade + bench are
+  rewired to the Codec-value surface (`bef44ae` in `../lean-basen`); `lake build`
+  green, zero `sorry`/warnings, every per-base `BaseN.Base{X}.roundtrip`
+  `[propext, Quot.sound]`-only, `nix flake check` green. The **next active
+  downstream work is `basen-rfc-conformance-theorems`** (the RFC 4648 conformance
+  plan — rejection / canonical / converse-injectivity; see the active-change
+  pointer above). Work in `../lean-basen`'s own `nix develop`, not this one's.
 
   Task 4.3 (`nix flake check green`) is **done**: `codec` is now
   a flake input (`github:dysinger/lean-codec`) threaded into `default.nix`, which
