@@ -17,18 +17,25 @@ so it is the natural second package to port. It also has a proven F* reference
 - Port the four F* base encodings (Base08/Base16/Base32/Base64, all RFC 4648)
   and **add Base2, Base4, and Base10** (not in `fstar-basen`), for a single
   package covering **Base2/4/8/10/16/32/64**.
-- State the encoders/decoders over the `codec` `Bytes n` substrate, with the
-  roundtrip law (decode(encode(x)) = x) proved for each base, `[propext,
-Quot.sound]`-only.
+- Express all seven bases as `codec` `Codec` values over `satisfy`/`count`/`iso`
+  plus the productive repetition layer (no bespoke `encode`/`decode`), with the
+  inherited roundtrip law proved for each base, `[propext, Quot.sound]`-only.
+
+> **Surface note:** an earlier phase of this change introduced bespoke
+> `encode : List UInt8 → List UInt8` / `decode : List UInt8 → Option (List UInt8)`
+> functions; that surface was **superseded** by `basen-uniform-leaf-api`
+> (archived), which re-expressed every base as a `Codec` value. The final
+> surface is the `Codec`-value run triple; this proposal records that final state.
 
 ## Capabilities
 
 ### New Capabilities
 
 - `basen`: the base-`N` encoding/decoding contract — one package, seven bases
-  (2/4/8/10/16/32/64), each with a byte-list encoder + decoder, a roundtrip law,
-  UTF-8/ASCII alphabets per RFC 4648, and the `codec`-inherited invariants
-  (single `Bytes n` substrate, `[propext, Quot.sound]`-only laws).
+  (2/4/8/10/16/32/64), each a `codec` `Codec` value over `satisfy`/`count`/`iso`
+  plus the repetition run triple, with an inherited roundtrip law, RFC 4648
+  alphabets, and the `codec`-inherited invariants (single `Bytes n` substrate,
+  `[propext, Quot.sound]`-only laws).
 
 ### Modified Capabilities
 

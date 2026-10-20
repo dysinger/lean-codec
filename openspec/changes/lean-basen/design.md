@@ -32,15 +32,18 @@ layout: `BaseN.Base2`, `BaseN.Base4`, `BaseN.Base8`, `BaseN.Base10`,
 `BaseN.Base16`, `BaseN.Base32`, `BaseN.Base64`, plus a `BaseN` facade re-exporting
 them (mirroring `fstar-basen`'s `Data.BaseN.fst`).
 
-### D2 — Substrate is `List UInt8`, mirroring the `codec` element type
+### D2 — Substrate is the `codec` `Bytes n`, surface is `Codec` values
 
-Each `encode : List UInt8 → List UInt8` and `decode : List UInt8 →
-Option (List UInt8)`. This keeps `basen` directly composable with `codec`'s
-`Bytes n` (whose element type is `UInt8`), without forcing `basen` to depend on
-`codec`'s _length-indexed_ wrapper for its own surface — the plain `List UInt8` is
-the transport, and a `codec` consumer lifts it. (Rationale: `fstar-basen` itself
-works over `list UInt8` and only _imports_ `Data.Codec.Types` for the `byte` alias;
-we do the same.)
+Each base is a `codec` `Codec` value over the `Bytes n := Fin n → UInt8`
+substrate, **not** a bespoke `encode : List UInt8 → List UInt8` / `decode :
+List UInt8 → Option (List UInt8)` function. The fixed-width bases (2/4/8/10/16)
+have element `Codec UInt8` (one byte per element); the block bases (32/64) have
+element `Codec (List UInt8)` (a 5-byte / 3-byte block). The run triple is
+`decode{X} = decodeRepeat {x}Elem {x}ConsumesByte` / `encode{X} = encodeRepeat
+{x}Elem` / `rel{X} = relRepeat (Rel {x}Elem)`, and the whole-input decoder is
+`Codec.decodeFull {x}Elem {x}ConsumesByte`. (An earlier phase used bespoke
+`encode`/`decode` over `List UInt8`; that was superseded by
+`basen-uniform-leaf-api`, archived.)
 
 ### D3 — Port the four RFC 4648 bases verbatim, then add 2/4/10
 
@@ -52,13 +55,14 @@ single-byte, full roundtrip). Base2 (8 bits, `0`/`1`), Base4 (quartets,
 here: bit/quartet/nibble-style digit extraction for 2/4, and repeated `÷10`/`%10`
 digit math for 10.
 
-### D4 — One roundtrip law per base, plus a facade aggregator
+### D4 — One inherited roundtrip law per base, plus a facade
 
-Each `BaseN.BaseX` proves `lemma_baseX_roundtrip : decode (encode bs) = some bs`.
-The facade `BaseN` proves a single `roundtrip (b : Base) (bs : List UInt8)` over a
-small inductive `Base := B2 | B4 | B8 | B10 | B16 | B32 | B64` dispatching to the
-per-base lemma. Known vectors are `#eval`-checked in a bench lane (RFC 4648 §10
-for 16/32/64; hand vectors for 2/4/8/10).
+Each `BaseN.BaseX` proves `roundtrip (bs) : decodeFull {x}Elem {x}ConsumesByte
+(encode{X} bs) = some bs` (inherited from `decodeRepeat_spec`/`encodeRepeat_rel`;
+no bespoke proof per base). The facade `BaseN` re-exports the seven modules and
+an inductive `Base := B2 | B4 | B8 | B10 | B16 | B32 | B64`. Known vectors are
+`example … := rfl`-checked in a bench lane (RFC 4648 §10 for 16/32/64; hand
+vectors for 2/4/8/10) at the block-`iso` `unapply` direction.
 
 ### D5 — Build shape mirrors the template + codec
 
@@ -112,29 +116,18 @@ Quot.sound]`, `nix flake check` green.
   three zero-padded decimal digits per byte, no sign. A sign convention for
   arbitrary-precision integers is out of scope for a byte-oriented codec.
 
-## Next session (2026-10-18): flake-input `codec` injection — DONE (task 4.3)
+## Next session (re-anchored, 2026-10-20): Codec-value rewrite is DONE
 
-The 4.3 gate is **landed and green** (lean-basen commit `9bdfd4b`, pushed). The
-flake-injection half of task 1.1 that blocked it is implemented:
+This change's bespoke-surface phase is **closed**. All seven bases were
+re-expressed as `Codec` values by `basen-uniform-leaf-api` (archived;
+lean-basen commits `7eefebc`…`bef44ae`), and the facade + bench were rewired to
+the Codec-value surface (`bef44ae`). `lake build` is green, zero
+`sorry`/warnings, `#print axioms` on every per-base `roundtrip` =
+`[propext, Quot.sound]`, and `nix flake check` is green (codec is a public
+`github:dysinger/lean-codec` flake input; `flake.lock` pins `77c1c54`, not the
+stale `88e4c36` — see `bef44ae`).
 
-- **`flake.nix`**: `codec` is now a flake input using the correct shorthand
-  `github:dysinger/lean-codec`, threaded as `codecSrc = codec.outPath` into
-  `default.nix`.
-- **`default.nix`**: `mkLakeBuild` copies `codecSrc` into the writable sandbox
-  (`cp -r` + `chmod -R u+w`) and rewrites the `require codec from git …` line to
-  `require codec from "./codec-src"` before `lake build`, so Lake builds codec
-  from source as a **local path dependency** — no `git clone`, no network, no
-  pre-built `.olean` needed.
-- **`flake.lock`**: locked `codec` to `88e4c36`.
-
-`lake build` zero sorry/warnings; `#print axioms BaseN.roundtrip` and every
-`BaseN.Base{X}.roundtrip` = `[propext, Quot.sound]`; `nix flake check` green
-(both `checks.lean` and `checks.formatting`). The hook (`.githooks/pre-commit`,
-`nix fmt`) is in place and passes.
-
-**Caveat (resolved this session):** `dysinger/lean-codec` was **private**, so
-fetching the `github:` input needed a credential (`access-tokens = github.com=
-<token>` or `nix --extra-access-tokens "github.com=$(gh auth token)" …` — no
-`--impure`, but a credential). The repo is now **public** (`gh repo edit
-… --visibility public`), so `nix flake check` runs green with a plain
-invocation: no token, no `--impure`, fully portable.
+The **remaining work lives in `basen-rfc-conformance-theorems`**, the active
+change, which subsumes the bespoke-surface review findings 5.1 (non-terminal
+padding) / 5.7 (smoke coverage) / 5.10 (base16 lowercase). See this change's
+`tasks.md` §5 for which review findings are still open vs. superseded.
