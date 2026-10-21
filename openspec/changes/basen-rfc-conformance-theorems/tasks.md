@@ -76,7 +76,7 @@
       digit predicate).
 - [x] 4.2 Base32/64: `encodeStrict` alphabet-or-pad, pad exactly the terminal
       tail's RFC arity, `=` never precedes non-`=`.
-- [ ] 4.3 Per base: `decode … = some v → encode v = some ⟨n, s⟩` (converse).
+- [x] 4.3 Per base: `decode … = some v → encode v = some ⟨n, s⟩` (converse).
 - [x] 4.4 Per base: `encode v = encode v' → v = v'` (injectivity).
 - [ ] 4.5 Facade `BaseN`: the `Base`-dispatched `decode_encode_inverse`/
       `encode_injective` (net-new), `cases` over all seven, three shapes.
