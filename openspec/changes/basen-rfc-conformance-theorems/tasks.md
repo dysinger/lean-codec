@@ -19,13 +19,13 @@
 > `relRepeat`/`decodeRepeat`/`encodeRepeat` — **no** `codec`-core change. See
 > `specs/codec/spec.md`.
 
-- [ ] 0.1 Define `Run` (in `BaseN`, downstream `lean-basen`): a `structure` bundling
+- [x] 0.1 Define `Run` (in `BaseN`, downstream `lean-basen`): a `structure` bundling
       `elem : Codec UInt8` + `step : ConsumesByte elem`, with `decode :=
-    decodeRepeat elem step`, `encode := encodeRepeat elem`, `rel := relRepeat (Rel
-    elem)`. Its laws are the inherited `decodeRepeat_spec`/`encodeRepeat_rel`.
-- [ ] 0.2 Confirm `lake build` green with `Run` in place (no core change; zero
+  decodeRepeat elem step`, `encode := encodeRepeat elem`, `rel := relRepeat (Rel
+  elem)`. Its laws are the inherited `decodeRepeat_spec`/`encodeRepeat_rel`.
+- [x] 0.2 Confirm `lake build` green with `Run` in place (no core change; zero
       `sorry`/warnings; `#print axioms Codec.roundtrip` still `[propext,
-    Quot.sound]`).
+  Quot.sound]`).
 
 ## 1. The uniform `Codec (List UInt8)` bases, deleting the run triples
 
@@ -47,7 +47,14 @@
 - [ ] 2.1 Restore the facade `encode (b : Base) : List UInt8 → List UInt8` /
       `decode (b : Base) : List UInt8 → Option (List UInt8)` dispatching `cases b`
       to the single `Codec` value per base, normalized through `BaseN.Bridge`.
+      _(facade-half landed: the uniform `List UInt8` `encode`/`decode` exists in
+      `BaseN.lean`, `cases b` across all seven; base32/64 still dispatch to the
+      strict/parse `decodeB32Strict`/`encodeB32Strict` + byte transport, **not** a
+      single `Codec` value — the "single Codec value per base" half waits on
+      tasks 1.1/1.3.)_
 - [ ] 2.2 Prove `roundtrip (b : Base) (bs) : decode b (encode b bs) = some bs`.
+      _(per-base `roundtripBytes` for the B32/B64 transport are done; the
+      `Base`-dispatching `roundtrip` is not.)_
 - [ ] 2.3 Add facade-dispatched `decode_encode_inverse`/`encode_injective` — now
       over the **single** value type (`List UInt8`), no three-shape signature
       decision, no `Base.val` family.
