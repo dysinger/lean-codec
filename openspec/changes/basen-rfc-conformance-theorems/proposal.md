@@ -90,22 +90,23 @@ reproduces the input` (whenever the decoder accepts a value, it is the _unique_
 
 ### Modified Capabilities
 
-<!-- None that MODIFY an existing requirement header in the synced base spec:
-     the synced `basen` spec has no "reject malformed input" / "canonical" /
-     "converse" requirement to modify, so this change adds those requirements
-     (see the ADDED section in specs/basen/spec.md). It does re-anchor the
-     *subject* of the laws from the deleted bespoke facade to the `Codec`-value
-     surface, but that is recorded here, not as a MODIFIED delta. -->
+- `codec`: ADD a requirement re-asserting that `many` is **derived** (never a
+  `Codec` constructor — a constructor is un-implementable in Lean), and that a
+  concrete format surfaces unbounded repetition as a **first-class run value**
+  (bundling `relRepeat`/`decodeRepeat`/`encodeRepeat`) so the uniform
+  `decode`/`encode` keeps no bespoke per-format function (see `specs/codec/spec.md`).
 
 ## Impact
 
 - **Code**: the padded bases' whole-input rejection of trailing data after `=`
   is fixed by **re-typing**: `List (List UInt8)` is replaced by the terminal-tail
-  inductive `B32`/`B64` (design §D0), realized as a derived strict run triple
-  (`relStrict`/`decodeStrict`/`encodeStrict`) — see `design.md`. Rejection is
-  **structural** (the illegal shape has no inhabitant), there is no flattening
-  (no bijective `B64 → List (List UInt8)` exists), and the lenient `List (List
-UInt8)` codecs are deleted.
+  inductive `B32`/`B64` (design §D3), which is the **value type** of a
+  `Codec (List UInt8)` value (realized via `iso`), not a hand-rolled run triple.
+  Unbounded repetition is restored as the `many` constructor (design §D0), so
+  every base is one `Codec (List UInt8)` value decoded/encoded by the single
+  `Codec.decode`/`Codec.encode`. Rejection is **structural** (the illegal shape
+  has no inhabitant), there is no flattening (no bijective `B64 → List (List
+UInt8)` exists), and the lenient `List (List UInt8)` codecs are deleted.
 - **Base16 case-insensitivity** (RFC 4648 §8: a decoder MUST accept both cases)
   is an **explicit non-goal** of this change: the `Codec`-value `hexElem` is a
   strict uppercase bijection, and a case-insensitive decoder is not expressible

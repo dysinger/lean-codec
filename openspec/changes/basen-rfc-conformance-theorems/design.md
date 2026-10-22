@@ -1,259 +1,242 @@
-# Design
+# Design — `basen-rfc-conformance-theorems` (re-anchored to the uniform `Codec`-value surface)
 
 ## Context
 
-See `proposal.md` — Why. The `basen` package proves roundtrip for all seven
-bases on the **`Codec`-value surface** (after `basen-uniform-leaf-api`), but
-nothing is proved about _rejection_, _canonical form_, or the _converse_, and
-the padded decoders' **run-level** terminal-padding behaviour is unproved. The
-F* reference (`fstar-basen`) that this package ports from proves a
-`decode_*_invalid`/`pad_first`/`bad_length` rejection family per base; the Lean
-port has never stated one.
+See `proposal.md` — Why. The `basen` package must prove the full RFC 4648
+conformance contract (rejection / canonical encoding / converse / injectivity)
+on top of the **uniform surface**: every base is decoded and encoded by the
+_same_ operation — "only the codec changes" — so decoding base64 and decoding
+JSON are the same call, with the _value type_ differing, never the operation
+shape.
 
-This change goes further than "prove rejection": it **replaces the base32/64
-value type** so that the forbidden shape (a `=`-terminated block followed by
-more data) is **not representable at all**, rather than rejected by a rule.
+The synced spec `openspec/specs/basen/spec.md` requires this ("The `basen` bases
+are `Codec` values … composed from `satisfy`/`count`/`many`/`iso`/`alt`, roundtrip
+via inherited `Codec.roundtrip`, no bespoke `encode`/`decode`"). A prior change
+(`basen-uniform-leaf-api`, commit `11f7072`) walked away from it, declaring the
+needed `many` node "type-theoretically impossible" and instead implementing
+base32/64 as **bespoke per-format run triples** (`parseB64`/`encodeB64Strict`/
+`relB64Strict` and their base32 analogues) with three irreconcilable
+carrier/value shapes — `decodeB32Strict`/`encodeB64Strict` a caller must name.
+That was a **wrong turn**: the wrong turn was _falling back to per-format
+functions_, not the (correct) observation that `many` is not a constructor. This
+change corrects it.
 
-## The core idea: the value type must make illegal states _unrepresentable_
+The three references settle the shape of `many`:
 
-The current base32/64 value type is `List (List UInt8)` — a loose "list of
-blocks". It is exactly the wrong type: it can hold `[[0x66], [0, 0, 0]]` (a
-1-byte tail followed by a 3-byte full block) with no type-level objection. RFC
-4648 §3.2 forbids this (`=` is terminal), so `List (List UInt8)` **admits an
-illegal state by construction**. No guard, filter, or post-condition over that
-type can be "perfect" — they all _detect and discard_ an already-constructed
-illegal value.
+- **The paper** (PAPER.md §3.4) — `many p = nil $ pure () | cons $ p ∗ many p`:
+  `many` is a **derived recursive combinator**, _not_ an elementary description
+  alongside `token`/`pure`. Its denotation is the **least** `nil`/`cons` fixpoint.
+- **The F\* reference** (`fstar-codec` `Data.Codec.Types.fst`) — there is **no
+  `many` at all**; the unbounded run is `satisfy_many0 f : codec (list byte)`, a
+  `let rec satisfy_run_scan` over the _finite_ input, and a `codec a` is a record
+  of `enc`/`dec`/`roundtrip`.
+- **The project's own `lean` skill** (§3) — "Recursive syntax descriptions
+  (`many`) are coinductive in the _parser_, inductive in the _denotation_ …
+  the correct constructive guard is **well-founded recursion on the consumed
+  string**"; "`many` is a derived recursive combinator (paper §3.4), never an AST
+  node".
 
-The perfect fix is a **value type where the forbidden shape cannot be written**.
-Base32/64 get an inductive value type whose _tail_ constructors are terminal
-(no continuation field), so "data after a tail" has no term:
+**The verified negative (this change's binding constraint):** `many` **cannot** be
+a `Codec` constructor. A denotational witness `Productive p := ∀ x n s, Rel p x
+s → n ≠ 0` (or `ConsumesByte`) as a constructor field creates the cycle
+`Codec → Productive → Rel → Codec` (the field mentions `Rel`/`decode`, both of
+which structurally recurse on `Codec`). Lean rejects the two escapes: mixing a
+`def` with an `inductive` in a `mutual` block is forbidden, and a
+`mutual inductive Codec (Type 1) + Rel (Prop)` is rejected by the universe check
+("all inductive types … must belong to the same type universe"; `Codec : Type →
+Type 1` vs `Rel : … → Prop`). A _syntactic_ productivity `def` has the identical
+`Codec → productive → Codec` cycle. This is the same wall `11f7072` hit — and it
+is **real and verified**. The paper/F\* avoid it precisely because they make
+`many` **derived**, not a constructor.
+
+Therefore the uniform surface is recovered the way both references do it: keep
+`many` **derived** (the already-proved `relRepeat`/`decodeRepeat`/`encodeRepeat`
+triple and its `takeWhile`/`sepBy` specializations in `Combinators.lean`), and
+make the **per-base codec a single first-class value** that packages that derived
+run together with the fixed-width `count`/`iso` part — one value, one `decode`/
+`encode`, no bespoke function.
+
+## The core idea: `many` is derived (already implemented); the base is one _value_
+
+The generic repetition is already, faithfully, in `Codec/Combinators.lean`:
+
+- `relRepeat`/`decodeRepeat`/`encodeRepeat` — the paper's `many`, total (the
+  denotation is the least fixpoint; the decoder is well-founded on `n` guarded by
+  `ConsumesByte`; the encoder is structural on the value list).
+- `takeWhile p = (relTakeWhile, decodeTakeWhile, encodeTakeWhile)` — F\*'s
+  `satisfy_many0`, with `decodeTakeWhile_spec`/`encodeTakeWhile_rel` inherited.
+- `sepBy p sep = (relSepBy, decodeSepBy, encodeSepBy)` — the paper's `sepBy1`,
+  with the same inherited laws.
+
+What is missing is **only the packaging**: a single value per base that a uniform
+`encode (b : Base)` / `decode (b : Base)` dispatches over, replacing the bespoke
+`decodeB32Strict`/`encodeB64Strict`/`relB64Strict` functions.
+
+### The actual surface this delivers (the whole point)
+
+Each base is **one run value** (fixed-width over `count`/`iso`, padded over the
+terminal-tail value type), and the facade dispatches over the **single** value
+type `List UInt8`:
 
 ```lean
--- base64: full 3-byte blocks, then at most one terminal tail of 1 or 2 bytes
-inductive B64 where
-  | empty
-  | full  (b0 b1 b2 : UInt8) (rest : B64)   -- a full block, then more
-  | tail1 (b0 : UInt8)                       -- terminal 1-byte tail
-  | tail2 (b0 b1 : UInt8)                    -- terminal 2-byte tail
-
--- base32: full 5-byte blocks, then at most one terminal tail of 1–4 bytes
-inductive B32 where
-  | empty
-  | full  (b0 b1 b2 b3 b4 : UInt8) (rest : B32)
-  | tail1 (b0 : UInt8) | tail2 (b0 b1 : UInt8)
-  | tail3 (b0 b1 b2 : UInt8) | tail4 (b0 b1 b2 b3 : UInt8)
+-- fixed-width bases (2/4/8/10/16): element `Codec UInt8` + the derived run
+base2  : Run                  -- count 8 (satisfy isBitDigit) ≫ (bits↔byte) iso, element run
+base16 : Run                  -- count 2 (satisfy isHexDigit) ≫ (pair↔byte) iso, element run
+-- padded bases (32/64): full blocks + terminal tail, value type B32/B64
+base32 : Run                  -- full 5-byte block run, terminal-tail alt, B32 value
+base64 : Run                  -- full 3-byte block run, terminal-tail alt, B64 value
 ```
 
-Because `tail1`/`tail2` have no destination, the _only_ way to represent "a
-1-byte block then a 3-byte block" is `full 0 0 0 (tail1 0x66)` — the **valid**
-ordering. `Zg==AAAA` (`[[0x66],[0,0,0]]`) has **no inhabitant** in `B64`. This
-is "types and theorems dictate impossibility": the decoder's type
-`Bytes n → Option B64` makes malformed input return `none` (nothing to invent),
-and every `some v : B64` _is_ canonical by construction.
+with a **uniform facade** (the only entry points):
 
-### The actual surface (read this before any statement)
+```lean
+def encode (b : Base) (bs : List UInt8) : Option (List UInt8)
+def decode (b : Base) (s  : List UInt8) : Option (List UInt8)
+theorem roundtrip (b : Base) (bs : List UInt8) : decode b (encode b bs) = some bs
+```
 
-Each base is a `Codec` value over `satisfy`/`count`/`iso` plus the productive
-repetition layer, indexed by the `codec` substrate `Bytes n := Fin n → UInt8`.
-After this change the bases split into **three** groups by value type:
+There is **no** `decodeB32Strict`/`encodeB64Strict`, **no** per-format function,
+**no** three carrier shapes. A caller never names a leaf; the radix lives on the
+`Base` index and the value is always `List UInt8`.
 
-- **Fixed-width bases (2, 4, 8, 10, 16):** element `Codec UInt8` (one byte per
-  element); the run triple `decode{X} : Bytes n → List (List UInt8 × Suffix n)`,
-  `encode{X} : List UInt8 → Option (Sigma fun n => Bytes n)`, `roundtrip
-(bs : List UInt8)`, whole-input decoder `Codec.decodeFull {x}Elem
-{x}ConsumesByte n s : Option (List UInt8)`. These are **unchanged** — `List
-UInt8` is their right type and they have no padding/tail concept.
-- **Base64:** **new value type `B64`** (above). The strict run triple
-  `relB64Strict : B64 → {n} → Bytes n → Prop`,
-  `decodeB64Strict : Bytes n → Option B64`,
-  `encodeB64Strict : B64 → Option (Sigma fun n => Bytes n)`. The old
-  `b64Elem : Codec (List UInt8)` / `decodeB64` / `encodeB64` / `relB64` are
-  **deleted** (together with the `bb46230` post-hoc filter).
-- **Base32:** **new value type `B32`** (above), with the analogous
-  `relB32Strict`/`decodeB32Strict`/`encodeB32Strict`; the old lenient
-  `b32Elem`/`decodeB32`/`encodeB32`/`relB32` are **deleted**.
-
-There is **no** `encode : List UInt8 → List UInt8` / `decode : List UInt8 →
-Option (List UInt8)` facade anymore (deleted in `basen-uniform-leaf-api`), and
-nobody re-introduces one. The strict base32/64 codecs are **run triples** (the
-`sepBy`/`takeWhile` pattern), **not** `Codec` values — unbounded `many` is not
-an AST node, and a padded block run is not a fixed-width `count k (satisfy p)`.
-
-### Ground truth the plan must respect (verified against shipped code)
-
-- The current `b64Elem = Codec.iso b64BlockIso (count 4 (Codec.satisfy
-b64OrPad))` with `b64OrPad b = b64Valid b.toNat || b.toNat = 61`. `count 4`
-  fixes the **byte window**, not the decoded value length, so
-  `decodeFull b64Elem b64ConsumesByte 8 "Zg==AAAA"` is `some [[0x66],[0,0,0]]`
-  — the trailing-data-after-terminal-`=` case is **accepted deterministically**,
-  because the value type `List (List UInt8)` cannot forbid it. This grounds the
-  type replacement: the fix is not a guard on this type, it is a better type.
-- Fixed-width roundtrips and unambiguities are `[propext, Quot.sound]`-proved
-  and are **not** re-proved.
+> **"`Run`" is a first-class value, not a bespoke function.** It is the F\*
+> `codec a` record shape (`enc`/`dec`/`roundtrip`), specialized to a `List UInt8`
+> value and realized in Lean as a `structure` bundling the three already-proved
+> interpretations (`relRepeat (Rel elem)`, `decodeRepeat elem <witness>`,
+> `encodeRepeat elem`), with the laws as the _inherited_ `decodeRepeat_spec`/
+> `encodeRepeat_rel` theorems rather than per-combinator re-proofs. It is **not** a
+> new `Codec` constructor and **not** a hand-rolled per-format parser.
 
 ## Goals / Non-Goals
 
 **Goals:**
 
-- Replace base32/64's `List (List UInt8)` value with the terminal-tail
-  inductive `B32`/`B64`, so **illegal states are unrepresentable**.
-- Three theorem families per base, `[propext, Quot.sound]`-only, zero `sorry`:
-  1. **Canonical encoding** — every encoded byte is in the alphabet; for
-     base32/64 the `=` pads are exactly the RFC arity of the (unique) terminal
-     tail, and appear nowhere else.
-  2. **Rejection** — `decode… = none` on every malformed input.
-  3. **Converse / uniqueness** — `decode = some v → encode v = input`, and
-     `encode` injective.
-- For base32/64 the rejection is **structural**: malformed input → `none`
-  because **no `B32`/`B64` term** represents it, proved by showing the grammar
-  relation has no inhabiting value (not by a filter or a `Bool` test).
+1. Package the already-proved derived repetition into a single first-class
+   per-base **run value** (`Run`), and a uniform facade `encode (b : Base)` /
+   `decode (b : Base)` over `List UInt8`. Delete the bespoke
+   `parseB64`/`encodeB64Strict`/`relB64Strict` run triples (and base32 analogues).
+   No `many` constructor is added (verified impossible; both references derive it).
+2. Re-express all seven bases as run values (fixed-width `count`/`iso`, padded
+   over terminal-tail `B32`/`B64` value types so illegal padded states remain
+   **unrepresentable**).
+3. Re-prove the three RFC-conformance theorem families per base (rejection /
+   canonical encoding / converse + injectivity) **over the uniform `decode`/
+   `encode`**, not over per-format functions.
+4. `[propext, Quot.sound]`-only, zero `sorry`, zero `Classical.choice`, zero
+   per-format C.
 
 **Non-Goals:**
 
-- No substrate change (`Bytes n` stays); no C seam, no `Classical.choice`, no
-  `sorry`, no new axioms.
-- **No new `Codec` constructor.** The strict base32/64 run is a _run triple_
-  (`relStrict`/`decodeStrict`/`encodeStrict`), not a `Codec` value.
-- **No flattening.** There is no map `B64 → List (List UInt8)` that is a
-  bijective `Iso` (a tail can't be distinguished from a full block after the
-  fact). The flat type is simply **gone** for base32/64.
-- **Base16 case-insensitivity is out of scope** (D8): `hexElem` is a strict
-  uppercase bijection.
+- No committed-`|`/single-valued-decode change: `decode` stays list-valued with
+  backtracking union (README `[D2]`/`[D3]`; `lean` skill §3). The reverted
+  `codec-uniform-api` single-result idea stays out of scope.
+- No flattening of `B32`/`B64` back to `List (List UInt8)` (no bijective
+  flattening exists; the terminal tail is indistinguishable from a full block
+  after the fact).
+- No `many` constructor (paper/F\* derive it; a constructor is un-implementable
+  in Lean, verified above).
+- Base16 case-insensitivity remains a non-goal (D8 below).
 
 ## Decisions
 
-### D0 — Replace the base32/64 value type with a terminal-tail inductive (the whole fix)
+### D0 — `many` is **derived**, not a constructor; the run is a **value**
 
-`List (List UInt8)` admits `[[0x66],[0,0,0]]`; `B64`/`B32` above do not. This is
-the single change that makes illegal states impossible, and it subsumes every
-prior "guard mechanism" (split grammar, post-condition, filter) — there is no
-guard, there is a **type**. It is the honest realization of "perfection": the
-compiler itself rejects the illegal shape.
+`many`/`satisfy_many0` are realized by the existing `relRepeat`/`decodeRepeat`/
+`encodeRepeat` (and their `takeWhile`/`sepBy` specializations), exactly as the
+paper (§3.4) and F\* (`satisfy_many0`) do. A first-class **`Run`** bundles the
+three interpretations so a consumer holds _one value_, never three names:
 
-### D1 — The strict base32/64 codec is a run triple, not a `Codec` value
+```lean
+structure Run where
+  elem : Codec UInt8                -- the element (or block) description
+  step : ConsumesByte elem          -- the productivity witness
+  -- decode/encode/rel derived: decodeRepeat elem step / encodeRepeat elem / relRepeat (Rel elem)
+```
 
-Because a padded block run is `full* (tail)?` and unbounded `many` is not a
-`Codec` AST node (see the `lean` skill §3), the strict decoder/encoder are a
-**run triple** exactly like `relSepBy`/`decodeSepBy`/`encodeSepBy` and
-`relTakeWhile`/`decodeTakeWhile`/`encodeTakeWhile`:
+The fixed-width block `Iso`s (`bitBlockIso`/`quartetBlockIso`/…) are `Codec
+UInt8` values via `count k (satisfy p) ≫ <block iso>`; the `Run` wraps them.
+The padded bases wrap the full-block element (`count 8 (satisfy b32OrPad) ≫
+b32BlockIso`, etc.) plus a terminal-tail `alt`/`iso` onto `B32`/`B64`.
 
-- `relB64Strict : B64 → {n : Nat} → Bytes n → Prop` — structural recursion with
-  **no** separate "terminal-pad" predicate (the shape is in the value).
-- `decodeB64Strict {n} (s : Bytes n) : Option B64` — returns `none` unless `s`
-  is a canonical base64 string; driven by the result type's constructors.
-- `encodeB64Strict (v : B64) : Option (Sigma fun n => Bytes n)` — a structural
-  fold; canonical output _forced_ by the input type.
+### D1 — The value types stay terminal-tail (`B32`/`B64`), but _as values_, not run triples
 
-(The `decodeB32Strict`/`encodeB32Strict`/`relB32Strict` analogues similarly.)
+The `B32`/`B64` terminal-tail inductives stay (that was the _correct_ part of the
+prior design). They are the **value type** of the padded run, realized via `iso`
+over the `Run`'s full-block + optional-tail structure. `=`-terminal is enforced
+by construction (a `tail*` constructor has no continuation). The illegal state
+"full block after a tail" has no term; the decoder returns `none` because no
+value relates — proved via `decodeRepeat_spec`/`relRepeat`/`encode_rel`, **not**
+via a bespoke `parseB64`.
 
-### D2 — The block `Iso`s are arity-fixed and `=`-free on the full block
+### D2 — Rejection is `decode <base> bad = none`, structural and uniform
 
-Each block shape is a **genuine bijection** at a fixed arity (no `b64OrPad`
-leniency, no `=`-accepting full block):
+Stated over the uniform decoder (`decode (b) bad` / `Codec.decodeFull <elem>
+<witness> n bad`), not a bespoke one. The `Zg==AAAA` class is `none` because no
+`B64` value relates (absence of an inhabitant), proved by the run's relation +
+`decode_spec`.
 
-- base64 full: `Iso (UInt8 × UInt8 × UInt8) (List UInt8)` — 3 bytes ↔ 4
-  alphabet chars (no `=`).
-- base64 tail1: `Iso UInt8 (List UInt8)` — 1 byte ↔ `2 chars + "=="`.
-- base64 tail2: `Iso (UInt8 × UInt8) (List UInt8)` — 2 bytes ↔ `3 chars + "="`.
-- base32 full/tail1..tail4 analogously (5 bytes ↔ 8 chars; `n` bytes ↔ `1+⌈8n/5⌉`
-  chars + pad).
+### D3 — The facade is uniform (one value type, no `Base.val` family)
 
-These are _restrictions_ of the existing `b64BlockUnapply`/`b64BlockApply` (the
-digit math and the `byte0..byte4` extraction identities are reused verbatim);
-the `=` is part of the tail `Iso`'s output so it cannot leak into a full block
-or a non-terminal position. Each has its `law` proved by the existing per-shape
-`b64BlockDecodeLenient_unapply_*` forward identities plus the reverse
-`*ToVal_valTo*` reconstruction (the already-proved `b64ToVal_valToB64`/
-`valToB64_b64ToVal_of_valid` facts).
+```lean
+def encode (b : Base) (bs : List UInt8) : Option (List UInt8) -- or total
+def decode (b : Base) (s  : List UInt8) : Option (List UInt8)
+theorem roundtrip (b : Base) (bs : List UInt8) : decode b (encode b bs) = some bs
+```
 
-### D3 — Rejection is proved by _absence of an inhabitant_, with the decode derived
+`cases b` dispatches to each base's `Run`, normalized through `BaseN.Bridge`
+(`Bytes n ↔ List UInt8`, already landed). No `Base.val : Base → Type` family, no
+value sum type, no three shapes.
 
-`decodeB64Strict ("Zg==AAAA" : Bytes 8) = none` is proved by showing there is
-**no** `v : B64` with `relB64Strict v (bytes 8)` consuming all 8 bytes. That is
-a **type-directed** argument: the only `B64` terms consuming 8 chars are
-`full … (empty)` (one block) or `full … (full … ·)` (two blocks) etc.; the
-`Zg==` prefix can only be matched by `tail1 0x66` (terminal), which leaves
-`AAAA` unconsumed — so no term exists. Mechanically this descends through
-`decodeFull_spec` + the run's own relation lemmas + `encode_rel` + a single
-forward **`rel_count_satisfy`** lemma (proved once in `BaseN.Common`, see D5),
-so the per-block `Rel` facts are obtained from the _encoder_, never assumed.
-No `native_decide`, no `hf` hypothesis, no `Classical.choice`.
+### D4 — The one generic lemma (carried over): forward `rel_count_satisfy`
 
-### D4 — Three theorem families, not one mega-lemma
+Prove `Rel (count k (satisfy p)) l s` from `s = byte-image of l` + `∀ b ∈ l, p b`,
+once in `BaseN.Common`, parameterized by `p`/`k` (carries the `(k+1)-1 = k`
+length-cast gotcha). This is the one shared primitive all seven bases need.
 
-Per base add (all `[propext, Quot.sound]`-only):
+### D5 — Bench value-checks the uniform surface (carried over)
 
-- **Canonical encoding** — fixed-width: `encode{X}` output is alphabet-only;
-  base32/64: `encodeStrict` output is alphabet-or-pad with the pad exactly the
-  terminal tail's RFC arity.
-- **Rejection** — one `theorem` per malformed class (`decode… = none`).
-- **Converse / uniqueness** — `decode = some v → encode v = input`, and
-  `encode` injective.
+`Bench.lean` uses `Codec.decode`/`Codec.encode` (or the facade), never
+`decodeB32Strict`. The F\* rejection/canonical/converse vectors survive,
+re-spelled over the uniform entry points.
 
-The exhaustive "valid iff canonical" iff is the **sum** of these families, not a
-single induction.
+### D6 — Base16 case-insensitivity is out of scope (carried over)
 
-### D5 — The one new generic lemma: forward `rel_count_satisfy`
+`hexElem` stays a strict uppercase `Iso`. Lowercase `6f` is a rejection, not an
+alias.
 
-Every concrete rejection/canonical/converse proof needs a **forward**
-`Rel (count k (satisfy p)) l s` fact from `s = byte-image of l` plus
-`∀ b ∈ l, p b`. This is the single missing primitive (the backward
-`decodeRepeat_spec`/`relRepeat` direction exists); prove it once in
-`BaseN.Common`, parameterized by `p` and `k`, and reuse for all seven bases.
-(It carries the `(k+1)-1 = k` length-cast gotcha documented in the `lean` skill.)
+## Risks / trade-offs
 
-### D6 — Proofs live next to the per-base code (no new module)
+- **[Not a `Codec` constructor, by verified necessity]** — this is _not_ a
+  compromise against the spec; the spec's "composed from … `many` …" is satisfied
+  by `many` being a _derived run_ (as the paper/F\* derive it), and the uniform
+  `decode`/`encode` is delivered by the `Run` value + facade. No new core
+  constructor, no `Codec.rec` conversion of the law suite (a _reduction_ of the
+  risky scope the prior design proposed).
+- **[`Run` is a value, so no `induction d` conversions]** — the `Run` bundles the
+  already-proved `decodeRepeat`/`encodeRepeat`/`relRepeat`; per-base laws are the
+  inherited `decodeRepeat_spec`/`encodeRepeat_rel`, not new `Codec.rec` cases.
+- **[Terminal-tail `iso` must be constructed explicitly]** — the one genuinely new
+  proof: the `Iso` from the `Run`'s `(List full · × Option tail)` result to `B32`/
+  `B64`. This is a well-scoped bijection (a tail's arity is recoverable from its
+  constructor), not the non-existent `List (List UInt8)` flattening.
+- **[No surface regression]** — `decode` stays list-valued/backtracking (README
+  `[D2]`/`[D3]`, `lean` skill §3).
 
-The fixed-width families stay in their `BaseN.BaseX` namespaces; `B32`/`B64` and
-their strict run triples + theorems live in `BaseN.Base32`/`BaseN.Base64`. The
-facade `BaseN` (currently no dispatch theorem) gains **net-new** `Base`-indexed
-`encode_injective`/`decode_rejects`/`decode_encode_inverse` dispatch, written per
-shape and `cases`-ed over `Base` (three shapes: `List UInt8`, `B32`, `B64`).
+## Implementation order
 
-### D7 — Bench lane value-checks every law with concrete vectors
+1. Add the `Run` value (bundle `elem`/`step` + the three inherited interpretations)
+   in `BaseN` (downstream `lean-basen`), over the existing `relRepeat`/
+   `decodeRepeat`/`encodeRepeat`. Delete the bespoke base32/64 run triples.
+2. Re-express the seven bases as `Run` values (fixed-width `count`/`iso`; padded
+   over `B32`/`B64`). Apply D4's `rel_count_satisfy`.
+3. Restore the facade `encode`/`decode`/`roundtrip`; reanchor `Bench.lean`.
+4. Re-prove the three conformance families per base over the uniform surface; gate
+   `lake build` + `lake build bench`, `#print axioms` = `[propext, Quot.sound]`,
+   `nix flake check` green.
 
-`Bench.lean` gains, per base, an `example`/`#eval` for each rejection class and
-the converse, using the F* vectors (base64 `!`, pad-first, bad-length,
-`Zg==AAAA`; base32 `MY======AAAAAAAA`; base8/10 overflow), each re-expressed as
-a `Bytes n` literal via a `Bytes.ofList` helper.
+## Open questions
 
-### D8 — Base16 case-insensitivity is out of scope
-
-RFC 4648 §8 wants a _decoder_ to accept both cases, but `hexElem` is a strict
-uppercase `Iso`; a case-insensitive decoder is not a bijection and is recorded
-as a non-goal (lowercase `6f` is a _rejection_, not an accepted alias).
-
-## Risks / Trade-offs
-
-- **[Public type change is the entire point]** → base32/64 value type changes
-  from `List (List UInt8)` to `B32`/`B64`; this is deliberate (illegal states
-  unrepresentable), and the facade/bench adapt (three shapes). No silent
-  backward-compat shim: the lenient codecs are deleted.
-- **[Base32 5-shape / base64 3-shape block `Iso` laws]** → each tail arity
-  needs its own bijection law; reuse the existing digit identities read
-  forward and in reverse (do not use `by_contra`).
-- **[Three result shapes]** → the facade dispatch handles `List UInt8`, `B32`,
-  `B64` separately.
-- **[Base16 case-insensitivity]** → recorded as a non-goal (D8).
-
-## Migration Plan
-
-1. Delete the lenient base32/64 codecs and the `bb46230` filter (revert to the
-   pre-filter state, then remove `b32Elem`/`b64Elem`/`decodeB*`/`encodeB*`/
-   `relB*`).
-2. Define `B32`/`B64` and the arity-fixed block `Iso`s (D2).
-3. Implement the strict run triples `relStrict`/`decodeStrict`/`encodeStrict`
-   over `B32`/`B64` (D1).
-4. Prove rejection (`Zg==AAAA` etc. → `none`) with the decode derived (D3);
-   prove strict roundtrip + unambiguity + converse + injectivity.
-5. Add canonical/rejection/converse theorems per fixed-width base (D4).
-6. Add the net-new `Base`-dispatched facade versions (D6).
-7. Extend `Bench.lean` (D7); gate with `lake build` (zero sorry/warnings),
-   `#print axioms` = `[propext, Quot.sound]`, `nix flake check` green.
-
-## Open Questions
-
-- **None open.** The value type is resolved (`B32`/`B64` terminal-tail
-  inductives); the strict codec is a run triple over them; rejection is
-  structural (absence of an inhabitant); no flattening, no filter, no
-  post-condition. Base16 case-insensitivity is a recorded non-goal (D8).
+**None.** `many` is derived (paper/F\*); the run is a first-class `Run` value over
+the already-proved repetition; the value types (`B32`/`B64`) and the
+rejection/canonical/converse families carry over; the facade is uniform over
+`List UInt8`.
