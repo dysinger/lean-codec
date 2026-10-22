@@ -21,11 +21,11 @@
 
 - [x] 0.1 Define `Run` (in `BaseN`, downstream `lean-basen`): a `structure` bundling
       `elem : Codec UInt8` + `step : ConsumesByte elem`, with `decode :=
-  decodeRepeat elem step`, `encode := encodeRepeat elem`, `rel := relRepeat (Rel
-  elem)`. Its laws are the inherited `decodeRepeat_spec`/`encodeRepeat_rel`.
+decodeRepeat elem step`, `encode := encodeRepeat elem`, `rel := relRepeat (Rel
+elem)`. Its laws are the inherited `decodeRepeat_spec`/`encodeRepeat_rel`.
 - [x] 0.2 Confirm `lake build` green with `Run` in place (no core change; zero
       `sorry`/warnings; `#print axioms Codec.roundtrip` still `[propext,
-  Quot.sound]`).
+Quot.sound]`).
 
 ## 1. The uniform `Codec (List UInt8)` bases, deleting the run triples
 
@@ -39,8 +39,17 @@
 - [ ] 1.3 Re-express base32/64 as a `Run` over the full-block element plus a
       terminal-tail `alt`/`iso` onto `B32`/`B64`. The terminal-tail branch is
       terminal (empty continuation), so "data after `=`" is unrepresentable.
+      _(base64 foundation landed (`../lean-basen` `a71277c`): `b64BlockElem` /
+      `b64TailElem` `Codec (List UInt8)` elements (with a new `b64TailIso` law
+      restricting a block to 1–2 bytes), `b64Run`/`b64TailRun`, all
+      unambiguity/functional/canonical lemmas, the uniform `decodeFullB64`/
+      `encodeB64`, and `decodeFull_b64Tail_of_encode`. The whole-input
+      `roundtrip` + conformance laws are still open.)_
 - [ ] 1.4 Prove `roundtrip` per base as the **inherited** `decodeRepeat_spec`/
       `encodeRepeat_rel` law (no bespoke law); `lake build` green.
+      _(base64's roundtrip requires the `concat`-empty / `Suffix.drop`-then-
+      `prepend` transport lemma family over the block-prefix-then-tail split;
+      still open.)_
 
 ## 2. Facade: uniform `encode (b : Base)` / `decode (b : Base)`
 
