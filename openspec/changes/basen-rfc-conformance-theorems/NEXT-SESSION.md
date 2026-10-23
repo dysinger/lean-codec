@@ -1,9 +1,31 @@
 # Next session — `basen-rfc-conformance-theorems` (re-anchored to the uniform surface)
 
-Status at handoff: **2 / 19 tasks done (0.1, 0.2)**, plus a **facade-first milestone**
-landed (uniform `encode`/`decode` over `List UInt8`). The deep base32/64
-`Codec`-value reformulation (tasks 1.1/1.3 and everything that depends on it)
-remains. Committed in `../lean-basen`; see §"Landed this session".
+Status at handoff: **4 / 19 tasks done (0.1, 0.2, 1.2, 1.3)**, plus a **facade-first
+milestone** landed (uniform `encode`/`decode` over `List UInt8`), plus the
+**content-extraction primitive** (this session, `../lean-basen` `2303421`). The
+whole-input **roundtrip** (task 1.4) and the bespoke-triple **deletion** (task 1.1)
+remain, and are tightly coupled: 1.1 cannot land until 1.4 gives the facade a
+Codec-value roundtrip to dispatch to (the facade currently calls
+`encodeBytes`/`decodeBytes`, which wrap the strict `encodeB64Strict`/`decodeB64Strict`).
+Committed in `../lean-basen`; see §"Landed this session".
+
+## Landed this session (commit `2303421` in `../lean-basen`)
+
+**The content-extraction primitive** (task 1.4 crutx, item (a)) in `BaseN/Common.lean`:
+
+- `Rel_count_satisfy_length p k xs s : Rel (count k (satisfy p)) xs s → xs.length = k`
+  — the mirror of `Rel_count_satisfy_len` (`n = k`); together they give `n = xs.length`.
+- `Rel_count_satisfy_ofFn p k xs s : Rel (count k (satisfy p)) xs s → List.ofFn s = xs`
+  — pins the byte string to the exact list, where `Rel_count_satisfy_forall` only gave
+  the predicate. Proved by structural induction on `k` + the `splice`/`concat`/`Fin`
+  cast commutation (`List.ext_getElem?` + `splice_prefix_read`/`splice_apply` +
+  `List.getElem?_ofFn` + `List.getElem?_cons` + `omega` on the `Fin` index).
+
+Both are `#print axioms` = `[propext, Quot.sound]` (the length one is `[propext]`),
+zero `sorry`, `lake build` green zero warnings. This was the precise "content-extraction
+primitive" the task 1.4 note called out as missing; the `List.ofFn`/`Fin`-cast friction
+you hit is real — use `List.ext_getElem?` (total `[i]?` form, no length hypothesis) rather
+than `List.ext_get`/`getElem` to dodge the `n = n-1+1` index-validity subgoals.
 
 ## The one thing every session must not re-litigate
 
@@ -56,22 +78,47 @@ base32/64 as a **`Codec` value** over the full-block `Run` + terminal-tail
 
 ## Next implementation order (remaining §0–§5)
 
-1. **1.1/1.3 (the hard core)** — re-express base32/64 as `Codec` values, deleting
-   `parseB64`/`encodeB64Strict`/`relB64Strict`/`decodeB64Strict` (+ base32 analogues).
-   The full-block element is a fresh `Codec (List UInt8)` (3 bytes ↔ 4 non-pad chars
-   for base64; 5 bytes ↔ 8 non-pad chars for base32); the terminal tail is a finite
-   `Codec (List UInt8)` per tail shape (`= ` positions fixed); fold onto `B32`/`B64`
-   via `iso`/`alt`. The cross-byte block `Iso.law` backward directions are the hard
-   part (3 shapes for base64, 5 for base32) — recoverable from the already-landed
-   `b64BlockIso_law`/`b32BlockIso_law` and the `b64BlockDecodeLenient_unapply_{single,
-pair,triple}` / `b32BlockDecodeLenient_unapply_{single,…,quintet}` identities
-   (see `../lean-basen` commits `71aaad3`/`71aaad3` for the prior `b64Elem : Codec
-(List UInt8) := iso b64BlockIso (count 4 (satisfy b64OrPad))` form to mine).
-2. **1.2/1.4** — wrap the five fixed-width bases as `Run UInt8` values; their
-   `roundtrip`/converse/injectivity/canonical/rejection laws already exist and
-   transfer verbatim.
-3. **2.2/2.3** — facade `roundtrip (b) (bs)` and `decode_encode_inverse`/
-   `encode_injective` over the single `List UInt8` value type.
+**The single blocking item is task 1.4's whole-input roundtrip**
+`decodeFullB64 (encodeB64 bs) = some bs` (and the base32 mirror). Nothing else can
+land first: task 1.1 deletes the strict triples the facade still dispatches to, and
+that deletion is only safe once `decodeFullB64`/`encodeB64` have their roundtrip proved
+(so the facade can rewire to the Codec value, task 2.1). Correct order:
+
+1. **1.4 (the hard core)** — prove `decodeFullB64 (encodeB64 bs) = some bs`. The
+   `decodeFullB64` definition is `List.head? ((decodeRepeat b64BlockElem … n s).filterMap …)`,
+   so the proof needs the **committed-block-prefix uniqueness** (item (b) of the task
+   1.4 note). The pieces that exist:
+   - `decodeRepeat_prefix_concat` lifts `(blocks, empty m₁) ∈ decodeRepeat … sb` to
+     `(blocks, Suffix.drop m₁ (concat sb st))` (Common.lean).
+   - `decodeFull_b64Tail_suffix_nil`/`_cons` decode the tail over the dropped suffix.
+   - `not_rel_b64BlockElem_of_pad` + `b64Char_pad_false` (the block element can't match a
+     `=` byte). `Rel_b64BlockElem_canonical` (block bytes are all `b64Char`, no pad).
+   - the new `Rel_count_satisfy_ofFn` (content extraction).
+   - **Not yet written**: (i) `encodeB64Tail tail = some ⟨q,st⟩ → tail ≠ [] →
+∃ i : Fin q, (st i).toNat = 61` (the tail encoding has a `=` pad — read it off
+     `b64BlockUnapply [b] = [c0,c1,61,61]` / `[a,b] = [c0,c1,c2,61]`, then
+     `Codec.encode b64TailElem` = `b64TailUnapply` `bind` `count 8 (satisfy b64OrPad)`);
+     (ii) the uniqueness lemma: any `(blocks', t') ∈ decodeRepeat b64BlockElem … (concat sb st)`
+     with `decodeFull b64TailElem t'.bytes ≠ none` has `blocks' = blocks`. The pad dichotomy
+     (alphabet vs `=`) disambiguates the length-8 edge cases (2 blocks of 4 bytes vs a
+     tail: `b64TailApply` rejects a 3-byte output, so a full-block prefix never decodes as
+     a tail at the wrong boundary); (iii) a `List.head?`-of-`filterMap`-with-unique-hit
+     lemma pinning the result. **A cleaner alternative to consider**: re-express
+     `decodeFullB64` without `head?`/`filterMap`, as a `decodeFullStep`-style direct
+     `Option`, so the inherited `decodeFull` machinery applies (design D1 says the value
+     type should be the terminal-tail `B64` via `iso`, not the current flattened
+     `List UInt8` + `head?`) — that is a design-decision, flag it before re-scoping.
+   - **A decomposition lemma was attempted this session and is Sigma-eq-fiddly**: to
+     unwrap `encodeB64 bs = some ⟨n,s⟩` into `encodeRepeat b64BlockElem (b64Split bs).1
+= some ⟨m₁,sb⟩ ∧ encodeB64Tail (b64Split bs).2 = some ⟨m₂,st⟩ ∧ n = m₁+m₂ ∧ HEq s
+(concat sb st)`, do `cases (Option.some.inj he')` on the Sigma equality (gives `rfl`
+     for the length and a `HEq` for the bytes); do **not** `congrArg Sigma.snd` (dependent
+     projection) and do **not** let `simpa [heb,het]` rewrite the in-scope `heb`/`het`.
+2. **2.1/2.2/2.3** — rewire the facade `encode`/`decode` to dispatch `cases b` to
+   `encodeB64`/`decodeFullB64`/`encodeB32`/`decodeFullB32` (not `encodeBytes`/`decodeBytes`),
+   then prove the `Base`-dispatching `roundtrip`, `decode_encode_inverse`, `encode_injective`.
+3. **1.1** — now delete `parseB64`/`encodeB64Strict`/`relB64Strict`/`decodeB64Strict` +
+   base32 analogues and their per-format lemmas (keep `B32`/`B64`, digit math, block `Iso`s).
 4. **3.x/4.x** — re-prove the three conformance families per base over the uniform
    `Codec.decode`/`Codec.encode` (rejection / canonical / converse + injectivity);
    the fixed-width halves already have these laws (`decodeFull_canonical`,
