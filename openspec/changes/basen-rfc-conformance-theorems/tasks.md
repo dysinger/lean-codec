@@ -55,6 +55,14 @@ Quot.sound]`).
       **The transport lemma family is now LANDED** in `BaseN/Common.lean`
       (`bdrop_concat` / `concat_eq_drop_prepend` / `decodeRepeat_prefix_concat`,
       all `[propext, Quot.sound]`-only, build green — `../lean-basen` `dd69bbf`).
+      **This session added the base64 whole-input transport half**
+      (`../lean-basen` `1ab89d4`): `decodeFull_cast` (decode insensitive to a
+      length cast), `b64Split_shape`/`b64Split_ofBytes_ofBytes` (the direct
+      `b64Split` re-labels `b64Split_ofBytes ∘ b64OfBytes`), and the
+      `Suffix.drop`-then-`concat` tail lemmas
+      (`decodeFull_b64Tail_suffix_nil`/`_cons`), plus the pad-dichotomy primitives
+      (`b64Char_pad_false` / `not_rel_b64BlockElem_of_pad`) — all
+      `[propext, Quot.sound]`-clean, build green. Base32 needs the mirror set.
       The remaining step is the `List.head? (decodeRepeat … .filterMap …)`
       committed-prefix **uniqueness** lemma: `decodeFullB64/B32` is the `head?` of
       a committed-prefix `filterMap` over the all-prefix `decodeRepeat`, so closing
@@ -62,7 +70,16 @@ Quot.sound]`).
       (from `relB64Block_unambiguous` / `relB64Tail_unambiguous` plus a `prepend`-
       injectivity fact). Base64's roundtrip is carried through the encode-unfold +
       block-prefix/tail membership; the `head?` step is the open substep, and base32
-      mirrors it with 5 tail shapes.)_
+      mirrors it with 5 tail shapes. **The open substep's crux is now pinned**
+      precisely: the `head?` uniqueness needs (a) a content-extraction primitive
+      (`Rel (count k (satisfy p)) xs s → s` pins `xs` pointwise — the
+      `Rel_count_satisfy_forall` predicate form is not enough) and (b) the pad
+      dichotomy `Rel b64TailElem t s → s` has a `=` byte (from `b64TailUnapply`
+      producing `[c0,c1,61,61]`/`[c0,c1,c2,61]`), so the block run cannot consume
+      into `st`'s pad and the tail cannot start inside `sb`'s alphabet-only bytes.
+      Both are `[propext, Quot.sound]`-provable but need careful `List.ofFn`/`Fin`-
+      cast reasoning in the stdlib-only (no `convert`/`conv`/`nth_rewrite`) tactic
+      environment.)_
 
 ## 2. Facade: uniform `encode (b : Base)` / `decode (b : Base)`
 
