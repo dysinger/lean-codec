@@ -33,10 +33,10 @@ Quot.sound]`).
       `relB64Strict`/`decodeB64Strict` (and the base32 analogues), and their
       per-format lemmas. Keep the terminal-tail `B32`/`B64` value types and the
       digit math + block `Iso`s (`b32BlockIso`/`b64BlockIso`).
-- [ ] 1.2 Re-express each fixed-width base as a `Run` over the element
+- [x] 1.2 Re-express each fixed-width base as a `Run` over the element
       `Codec UInt8 := count k (satisfy p) ≫ blockIso` (Base16 `count 2`, base2
       `count 8`, base4 `count 4`, base8 `count 3`, base10 element run + block iso).
-- [ ] 1.3 Re-express base32/64 as a `Run` over the full-block element plus a
+- [x] 1.3 Re-express base32/64 as a `Run` over the full-block element plus a
       terminal-tail `alt`/`iso` onto `B32`/`B64`. The terminal-tail branch is
       terminal (empty continuation), so "data after `=`" is unrepresentable.
       _(base64 foundation landed (`../lean-basen` `a71277c`): `b64BlockElem` /
@@ -44,12 +44,25 @@ Quot.sound]`).
       restricting a block to 1–2 bytes), `b64Run`/`b64TailRun`, all
       unambiguity/functional/canonical lemmas, the uniform `decodeFullB64`/
       `encodeB64`, and `decodeFull_b64Tail_of_encode`. The whole-input
-      `roundtrip` + conformance laws are still open.)_
+      `roundtrip` + conformance laws are still open.)_ Base32's Codec-value
+      layer (`b32BlockElem`/`b32TailElem`/`b32Run`/`b32TailRun`/`decodeFullB32`/
+      `encodeB32`/`decodeFull_b32Tail_of_encode`, 1–4-byte tail shapes) is now
+      landed too.
 - [ ] 1.4 Prove `roundtrip` per base as the **inherited** `decodeRepeat_spec`/
       `encodeRepeat_rel` law (no bespoke law); `lake build` green.
       _(base64's roundtrip requires the `concat`-empty / `Suffix.drop`-then-
-      `prepend` transport lemma family over the block-prefix-then-tail split;
-      still open.)_
+      `prepend` transport lemma family over the block-prefix-then-tail split.
+      **The transport lemma family is now LANDED** in `BaseN/Common.lean`
+      (`bdrop_concat` / `concat_eq_drop_prepend` / `decodeRepeat_prefix_concat`,
+      all `[propext, Quot.sound]`-only, build green — `../lean-basen` `dd69bbf`).
+      The remaining step is the `List.head? (decodeRepeat … .filterMap …)`
+      committed-prefix **uniqueness** lemma: `decodeFullB64/B32` is the `head?` of
+      a committed-prefix `filterMap` over the all-prefix `decodeRepeat`, so closing
+      `decodeFullB64 s = some bs` needs the committed block prefix to be unique
+      (from `relB64Block_unambiguous` / `relB64Tail_unambiguous` plus a `prepend`-
+      injectivity fact). Base64's roundtrip is carried through the encode-unfold +
+      block-prefix/tail membership; the `head?` step is the open substep, and base32
+      mirrors it with 5 tail shapes.)_
 
 ## 2. Facade: uniform `encode (b : Base)` / `decode (b : Base)`
 
