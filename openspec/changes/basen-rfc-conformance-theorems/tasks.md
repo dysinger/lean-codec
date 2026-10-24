@@ -48,7 +48,7 @@ Quot.sound]`).
       layer (`b32BlockElem`/`b32TailElem`/`b32Run`/`b32TailRun`/`decodeFullB32`/
       `encodeB32`/`decodeFull_b32Tail_of_encode`, 1–4-byte tail shapes) is now
       landed too.
-- [ ] 1.4 Prove `roundtrip` per base as the **inherited** `decodeRepeat_spec`/
+- [x] 1.4 Prove `roundtrip` per base as the **inherited** `decodeRepeat_spec`/
       `encodeRepeat_rel`/`decodeFull_spec` laws for each component **plus one
       named block-run/tail split-uniqueness composition lemma** (the D7 shape);
       `lake build` green.
@@ -176,8 +176,15 @@ n = 4` (empty tail or one padded block) — `../lean-basen` `c0cf50d`.
       (`head?_eq_some_of_mem_eq` + boundary pin + `b64_block_run_of_boundary` + the tail pin
       `tail'.flatten = tail`, whose cast bridge `cast (congrArg Bytes hbnd) t'.bytes = tailBytes`
       uses `prepend_suffix_read`/`concat_tail_read`, and whose content pin uses
-      `decodeFull_b64Tail_of_encode` per `tail` case); (5) the base32 mirror (needs `relB32Block_len`/`relB32Tail_len`/`Rel_b32BlockElem_size`/
-      `Rel_b32TailElem_has_pad`/`encodeB32Block_nopad`/`encodeB32Tail_len` — none landed yet, unlike base64).)_
+      `decodeFull_b64Tail_of_encode` per `tail` case); (5) ~~the base32 mirror~~ **LANDED** (`../lean-basen`
+      `c216e2f`, `[propext, Quot.sound]`-only, zero `sorry`, `lake build` + `lake build bench` green) —
+      the base32 lemma family (`relB32Block_len`/`relB32Tail_len` = 8 chars/block, `Rel_b32BlockElem_size` = 5 bytes,
+      `Rel_b32TailElem_size` = 1–4 bytes, `Rel_b32BlockElem_not_tail`, `Rel_b32TailElem_has_pad`,
+      `b32Char_pad_false`/`not_rel_b32BlockElem_of_pad`, `encodeB32Block_nopad`/`encodeB32Tail_has_pad`/
+      `encodeB32Tail_len` = m₂ ∈ {0,8}) plus the 8-aligned boundary pin `b32_boundary_pin` (via
+      `eight_mul_lt_of_lt`), block-run uniqueness `b32_block_run_of_boundary`, and the whole-input
+      assembly `decodeFullB32_mem_encode`/`decodeFullB32_roundtrip` (`decodeFullB32 (encodeB32 bs) = some bs`,
+      5 tail shapes). **_Task 1.4 is now complete (base64 + base32 both have the whole-input roundtrip)._**)_
 
 ## 2. Facade: uniform `encode (b : Base)` / `decode (b : Base)`
 
