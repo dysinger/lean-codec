@@ -204,6 +204,33 @@ re-spelled over the uniform entry points.
 `hexElem` stays a strict uppercase `Iso`. Lowercase `6f` is a rejection, not an
 alias.
 
+### D7 — The padded whole-input decoder is a `Codec B64`/`Codec B32` value, **not** `head?`/`filterMap`
+
+The first implementation of `decodeFullB64`/`decodeFullB32` (and `encodeB64`/
+`encodeB32`) returned a _flattened_ `List UInt8` built by `List.head? ((decodeRepeat
+b64BlockElem … s).filterMap …)`. That shape makes the whole-input roundtrip
+(`decodeFullB64 (encodeB64 bs) = some bs`) depend on a bespoke
+"committed-block-prefix uniqueness" proof (the `head?` picks the first `filterMap`
+hit; proving it is the _right_ hit needs the alphabet-vs-`=` pad dichotomy and a
+`List.ofFn`/`Fin` cast grind).
+
+**Decision:** re-express the padded whole-input decoder/encoder over a single
+`Codec B64`/`Codec B32` value whose value type is the terminal-tail `B64`/`B32`
+(per D1 — realized via `iso` over the full-block `Run` + the finite terminal-tail
+`alt`), so the roundtrip is the **inherited** `Codec.decodeFull_spec`/
+`encodeRepeat_rel` law (the codec library's already-proved full-consumption
+uniqueness machinery), **not** a new `head?`-uniqueness lemma. This is the
+(design-faithful) alternative to grinding out the `head?`/`filterMap` uniqueness;
+it removes the flattened `List UInt8` step and makes the base32 mirror (5 tail
+shapes) fall out of the same template. The facade (`BaseN.lean`) then dispatches
+`cases b` to `Codec.decodeFull`/`Codec.encode` over that value, normalized through
+`BaseN.Bridge`. This matches task 1.4's requirement ("the inherited
+`decodeRepeat_spec`/`encodeRepeat_rel` law, no bespoke law").
+
+_Consequence for task order:_ 1.4 (roundtrip) is now the gate for 2.1 (facade
+rewire) → 1.1 (delete the strict triples) → 2.2, exactly as stated; the re-express
+here is the _mechanism_ that makes 1.4 provable without a bespoke uniqueness lemma.
+
 ## Risks / trade-offs
 
 - **[Not a `Codec` constructor, by verified necessity]** — this is _not_ a
