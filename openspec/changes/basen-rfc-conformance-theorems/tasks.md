@@ -68,7 +68,7 @@ Quot.sound]`).
       Per the **D7 correction** (settled this session), do **not** try to build a
       single `Codec B64`/`Codec B32` value (impossible: no repetition node in the
       `Codec` AST). The target shape is the **composition** — `decodeRepeat
-  b64BlockElem` (the full-block `Run`) then `decodeFull b64TailElem` (the
+b64BlockElem` (the full-block `Run`) then `decodeFull b64TailElem` (the
       terminal tail), `iso`-ed to `B64` — and the roundtrip law is the inherited
       per-component laws **plus one named, scoped split-uniqueness lemma** (the
       committed block prefix is unique). That one lemma is the open substep (and
@@ -105,6 +105,33 @@ Quot.sound]`).
       `head?`/`filterMap` singleton step (all members `= bs` + non-emptiness);
       (6) rewrite `decodeFullB64`/`decodeFullB32` off the `head?`/`filterMap`
       shape per D7, then the **base32 mirror** (5 tail shapes, harder).)_
+      _(**Session update (pad-dichotomy foundation landed):** substeps (1), (2),
+      and the tail side of (3) are now **proved** and committed in
+      `../lean-basen` `BaseN/Base64.lean`, all `[propext, Quot.sound]`-only,
+      zero `sorry`, build green: * `Rel_b64BlockElem_size` — a `b64BlockElem` value is a 3-byte list
+      (substep 1; pitch-forks `b64BlockUnapply x = some a` against the
+      1/2-byte shapes, each embedding a `61`, via `Rel_count_satisfy_ofFn`
+      content extraction for "`a` is pad-free") — `../lean-basen` `eb2c062`; * `Rel_b64BlockElem_not_tail` — a value cannot be both a full block
+      (3 bytes) and a terminal tail (1–2 bytes) (substep 2, the pad-dichotomy
+      rejection) — `../lean-basen` `eb2c062`; * `Rel_b64TailElem_has_pad` — a `b64TailElem`-related string contains a
+      `=` byte (the tail side of substep 3's boundary pin; forward-direction
+      dual of `Rel_b64BlockElem_size`) — `../lean-basen` `7febf2c`.
+      With the already-landed `not_rel_b64BlockElem_of_pad` / `b64Char_pad_false` /
+      `relB64Block_len` / `relB64Tail_len` / `Rel_b64TailElem_size`, the full
+      pad-dichotomy foundation is complete. **Also landed (encoded-output
+      structure, the boundary-pin's remaining inputs):** * `encodeB64Block_nopad` — `encodeRepeat b64BlockElem blocks = some ⟨n,s⟩`
+      forces every byte `b64Char` (alphabet-only, never `=`), via
+      `relRepeat_forall b64Char` + `Rel_b64BlockElem_canonical` —
+      `../lean-basen` `3f1fb84`; * `encodeB64Tail_has_pad` — a non-empty `encodeB64Tail` output contains a
+      `=` byte (via `encode_rel b64TailElem` + `Rel_b64TailElem_has_pad`) —
+      `../lean-basen` `3f1fb84`; * `encodeB64Tail_len` — `encodeB64Tail tail = some ⟨n,s⟩` pins `n = 0 ∨
+      n = 4` (empty tail or one padded block) — `../lean-basen` `c0cf50d`.
+      **Still open:** the split-uniqueness lemma itself (substeps 3–5: the
+      boundary-pin `t'.remaining = m₂` via the 4-aligned no-pad-prefix argument,
+      then `blocks' = blocks` via `b64BlockDecodeFull_unambiguous`, then the
+      `head?`/`filterMap` singleton) and substep 6 (D7 rewrite of
+      `decodeFullB64`/`decodeFullB32` off `head?`/`filterMap`) + the base32
+      mirror.)_
 
 ## 2. Facade: uniform `encode (b : Base)` / `decode (b : Base)`
 
