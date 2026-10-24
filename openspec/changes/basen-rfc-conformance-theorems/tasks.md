@@ -125,7 +125,7 @@ b64BlockElem` (the full-block `Run`) then `decodeFull b64TailElem` (the
       `../lean-basen` `3f1fb84`; * `encodeB64Tail_has_pad` — a non-empty `encodeB64Tail` output contains a
       `=` byte (via `encode_rel b64TailElem` + `Rel_b64TailElem_has_pad`) —
       `../lean-basen` `3f1fb84`; * `encodeB64Tail_len` — `encodeB64Tail tail = some ⟨n,s⟩` pins `n = 0 ∨
-    n = 4` (empty tail or one padded block) — `../lean-basen` `c0cf50d`.
+  n = 4` (empty tail or one padded block) — `../lean-basen` `c0cf50d`.
       **Still open:** the split-uniqueness lemma itself (substeps 3–5: the
       boundary-pin `t'.remaining = m₂` via the 4-aligned no-pad-prefix argument,
       then `blocks' = blocks` via `b64BlockDecodeFull_unambiguous`, then the
@@ -138,13 +138,12 @@ b64BlockElem` (the full-block `Run`) then `decodeFull b64TailElem` (the
       `head?`-of-`filterMap` wrap-up once the `filterMap` is shown a singleton/all-`bs`; * `Base64.prepend_concat_prefix_cast` — from `t'.prepend s₀ = concat a b` and
       `e : m₁+m₂-t'.remaining = m₁`, the cast `cast (congrArg Bytes e) s₀ = a` (the
       consumed-prefix half of the boundary-pin extraction).
-      **Still open (in order):** (1) `prepend_concat_suffix` — the `t'.bytes = tailBytes`
-      half; `bdrop_prepend t' s₀` + `bdrop_concat` + `hrem : t'.remaining = m₂`, but the cast
-      `cast (Nat.sub_sub_self t'.hle .symm) t'.bytes : Bytes (m₁+m₂-(m₁+m₂-t'.remaining))` vs
-      `tailBytes : Bytes m₂` needs `hrem`+`cast_bytes_irrel` transport (the `Suffix.remaining`
-      projection won't `subst`/`cases`-reduce). Recommended: state it in `bdrop_prepend`'s natural
-      form (conclusion `cast (sub_sub_self.symm) t'.bytes = cast (by omega) tailBytes`), not the
-      `hrem`-cast form; (2) the boundary pin `t'.remaining = m₂` (via `s₀` alphabet-only vs
+      **Still open (in order):** (1) ~~`prepend_concat_suffix`~~ **LANDED** (`../lean-basen`
+      `29a620e`, `[propext, Quot.sound]`-only, build green) — the `t'.bytes = tailBytes` half,
+      proved via `bdrop_prepend t' s₀` + `bdrop`-of-`concat` in the `bdrop_prepend` natural form
+      (conclusion `cast (sub_sub_self.symm) t'.bytes = cast (by omega) b`; the RHS goes through
+      `Bytes.ext` + `cast_bytes_val'` + `dsimp [bdrop, concat]` + `hk : m₁+m₂-t'.remaining = m₁`
+      so `simp [hk, hnot]` closes the `Fin`-reindexing defeq-clean); (2) the boundary pin `t'.remaining = m₂` (via `s₀` alphabet-only vs
       `concat` `=`-in-`[m₁,m₁+m₂)`, `relB64Tail_len`, `encodeB64Tail_len`, and `Rel_b64TailElem_has_pad`
       for the `m₂=0` case); (3) `blocks' = blocks` via `relB64Block_unambiguous` (`relRepeat_cast` +
       `prepend_concat_prefix_cast` + `encodeRepeat_rel`); (4) roundtrip assembly via
