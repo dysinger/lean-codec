@@ -125,7 +125,7 @@ b64BlockElem` (the full-block `Run`) then `decodeFull b64TailElem` (the
       `../lean-basen` `3f1fb84`; * `encodeB64Tail_has_pad` — a non-empty `encodeB64Tail` output contains a
       `=` byte (via `encode_rel b64TailElem` + `Rel_b64TailElem_has_pad`) —
       `../lean-basen` `3f1fb84`; * `encodeB64Tail_len` — `encodeB64Tail tail = some ⟨n,s⟩` pins `n = 0 ∨
-  n = 4` (empty tail or one padded block) — `../lean-basen` `c0cf50d`.
+n = 4` (empty tail or one padded block) — `../lean-basen` `c0cf50d`.
       **Still open:** the split-uniqueness lemma itself (substeps 3–5: the
       boundary-pin `t'.remaining = m₂` via the 4-aligned no-pad-prefix argument,
       then `blocks' = blocks` via `b64BlockDecodeFull_unambiguous`, then the
@@ -138,7 +138,34 @@ b64BlockElem` (the full-block `Run`) then `decodeFull b64TailElem` (the
       `head?`-of-`filterMap` wrap-up once the `filterMap` is shown a singleton/all-`bs`; * `Base64.prepend_concat_prefix_cast` — from `t'.prepend s₀ = concat a b` and
       `e : m₁+m₂-t'.remaining = m₁`, the cast `cast (congrArg Bytes e) s₀ = a` (the
       consumed-prefix half of the boundary-pin extraction).
-      **Still open (in order):** (1) ~~`prepend_concat_suffix`~~ **LANDED** (`../lean-basen`
+      **Still open (in order):**
+
+      > **NEXT SESSION — work THIS entry, nothing else.** Task **1.4**, substep (2):
+      > **the boundary pin `t'.remaining = m₂`** (base64, `../lean-basen`
+      > `BaseN/Base64.lean`). This is the one proof that pins the block/tail
+      > boundary — once it lands, substeps (3)+(4) are straight `rw` assemblies and
+      > the `decodeFullB64 (encodeB64 bs) = some bs` roundtrip closes. Concrete
+      > statement: in the assembly, you have `t' : Suffix (m₁+m₂)`, `h : t'.prepend s₀ =
+      > concat blkBytes tailBytes` (for the committed `blkBytes : Bytes m₁`,
+      > `tailBytes : Bytes m₂` from `encodeB64 bs`), and you must prove
+      > `t'.remaining = m₂` from: (a) `s₀` is alphabet-only (`b64Char` true, no `=`)
+      > via `encodeB64Block_nopad`; (b) `concat blkBytes tailBytes` has a `=` byte at
+      > some index in `[m₁, m₁+m₂)` iff `tailBytes` is a non-empty tail, via
+      > `encodeB64Tail_has_pad` + `encodeB64Tail_len` (so `m₂ ∈ {0,4}`); (c)
+      > `relB64Tail_len` + `Rel_b64TailElem_has_pad` give the contradiction when
+      > `t'.remaining ≠ m₂` (the `=` byte would have to be read as an alphabet byte by
+      > `s₀`, or vice versa). Then substep (3): `blocks' = blocks` via
+      > `relB64Block_unambiguous` (`relRepeat_cast` + `prepend_concat_prefix_cast` +
+      > `encodeRepeat_rel`). Then substep (4): roundtrip assembly via
+      > `decodeRepeat_prefix_concat` + `decodeFull_b64Tail_suffix_nil/_cons` +
+      > `head?_eq_some_of_mem_eq`. After 1.4 (base64) is fully green, do the base32
+      > mirror (5) — needs the base32 lemma family
+      > (`relB32Block_len`/`relB32Tail_len`/`Rel_b32BlockElem_size`/
+      > `Rel_b32TailElem_has_pad`/`encodeB32Block_nopad`/`encodeB32Tail_len` — **none
+      > landed yet**). **Do NOT touch 1.1 (delete strict triples)** — it is blocked
+      > behind 1.4 → 2.1. The full substep list follows:
+      >
+      (1) ~~`prepend_concat_suffix`~~ **LANDED** (`../lean-basen`
       `29a620e`, `[propext, Quot.sound]`-only, build green) — the `t'.bytes = tailBytes` half,
       proved via `bdrop_prepend t' s₀` + `bdrop`-of-`concat` in the `bdrop_prepend` natural form
       (conclusion `cast (sub_sub_self.symm) t'.bytes = cast (by omega) b`; the RHS goes through
