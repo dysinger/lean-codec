@@ -30,9 +30,13 @@ Quot.sound]`).
 ## 1. The uniform `Codec`-value bases (the `Run`/`many` repetition is a wrapper, not a base), deleting the run triples
 
 - [ ] 1.1 Delete the base32/64 bespoke run triples: `parseB64`/`encodeB64Strict`/
-      `relB64Strict`/`decodeB64Strict` (and the base32 analogues), and their
-      per-format lemmas. Keep the terminal-tail `B32`/`B64` value types and the
-      digit math + block `Iso`s (`b32BlockIso`/`b64BlockIso`).
+      `relB64Strict`/`decodeB64Strict` (and the base32 analogues), their per-format
+      lemmas, **and the `decodeBytes`/`encodeBytes`/`roundtripBytes` shims**, plus
+      the `BaseN.Bridge` module (facade-only). Keep the terminal-tail `B32`/`B64`
+      value types and the digit math + block `Iso`s (`b32BlockIso`/`b64BlockIso`).
+      _(**now unblocked:** the facade was removed, so this is the immediate next
+      task after 1.4; the strict triples are used only by the deleted facade and
+      the bench, which 5.1 re-anchors.)_
 - [x] 1.2 Re-express each fixed-width base as a `Run` over the element
       `Codec UInt8 := count k (satisfy p) ≫ blockIso` (Base16 `count 2`, base2
       `count 8`, base4 `count 4`, base8 `count 3`, base10 element run + block iso).
@@ -153,8 +157,9 @@ n = 4` (empty tail or one padded block) — `../lean-basen` `c0cf50d`.
       > Substep (6) — the D7 rewrite of `decodeFullB64`/`decodeFullB32` off the `head?`/`filterMap`
       > shape — remains a *definition* change: the roundtrip **theorem** already closes over the
       > current shape (the D7 rewrite is not required for the law, only for the "no `head?`
-      > superseded by direct composition" wording). **Do NOT touch 1.1 (delete strict triples)** —
-      > it stays blocked behind 1.4 → 2.1. The full substep list follows:
+      > superseded by direct composition" wording). **1.1 (delete strict triples) is now the next
+      > task** — the facade (former 2.1/2.2/2.3) was removed, so 1.1 is unblocked by 1.4. The full
+      > substep list follows:
       >
       (1) ~~`prepend_concat_suffix`~~ **LANDED** (`../lean-basen`
       `29a620e`, `[propext, Quot.sound]`-only, build green) — the `t'.bytes = tailBytes` half,
@@ -186,30 +191,22 @@ n = 4` (empty tail or one padded block) — `../lean-basen` `c0cf50d`.
       assembly `decodeFullB32_mem_encode`/`decodeFullB32_roundtrip` (`decodeFullB32 (encodeB32 bs) = some bs`,
       5 tail shapes). **_Task 1.4 is now complete (base64 + base32 both have the whole-input roundtrip)._**)_
 
-## 2. Facade: uniform `encode (b : Base)` / `decode (b : Base)`
+## 2. No facade — delete the radix-dispatch layer (removed)
 
-- [ ] 2.1 Restore the facade `encode (b : Base) : List UInt8 → List UInt8` /
-      `decode (b : Base) : List UInt8 → Option (List UInt8)` dispatching `cases b`
-      to the base's `Run`/composition (full-block `Run` + terminal-tail `Codec`,
-      `iso`-ed to `B32`/`B64`, then the byte transport), normalized through
-      `BaseN.Bridge`.
-      _(facade-half landed: the uniform `List UInt8` `encode`/`decode` exists in
-      `BaseN.lean`, `cases b` across all seven; base32/64 still dispatch to the
-      strict/parse `decodeB32Strict`/`encodeB32Strict` + byte transport, **not**
-      the `Run`+tail composition — that half waits on tasks 1.1/1.3/1.4.)_
-- [ ] 2.2 Prove `roundtrip (b : Base) (bs) : decode b (encode b bs) = some bs`.
-      _(per-base `roundtripBytes` for the B32/B64 transport are done; the
-      `Base`-dispatching `roundtrip` is not.)_
-- [ ] 2.3 Add facade-dispatched `decode_encode_inverse`/`encode_injective` — now
-      over the **single** value type (`List UInt8`), no three-shape signature
-      decision, no `Base.val` family.
+> **Removed:** the `Base` enum and `encode (b : Base)` / `decode (b : Base)`
+> facade was cut (no client, type-erases `B32`/`B64`, a bespoke function by
+> another name). The uniform surface is `Codec.decode`/`Codec.encode` on each
+> base's own value; the radix lives in the value, never a dispatch index. The
+> work the facade would have carried (deleting the strict triples, re-anchoring
+> the bench, re-stating conformance over the composition) is folded into tasks
+> 1.1 and 3.x/4.x/5.x below.
 
 ## 3. Rejection theorems (the illegal shape has no inhabitant)
 
-- [ ] 3.1 Base64: `decode base64 (decodeFull …) "Zg==AAAA" = none` (structural:
+- [ ] 3.1 Base64: `decodeFullB64 … "Zg==AAAA" = none` (structural:
       no `B64` term), plus invalid-char, pad-first, bad-length, and pad-shape
       vectors — all over the uniform decoder.
-- [ ] 3.2 Base32: `decode base32 "MY======AAAAAAAA" = none` and the same family.
+- [ ] 3.2 Base32: `decodeFullB32 … "MY======AAAAAAAA" = none` and the same family.
 - [ ] 3.3 Fixed-width bases: the F\* rejection family per base (base16 non-hex +
       lowercase + odd arity; base2/4/8/10 invalid alphabet + wrong arity +
       base8/10 overflow).
@@ -227,10 +224,11 @@ n = 4` (empty tail or one padded block) — `../lean-basen` `c0cf50d`.
 - [ ] 5.1 `Bench.lean`: rewire to the uniform surface — roundtrip `example`s,
       canonical vectors (`Zg==`/`Zm8=`/`Zm9v`, `MY======`/`MZXW6YTB`), rejection
       `example`s (`Zg==AAAA`/`MY======AAAAAAAA`), converse + overflow vectors, all
-      through `Codec.decode`/`Codec.encode` (or the facade), never a bespoke fn.
+      through `Codec.decodeFull`/`Codec.encode` (and `decodeFullB64`/`decodeFullB32`),
+      never a bespoke fn and never a facade.
 - [ ] 5.2 `lake build` and `lake build bench` green, zero `sorry`/warnings;
       `#print axioms` = `[propext, Quot.sound]` (or `[propext]`) for the new laws;
       `nix flake check` green (checks.lean + checks.formatting).
 - [ ] 5.3 Commit + push; update `openspec/changes/lean-basen/` (its §4.1 "no
-      roundtrip dispatch" note → "facade dispatches over one value type
-      `List UInt8`").
+      roundtrip dispatch" note → "each base is its own `Codec` value decoded/encoded
+      by `Codec.decode`/`Codec.encode`; no facade").

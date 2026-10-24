@@ -13,7 +13,8 @@ terminal positions).
 Today, on the **`Codec`-value surface** (all seven bases are now `Codec` values
 over `satisfy`/`count`/`iso` + the productive repetition layer, after
 `basen-uniform-leaf-api`; there is no bespoke `encode : List UInt8 → List UInt8`
-/ `decode : List UInt8 → Option (List UInt8)` facade anymore):
+/ `decode : List UInt8 → Option (List UInt8)` and — deliberately — no
+`Base`-dispatching facade):
 
 - **No rejection theorems exist.** The F* reference (`fstar-basen`) proves a
   `decode_*_invalid`/`pad_first`/`bad_length` family per base; the Lean port has
@@ -116,8 +117,9 @@ reproduces the input` (whenever the decoder accepts a value, it is the _unique_
   is an **explicit non-goal** of this change: the `Codec`-value `hexElem` is a
   strict uppercase bijection, and a case-insensitive decoder is not expressible
   as a strict `Iso` without breaking `Unambiguous`. Recorded, not dropped.
-- **New proofs**: three theorem families × seven bases, plus (for the facade) a
-  `Base`-dispatching rejection/converse lemma. `#print axioms` stays
+- **New proofs**: three theorem families × seven bases, each stated over the
+  base's own `Codec`/`Run` value (no facade, no `Base`-dispatching lemma).
+  `#print axioms` stays
   `[propext, Quot.sound]` for every new law.
 - **Bench**: each new rejection/converse law gets a concrete `example`/`#eval`
   vector (matching the F* reference's `decode_*_invalid` vectors, re-expressed

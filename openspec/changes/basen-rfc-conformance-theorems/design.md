@@ -70,16 +70,16 @@ The generic repetition is already, faithfully, in `Codec/Combinators.lean`:
 - `sepBy p sep = (relSepBy, decodeSepBy, encodeSepBy)` — the paper's `sepBy1`,
   with the same inherited laws.
 
-What is missing is **only the packaging**: a single value per base that a uniform
-`encode (b : Base)` / `decode (b : Base)` dispatches over, replacing the bespoke
-`decodeB32Strict`/`encodeB64Strict`/`relB64Strict` functions.
+What is missing is **only the packaging**: a single value per base — the
+`Codec`/`Run` value itself — replacing the bespoke
+`decodeB32Strict`/`encodeB64Strict`/`relB64Strict` functions. There is no
+`Base` enum and no dispatcher to add: the caller holds the base's value.
 
 ### The actual surface this delivers (the whole point)
 
 Each base is **one `Codec`-value surface** (the format is a `Codec` value; `Run` is
 only the already-proved repetition wrapper on top of an element, never a second
-kind of format), and the facade dispatches over the **single** value type
-`List UInt8`. Concretely:
+kind of format). Concretely:
 
 ```lean
 -- fixed-width bases (2/4/8/10/16): the element IS the `Codec` value; the `Run`
@@ -98,17 +98,20 @@ step : ConsumesByte elem }` — it cannot name the whole-input `B64`/`B32` forma
 which is a block `Run` _plus_ a tail `Codec` _plus_ an `iso`. See the D7
 correction.)
 
-with a **uniform facade** (the only entry points):
+These values are decoded/encoded by the **uniform `Codec` operations**
+(`Codec.decodeFull`/`Codec.encode`, or `decodeRepeat`/`encodeRepeat` for a run):
 
 ```lean
-def encode (b : Base) (bs : List UInt8) : Option (List UInt8)
-def decode (b : Base) (s  : List UInt8) : Option (List UInt8)
-theorem roundtrip (b : Base) (bs : List UInt8) : decode b (encode b bs) = some bs
+Codec.decodeFull BaseN.Base16.hexElem BaseN.Base16.hexConsumesByte n s
+BaseN.Base64.decodeFullB64 s
+BaseN.Base32.encodeB32 bs
 ```
 
-There is **no** `decodeB32Strict`/`encodeB64Strict`, **no** per-format function,
-**no** three carrier shapes. A caller never names a leaf; the radix lives on the
-`Base` index and the value is always `List UInt8`.
+There is **no** `encode (b : Base)` / `decode (b : Base)` facade, **no** `Base`
+inductive, **no** `BaseN.Bridge` type-erasure, and **no** `decodeB32Strict`/
+`encodeB64Strict`, **no** per-format function, **no** three carrier shapes. A
+caller names the base's own value; the radix lives in that value and the value
+type is the base's natural type (`UInt8`, `B32`, `B64`).
 
 > **"`Run`" is a first-class value, not a bespoke function.** It is the F\*
 > `codec a` record shape (`enc`/`dec`/`roundtrip`), specialized to a `List UInt8`
@@ -123,10 +126,13 @@ There is **no** `decodeB32Strict`/`encodeB64Strict`, **no** per-format function,
 **Goals:**
 
 1. Package the already-proved derived repetition into a single first-class
-   per-base **run value** (`Run`), and a uniform facade `encode (b : Base)` /
-   `decode (b : Base)` over `List UInt8`. Delete the bespoke
-   `parseB64`/`encodeB64Strict`/`relB64Strict` run triples (and base32 analogues).
-   No `many` constructor is added (verified impossible; both references derive it).
+   per-base **run value** (`Run`). There is **no** facade `encode (b : Base)` /
+   `decode (b : Base)` over `List UInt8` — the uniform surface is
+   `Codec.decode`/`Codec.encode` on each base's value. Delete the bespoke
+   `parseB64`/`encodeB64Strict`/`relB64Strict` run triples (and base32 analogues)
+   and the `decodeBytes`/`encodeBytes`/`roundtripBytes` shims and the
+   `BaseN.Bridge` module. No `many` constructor is added (verified impossible; both
+   references derive it).
 2. Re-express all seven bases as run values (fixed-width `count`/`iso`, padded
    over terminal-tail `B32`/`B64` value types so illegal padded states remain
    **unrepresentable**).
@@ -186,17 +192,24 @@ Stated over the uniform decoder (`decode (b) bad` / `Codec.decodeFull <elem>
 `B64` value relates (absence of an inhabitant), proved by the run's relation +
 `decode_spec`.
 
-### D3 — The facade is uniform (one value type, no `Base.val` family)
+### D3 — No facade: each base is its own `Codec`/`Run` value, decoded/encoded by the uniform `Codec` operations
 
 ```lean
-def encode (b : Base) (bs : List UInt8) : Option (List UInt8) -- or total
-def decode (b : Base) (s  : List UInt8) : Option (List UInt8)
-theorem roundtrip (b : Base) (bs : List UInt8) : decode b (encode b bs) = some bs
+-- no `Base` inductive, no `encode (b : Base)`, no `decode (b : Base)`
+-- each base is a value; the radix lives in the value, not a dispatch index
+Codec.decodeFull BaseN.Base16.hexElem BaseN.Base16.hexConsumesByte n s   -- : Option (List UInt8)
+BaseN.Base64.decodeFullB64 s                                              -- : Option (List UInt8)
+BaseN.Base32.encodeB32 bs                                                 -- : Option (Sigma … Bytes …)
 ```
 
-`cases b` dispatches to each base's `Run`, normalized through `BaseN.Bridge`
-(`Bytes n ↔ List UInt8`, already landed). No `Base.val : Base → Type` family, no
-value sum type, no three shapes.
+The uniform surface is `Codec.decode`/`Codec.encode` (and `decodeRepeat`/
+`encodeRepeat`/`decodeFull` for a run or composition) applied to the base's own
+value. There is **no** `Base` enum, no `cases b` dispatcher, no `BaseN.Bridge`
+type-erasure, and no `Base.val : Base → Type` family: a runtime radix selector
+would be a bespoke per-format function by another name, would throw away the
+`B32`/`B64` terminal-tail value types (whose whole point is that illegal states
+are unrepresentable), and has no client. The value type stays the base's natural
+type — `UInt8` for the fixed-width bases, `B32`/`B64` for the padded bases.
 
 ### D4 — The one generic lemma (carried over): forward `rel_count_satisfy`
 
@@ -206,7 +219,8 @@ length-cast gotcha). This is the one shared primitive all seven bases need.
 
 ### D5 — Bench value-checks the uniform surface (carried over)
 
-`Bench.lean` uses `Codec.decode`/`Codec.encode` (or the facade), never
+`Bench.lean` uses `Codec.decodeFull`/`Codec.encode` (and `decodeFullB64`/
+`encodeB64`/`decodeFullB32`/`encodeB32` for the padded bases), never
 `decodeB32Strict`. The F\* rejection/canonical/converse vectors survive,
 re-spelled over the uniform entry points.
 
@@ -253,14 +267,13 @@ full-block `Run` `▸` terminal-tail `Codec` `▸` `iso` to `B64`/`B32`, with th
 roundtrip law = inherited `decodeRepeat_spec`/`encodeRepeat_rel` (blocks) +
 inherited `decodeFull_spec` (tail) + the one split-uniqueness composition lemma.
 This removes the flattened `List UInt8`/`head?`/`filterMap` step and makes the
-base32 mirror (5 tail shapes) fall out of the same tail-`alt` template. The facade
-(`BaseN.lean`) then dispatches `cases b` to `Codec.decodeFull`/`Codec.encode` over
-that composition, normalized through `BaseN.Bridge`.
+base32 mirror (5 tail shapes) fall out of the same tail-`alt` template. Each
+base is decoded/encoded by `Codec.decodeFull`/`Codec.encode` on its own value —
+**no** `BaseN.lean` facade and **no** `BaseN.Bridge` type-erasure.
 
-_Consequence for task order:_ 1.4 (roundtrip) is the gate for 2.1 (facade rewire)
-→ 1.1 (delete the strict triples) → 2.2, exactly as stated. The re-express here is
-the _mechanism_ that makes 1.4 provable **with one named, scoped composition lemma**
-(not "no bespoke law", as the earlier wording claimed).
+_Consequence for task order:_ 1.4 (roundtrip) is the gate for 1.1 (delete the
+strict triples + shims); then the bench re-anchor (5.1) and the conformance
+families (3.x/4.x), exactly as stated — there is **no** facade task.
 
 ## Risks / trade-offs
 
@@ -268,7 +281,8 @@ the _mechanism_ that makes 1.4 provable **with one named, scoped composition lem
   compromise against the spec; the spec's "composed from `satisfy`/`count`/`iso`/
   `alt`, with unbounded repetition as the derived `many`" is satisfied by `many`
   being a _derived run_ (as the paper/F\* derive it), and the uniform
-  `decode`/`encode` is delivered by the `Run` value + facade. No new core
+  `decode`/`encode` is delivered by the per-base `Codec`/`Run` value — the caller
+  calls `Codec.decode`/`Codec.encode`, never a facade dispatcher. No new core
   constructor, no `Codec.rec` conversion of the law suite (a _reduction_ of the
   risky scope the prior design proposed).
 - **[`Run` is a value, so no `induction d` conversions]** — the `Run` bundles the
@@ -294,7 +308,9 @@ Option tail)` result to `B32`/`B64` (a well-scoped bijection; a tail's arity is
    `decodeRepeat`/`encodeRepeat`. Delete the bespoke base32/64 run triples.
 2. Re-express the seven bases as `Run` values (fixed-width `count`/`iso`; padded
    over `B32`/`B64`). Apply D4's `rel_count_satisfy`.
-3. Restore the facade `encode`/`decode`/`roundtrip`; reanchor `Bench.lean`.
+3. Reanchor `Bench.lean` to the per-base values (`Codec.decodeFull`/`encodeX`/
+   `decodeFullB64`/`decodeFullB32`); delete the strict triples + shims and
+   `BaseN.Bridge`.
 4. Re-prove the three conformance families per base over the uniform surface; gate
    `lake build` + `lake build bench`, `#print axioms` = `[propext, Quot.sound]`,
    `nix flake check` green.
@@ -303,5 +319,5 @@ Option tail)` result to `B32`/`B64` (a well-scoped bijection; a tail's arity is
 
 **None.** `many` is derived (paper/F\*); the run is a first-class `Run` value over
 the already-proved repetition; the value types (`B32`/`B64`) and the
-rejection/canonical/converse families carry over; the facade is uniform over
-`List UInt8`.
+rejection/canonical/converse families carry over; there is **no** facade — each
+base is its own `Codec`/`Run` value decoded/encoded by `Codec.decode`/`Codec.encode`.

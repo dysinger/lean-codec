@@ -48,8 +48,13 @@ interpretations) rather than a bespoke per-format function. There SHALL be no
 ### Requirement: Concrete formats are `Codec`-surfaced values (uniform `decode`/`encode`)
 
 A concrete format SHALL be a value decoded/encoded by the single uniform
-`decode`/`encode` (or the facade `decode (b : Base)` / `encode (b : Base)`),
-never a bespoke per-format `encode`/`decode`/`rel`.
+`Codec.decode` / `Codec.encode` — the _same two operations_ every `Codec` value
+enjoys — never a bespoke per-format `encode`/`decode`/`rel`. There is **no**
+`Base` enum and no `encode (b : Base)` / `decode (b : Base)` dispatcher: a
+runtime radix selector is a bespoke function by another name, it erases the
+value type (`UInt8` vs `B32`/`B64`) that carries the unrepresentable-illegal-state
+guarantee, and it has no client. The radix lives _in the value the caller already
+holds_ (`hexElem` vs `b32BlockElem`), never on a dispatch index.
 
 #### Scenario: base32/64 are values, not run triples
 
@@ -62,9 +67,11 @@ never a bespoke per-format `encode`/`decode`/`rel`.
   unbounded full-block prefix is the `Run`'s `decodeRepeat`/`encodeRepeat`, not an
   AST description.)
 
-#### Scenario: The facade dispatches over one value type
+#### Scenario: No radix-dispatching facade
 
 - **WHEN** a consumer encodes/decodes a value of some base
-- **THEN** it calls `encode (b : Base)` / `decode (b : Base)`, which `cases` over
-  the base and applies the uniform operation to the base's run value — the radix
-  lives on the `Base` index, never on a bespoke function name.
+- **THEN** it calls `Codec.decode`/`Codec.encode` (or `decodeRepeat`/`encodeRepeat`
+  for the run) on the base's own `Codec`/`Run` value — `Codec.decodeFull hexElem …`,
+  `encodeB32 bs`, `decodeFullB64 s` — and the value type is the base's natural
+  type (`UInt8` for fixed-width, `B32`/`B64` for padded). There is **no**
+  `encode (b : Base)` / `decode (b : Base)` and no `Base` inductive.
