@@ -54,9 +54,13 @@ never a bespoke per-format `encode`/`decode`/`rel`.
 #### Scenario: base32/64 are values, not run triples
 
 - **WHEN** base32/base64 are defined
-- **THEN** each is a run value over the terminal-tail value type `B32`/`B64`
-  (realized via `iso`); there is no `decodeB32Strict`/`encodeB64Strict`/
-  `relB64Strict` triple to call.
+- **THEN** each is a **composition** of a full-block `Run` (derived `many`) + a
+  finite terminal-tail `Codec`, with the result `iso`-ed to the terminal-tail
+  value type `B32`/`B64`; there is no `decodeB32Strict`/`encodeB64Strict`/
+  `relB64Strict` triple to call. (There is **no** single `Codec B32`/`Codec B64`
+  value: the `Codec` AST has no repetition node, and `many` is derived — the
+  unbounded full-block prefix is the `Run`'s `decodeRepeat`/`encodeRepeat`, not an
+  AST description.)
 
 #### Scenario: The facade dispatches over one value type
 

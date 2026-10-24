@@ -100,13 +100,18 @@ reproduces the input` (whenever the decoder accepts a value, it is the _unique_
 
 - **Code**: the padded bases' whole-input rejection of trailing data after `=`
   is fixed by **re-typing**: `List (List UInt8)` is replaced by the terminal-tail
-  inductive `B32`/`B64` (design §D3), which is the **value type** of a
-  `Codec (List UInt8)` value (realized via `iso`), not a hand-rolled run triple.
-  Unbounded repetition is restored as the `many` constructor (design §D0), so
-  every base is one `Codec (List UInt8)` value decoded/encoded by the single
-  `Codec.decode`/`Codec.encode`. Rejection is **structural** (the illegal shape
-  has no inhabitant), there is no flattening (no bijective `B64 → List (List
-UInt8)` exists), and the lenient `List (List UInt8)` codecs are deleted.
+  inductive `B32`/`B64` (design §D3), reached by `iso` **after** a composition of
+  the full-block `Run` (derived `many`) and the finite terminal-tail `Codec` —
+  **not** a single `Codec (List UInt8)` value and **not** a hand-rolled run triple
+  (there is no repetition node in the `Codec` AST, so no unbounded whole-input
+  description exists). Unbounded repetition is the **derived** `many`
+  (`relRepeat`/`decodeRepeat`/`encodeRepeat`, design §D0) — **never** a `many`
+  constructor (un-implementable, per the verified universe/definition-order
+  cycle). The whole-input roundtrip is the inherited per-component laws plus one
+  named block-run/tail split-uniqueness lemma (design §D7). Rejection is
+  **structural** (the illegal shape has no inhabitant), there is no flattening
+  (no bijective `B64 → List (List UInt8)` exists), and the lenient
+  `List (List UInt8)` codecs are deleted.
 - **Base16 case-insensitivity** (RFC 4648 §8: a decoder MUST accept both cases)
   is an **explicit non-goal** of this change: the `Codec`-value `hexElem` is a
   strict uppercase bijection, and a case-insensitive decoder is not expressible

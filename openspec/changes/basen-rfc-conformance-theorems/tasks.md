@@ -27,7 +27,7 @@ elem)`. Its laws are the inherited `decodeRepeat_spec`/`encodeRepeat_rel`.
       `sorry`/warnings; `#print axioms Codec.roundtrip` still `[propext,
 Quot.sound]`).
 
-## 1. The uniform `Codec (List UInt8)` bases, deleting the run triples
+## 1. The uniform `Codec`-value bases (the `Run`/`many` repetition is a wrapper, not a base), deleting the run triples
 
 - [ ] 1.1 Delete the base32/64 bespoke run triples: `parseB64`/`encodeB64Strict`/
       `relB64Strict`/`decodeB64Strict` (and the base32 analogues), and their
@@ -49,7 +49,9 @@ Quot.sound]`).
       `encodeB32`/`decodeFull_b32Tail_of_encode`, 1–4-byte tail shapes) is now
       landed too.
 - [ ] 1.4 Prove `roundtrip` per base as the **inherited** `decodeRepeat_spec`/
-      `encodeRepeat_rel` law (no bespoke law); `lake build` green.
+      `encodeRepeat_rel`/`decodeFull_spec` laws for each component **plus one
+      named block-run/tail split-uniqueness composition lemma** (the D7 shape);
+      `lake build` green.
       _(base64's roundtrip requires the `concat`-empty / `Suffix.drop`-then-
       `prepend` transport lemma family over the block-prefix-then-tail split.
       **The transport lemma family is now LANDED** in `BaseN/Common.lean`
@@ -63,34 +65,31 @@ Quot.sound]`).
       (`decodeFull_b64Tail_suffix_nil`/`_cons`), plus the pad-dichotomy primitives
       (`b64Char_pad_false` / `not_rel_b64BlockElem_of_pad`) — all
       `[propext, Quot.sound]`-clean, build green. Base32 needs the mirror set.
-      The remaining step is the `List.head? (decodeRepeat … .filterMap …)`
-      committed-prefix **uniqueness** lemma: `decodeFullB64/B32` is the `head?` of
-      a committed-prefix `filterMap` over the all-prefix `decodeRepeat`, so closing
-      `decodeFullB64 s = some bs` needs the committed block prefix to be unique
-      (from `relB64Block_unambiguous` / `relB64Tail_unambiguous` plus a `prepend`-
-      injectivity fact). Base64's roundtrip is carried through the encode-unfold +
-      block-prefix/tail membership; the `head?` step is the open substep, and base32
-      mirrors it with 5 tail shapes. **The open substep's crux is now pinned**
-      precisely: the `head?` uniqueness needs (a) a content-extraction primitive
-      (`Rel (count k (satisfy p)) xs s → s` pins `xs` pointwise — the
-      `Rel_count_satisfy_forall` predicate form is not enough) and (b) the pad
-      dichotomy `Rel b64TailElem t s → s` has a `=` byte (from `b64TailUnapply`
-      producing `[c0,c1,61,61]`/`[c0,c1,c2,61]`), so the block run cannot consume
-      into `st`'s pad and the tail cannot start inside `sb`'s alphabet-only bytes.
-      Both are `[propext, Quot.sound]`-provable but need careful `List.ofFn`/`Fin`-
-      cast reasoning in the stdlib-only (no `convert`/`conv`/`nth_rewrite`) tactic
-      environment.)_
+      Per the **D7 correction** (settled this session), do **not** try to build a
+      single `Codec B64`/`Codec B32` value (impossible: no repetition node in the
+      `Codec` AST). The target shape is the **composition** — `decodeRepeat
+    b64BlockElem` (the full-block `Run`) then `decodeFull b64TailElem` (the
+      terminal tail), `iso`-ed to `B64` — and the roundtrip law is the inherited
+      per-component laws **plus one named, scoped split-uniqueness lemma** (the
+      committed block prefix is unique). That one lemma is the open substep (and
+      base32 mirrors it with 5 tail shapes); it needs (a) the content-extraction
+      primitive and (b) the pad dichotomy. There is **no** `List.head? (...filterMap...)`
+      in the target shape — the `head?` form is superseded by the direct `Run.decodeFull`/
+      `Codec.decodeFull` composition. Both (a)/(b) are `[propext, Quot.sound]`-provable
+      but need careful `List.ofFn`/`Fin`-cast reasoning in the stdlib-only (no
+      `convert`/`conv`/`nth_rewrite`) tactic environment.)_
 
 ## 2. Facade: uniform `encode (b : Base)` / `decode (b : Base)`
 
 - [ ] 2.1 Restore the facade `encode (b : Base) : List UInt8 → List UInt8` /
       `decode (b : Base) : List UInt8 → Option (List UInt8)` dispatching `cases b`
-      to the single `Codec` value per base, normalized through `BaseN.Bridge`.
+      to the base's `Run`/composition (full-block `Run` + terminal-tail `Codec`,
+      `iso`-ed to `B32`/`B64`, then the byte transport), normalized through
+      `BaseN.Bridge`.
       _(facade-half landed: the uniform `List UInt8` `encode`/`decode` exists in
       `BaseN.lean`, `cases b` across all seven; base32/64 still dispatch to the
-      strict/parse `decodeB32Strict`/`encodeB32Strict` + byte transport, **not** a
-      single `Codec` value — the "single Codec value per base" half waits on
-      tasks 1.1/1.3.)_
+      strict/parse `decodeB32Strict`/`encodeB32Strict` + byte transport, **not**
+      the `Run`+tail composition — that half waits on tasks 1.1/1.3/1.4.)_
 - [ ] 2.2 Prove `roundtrip (b : Base) (bs) : decode b (encode b bs) = some bs`.
       _(per-base `roundtripBytes` for the B32/B64 transport are done; the
       `Base`-dispatching `roundtrip` is not.)_
@@ -126,4 +125,5 @@ Quot.sound]`).
       `#print axioms` = `[propext, Quot.sound]` (or `[propext]`) for the new laws;
       `nix flake check` green (checks.lean + checks.formatting).
 - [ ] 5.3 Commit + push; update `openspec/changes/lean-basen/` (its §4.1 "no
-      roundtrip dispatch" note → "facade dispatches over one `Codec` type").
+      roundtrip dispatch" note → "facade dispatches over one value type
+      `List UInt8`").

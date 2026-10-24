@@ -10,8 +10,10 @@ idea, finished.
 
 ## The idea, in one breath
 
-Every building block of a syntax description is a **partial isomorphism** — a
-box with two doors, `apply` and `unapply`, that are each other's inverse. If you
+The value-level transformations in a syntax description are **partial
+isomorphisms** — a box with two doors, `apply` and `unapply`, that are each
+other's inverse (`iso i d` is the `Codec` constructor that wraps one, while
+`seq`/`alt`/`empty`/`pure`/`byte`/`satisfy` supply the structure). If you
 know how to go _into_ the box, you automatically know how to come back out,
 because the two doors are the same fact stated twice. So one description drives
 **two directions** at once:
@@ -55,7 +57,7 @@ subsection we cite the subsection).
 
 **[D1] `String`/`Char` → bytes — bytes become the base unit.**
 The paper's concrete syntax is textual. The decoder is `Parser (String → [(α,
-String)])` (§5.1) and the primitive token is `token` over `Char`; the value graph
+String)])` (§4.1) and the primitive token is `token` over `Char`; the value graph
 is given as `Rel :: [(α, String)]` (§4.3). `codec` targets binary, so the base
 unit is `UInt8`, the base string is a byte sequence, and `byte : Codec UInt8` is
 the `token` analogue. Text/Unicode is rebuilt downstream (`lean-text`) on top of
@@ -70,21 +72,23 @@ proved-equal or trust-seam _implementations on top of_ that single spec — see
 [Performance](#performance-two-proof-layers-and-an-honest-ceiling).
 
 **[D2] The nondeterministic list decoder.** The paper's decoder returns a _list_
-of `(value, remaining)` pairs — a relation (§5.1 `Parser (String → [(α, String)])`,
+of `(value, remaining)` pairs — a relation (§4.1 `Parser (String → [(α, String)])`,
 §4.3 "decoding … the graph"). `codec` keeps it that way: `decode` returns all
 `(value, remainder)` pairs, and `|` is list concatenation.
 
 **[D3] `|` is the paper's _backtracking union_, not committed choice.**
-`decode (d₁ | d₂) s = decode d₁ s ++ decode d₂ s`, matching `Rel (d₁ | d₂) = Rel d₁ ∨ Rel d₂` by construction.
+`decode (d₁ | d₂) s = decode d₁ s ++ decode d₂ s`, matching `Rel (d₁ | d₂) = Rel d₁ ∨ Rel d₂` by construction. (The paper itself treats the two directions asymmetrically: its _parser_ `|` is backtracking union (`++`, §4.1) while its _printer_ `|` is left-biased `mplus` (try left, else right; §4.2). `codec` keeps the **relation** backtracking — that is the single source of truth — and lets `encode` inherit the printer's left-bias naturally, so `Rel` and `decode` agree by construction and nothing rounds through a committed choice.)
 
 **[D4] Lossless capture — a destructive constructor such as the paper's
-`ignore` is _impossible_ under strict isomorphism.** The paper (§3.1) deliberately
-_discards_ optional bytes: its `ignore` maps _any_ run of blanks down to a single
-unit value and, on printing, emits a **fixed, single** representation back — so an
-arbitrary-length whitespace run is not preserved, and the isomorphism holds only
-"modulo equivalence classes" rather than literally. (`skipSpace`, `optSpace`/
-`sepSpace` in §6.3 are three concrete instantiations, all sharing the same
-one-way-lossy shape.) Because every `codec` combinator is a **strict** partial
+`ignore` is _impossible_ under strict isomorphism.** The paper (§6.3) defines
+`ignore :: α → Iso α ()` and, in its own words, notes it is "again **not a strict
+partial isomorphism**": it maps _any_ run of blanks down to a single unit value
+and, on printing, emits a **fixed, single** representation back — so an
+arbitrary-length whitespace run is not preserved, and the inverse invariant
+holds only "modulo equivalence classes" (§3.1) rather than literally. (`skipSpace`
+and `optSpace` in §6.3 are the two direct instantiations of `ignore`;
+`sepSpace = text " " ∗ skipSpace` composes it — all three share the same
+one-way-lossy whitespace shape.) Because every `codec` combinator is a **strict** partial
 isomorphism — `Iso.law` is a field, `apply a = some b ↔ unapply b = some a` — we
 **cannot follow the paper's destructive constructor**: a lossy `ignore` cannot
 inhabit `Iso`, since two distinct inputs mapping to one output make `unapply`
@@ -104,12 +108,13 @@ non-empty string, so `nil | cons` is never prefix-disjoint).
 **[D6] `Codec` is a description _value_, not the §3.4 typeclass.** The paper
 embeds syntax descriptions polymorphically (a `Syntax` typeclass, with `$`/`∗`/
 `|`/`pure`/`token` as methods). `codec` instead makes `Codec` an inductive AST
-(`iso`/`seq`/`alt`/`empty`/`pure`/`byte` as constructors), so a description is an
+(iso`/`seq`/`alt`/`empty`/`pure`/`byte`/`satisfy` as constructors), so a description is an
 ordinary value you can hold and **structurally recurse over** — which is what
 makes "proved for every description" a real, finite induction rather than a
 promise.
 
-**[D7] `iterate` (paper §5.2/§5.3) is deliberately omitted.** Its forward- and
+**[D7] `iterate` (paper §5.3, the backward-run step of the §5.2 foldl machine) is
+deliberately omitted.** Its forward- and
 backward-iteration fixpoints need not coincide, so no inverse law exists without
 a per-element "chain-isolated in both directions" precondition. We provide
 `foldl`/`foldr` directly (well-founded recursion) and omit `iterate` rather than
@@ -137,7 +142,9 @@ witness the caller supplies.
 text vocabulary; on bytes they mislead, so they become `Codec`/`decode`/`encode`/
 `byte`. A rename only.
 
-**[S3] Zero domain-specific leaf codecs.** Core ships only `byte` and `pure`;
+**[S3] Zero domain-specific leaf codecs.** Core ships only the primitive leaves
+`byte` and `satisfy` (plus the non-leaf `pure`, which is a value-equality
+check, not a format);
 every concrete format (`u8`/`utf8`/`varint`/…) lives downstream (`lean-binary`,
 `lean-text`). Nothing in core can silently bake in a text- or machine-specific
 assumption.
@@ -153,15 +160,19 @@ an induction principle makes "least fixpoint" a theorem rather than a claim.
 
 **[S6] Unbounded `many` is _semantic_, not a `Codec` value — a strictness
 consequence, not a naming choice.** The paper is a **lazy** language, so `Rel`'s
-meaning "will generate and concatenate infinite lists" (§4.3) and its named
-combinators (`many`, `sepBy`, `chainl1`/`chainr1`) are ordinary **values**. Lean is
-**strict**: a finite AST node cannot contain an unbounded repetition, so `codec`
-does not try. Repetition lives instead as **three separate artifacts** — a
+meaning "will generate and concatenate infinite lists" (§4.3) and its two named
+list combinators — `many` (§3.4) and `chainl1` (§6.1, itself `foldl f $ arg ∗ many
+(op ∗ arg)`) — are ordinary **values**. Lean is **strict**: a finite AST node cannot
+contain an unbounded repetition, so `codec` does not try. Repetition lives instead
+as **three separate artifacts** — a
 denotation (`relRepeat`), a decoder (`decodeRepeat`), and an encoder — rather than
-a single `many` value; the paper's `sepBy`/`chainl1`/`chainr1` are re-derived over
-those three and do **not** exist as bare `Codec`-building symbols. This is the
-same semantic content, but it is a _language_ difference (laziness vs strictness),
-not merely a cosmetic naming change.
+a single `many` value; `chainl1` is re-derived over those three, and `codec`
+_additionally_ derives `sepBy`/`chainr1` (one-or-more, zero-or-more) in the same
+§6.1 style — the paper defines no `sepBy`/`chainr1`, so these are `codec`'s own
+faithful additions, not a reproduction. None of these exist as bare
+`Codec`-building symbols. This is the same semantic content for `many`/`chainl1`,
+but it is a _language_ difference (laziness vs strictness), not merely a cosmetic
+naming change.
 
 Everything else is **kept**, and kept strongly: `Rel` is preserved as the
 _specification_ (decoding is the paper's full relation, nothing narrowed on top),
@@ -309,10 +320,10 @@ we need to prove about
 
 In the paper, a description lives _inside the type system_: a typeclass, with "a
 parser" or "a printer" chosen by context. You never hold a description in your
-hand; it is implicit. `codec` makes `Codec` an explicit **tree** (six
+hand; it is implicit. `codec` makes `Codec` an explicit **tree** (seven
 constructors), so a description is an ordinary value you can pattern-match on and
 **structurally recurse over**. Every roundtrip proof works case-by-case over the
-six constructors — and that finite induction is _the_ thing that makes "proved
+seven constructors — and that finite induction is _the_ thing that makes "proved
 for every description" mean something. A typeclass gives you no finite list of
 cases to exhaust.
 
@@ -401,7 +412,7 @@ structure Iso (α β : Type) where
 --   $ : Iso α β → Codec α → Codec β      (apply an iso)
 --   * : Codec α → Codec β → Codec (α × β) (sequential / product)
 --   | : Codec α → Codec α → Codec α      (backtracking union)
---   empty / pure / byte                   (failure / fixed value / one byte)
+--   empty / pure / byte / satisfy        (failure / fixed value / one byte / guarded byte)
 
 -- the length-indexed byte string (the single spec substrate and its scalar read)
 --   Bytes n := Fin n → UInt8 ; s ⟨i, ·⟩ is a structural indexed load
@@ -415,7 +426,9 @@ structure Iso (α β : Type) where
 --   encode d x = some ⟨n, s⟩ → (x, Suffix.empty n) ∈ decode d s (roundtrip, unconditional)
 ```
 
-Every `Codec` is a composition of `Iso`s; the inverse guarantee is **structural**:
+Every `Codec` is built by structural induction over the seven constructors
+(`iso`/`seq`/`alt`/`empty`/`pure`/`byte`/`satisfy`); `iso` is the single
+constructor that wraps an `Iso`, so the inverse guarantee is **structural**:
 the law is a field, and the two theorems above hold **unconditionally** for every
 description — no solver, no per-combinator gate, no prefix-disjointness condition.
 

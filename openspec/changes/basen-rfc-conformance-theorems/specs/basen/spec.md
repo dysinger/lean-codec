@@ -4,8 +4,9 @@
 
 Strengthens the `basen` specification from "roundtrip holds" to **complete RFC
 4648 conformance**, anchored to the already-synced **`Codec`-value surface**
-(the base spec already requires every base to be a `Codec (List UInt8)` value
-with no bespoke `encode`/`decode`). Per base: the encoder's output is canonical
+(the base spec already requires every base to be a `Codec`-based value — an
+element `Codec` + the derived `Run` (fixed-width) or the block-run + tail
+composition (padded) — with no bespoke `encode`/`decode`). Per base: the encoder's output is canonical
 (alphabet-only, terminal-only padding), the whole-input decoder
 (`Codec.decodeFull {x}Elem {x}ConsumesByte`) rejects _every_ malformed input,
 and `decodeFull … = some ys → encode ys` reproduces the input (unique canonical
@@ -18,13 +19,17 @@ with the same rejection/canonical discipline applied.
 ### Requirement: A decoder rejects malformed input
 
 Each `BaseN` decoder — the whole-input decoder
-`Codec.decodeFull {x}Elem {x}ConsumesByte n s` over the base's `Codec (List
-UInt8)` value `{x}Elem` (for the fixed-width bases) or `Codec.decode`/the
-whole-input form over the base's `Codec (List UInt8)` value whose terminal-tail
-value type is `B32`/`B64` (for base32/64) — SHALL return `none` for **every**
+`Codec.decodeFull {x}Elem {x}ConsumesByte n s` over the base's element
+`Codec UInt8` `{x}Elem` (for the fixed-width bases; the whole-input format is the
+derived `Run` over that element) or, for base32/64, the
+whole-input decoder over the base's **composition** (the full-block `Run` =
+derived `many`, followed by the terminal-tail `Codec` `{x}TailElem`, with the
+result `iso`-ed to the terminal-tail value type `B32`/`B64`; see the D7 note
+— there is **no** single `Codec B32`/`Codec B64` value, because the `Codec` AST
+has no repetition node) — SHALL return `none` for **every**
 input `s` that is not a valid encoding for that base. There is no bespoke
 `decodeB32Strict`/`decodeB64Strict` function: rejection is a theorem over the
-uniform `Codec.decode`/`decodeFull`, not a per-format decoder. "Not valid" SHALL mean
+uniform `Codec.decode`/`decodeFull` composition, not a per-format decoder. "Not valid" SHALL mean
 _any one_ of: (a) a byte outside the base's alphabet (for base16, outside the
 **uppercase canonical** alphabet `0-9A-F` — lowercase `a-f` is _not_ accepted by
 the `Codec` value, which is a strict uppercase bijection; see the non-goal
@@ -49,11 +54,11 @@ that decodes the malformed input and discards it.
 
 #### Scenario: Illegal or non-terminal padding is rejected
 
-- **WHEN** the uniform decoder (`Codec.decode`/`decodeFull`) over the
-  padded-base `Codec` value is applied to a `Bytes n` where `=` appears in an
-  illegal position — the first position of a block, a lone partial
-  pad group, or followed by any non-`=` data (`"Zg==AAAA"`, `"MY======AAAAAAAA"`
-  as the terminal-`=`-then-data two-block case)
+- **WHEN** the uniform decoder over the padded-base composition (the full-block
+  `Run` + terminal-tail `Codec`, `iso`-ed to `B64`/`B32`) is applied to a `Bytes n`
+  where `=` appears in an illegal position — the first position of a block, a lone
+  partial pad group, or followed by any non-`=` data (`"Zg==AAAA"`,
+  `"MY======AAAAAAAA"` as the terminal-`=`-then-data two-block case)
 - **THEN** the result is `none` (the `=` is terminal-only per RFC 4648 §3.2),
   **structurally** — the value type `B64`/`B32` has no term representing
   trailing data, so the rejection is the absence of an inhabiting value, never a
@@ -77,7 +82,7 @@ that decodes the malformed input and discards it.
 
 For each base, the encoder (`Codec.encode {x}Elem`, equivalently `encode{X}`
 over `List UInt8` for the fixed-width bases; `Codec.encode` over the base32/64
-`Codec (List UInt8)` value whose terminal-tail value type is `B32`/`B64`) SHALL
+composition — full-block `Run` + terminal-tail `Codec`, `iso`-ed to `B32`/`B64`) SHALL
 be the RFC 4648 (or this package's own spec) **canonical**
 form: every output byte is in the base's alphabet, and for the padded bases the
 `=` pad characters appear **only** in the terminal tail with exactly the RFC
@@ -106,8 +111,8 @@ every output byte is an alphabet character.
 
 For each base, the whole-input decoder SHALL be the **unique** inverse of the
 encoder: whenever the decoder (`Codec.decodeFull {x}Elem {x}ConsumesByte n s`
-for the fixed-width bases; `Codec.decode`/the whole-input form over the base32/64
-`Codec` value) returns `some v`, the encoder `encode{X} v`/`Codec.encode <codec> v`
+for the fixed-width bases; the whole-input form over the base32/64
+composition — full-block `Run` + terminal-tail `Codec`, `iso`-ed to `B64`/`B32`) returns `some v`, the encoder `encode{X} v`/`Codec.encode <codec> v`
 reproduces `s` byte-for-byte, and the encoder is injective on its value. Combined with the
 existing roundtrip law (`decodeFull (encode bs) = some bs`), this makes the
 encoder and decoder a partial isomorphism with a single canonical
@@ -116,7 +121,8 @@ representation per value.
 #### Scenario: A successful decode re-encodes to the input
 
 - **WHEN** the whole-input decoder (`Codec.decodeFull {x}Elem {x}ConsumesByte n s`,
-  or `Codec.decode`/the whole-input form over the base32/64 `Codec` value) returns
+  or the whole-input form over the base32/64 composition — full-block `Run` +
+  terminal-tail `Codec`, `iso`-ed to `B64`/`B32`) returns
   `some v` for some `s, v`
 - **THEN** `encode{X} v`/`Codec.encode <codec> v = some ⟨n, s⟩` (a theorem, proved
   `[propext, Quot.sound]`-only).

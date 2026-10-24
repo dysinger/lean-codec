@@ -10,8 +10,10 @@ JSON are the same call, with the _value type_ differing, never the operation
 shape.
 
 The synced spec `openspec/specs/basen/spec.md` requires this ("The `basen` bases
-are `Codec` values … composed from `satisfy`/`count`/`many`/`iso`/`alt`, roundtrip
-via inherited `Codec.roundtrip`, no bespoke `encode`/`decode`"). A prior change
+are `Codec` values … composed from `satisfy`/`count`/`iso`/`alt`, with unbounded
+repetition as the derived `many`, roundtrip via the inherited per-component laws
+plus one block-run/tail split-uniqueness lemma for the padded bases, no
+bespoke `encode`/`decode`"). A prior change
 (`basen-uniform-leaf-api`, commit `11f7072`) walked away from it, declaring the
 needed `many` node "type-theoretically impossible" and instead implementing
 base32/64 as **bespoke per-format run triples** (`parseB64`/`encodeB64Strict`/
@@ -74,18 +76,27 @@ What is missing is **only the packaging**: a single value per base that a unifor
 
 ### The actual surface this delivers (the whole point)
 
-Each base is **one run value** (fixed-width over `count`/`iso`, padded over the
-terminal-tail value type), and the facade dispatches over the **single** value
-type `List UInt8`:
+Each base is **one `Codec`-value surface** (the format is a `Codec` value; `Run` is
+only the already-proved repetition wrapper on top of an element, never a second
+kind of format), and the facade dispatches over the **single** value type
+`List UInt8`. Concretely:
 
 ```lean
--- fixed-width bases (2/4/8/10/16): element `Codec UInt8` + the derived run
-base2  : Run                  -- count 8 (satisfy isBitDigit) ≫ (bits↔byte) iso, element run
-base16 : Run                  -- count 2 (satisfy isHexDigit) ≫ (pair↔byte) iso, element run
--- padded bases (32/64): full blocks + terminal tail, value type B32/B64
-base32 : Run                  -- full 5-byte block run, terminal-tail alt, B32 value
-base64 : Run                  -- full 3-byte block run, terminal-tail alt, B64 value
+-- fixed-width bases (2/4/8/10/16): the element IS the `Codec` value; the `Run`
+-- is just its repetition wrapper (element `count k (satisfy p) ≫ block iso`)
+base2  : Codec UInt8   := count 8 (satisfy isBitDigit) ≫ bitBlockIso   -- + bitRun : Run UInt8
+base16 : Codec UInt8   := count 2 (satisfy isHexDigit) ≫ hexBlockIso   -- + hexRun : Run UInt8
+-- padded bases (32/64): a COMPOSITION — full-block `Run` (element `b64BlockElem`)
+-- then the terminal-tail `Codec` (`b64TailElem`), `iso`-ed to the B64/B32 value
+base64 : composition  = b64Run ▸ b64TailElem ▸ (iso b64Iso)   -- value type B64
+base32 : composition  = b32Run ▸ b32TailElem ▸ (iso b32Iso)   -- value type B32
 ```
+
+(The `base{X} : Run` signature in an earlier draft was wrong: it typed each base
+as a `Run`, which is only the repetition layer. A `Run α` is `{ elem : Codec α,
+step : ConsumesByte elem }` — it cannot name the whole-input `B64`/`B32` format,
+which is a block `Run` _plus_ a tail `Codec` _plus_ an `iso`. See the D7
+correction.)
 
 with a **uniform facade** (the only entry points):
 
@@ -204,7 +215,7 @@ re-spelled over the uniform entry points.
 `hexElem` stays a strict uppercase `Iso`. Lowercase `6f` is a rejection, not an
 alias.
 
-### D7 — The padded whole-input decoder is a `Codec B64`/`Codec B32` value, **not** `head?`/`filterMap`
+### D7 — The padded whole-input decoder is a **composition** (full-block `Run` + terminal-tail `Codec`, `iso`-ed to `B64`/`B32`), **not** `head?`/`filterMap`
 
 The first implementation of `decodeFullB64`/`decodeFullB32` (and `encodeB64`/
 `encodeB32`) returned a _flattened_ `List UInt8` built by `List.head? ((decodeRepeat
@@ -214,38 +225,65 @@ b64BlockElem … s).filterMap …)`. That shape makes the whole-input roundtrip
 hit; proving it is the _right_ hit needs the alphabet-vs-`=` pad dichotomy and a
 `List.ofFn`/`Fin` cast grind).
 
-**Decision:** re-express the padded whole-input decoder/encoder over a single
-`Codec B64`/`Codec B32` value whose value type is the terminal-tail `B64`/`B32`
-(per D1 — realized via `iso` over the full-block `Run` + the finite terminal-tail
-`alt`), so the roundtrip is the **inherited** `Codec.decodeFull_spec`/
-`encodeRepeat_rel` law (the codec library's already-proved full-consumption
-uniqueness machinery), **not** a new `head?`-uniqueness lemma. This is the
-(design-faithful) alternative to grinding out the `head?`/`filterMap` uniqueness;
-it removes the flattened `List UInt8` step and makes the base32 mirror (5 tail
-shapes) fall out of the same template. The facade (`BaseN.lean`) then dispatches
-`cases b` to `Codec.decodeFull`/`Codec.encode` over that value, normalized through
-`BaseN.Bridge`. This matches task 1.4's requirement ("the inherited
-`decodeRepeat_spec`/`encodeRepeat_rel` law, no bespoke law").
+**Decision:** re-express the padded whole-input decoder/encoder over a
+well-scoped **composition** — the full-block `Run` (`b64Run`/`b32Run`, the derived
+`many`) followed by the finite terminal-tail `Codec` (`b64TailElem`/`b32TailElem`),
+with the result `iso`-ed to the terminal-tail value type `B64`/`B32` (per D1). The
+roundtrip is therefore the **inherited** `decodeRepeat_spec`/`encodeRepeat_rel`/
+`decodeFull_spec` laws for the two components **plus one explicit, named
+composition lemma** — the block-run/tail split uniqueness (the alphabet-vs-`=` pad
+dichotomy disambiguates the block/tail boundary; see the `head?`-replacement note
+below).
 
-_Consequence for task order:_ 1.4 (roundtrip) is now the gate for 2.1 (facade
-rewire) → 1.1 (delete the strict triples) → 2.2, exactly as stated; the re-express
-here is the _mechanism_ that makes 1.4 provable without a bespoke uniqueness lemma.
+> **Correction (coherence with D0):** there is **no** single `Codec B64`/`Codec B32`
+> value. The `Codec` AST has no repetition node (only `iso`/`seq`/`alt`/`empty`/
+> `pure`/`byte`/`satisfy`), and D0 proves `many` cannot be added as one. An
+> unbounded "n full blocks + one terminal tail" is **not** a finite `Codec`
+> description; it is a _derived composition_ (a `Run` = `many`-of-blocks, then a
+> finite tail `Codec`). The value type `B64`/`B32` is reached by `iso` **after** that
+> composition, so the whole-input roundtrip is **not** the inherited law _alone_:
+> it is the inherited per-component laws composed through a new (but small and
+> well-scoped) split-uniqueness lemma. That lemma is unavoidable given D0; D7 does
+> not delete it, it gives it a precise shape and location.
+
+This is the correction to the earlier D7 wording ("a single `Codec B64`/`Codec B32`
+value … the inherited law, not a new lemma"), which was incoherent with D0: it
+promised one AST value where D0 proves none exists. The honest shape is
+full-block `Run` `▸` terminal-tail `Codec` `▸` `iso` to `B64`/`B32`, with the
+roundtrip law = inherited `decodeRepeat_spec`/`encodeRepeat_rel` (blocks) +
+inherited `decodeFull_spec` (tail) + the one split-uniqueness composition lemma.
+This removes the flattened `List UInt8`/`head?`/`filterMap` step and makes the
+base32 mirror (5 tail shapes) fall out of the same tail-`alt` template. The facade
+(`BaseN.lean`) then dispatches `cases b` to `Codec.decodeFull`/`Codec.encode` over
+that composition, normalized through `BaseN.Bridge`.
+
+_Consequence for task order:_ 1.4 (roundtrip) is the gate for 2.1 (facade rewire)
+→ 1.1 (delete the strict triples) → 2.2, exactly as stated. The re-express here is
+the _mechanism_ that makes 1.4 provable **with one named, scoped composition lemma**
+(not "no bespoke law", as the earlier wording claimed).
 
 ## Risks / trade-offs
 
 - **[Not a `Codec` constructor, by verified necessity]** — this is _not_ a
-  compromise against the spec; the spec's "composed from … `many` …" is satisfied
-  by `many` being a _derived run_ (as the paper/F\* derive it), and the uniform
+  compromise against the spec; the spec's "composed from `satisfy`/`count`/`iso`/
+  `alt`, with unbounded repetition as the derived `many`" is satisfied by `many`
+  being a _derived run_ (as the paper/F\* derive it), and the uniform
   `decode`/`encode` is delivered by the `Run` value + facade. No new core
   constructor, no `Codec.rec` conversion of the law suite (a _reduction_ of the
   risky scope the prior design proposed).
 - **[`Run` is a value, so no `induction d` conversions]** — the `Run` bundles the
   already-proved `decodeRepeat`/`encodeRepeat`/`relRepeat`; per-base laws are the
   inherited `decodeRepeat_spec`/`encodeRepeat_rel`, not new `Codec.rec` cases.
-- **[Terminal-tail `iso` must be constructed explicitly]** — the one genuinely new
-  proof: the `Iso` from the `Run`'s `(List full · × Option tail)` result to `B32`/
-  `B64`. This is a well-scoped bijection (a tail's arity is recoverable from its
-  constructor), not the non-existent `List (List UInt8)` flattening.
+- **[Terminal-tail `iso` must be constructed explicitly, plus one composition lemma]** —
+  the two new proofs: (a) the `Iso` from the composed `(List full-block · ×
+Option tail)` result to `B32`/`B64` (a well-scoped bijection; a tail's arity is
+  recoverable from its constructor, not the non-existent `List (List UInt8)`
+  flattening); and (b) the **block-run/tail split-uniqueness composition lemma** —
+  the one genuinely new roundtrip step that D0 makes unavoidable (there is no
+  single `Codec B64` whose roundtrip is the inherited law alone; see D7). Both
+  are `[propext, Quot.sound]`-only, using the already-landed pad-dichotomy
+  primitives (`b64Char_pad_false` / `not_rel_b64BlockElem_of_pad`) and
+  `Rel_count_satisfy_ofFn` (content extraction).
 - **[No surface regression]** — `decode` stays list-valued/backtracking (README
   `[D2]`/`[D3]`, `lean` skill §3).
 

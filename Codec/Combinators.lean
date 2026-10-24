@@ -8,19 +8,22 @@ import Codec.Sound
 /-!
 # Derived combinators
 
-Generic, byte-agnostic combinators built from the primitives (paper §6.1):
+Generic, byte-agnostic combinators built from the primitives. The first group
+(`*>`, `<*`, `between`, `chainl1`) reproduces the paper's §6.1 derived operations;
+the rest are `codec`'s own additions in the same derivation style (the paper
+defines no `optional`/`maybe`/`choice`/`count`/`manyUpTo`/`sepBy`/`chainr1`):
 
   * `p *> q`, `p <* q` — pair variants that ignore a side (the paper's `*>`, `<*`)
-  * `between open close p` — `open *> p <* close`
-  * `optional`/`maybe`/`choice` — zero-or-one and n-ary alternation (§6.2)
-  * `count n p` / `manyUpTo n p` — bounded repetition (total, `#eval`-able)
+  * `between open close p` — `open *> p <* close` (the paper's `between`)
+  * `optional`/`maybe`/`choice` — zero-or-one and n-ary alternation (not in the paper)
+  * `count n p` / `manyUpTo n p` — bounded repetition, total and `#eval`-able
 
-Unbounded repetition (`many`, and its `sepBy`/`chainl1` derivations — realized here
-as the `relSepBy`/`decodeSepBy`/`encodeSepBy` and `relChain*`/`decodeChain*`/
-`encodeChain*` triples, there being **no** bare `sepBy`/`chainl1`/`some`/`many1`
-symbol) is **not** a finite `Codec` value: it is an *infinite* description, which
-this strict language cannot represent as an AST node. Its semantics lives in
-three already-separate places instead:
+Unbounded repetition (`many`, and the `sepBy`/`chainl1`/`chainr1` derivations —
+realized here as the `relSepBy`/`decodeSepBy`/`encodeSepBy` and
+`relChain*`/`decodeChain*`/`encodeChain*` triples, there being **no** bare
+`sepBy`/`chainl1`/`some`/`many1` symbol) is **not** a finite `Codec`
+value: it is an *infinite* description, which this strict language cannot represent
+as an AST node. Its semantics lives in three already-separate places instead:
 
   * `relRepeat (Rel p)` (`Codec.Codec`) — the total least-fixpoint denotation.
   * `decodeRepeat p h` (`Codec.Decode`) — the productive decoder, well-founded on
@@ -28,9 +31,9 @@ three already-separate places instead:
   * `encodeRepeat p` (`Codec.Encode`) — the total encoder, structural on the value
     list (no productivity witness needed).
 
-The `many`-shaped *list* combinators (`sepBy`, `chainl1`; see the explicit symbol
-names above) are re-derived at the end of this file **over these three**, not over
-an opaque `many p` value — a former `partial def many` was irreducibly opaque at
+The `many`-shaped *list* combinators (`sepBy`, `chainl1`, `chainr1`; see the explicit
+symbol names above) are re-derived at the end of this file **over these three**, not
+over an opaque `many p` value — a former `partial def many` was irreducibly opaque at
 the `Rel` level (a `partial def` produces no equational lemma), making
 `Rel (many p) ↔ relRepeat (Rel p)` unprovable.
 -/
@@ -53,7 +56,7 @@ def seqLeft {α : Type} (p : Codec α) (q : Codec Unit) : Codec α :=
 def between {α : Type} (l r : Codec Unit) (p : Codec α) : Codec α :=
   seqRight l (seqLeft p r)
 
-/-! ## Sum and optional combinators (paper §6.2) -/
+/-! ## Sum and optional combinators (not in the paper; `codec` additions) -/
 
 /-- `optional p` is zero-or-one `p`, as `Codec (Option α)`: the `some x` case via
 `optionSome`, or `none` via `pure none`. -/
