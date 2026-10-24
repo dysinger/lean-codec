@@ -52,8 +52,8 @@ A concrete format SHALL be a value decoded/encoded by the single uniform
 enjoys — never a bespoke per-format `encode`/`decode`/`rel`. There is **no**
 `Base` enum and no `encode (b : Base)` / `decode (b : Base)` dispatcher: a
 runtime radix selector is a bespoke function by another name, it erases the
-value type (`UInt8` vs `B32`/`B64`) that carries the unrepresentable-illegal-state
-guarantee, and it has no client. The radix lives _in the value the caller already
+value type (`UInt8` vs the padded bases' full-block/tail split), and it has no
+client. The radix lives _in the value the caller already
 holds_ (`hexElem` vs `b32BlockElem`), never on a dispatch index.
 
 #### Scenario: base32/64 are values, not run triples
@@ -72,6 +72,7 @@ holds_ (`hexElem` vs `b32BlockElem`), never on a dispatch index.
 - **WHEN** a consumer encodes/decodes a value of some base
 - **THEN** it calls `Codec.decode`/`Codec.encode` (or `decodeRepeat`/`encodeRepeat`
   for the run) on the base's own `Codec`/`Run` value — `Codec.decodeFull hexElem …`,
-  `encodeB32 bs`, `decodeFullB64 s` — and the value type is the base's natural
-  type (`UInt8` for fixed-width, `B32`/`B64` for padded). There is **no**
+  `encodeB32 bs`, `decodeFullB64 s` — and the value type is `List UInt8` (the whole
+  byte list), with `B32`/`B64` as the canonical block/tail spine used only to
+  specify the full-block/tail split. There is **no**
   `encode (b : Base)` / `decode (b : Base)` and no `Base` inductive.

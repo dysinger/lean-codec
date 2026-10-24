@@ -58,12 +58,12 @@ encoder is `encode{X}`/`encodeB{X}` — plus the one decoder fix they expose:
 2. **Decode totality (rejection)** — `Codec.decodeFull … = none` on every
    malformed input: a byte outside the alphabet (base16: outside the uppercase
    canonical alphabet — see the case-insensitivity non-goal below), `=` in an
-   illegal (non-terminal) position, wrong whole-string arity, and — the type
-   fix — any data after the terminal `=` run. For base32/64, the value type is
-   changed to the terminal-tail inductive `B32`/`B64`, so the malformed class is
-   _unrepresentable_ (there is no term for "tail then more data"); rejection is
-   the absence of an inhabitant, not a post-hoc filter. This restores the F*
-   reference's `decode_*_invalid`/`bad_pad`/`bad_length` lemma family.
+   illegal (non-terminal) position, wrong whole-string arity, and any data
+   after the terminal `=` run. Rejection is proved as an **inequation** over the
+   whole-input composition (`List.head? ((decodeRepeat {x}Elem …).filterMap
+(decodeFull {x}TailElem …))`) by the pad-dichotomy, not by a type change. This
+   restores the F* reference's `decode_*_invalid`/`bad_pad`/`bad_length` lemma
+   family.
 
 3. **Converse / canonical uniqueness** — `decodeFull … = some v → encode v
 reproduces the input` (whenever the decoder accepts a value, it is the _unique_
@@ -85,9 +85,9 @@ reproduces the input` (whenever the decoder accepts a value, it is the _unique_
   `sorry`, over the `Codec`-value / `Bytes n` substrate.
 - `basen`: proves the **run-level terminal-padding** property the block-`iso`
   canonical check does not cover (RFC 4648 §3.2: no data after the terminal
-  `=`), for base32 and base64, by **making the shape unrepresentable**: the
-  value type is the terminal-tail inductive `B32`/`B64`, so there is no term
-  for a tail followed by data.
+  `=`), for base32 and base64, as `decodeFullB64`/`decodeFullB32 s = none` inequations
+  — a full block never contains `=`, a terminal-tail block must, so the trailing
+  alphabet-only bytes cannot decode and the `head?`/`filterMap` composition is `none`.
 
 ### Modified Capabilities
 
@@ -109,10 +109,14 @@ reproduces the input` (whenever the decoder accepts a value, it is the _unique_
   (`relRepeat`/`decodeRepeat`/`encodeRepeat`, design §D0) — **never** a `many`
   constructor (un-implementable, per the verified universe/definition-order
   cycle). The whole-input roundtrip is the inherited per-component laws plus one
-  named block-run/tail split-uniqueness lemma (design §D7). Rejection is
-  **structural** (the illegal shape has no inhabitant), there is no flattening
-  (no bijective `B64 → List (List UInt8)` exists), and the lenient
-  `List (List UInt8)` codecs are deleted.
+  named block-run/tail split-uniqueness lemma (design §D7). Rejection is proved as
+  an **inequation** (`decodeFullB32`/`decodeFullB64 s = none`) by the pad-dichotomy
+  over the `head?`/`filterMap` composition; the `B32`/`B64` inductive is the
+  canonical block/tail spine (a proved total bijective relabeling of `List UInt8`),
+  **not** a type that makes trailing data unrepresentable. (The earlier "re-typing
+  makes the shape unrepresentable" and "no bijective flattening exists" claims
+  were false — `b32BytesOf_ofBytes`/`b32OfBytes_bytesOf` prove the bijection — and
+  are withdrawn.)
 - **Base16 case-insensitivity** (RFC 4648 §8: a decoder MUST accept both cases)
   is an **explicit non-goal** of this change: the `Codec`-value `hexElem` is a
   strict uppercase bijection, and a case-insensitive decoder is not expressible

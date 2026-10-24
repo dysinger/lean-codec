@@ -39,11 +39,14 @@ lone/partial `=` group, or **any data after the terminal `=`**; (c) a wrong
 arity (a whole-input byte count that is not a whole number of that base's code
 words); and (d) a value that overflows the reconstructed byte (e.g. a base8/10
 digit triple `> 255`). The rejection SHALL be proved (`… = none`),
-`[propext, Quot.sound]`-only, **structurally** — for the run-level
-trailing-data class, the value type `B32`/`B64` makes the malformed shape
-**unrepresentable**, so there is _no inhabiting value_, and `= none` follows
-from the absence of any full-consumption witness, not from a post-hoc filter
-that decodes the malformed input and discards it.
+`[propext, Quot.sound]`-only, as an **inequation over the composition** — the
+whole-input decoder is `List.head? ((decodeRepeat {x}Elem …).filterMap (decodeFull
+{x}TailElem …))` over the byte-list value, so `= none` follows by the
+pad-dichotomy: a full block never contains `=` (so the run cannot consume the
+trailing-data block), and a terminal-tail block must contain `=` (so the leftover
+alphabet-only bytes cannot decode as a tail). The `B32`/`B64` terminal-tail value
+types are the **canonical block/tail spine** (a total, proved bijective relabeling
+of `List UInt8`), not a type that makes the malformed shape unrepresentable.
 
 #### Scenario: A byte outside the alphabet is rejected
 
@@ -60,9 +63,10 @@ that decodes the malformed input and discards it.
   partial pad group, or followed by any non-`=` data (`"Zg==AAAA"`,
   `"MY======AAAAAAAA"` as the terminal-`=`-then-data two-block case)
 - **THEN** the result is `none` (the `=` is terminal-only per RFC 4648 §3.2),
-  **structurally** — the value type `B64`/`B32` has no term representing
-  trailing data, so the rejection is the absence of an inhabiting value, never a
-  post-decode filter.
+  proved as an **inequation** — the full-block run stops at the first `=` (no
+  `b64BlockElem`/`b32BlockElem` value contains `=`), the leftover alphabet-only
+  bytes cannot decode as a `b64TailElem`/`b32TailElem` (which must contain `=`),
+  so `decodeFullB64`/`decodeFullB32 = none`.
 
 #### Scenario: Wrong arity is rejected
 

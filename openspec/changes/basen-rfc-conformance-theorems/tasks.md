@@ -4,8 +4,11 @@
 > single `Codec.decode` / `Codec.encode` — "only the codec changes." The
 > fixed-width bases (2/4/8/10/16) are `count k (satisfy p) ≫ <block iso>` made
 > into a `Run` (bundling the derived `relRepeat`/`decodeRepeat`/`encodeRepeat`);
-> the padded bases (32/64) are a full-block `Run` plus a terminal-tail `alt`/`iso`
-> onto `B32`/`B64` (so illegal "data after `=`" states are **unrepresentable**).
+> the padded bases (32/64) are a full-block `Run` plus a terminal-tail `alt`/`iso`;
+> the `B32`/`B64` inductive is the **canonical block/tail spine** (a proved total
+> bijective relabeling of `List UInt8`), and rejection is a `decodeFullB32`/
+> `decodeFullB64 = none` inequation over the composition, not a type-level
+> unrepresentability.
 > `many` is **derived** (never a constructor). There is **no** bespoke
 > `encode`/`decode`, **no** `decodeB32Strict`/`encodeB64Strict` run triple, **no**
 > per-format function. Base16 is uppercase-only.
@@ -41,8 +44,8 @@ Quot.sound]`).
       `Codec UInt8 := count k (satisfy p) ≫ blockIso` (Base16 `count 2`, base2
       `count 8`, base4 `count 4`, base8 `count 3`, base10 element run + block iso).
 - [x] 1.3 Re-express base32/64 as a `Run` over the full-block element plus a
-      terminal-tail `alt`/`iso` onto `B32`/`B64`. The terminal-tail branch is
-      terminal (empty continuation), so "data after `=`" is unrepresentable.
+      terminal-tail `alt`/`iso`; the `B32`/`B64` inductive is the canonical
+      block/tail spine (the terminal-tail branch is a terminal continuation).
       _(base64 foundation landed (`../lean-basen` `a71277c`): `b64BlockElem` /
       `b64TailElem` `Codec (List UInt8)` elements (with a new `b64TailIso` law
       restricting a block to 1–2 bytes), `b64Run`/`b64TailRun`, all
@@ -201,11 +204,12 @@ n = 4` (empty tail or one padded block) — `../lean-basen` `c0cf50d`.
 > the bench, re-stating conformance over the composition) is folded into tasks
 > 1.1 and 3.x/4.x/5.x below.
 
-## 3. Rejection theorems (the illegal shape has no inhabitant)
+## 3. Rejection theorems (proved as `= none` inequations over the composition)
 
-- [ ] 3.1 Base64: `decodeFullB64 … "Zg==AAAA" = none` (structural:
-      no `B64` term), plus invalid-char, pad-first, bad-length, and pad-shape
-      vectors — all over the uniform decoder.
+- [ ] 3.1 Base64: `decodeFullB64 … "Zg==AAAA" = none` (pad-dichotomy
+      inequation: the full-block run stops at the first `=`, the leftover
+      alphabet-only bytes cannot decode as a `b64TailElem`), plus invalid-char,
+      pad-first, bad-length, and pad-shape vectors — all over the uniform decoder.
 - [ ] 3.2 Base32: `decodeFullB32 … "MY======AAAAAAAA" = none` and the same family.
 - [ ] 3.3 Fixed-width bases: the F\* rejection family per base (base16 non-hex +
       lowercase + odd arity; base2/4/8/10 invalid alphabet + wrong arity +

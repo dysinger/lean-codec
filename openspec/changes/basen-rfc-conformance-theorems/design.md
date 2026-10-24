@@ -88,8 +88,8 @@ base2  : Codec UInt8   := count 8 (satisfy isBitDigit) ≫ bitBlockIso   -- + bi
 base16 : Codec UInt8   := count 2 (satisfy isHexDigit) ≫ hexBlockIso   -- + hexRun : Run UInt8
 -- padded bases (32/64): a COMPOSITION — full-block `Run` (element `b64BlockElem`)
 -- then the terminal-tail `Codec` (`b64TailElem`), `iso`-ed to the B64/B32 value
-base64 : composition  = b64Run ▸ b64TailElem ▸ (iso b64Iso)   -- value type B64
-base32 : composition  = b32Run ▸ b32TailElem ▸ (iso b32Iso)   -- value type B32
+base64 : composition  = b64Run ▸ b64TailElem ▸ (iso b64Iso)   -- B64 spine over List UInt8
+base32 : composition  = b32Run ▸ b32TailElem ▸ (iso b32Iso)   -- B32 spine over List UInt8
 ```
 
 (The `base{X} : Run` signature in an earlier draft was wrong: it typed each base
@@ -134,8 +134,9 @@ type is the base's natural type (`UInt8`, `B32`, `B64`).
    `BaseN.Bridge` module. No `many` constructor is added (verified impossible; both
    references derive it).
 2. Re-express all seven bases as run values (fixed-width `count`/`iso`, padded
-   over terminal-tail `B32`/`B64` value types so illegal padded states remain
-   **unrepresentable**).
+   over the full-block `Run` + terminal-tail composition; the `B32`/`B64` value
+   types are the **canonical block/tail spine**, not a type that makes illegal
+   padded states unrepresentable).
 3. Re-prove the three RFC-conformance theorem families per base (rejection /
    canonical encoding / converse + injectivity) **over the uniform `decode`/
    `encode`**, not over per-format functions.
@@ -147,9 +148,10 @@ type is the base's natural type (`UInt8`, `B32`, `B64`).
 - No committed-`|`/single-valued-decode change: `decode` stays list-valued with
   backtracking union (README `[D2]`/`[D3]`; `lean` skill §3). The reverted
   `codec-uniform-api` single-result idea stays out of scope.
-- No flattening of `B32`/`B64` back to `List (List UInt8)` (no bijective
-  flattening exists; the terminal tail is indistinguishable from a full block
-  after the fact).
+- No flattening of `B32`/`B64` back to `List (List UInt8)` in the _surface_ (the
+  value type is `List UInt8`; `B32`/`B64` is only the canonical split spine, a
+  proved total bijective relabeling `b32BytesOf`/`b32OfBytes` — the earlier
+  "no bijective flattening exists" claim was false and is withdrawn).
 - No `many` constructor (paper/F\* derive it; a constructor is un-implementable
   in Lean, verified above).
 - Base16 case-insensitivity remains a non-goal (D8 below).
@@ -175,22 +177,26 @@ UInt8` values via `count k (satisfy p) ≫ <block iso>`; the `Run` wraps them.
 The padded bases wrap the full-block element (`count 8 (satisfy b32OrPad) ≫
 b32BlockIso`, etc.) plus a terminal-tail `alt`/`iso` onto `B32`/`B64`.
 
-### D1 — The value types stay terminal-tail (`B32`/`B64`), but _as values_, not run triples
+### D1 — The `B32`/`B64` inductives stay as the **canonical block/tail spine**, not a run triple
 
-The `B32`/`B64` terminal-tail inductives stay (that was the _correct_ part of the
-prior design). They are the **value type** of the padded run, realized via `iso`
-over the `Run`'s full-block + optional-tail structure. `=`-terminal is enforced
-by construction (a `tail*` constructor has no continuation). The illegal state
-"full block after a tail" has no term; the decoder returns `none` because no
-value relates — proved via `decodeRepeat_spec`/`relRepeat`/`encode_rel`, **not**
-via a bespoke `parseB64`.
+The `B32`/`B64` terminal-tail inductives stay (they are the canonical block/tail
+spine — a proved total bijective relabeling of `List UInt8` via `b32BytesOf`/
+`b32OfBytes`). They are **not** the value type of the uniform decoder (which is
+`List UInt8`); they are the structure used to _specify_ the full-block + terminal-tail
+split. A `tail*` constructor has no continuation, so the split is well-scoped, but
+this does **not** make "full block after a tail" untypeable — a `List UInt8` freely
+admits such a shape, and rejection is the `decodeFullB32`/`decodeFullB64 s = none`
+inequation over the composition, **not** an absence of an inhabitant.
 
-### D2 — Rejection is `decode <base> bad = none`, structural and uniform
+### D2 — Rejection is `decodeFullB64`/`decodeFullB32 s = none`, an inequation over the composition
 
-Stated over the uniform decoder (`decode (b) bad` / `Codec.decodeFull <elem>
-<witness> n bad`), not a bespoke one. The `Zg==AAAA` class is `none` because no
-`B64` value relates (absence of an inhabitant), proved by the run's relation +
-`decode_spec`.
+Stated over the uniform decoder (`Codec.decodeFull <elem> <witness> n s` for the
+fixed-width bases; `decodeFullB64`/`decodeFullB32 s` for the padded composition),
+not a bespoke one. The `Zg==AAAA` class is `none` because the full-block run cannot
+consume a block containing `=` (no `b64BlockElem`/`b32BlockElem` value contains `=`)
+and the leftover alphabet-only bytes cannot decode as a `b64TailElem`/`b32TailElem`
+(which must contain `=`), so `List.head? ((decodeRepeat …).filterMap …) = none` — a
+pad-dichotomy **inequation**, not an absence-of-inhabitant argument.
 
 ### D3 — No facade: each base is its own `Codec`/`Run` value, decoded/encoded by the uniform `Codec` operations
 
@@ -206,10 +212,9 @@ The uniform surface is `Codec.decode`/`Codec.encode` (and `decodeRepeat`/
 `encodeRepeat`/`decodeFull` for a run or composition) applied to the base's own
 value. There is **no** `Base` enum, no `cases b` dispatcher, no `BaseN.Bridge`
 type-erasure, and no `Base.val : Base → Type` family: a runtime radix selector
-would be a bespoke per-format function by another name, would throw away the
-`B32`/`B64` terminal-tail value types (whose whole point is that illegal states
-are unrepresentable), and has no client. The value type stays the base's natural
-type — `UInt8` for the fixed-width bases, `B32`/`B64` for the padded bases.
+would be a bespoke per-format function by another name, and has no client. The
+value type is `List UInt8` (the whole byte list), with `B32`/`B64` as the
+canonical block/tail spine used only to specify the split.
 
 ### D4 — The one generic lemma (carried over): forward `rel_count_satisfy`
 
@@ -242,7 +247,8 @@ hit; proving it is the _right_ hit needs the alphabet-vs-`=` pad dichotomy and a
 **Decision:** re-express the padded whole-input decoder/encoder over a
 well-scoped **composition** — the full-block `Run` (`b64Run`/`b32Run`, the derived
 `many`) followed by the finite terminal-tail `Codec` (`b64TailElem`/`b32TailElem`),
-with the result `iso`-ed to the terminal-tail value type `B64`/`B32` (per D1). The
+whose result is the whole `List UInt8` (the `B64`/`B32` spine only specifies the
+full-block/tail split, per D1). The
 roundtrip is therefore the **inherited** `decodeRepeat_spec`/`encodeRepeat_rel`/
 `decodeFull_spec` laws for the two components **plus one explicit, named
 composition lemma** — the block-run/tail split uniqueness (the alphabet-vs-`=` pad
@@ -254,8 +260,9 @@ below).
 > `pure`/`byte`/`satisfy`), and D0 proves `many` cannot be added as one. An
 > unbounded "n full blocks + one terminal tail" is **not** a finite `Codec`
 > description; it is a _derived composition_ (a `Run` = `many`-of-blocks, then a
-> finite tail `Codec`). The value type `B64`/`B32` is reached by `iso` **after** that
-> composition, so the whole-input roundtrip is **not** the inherited law _alone_:
+> finite tail `Codec`). The `B64`/`B32` spine is reached by `iso` **after** that
+> composition (a relabeling of the `List UInt8` result), so the whole-input roundtrip
+> is **not** the inherited law _alone_:
 > it is the inherited per-component laws composed through a new (but small and
 > well-scoped) split-uniqueness lemma. That lemma is unavoidable given D0; D7 does
 > not delete it, it gives it a precise shape and location.
@@ -318,6 +325,6 @@ Option tail)` result to `B32`/`B64` (a well-scoped bijection; a tail's arity is
 ## Open questions
 
 **None.** `many` is derived (paper/F\*); the run is a first-class `Run` value over
-the already-proved repetition; the value types (`B32`/`B64`) and the
+the already-proved repetition; the `B32`/`B64` spine and the
 rejection/canonical/converse families carry over; there is **no** facade — each
 base is its own `Codec`/`Run` value decoded/encoded by `Codec.decode`/`Codec.encode`.
