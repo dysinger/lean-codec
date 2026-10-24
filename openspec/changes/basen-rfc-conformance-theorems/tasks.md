@@ -68,7 +68,7 @@ Quot.sound]`).
       Per the **D7 correction** (settled this session), do **not** try to build a
       single `Codec B64`/`Codec B32` value (impossible: no repetition node in the
       `Codec` AST). The target shape is the **composition** — `decodeRepeat
-    b64BlockElem` (the full-block `Run`) then `decodeFull b64TailElem` (the
+  b64BlockElem` (the full-block `Run`) then `decodeFull b64TailElem` (the
       terminal tail), `iso`-ed to `B64` — and the roundtrip law is the inherited
       per-component laws **plus one named, scoped split-uniqueness lemma** (the
       committed block prefix is unique). That one lemma is the open substep (and
@@ -78,6 +78,33 @@ Quot.sound]`).
       `Codec.decodeFull` composition. Both (a)/(b) are `[propext, Quot.sound]`-provable
       but need careful `List.ofFn`/`Fin`-cast reasoning in the stdlib-only (no
       `convert`/`conv`/`nth_rewrite`) tactic environment.)_
+      _(**Session update (next session's starting state):** in `../lean-basen`
+      `BaseN/Base64.lean` this session landed the **length/size invariants** the
+      split-uniqueness lemma needs — `relB64Block_len`/`relB64Tail_len`
+      (`relRepeat (Rel {x}Elem) xs n s → n = 4·xs.length`) and
+      `Rel_b64TailElem_size` (a tail block value is 1–2 bytes) — all
+      `[propext, Quot.sound]`-only, zero `sorry`, build green
+      (`../lean-basen` `f8a3b30`). The roundtrip scaffolding also compiles
+      (verified): `encodeB64 bs = some ⟨n,s⟩` unfolds to
+      `encodeRepeat b64BlockElem blocks = some ⟨m₁, blkBytes⟩` +
+      `encodeB64Tail tail = some ⟨m₂, tailBytes⟩` with
+      `s = concat blkBytes tailBytes`; the flatten identity
+      `blocks.flatten ++ tail = bs` (via `b64Split_ofBytes_shape`+
+      `b64BytesOf_ofBytes`); and the committed block decode +
+      `decodeRepeat_prefix_concat` lift. **The open substesp — the
+      split-uniqueness lemma itself — still needs (in order):**
+      (1) `Rel_b64BlockElem_size` (a full block relates to exactly **3 bytes**,
+      i.e. `b64BlockApply` on 4 no-pad chars takes the 3-byte branch of
+      `b64BlockDecodeLenient`); (2) the pad-dichotomy rejection — a no-pad
+      4-char block decodes to 3 bytes so `Rel b64TailElem` (1–2 bytes) cannot
+      hold; (3) pin `t.remaining = m₂` (both ∈ {0,4} — via `encodeB64Tail_len`,
+      `relB64Tail_len` on `hxd`'s `decodeFull_some`, and the pad argument that
+      rules out the `|x| = |blocks|−1` case, where `4·|tx| = 4(|blocks|−|x|) + m₂`
+      forces a second `=` that does not exist); (4) `x = blocks` via
+      `b64BlockDecodeFull_unambiguous` on the extracted prefix; (5) the
+      `head?`/`filterMap` singleton step (all members `= bs` + non-emptiness);
+      (6) rewrite `decodeFullB64`/`decodeFullB32` off the `head?`/`filterMap`
+      shape per D7, then the **base32 mirror** (5 tail shapes, harder).)_
 
 ## 2. Facade: uniform `encode (b : Base)` / `decode (b : Base)`
 
