@@ -140,30 +140,21 @@ n = 4` (empty tail or one padded block) — `../lean-basen` `c0cf50d`.
       consumed-prefix half of the boundary-pin extraction).
       **Still open (in order):**
 
-      > **NEXT SESSION — work THIS entry, nothing else.** Task **1.4**, substep (2) ~~the
-      > boundary pin `t'.remaining = m₂`~~ **LANDED** (`../lean-basen` `fedbda9`,
-      > `b64_boundary_pin`, `[propext, Quot.sound]`-only); the next step is **substep (3):
-      > `blocks' = blocks`** (base64, `../lean-basen` `BaseN/Base64.lean`), then substep (4) the
-      > roundtrip assembly — both straight `rw` assemblies that close `decodeFullB64 (encodeB64 bs) =
-      > some bs`. The boundary pin's exact statement (for the caller): given `t' : Suffix (m₁+m₂)`,
-      > `h : t'.prepend s₀ = concat blkBytes tailBytes` (committed `blkBytes : Bytes m₁`,
-      > `tailBytes : Bytes m₂` from `encodeB64 bs`), `henc : relRepeat (Rel b64BlockElem) blocks m₁ blkBytes`,
-      > `hblock : relRepeat (Rel b64BlockElem) blocks' (m₁+m₂-t'.remaining) s₀`,
-      > `htail : relRepeat (Rel b64TailElem) tail'' t'.remaining t'.bytes`, `hm₂ : m₂ = 0 ∨ m₂ = 4`,
-      > and `hpad : m₂ ≠ 0 → ∃ i, (tailBytes i).toNat = 61`, it proves `t'.remaining = m₂` —
-      > `s₀` alphabet-only + `concat` `=`-in-`[m₁,m₁+m₂)` rules out stopping after `m₁`, and
-      > `relB64Tail_len` + `Rel_b64TailElem_has_pad` (the first decoded tail block would have to be an
-      > alphabet-only prefix of `t'.bytes` yet contain `=`) rules out stopping before `m₁`.
-      > Then substep (3): `blocks' = blocks` via
-      > `relB64Block_unambiguous` (`relRepeat_cast` + `prepend_concat_prefix_cast` +
-      > `encodeRepeat_rel`). Then substep (4): roundtrip assembly via
-      > `decodeRepeat_prefix_concat` + `decodeFull_b64Tail_suffix_nil/_cons` +
-      > `head?_eq_some_of_mem_eq`. After 1.4 (base64) is fully green, do the base32
-      > mirror (5) — needs the base32 lemma family
-      > (`relB32Block_len`/`relB32Tail_len`/`Rel_b32BlockElem_size`/
-      > `Rel_b32TailElem_has_pad`/`encodeB32Block_nopad`/`encodeB32Tail_len` — **none
-      > landed yet**). **Do NOT touch 1.1 (delete strict triples)** — it is blocked
-      > behind 1.4 → 2.1. The full substep list follows:
+      > **NEXT SESSION — work THIS entry, nothing else.** Task **1.4**, substeps ~~(2) the
+      > boundary pin~~ (LANDED `fedbda9`), ~~(3) `blocks' = blocks`~~ (LANDED `25c33cf`), and
+      > ~~(4) the roundtrip assembly~~ (LANDED `ca91716`) are all **done for base64** —
+      > `decodeFullB64 (encodeB64 bs) = some bs` is proved `[propext, Quot.sound]`-only, zero
+      > `sorry`, `lake build` green, pushed. The base64 half of task 1.4 is complete.
+      > The **next step** is the **base32 mirror** (substep 5): the whole-input roundtrip
+      > `decodeFullB32 (encodeB32 bs) = some bs` needs the base32 lemma family
+      > (`relB32Block_len`/`relB32Tail_len`/`Rel_b32BlockElem_size`/`Rel_b32TailElem_has_pad`/
+      > `encodeB32Block_nopad`/`encodeB32Tail_len` — **none landed yet**, unlike base64) plus the
+      > base32 boundary-pin + block-run-uniqueness + tail-pin analogues (5 tail shapes).
+      > Substep (6) — the D7 rewrite of `decodeFullB64`/`decodeFullB32` off the `head?`/`filterMap`
+      > shape — remains a *definition* change: the roundtrip **theorem** already closes over the
+      > current shape (the D7 rewrite is not required for the law, only for the "no `head?`
+      > superseded by direct composition" wording). **Do NOT touch 1.1 (delete strict triples)** —
+      > it stays blocked behind 1.4 → 2.1. The full substep list follows:
       >
       (1) ~~`prepend_concat_suffix`~~ **LANDED** (`../lean-basen`
       `29a620e`, `[propext, Quot.sound]`-only, build green) — the `t'.bytes = tailBytes` half,
@@ -176,10 +167,16 @@ n = 4` (empty tail or one padded block) — `../lean-basen` `c0cf50d`.
       `concat` `=`-in-`[m₁,m₁+m₂)`, `relB64Tail_len`, `encodeB64Tail_len`, and `Rel_b64TailElem_has_pad`
       for the `m₂=0` case, plus the private transport helpers `prepend_prefix_read`/
       `prepend_suffix_read`/`concat_tail_read`/`b64_first_tail_block_not_alphabet`/
-      `four_mul_lt_of_lt`); (3) `blocks' = blocks` via `relB64Block_unambiguous` (`relRepeat_cast` +
-      `prepend_concat_prefix_cast` + `encodeRepeat_rel`); (4) roundtrip assembly via
-      `decodeRepeat_prefix_concat` + `decodeFull_b64Tail_suffix_nil/_cons` + `head?_eq_some_of_mem_eq`;
-      (5) the base32 mirror (needs `relB32Block_len`/`relB32Tail_len`/`Rel_b32BlockElem_size`/
+      `four_mul_lt_of_lt`); (3) ~~`blocks' = blocks`~~ **LANDED** (`../lean-basen` `25c33cf`, `[propext, Quot.sound]`-only) —
+      `b64_block_run_of_boundary` via `relB64Block_unambiguous` (`relRepeat_cast` +
+      `prepend_concat_prefix_cast` + the `hrem : t'.remaining = m₂` boundary pin); (4) ~~roundtrip assembly~~ **LANDED** (`../lean-basen` `ca91716`, `[propext, Quot.sound]`-only,
+      zero `sorry`) — `decodeFullB64_roundtrip : decodeFullB64 (encodeB64 bs) = some bs`, via the
+      membership half `decodeFullB64_mem_encode` (`decodeRepeat_prefix_concat` +
+      `decodeFull_b64Tail_suffix_nil/_cons` + the flatten identity) and the singleton half
+      (`head?_eq_some_of_mem_eq` + boundary pin + `b64_block_run_of_boundary` + the tail pin
+      `tail'.flatten = tail`, whose cast bridge `cast (congrArg Bytes hbnd) t'.bytes = tailBytes`
+      uses `prepend_suffix_read`/`concat_tail_read`, and whose content pin uses
+      `decodeFull_b64Tail_of_encode` per `tail` case); (5) the base32 mirror (needs `relB32Block_len`/`relB32Tail_len`/`Rel_b32BlockElem_size`/
       `Rel_b32TailElem_has_pad`/`encodeB32Block_nopad`/`encodeB32Tail_len` — none landed yet, unlike base64).)_
 
 ## 2. Facade: uniform `encode (b : Base)` / `decode (b : Base)`
