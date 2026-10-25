@@ -251,52 +251,59 @@ n = 4` (empty tail or one padded block) — `../lean-basen` `c0cf50d`.
       with terminal, RFC-arity-correct `=`. Uses the key helper `b32TailApply_block`
       (`b32TailApply a = some ys → b32BlockApply a = some ys`). `List.ofFn (concat s₀ s₁) =
 List.ofFn s₀ ++ List.ofFn s₁` from `Codec.ofFn_concat`.)_
-- [ ] 4.3 Per base: `decode … = some v → encode v = some ⟨n, s⟩` (converse).
-      _(**NEXT SESSION — the padded bases only (fixed-width 4.3/4.4 already done via
-      `decode_encode_inverse`/`encode_injective` in Base2/4/8/10/16).** The converse for base32/64 is
-      `decodeFullB64 s = some v → encodeB64 v = some ⟨n,s⟩` (and the B32 mirror).
+- [x] 4.3 Per base: `decode … = some v → encode v = some ⟨n, s⟩` (converse).
+      _(**DONE (`../lean-basen` `9babcab`/`6d7ba52`), `[propext, Quot.sound]`-only, zero `sorry`.** The
+      padded bases are `decodeFullB64_conv` (`decodeFullB64 s = some v → encodeB64 v = some ⟨n, s⟩`) and its
+      `decodeFullB32_conv` mirror; the fixed-width bases already had `decode_encode_inverse` (Base2/4/8/10/16).
+      The proof shape: `decodeFullB64_some` decomposes into `blocks`/`t`/`tails` (`tails.length ≤ 1`), the block
+      run re-encodes via `encodeRepeat_of_rel b64BlockElem b64BlockElem_functional`, the tail via the new
+      `encodeB64Tail_of_rel` (functionality of `b64TailElem` pins the bytes), and `concat s₀ t.bytes` reassembles
+      to `s` via the `t.prepend s₀ = s` transport (`prepend_prefix_read`/`splice_apply`). Supporting lemmas:
+      `relB64Block_all_size3` (every block is 3 bytes), `b64Split_blocks_tail` (split-back), `encodeB64Tail_of_rel`;
+      the base32 mirror is `relB32Block_all_size3` (5 bytes), `b32Split_blocks_tail` (≤ 4-byte tail),
+      `encodeB32Tail_of_rel`. The `Zg==Zg==`/`MY======MY======` class is rejected by the D8 `≤ 1` guard, so the
+      converse holds unconditionally. **Note:** the `- (Suffix.empty t.remaining).remaining` length in the
+      `decodeRepeat_spec` tail witness leaked `Classical.choice` via `simp at` on a list-length contradiction —
+      replaced with explicit `simp only [List.length_cons] … ; omega` (the `nat_lt_four`-style discipline).)_
 
-      **D8 is LANDED (`../lean-basen` `c0c55cd`).** The decoder fix is the `tail.length ≤ 1` **guard** on
-      the existing `decodeFull b64TailElem`/`decodeFull b32TailElem` (NOT the single-element `decode`
-      re-shape: the guard keeps `tails : List (List UInt8)`, so the roundtrip/rejection proofs stay put and
-      only thread one extra `tails.length ≤ 1` conjunct). This rejects the `"Zg==Zg=="`/`"MY======MY======"`
-      class (data after terminal `=` that IS a valid padded block), so the converse is now **true** over every
-      successful decode.
-
-      **Remaining proof shape for 4.3:** `decodeFullB64_some` now yields `blocks`, `t`, `tails` with
-      `tails.length ≤ 1`, `decodeFull b64TailElem t.bytes = some tails`, and `v = blocks.flatten ++ tails.flatten`.
-      Since `tails = []` or `[x]` (the `≤ 1` bound), `b64Split_ofBytes (b64OfBytes v) = (blocks, tails.flatten)`
-      (each block is 3 bytes by `Rel_b64BlockElem_size`, each tail 1–2 bytes by `Rel_b64TailElem_size`). Then
-      re-encode via `encodeRepeat_of_rel b64BlockElem b64BlockElem_functional` (block side) and, for the tail,
-      `(bidir b64TailElem x t.remaining t.bytes).2` + `encode_of_decode b64TailElem b64TailElem_functional`
-      (single-element tail, giving `encodeB64Tail x = Codec.encode b64TailElem x`), and assemble
-      `encodeB64 v = some ⟨n, s⟩` from `s = t.prepend s₀` + `t.bytes`. The two fiddly sub-steps are:
-      (1) `b64Split_blocks_tail` (a run of 3-byte blocks + a ≤2-byte tail splits back exactly);
-      (2) bridging the single decoded tail block `sx` to `t.bytes` (a `relRepeat_cons`/`splice` boundary).
-      The roundtrip (`decodeFullB64_roundtrip`) gives the other direction, so 4.3 closes the partial-iso loop.)_
-
-- [ ] 4.4 Per base: `encode v = encode v' → v = v'` (injectivity).
-      _(**NEXT SESSION — padded bases only.** `encodeB64 v = some ⟨n,s⟩ → encodeB64 v' = some ⟨n,s⟩ → v = v'`.
-      Both decompose (via `encodeB64_canonical`/`encodeB32_canonical`, landed 4.2) into alphabet-only full blocks
-  - a single padded tail; the shared `s` pins the block/tail boundary via `b64_boundary_pin`/`b32_boundary_pin`
-    (already landed in task 1.4), then `relB64Block_unambiguous`/`relB64Tail_unambiguous` (and the B32 mirrors)
-    pin `blocks = blocks'` and `tail = tail'`, so `v = blocks.flatten ++ tail = v'` via
-    `b64Split_ofBytes_shape` + `b64BytesOf_ofBytes`. The boundary pin is stated over `Bytes`; bridge the 4.2
-    `List.ofFn` decomposition via `Codec.ofFn_concat` + `List.getElem_ofFn` (the 4.2 proof pattern). All existing
-    helpers — `b64_boundary_pin`, `b64_block_run_of_boundary`, `encodeB64Block_nopad`, `encodeB64Tail_has_pad`,
-    `encodeB64Tail_len`, `relB64Block_unambiguous`, `relB64Tail_unambiguous` — are in place; no new subsurstence
-    lemmas expected.)_
+- [x] 4.4 Per base: `encode v = encode v' → v = v'` (injectivity).
+      _(**DONE (`../lean-basen` `9babcab`/`6d7ba52`), `[propext, Quot.sound]`-only, zero `sorry`.** The padded
+      bases: `encodeB64_injective`/`encodeB32_injective`. The clean proof avoids the boundary-pin/unambiguity
+      machinery entirely: both `v` and `v'` encode to the same `⟨n, s⟩`, so `decodeFullB64_roundtrip` gives
+      `decodeFullB64 s = some v` and `= some v'`, whence `Option.some.inj` yields `v = v'` (decode is the left
+      inverse, encode a partial bijection). The fixed-width bases already had `encode_injective` (via
+      `relHex_/_relB64…_unambiguous`).)_
 
 ## 5. Bench lane + gate
 
-- [ ] 5.1 `Bench.lean`: rewire to the uniform surface — roundtrip `example`s,
+- [x] 5.1 `Bench.lean`: rewire to the uniform surface — roundtrip `example`s,
       canonical vectors (`Zg==`/`Zm8=`/`Zm9v`, `MY======`/`MZXW6YTB`), rejection
       `example`s (`Zg==AAAA`/`MY======AAAAAAAA`), converse + overflow vectors, all
       through `Codec.decodeFull`/`Codec.encode` (and `decodeFullB64`/`decodeFullB32`),
       never a bespoke fn and never a facade.
-- [ ] 5.2 `lake build` and `lake build bench` green, zero `sorry`/warnings;
+      _(**DONE (`../lean-basen` `44c0edf`).** The bench deleted every reference to the removed
+      `decodeB64Strict`/`encodeB64Strict`/`decodeB32Strict`/`encodeB32Strict` triples. Every vector now names a
+      base's own value: the block vectors (`b64BlockUnapply`/`b32BlockUnapply`), the fixed-width roundtrips
+      (`Base{X}.roundtrip`), the padded roundtrips (`decodeFullB64_roundtrip`/`decodeFullB32_roundtrip`), the
+      canonical-decomposition laws (`encodeB64_canonical`/`encodeB32_canonical`), the rejection flagships
+      (`decodeFullB64_reject_ZgAAAA`/`decodeFullB32_reject_MYAAAA`), the converse
+      (`decodeFullB64_conv`/`decodeFullB32_conv`), injectivity
+      (`encodeB64_injective`/`encodeB32_injective`/`Base16.encode_injective`), the fixed-width converse
+      (`Base16.decode_encode_inverse`), and the overflow vectors (`Base8.rejects_overflow`/
+      `Base10.rejects_overflow`). Base16 lowercase is recorded as the non-goal (`rejects_lowercase`).
+      `lake build bench` green, zero warnings.)_
+- [x] 5.2 `lake build` and `lake build bench` green, zero `sorry`/warnings;
       `#print axioms` = `[propext, Quot.sound]` (or `[propext]`) for the new laws;
       `nix flake check` green (checks.lean + checks.formatting).
-- [ ] 5.3 Commit + push; update `openspec/changes/lean-basen/` (its §4.1 "no
+      _(**DONE.** `lake build` (18 jobs) and `lake build bench` (43 jobs) green, zero `sorry`/warnings.
+      `#print axioms` = `[propext, Quot.sound]` for every new law (`decodeFullB64_conv`/`encodeB64_injective`/
+      `decodeFullB32_conv`/`encodeB32_injective`/`encodeB64_canonical`/`encodeB32_canonical`/the roundtrips/
+      the rejection flagships) and every per-base `roundtrip`. `nix flake check` green: both
+      `checks.aarch64-darwin.lean` and `checks.aarch64-darwin.formatting` ✅.)_
+- [x] 5.3 Commit + push; update `openspec/changes/lean-basen/` (its §4.1 "no
       roundtrip dispatch" note → "each base is its own `Codec` value decoded/encoded
       by `Codec.decode`/`Codec.encode`; no facade").
+      _(**DONE.** `../lean-basen` §4.1 entry rewritten to "each base is its own `Codec` value decoded/encoded
+      by `Codec.decode`/`Codec.encode`; no facade, no `Base` inductive, no dispatcher", and
+      `openspec validate lean-basen` is green. Commits pushed: `../lean-basen` `9babcab` (base64 converse +
+      injectivity), `6d7ba52` (base32 mirror + warning fixes), `44c0edf` (bench rewire).)_
