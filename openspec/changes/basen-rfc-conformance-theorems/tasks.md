@@ -32,7 +32,7 @@ Quot.sound]`).
 
 ## 1. The uniform `Codec`-value bases (the `Run`/`many` repetition is a wrapper, not a base), deleting the run triples
 
-- [ ] 1.1 Delete the base32/64 bespoke run triples: `parseB64`/`encodeB64Strict`/
+- [x] 1.1 Delete the base32/64 bespoke run triples: `parseB64`/`encodeB64Strict`/
       `relB64Strict`/`decodeB64Strict` (and the base32 analogues), their per-format
       lemmas, **and the `decodeBytes`/`encodeBytes`/`roundtripBytes` shims**, plus
       the `BaseN.Bridge` module (facade-only). Keep the terminal-tail `B32`/`B64`
@@ -210,14 +210,27 @@ n = 4` (empty tail or one padded block) — `../lean-basen` `c0cf50d`.
       inequation: the full-block run stops at the first `=`, the leftover
       alphabet-only bytes cannot decode as a `b64TailElem`), plus invalid-char,
       pad-first, bad-length, and pad-shape vectors — all over the uniform decoder.
+      _(In progress: the **flagship** `decodeFullB64_reject_ZgAAAA : decodeFullB64
+    zgAAAA = none` is **proved** (`../lean-basen`, uncommitted), together with
+      the characterization lemma `decodeFullB64_some` (`[propext, Quot.sound]`)
+      and the `BaseN.Common.decodeRepeat_nil_mem_eq_id` helper (`[propext,
+    Quot.sound]`, gives `t = Suffix.id n s₀` for the empty-blocks result).
+      **The remaining sub-issue (open):** `#print axioms decodeFullB64_reject_ZgAAAA`
+      currently reports `[propext, Classical.choice, Quot.sound]` — a `Classical.choice`
+      leaks from an `omega`/`decide`-synthesized `Decidable` somewhere in the
+      `hblock_stop`/`hall` byte-extraction (the `Fin`/`List` instance search, not any
+      named lemma — every direct dependency was verified `[propext, Quot.sound]`-clean).
+      It must be tightened to `[propext, Quot.sound]` before 3.1 is done. The five
+      additional invalid-char/pad-first/bad-length/pad-shape vectors are also still
+      open, and use the same `decodeFullB64_some` contrapositive.)_
 - [ ] 3.2 Base32: `decodeFullB32 … "MY======AAAAAAAA" = none` and the same family.
-- [ ] 3.3 Fixed-width bases: the F\* rejection family per base (base16 non-hex +
+- [x] 3.3 Fixed-width bases: the F\* rejection family per base (base16 non-hex +
       lowercase + odd arity; base2/4/8/10 invalid alphabet + wrong arity +
       base8/10 overflow).
 
 ## 4. Canonical + converse + injectivity
 
-- [ ] 4.1 Fixed-width bases: `encode{X}` alphabet-only.
+- [x] 4.1 Fixed-width bases: `encode{X}` alphabet-only.
 - [ ] 4.2 Base32/64: `encode` alphabet-or-pad, pad exactly the terminal tail's RFC
       arity, `=` never precedes non-`=`.
 - [ ] 4.3 Per base: `decode … = some v → encode v = some ⟨n, s⟩` (converse).
