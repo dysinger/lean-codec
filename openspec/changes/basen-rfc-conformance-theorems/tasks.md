@@ -266,7 +266,7 @@ List.ofFn s₀ ++ List.ofFn s₁` from `Codec.ofFn_concat`.)_
       `decodeRepeat_spec` tail witness leaked `Classical.choice` via `simp at` on a list-length contradiction —
       replaced with explicit `simp only [List.length_cons] … ; omega` (the `nat_lt_four`-style discipline).)_
 
-- [x] 4.4 Per base: `encode v = encode v' → v = v'` (injectivity).
+- [ ] 4.4 Per base: `encode v = encode v' → v = v'` (injectivity). **REOPENED by review (C2).**
       _(**DONE (`../lean-basen` `9babcab`/`6d7ba52`), `[propext, Quot.sound]`-only, zero `sorry`.** The padded
       bases: `encodeB64_injective`/`encodeB32_injective`. The clean proof avoids the boundary-pin/unambiguity
       machinery entirely: both `v` and `v'` encode to the same `⟨n, s⟩`, so `decodeFullB64_roundtrip` gives
@@ -276,7 +276,7 @@ List.ofFn s₀ ++ List.ofFn s₁` from `Codec.ofFn_concat`.)_
 
 ## 5. Bench lane + gate
 
-- [x] 5.1 `Bench.lean`: rewire to the uniform surface — roundtrip `example`s,
+- [ ] 5.1 `Bench.lean`: rewire to the uniform surface **REOPENED by review (C1).** — roundtrip `example`s,
       canonical vectors (`Zg==`/`Zm8=`/`Zm9v`, `MY======`/`MZXW6YTB`), rejection
       `example`s (`Zg==AAAA`/`MY======AAAAAAAA`), converse + overflow vectors, all
       through `Codec.decodeFull`/`Codec.encode` (and `decodeFullB64`/`decodeFullB32`),
@@ -307,3 +307,138 @@ List.ofFn s₀ ++ List.ofFn s₁` from `Codec.ofFn_concat`.)_
       by `Codec.decode`/`Codec.encode`; no facade, no `Base` inductive, no dispatcher", and
       `openspec validate lean-basen` is green. Commits pushed: `../lean-basen` `9babcab` (base64 converse +
       injectivity), `6d7ba52` (base32 mirror + warning fixes), `44c0edf` (bench rewire).)_
+
+## 6. Post-review hardening (independent hyper-critical review, `../lean-basen/REVIEW-basen-rfc-conformance.md`)
+
+> **Context.** An independent adversarial review of commits `9babcab`/`6d7ba52`/`44c0edf`
+> found **zero axiom leaks** (every new law verified `[propext, Quot.sound]`-only, two
+> `[propext]`-only, no `sorry`/`Classical.choice`/`native_decide`/`by_contra`) and **no
+> unsound proof** — the proofs are valid _for the statements they state_. The failures are
+> in **statement fidelity and honesty**: three CRITICAL (bench tautology, injectivity weaker
+> than the spec, synced main spec still asserting the withdrawn "unrepresentable"/"no
+> per-format function" claims), four HIGH (D7 header lies about `head?`/`filterMap`; a
+> self-labelled-non-goal bench vector; `relB32Block_all_size3` proves length 5; duplicated
+> Common-eligible helpers), and the MEDIUM finding that "unique canonical inverse"/"total
+> characterization" (the proposal's headline) is _not_ proved — only converse + injectivity +
+> named rejection vectors. These tasks close the review. Nothing here is a soundness bug.
+
+- [ ] 6.1 **Bench canonical vectors are tautologies (CRITICAL C1).** The two canonical
+      `example`s in `Bench.lean` unpack `encodeB64_canonical`'s ∃-hypothesis and repack only
+      conjuncts 1–3, **dropping conjuncts 4–5** (alphabet-only + exact pad-arity) — the only
+      RFC content. No `example` anywhere asserts the _actual_ encoder output
+      (`encodeB64 foobar = some ⟨8, "Zm9vYmFy"⟩`); the only concrete base32/64 strings are
+      block-level `b64BlockUnapply`/`b32BlockUnapply` `rfl` checks, which never exercise
+      `encodeB64`/`encodeB32`. So a buggy whole-input encoder would still pass. **Fix:** add
+      concrete whole-input value asserts per vector (`f/fo/foo/foob/fooba/foobar` →
+      `Zg==`/`Zm8=`/`Zm9v`/`Zm9vYg==`/`Zm9vYmE=`/`Zm9vYmFy`; base32 → `MY======`/…/`MZXW6YTB`)
+      as `example : encodeB64 v = some ⟨k, <literal Bytes k>⟩` (prove by `rfl`/`decide`, or a
+      `List.ofFn` equality); delete the ∃-repackings. **Acceptance:** a deliberately-wrong
+      encoder (lowercase, or wrong pad count) must fail the bench.
+
+- [ ] 6.2 **Injectivity stated weaker than the spec (CRITICAL C2).** Spec
+      (`specs/basen/spec.md`, Scenario "Encoding is injective"): `encode v = encode v' → v = v'`
+      (Option equality). `encodeB64_injective`/`encodeB32_injective` and the five fixed-width
+      `encode_injective` all assume **both** sides `= some ⟨n,s⟩`, so they miss the
+      `none = none` branch and silently rely on an unproved totality fact (no `encode…_ne_none`
+      exists). **Fix:** prove `encode{X}_ne_none`/`isSome` (totality — it _is_ total, per
+      `#eval`) and restate injectivity as the spec's `Option`-equality form; **or** if keeping
+      the both-succeed form, amend the spec Scenario to say so explicitly _and_ state the
+      totality lemma beside it. Do not leave the spec sentence mismatched.
+
+- [ ] 6.3 **"Unique canonical inverse" / total characterization is not proved (MEDIUM M3).**
+      The requirement is titled "Decode is the unique canonical inverse"; the delivered laws
+      are roundtrip + converse + injectivity (three separate statements). They yield "unique"
+      only with `decode s = some v ↔ ∃ v', encode v' = some ⟨n, s⟩` (decode succeeds _iff_ `s`
+      is in `encode`'s image), which is **not** stated. **Fix:** add
+      `decodeFullB64_char : decodeFullB64 s = some v ↔ ∃ v', encodeB64 v' = some ⟨n, s⟩ ∧ v = v'`
+      (and the B32 mirror), `[propext, Quot.sound]`-only. This is what the proposal's
+      "decode succeeds exactly on the RFC-valid inputs" actually means, and it subsumes 6.4.
+
+- [ ] 6.4 **Rejection is a finite vector set, not the general law (MEDIUM M4).** The rejection
+      theorems are named instances (`reject_ZgAAAA`, `reject_MYAAAA`, `reject_invalid_char`,
+      `reject_pad_first`, `reject_bad_length`, `reject_overflow`). The proposal promises the
+      _general_ statement. **Fix:** prove, for **all** `s`: (a) any byte `b64Valid = false` ⇒
+      `decodeFullB64 s = none` (generalize `reject_first_invalid` from index 0 to all indices);
+      (b) a `=` at a non-terminal position ⇒ `none` (cover the `Zg==Zg==`/`MY======MY======`
+      class explicitly — currently only implicit in the D8 `≤ 1` guard, no theorem states it);
+      (c) `n % 4 ≠ 0` ⇒ `none` (and `n % 8 ≠ 0` for base32). Mirror; all `[propext, Quot.sound]`.
+
+- [ ] 6.5 **Design D7 header is false (HIGH H1).** `design.md:237` says the padded decoder is
+      "**not** `head?`/`filterMap`", and `:276` "This removes the flattened `List UInt8`/`head?`/
+      `filterMap` step" — but `Base64.lean:866`/`Base32.lean:1009` **are** exactly
+      `List.head? ((decodeRepeat …).filterMap …)`. **Fix:** either perform the D7 rewrite
+      (drop `head?`/`filterMap`; use the direct `Run.decodeFull` ▸ tail composition) or rewrite
+      D7's header/body to state the shape is retained and guarded by the D8 `≤ 1` bound. The
+      honest note currently buried in a task parenthetical must move into D7 itself.
+
+- [ ] 6.6 **Synced main spec still asserts withdrawn claims (CRITICAL C3).**
+      `../lean-codec/openspec/specs/basen/spec.md:24-31` still says the padded bases are composed
+      "so illegal 'data after `=`' is **unrepresentable**" (the proposal explicitly **withdraws**
+      this: "the earlier … 'unrepresentable' … claims were false … withdrawn") and still says
+      "**no bespoke `encode`/`decode`"** (the code has `decodeFullB64`/`encodeB64`/
+      `decodeFullB32`/`encodeB32`). **Fix (see 6.11 for the archive hazard):** edit the synced
+      requirement to drop "unrepresentable" and to qualify "no bespoke per-format function" as
+      "no per-format _decoder triple_; the whole-input base32/64 composition is exposed as
+      `decodeFullB{32,64}`/`encodeB{32,64}`" — or make those `abbrev`s and document them as the
+      composition D7/D8 promise.
+
+- [ ] 6.7 **`relB32Block_all_size3` proves length 5 (HIGH H3).** `relB64Block_all_size3` proves
+      `b.length = 3`, the base32 twin proves `b.length = 5` — same name, different content.
+      **Fix:** rename to `relB64Block_len3`/`relB32Block_len5` (or `…_all_len` with a comment).
+
+- [ ] 6.8 **Duplicated Common-eligible helpers (HIGH H4 / tech-debt).** Three lemma pairs are
+      structurally identical and re-derived per base: `relB{64,32}Block_all_size3` (same
+      induction), `b{64,32}Split_blocks_tail` (same split-back, differing only in block size
+      3/5 and tail bound 2/4), `encodeB{64,32}Tail_of_rel` (same functionality-pins-bytes shape).
+      `../lean-basen/AGENTS.md` requires reusing `BaseN.Common`. **Fix:** hoist a generic
+      `relRepeat_all_len {elem} {len} (h : ∀ x {m} s, Rel elem x s → x.length = len)`, a
+      size-parameterized `split_blocks_tail (k : Nat)` over the per-base `split`'s defining
+      equations, and a `encodeTail_of_rel` parameterized by the tail element; or at minimum add a
+      docstring per base documenting the mirror and why the `split`/tail-shape stays per-base.
+
+- [ ] 6.9 **Axiom gate is manual, not automated (MEDIUM M1).** `[propext, Quot.sound]`-only was
+      verified by hand this session (and a `Classical.choice` leak was already caught once — see
+      the 4.3 note). AGENTS' "`#print axioms Codec.roundtrip` is the check" is not what runs here.
+      **Fix:** add an `Axioms.lean` (or a `#print axioms` block wired into `lake build`) covering
+      **every** new law for all seven bases, so a future `simp`/`omega` regression that picks up
+      `Classical.choice` fails the build.
+
+- [ ] 6.10 **`rejects_lowercase` is a passing vector labelled a non-goal (HIGH H2 / LOW L6, N2).**
+      `Bench.lean:181` is a **passing** `example` whose own comment says "not a passing vector",
+      contradicting `proposal.md` ("recorded as a non-goal, **not** a passing vector"); and its
+      comment says "lowercase `6f`" while the byte is `0x66` (`'f'`) and the theorem is arity-1.
+      This positively enshrines an RFC §8 divergence ("a decoder MUST accept both cases") that no
+      spec mentions. **Fix:** either delete the `example` and record the §8 divergence as an
+      explicit spec non-goal requirement, or keep it and add the spec requirement + fix the
+      comment; also add the interesting vector (`decodeFull … 2 "6f" = none`) if the two-char
+      lowercase form is meant.
+
+- [ ] 6.11 **Archive hazard: overlapping MODIFIED block (openspec integrity, E).** The
+      `lean-basen` change **MODIFIES** "The `basen` bases are `Codec` values" and so would the
+      6.6 fix — the AGENTS-documented "two changes each MODIFY the same requirement ⇒ archive
+      silently drops one version" trap. **Fix:** apply the 6.6 edit to the **synced** spec once
+      (coordinate the two changes / archive `lean-basen` first), and re-run
+      `openspec validate basen-rfc-conformance-theorems` + `openspec validate lean-basen` before
+      archiving; carry every existing scenario in the MODIFIED block.
+
+- [ ] 6.12 **Proof-quality cleanups (LOW L1/L2, NIT).** (a) `encodeB64Tail_of_rel`'s 4-branch
+      `rcases x with _ | ⟨a,t⟩; cases t with …` cascade is overkill — `hxlen : x.length = 1 ∨
+    x.length = 2` is already in scope; replace with a 3-line length-dichotomy (`match x, hxlen`
+      or `cases x <;> cases hxlen <;> first | rfl | omega`). (b) `dsimp only []` is a no-op —
+      remove. (c) `simp only [Suffix.empty, Nat.sub_zero] at st hrelt` + `subst hst_eq` are brittle
+      — prefer `cases`/explicit `cast (Nat.sub_zero …)` and a comment that the `- 0` index is what
+      is being normalised. (d) `encodeB64_injective`'s docstring "partial bijection" overstates —
+      it proves injectivity only (totality unproved, see 6.2).
+
+## 7. Follow-on change (out of scope for `basen-rfc-conformance-theorems`)
+
+> Recorded so the scope split is explicit; create as its own change
+> (`basen-rfc-total-characterization`) rather than absorbing into this one.
+
+- [ ] 7.1 The general "decode succeeds iff `s ∈ image encode`" iff for all seven bases (the full
+      consequence of 6.3 + 6.4; may simply be the 6.3 law promoted per base).
+- [ ] 7.2 Either legitimately prove a type-level `B64`/`B32` that cannot represent trailing data
+      (currently `B64`/`B32` is a bijective relabeling of `List UInt8`, so "unrepresentable" is
+      false by construction), or keep the withdrawal and update the main spec (6.6).
+- [ ] 7.3 Base16 case-insensitive decoder (RFC §8 "MUST accept both cases") — currently a non-goal;
+      if pursued it breaks `Unambiguous` (per design) and needs a documented relaxation.
