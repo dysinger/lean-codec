@@ -1,13 +1,59 @@
-# Next session — `basen-rfc-conformance-theorems` (re-anchored to the uniform surface)
+# Next session — `basen-rfc-conformance-theorems`
 
-Status at handoff: **4 / 19 tasks done (0.1, 0.2, 1.2, 1.3)**, plus a **facade-first
-milestone** landed (uniform `encode`/`decode` over `List UInt8`), plus the
-**content-extraction primitive** (this session, `../lean-basen` `2303421`). The
-whole-input **roundtrip** (task 1.4) and the bespoke-triple **deletion** (task 1.1)
-remain, and are tightly coupled: 1.1 cannot land until 1.4 gives the facade a
-Codec-value roundtrip to dispatch to (the facade currently calls
-`encodeBytes`/`decodeBytes`, which wrap the strict `encodeB64Strict`/`decodeB64Strict`).
-Committed in `../lean-basen`; see §"Landed this session".
+**Status at handoff: 25 / 31 tasks done. `openspec validate` green.**
+`../lean-basen` `HEAD` = `73f2583`; `../lean-codec` = `8cb0d5b`. Both pushed.
+
+## START HERE — implement task 6.4
+
+The rejection theorems are a **finite vector set**, not the general law the
+proposal promises. Prove, for **all** `s` (then mirror for base32):
+
+- **(a)** any byte `b` with `b64Valid b.toNat = false` ⇒ `decodeFullB64 s = none`
+  (generalise `reject_invalid_char` — it is index-0 only — to **every** index);
+- **(b)** a `=` at a **non-terminal** position ⇒ `none` (the `Zg==Zg==` /
+  `MY======MY======` class — currently only implicit in the D8 `≤ 1` guard; no
+  theorem states it);
+- **(c)** `n % 4 ≠ 0` ⇒ `none` (base32: `n % 8 ≠ 0`). **Only genuinely hard
+  one** — needs the arity argument lifted off the named vectors.
+
+Every law `[propext, Quot.sound]`-only, gated in `Axioms.lean`, bench-covered.
+Work in `../lean-basen`, in that repo's own `nix develop`.
+
+Starting points that exist and are confirmed present in `BaseN/Base64.lean`:
+`decodeFullB64_some` (decomposes into blocks + a `≤ 1`-element tail),
+`Rel_b64BlockElem_len` (4 bytes/block), `relB64Tail_len` (4 bytes/tail), the D8
+`tails.length ≤ 1` guard inside `decodeFullB64_reject_ZgAAAA`, and
+`b64BlockDecodeLenient`'s pad-rejection arms. For (c): `b64Split`'s block run
+consumes `4 · blocks.length` and the tail `0` or `4`, so `n` must be `4·k`.
+
+**Then** `tasks.md` § "6.5 — Remaining order": **6.11 _then_ 6.6** (6.11 first —
+both MODIFY the same requirement block and archive silently keeps one version).
+Section 7 is a separate change, out of scope.
+
+## Landed last session (6.2 + 6.3, and 4.4 with them)
+
+- **6.2 (CRITICAL C2)** — the spec's injectivity Scenario is
+  `encode{X} v = encode{X} v' → v = v'`; the shipped theorems assumed both sides
+  `= some ⟨n,s⟩`. Fixed by **proving totality and restating**, never by weakening
+  the spec. Seven `…_injective_eq` laws; totality layer is
+  `Common.encode_satisfy_ne_none` / `encode_seq_ne_none` /
+  `count_satisfy_encode_ne_none` plus `{x}BlockUnapply_digits` /
+  `b{64,32}BlockUnapply_len{3,5}` / `b{64,32}TailUnapply_len{12,14}` /
+  `b{64,32}Split_ofBytes_shape_bounds` / `encodeB{64,32}_ne_none`.
+- **6.3 (MEDIUM M3)** — `decodeFullB{64,32}_char`:
+  `decode s = some v ↔ ∃ w, encode w = some ⟨n,s⟩ ∧ v = w`. Pure assembly over
+  `decodeFullB*_conv` (→) and `decodeFullB*_roundtrip` (←).
+
+**Gotcha worth knowing before you start 6.4** (now in the `lean` skill): a
+_dependent_ `cases`/`match` on a list whose **equation** is in context
+(`bs.length = 1 ∨ bs.length = 2`, `ds.length = k`) leaks `Classical.choice` even
+when every cited lemma is `[propext]`-clean. Restate the hypothesis numerically
+(`1 ≤ bs.length`, `bs.length ≤ 2`) or derive the index from the term. Bisect by
+shrinking the body to `⟨_, rfl⟩`: if it still leaks, it is the match.
+
+---
+
+# Historical: earlier sessions
 
 ## This session (2026-10-24): precision/coherence pass — no task-code changes
 

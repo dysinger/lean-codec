@@ -56,63 +56,99 @@ reminder that the toolchain is _flake-scoped_, not host-global.)
   with a layman "why"):** `README.md`.
 - **Engineering state & task ledger (spec-driven):** `openspec/`. Every change
   lives under `openspec/changes/` as proposal / spec delta / design / tasks. The
-  **`basen-rfc-conformance-theorems` is the ACTIVE change — 22/31 tasks done,
-  state `ready` (reopened by adversarial review).** Do **not** archive it.
+  **`basen-rfc-conformance-theorems` is the ACTIVE change — 25/31 tasks done,
+  `openspec validate` green.** Do **not** archive it.
 
   ### NEXT SESSION — start here, nothing else
 
-  **Implement task 6.2.** Its plan is written out in full at the bottom of
-  `openspec/changes/basen-rfc-conformance-theorems/tasks.md` (section
-  "6.2 — implementation plan (settled; execute in the next session)"). The
-  decision is already made: **prove totality and restate injectivity as the
-  spec's `Option`-equality law** — do not re-open that choice, and do not weaken
-  the spec instead. Work in `../lean-basen`, in that repo's own `nix develop`.
+  **Implement task 6.4** (MEDIUM M4 — the last substantive §6 item that is not a
+  spec-edit or a process item). Its finding, verbatim from `tasks.md`: the
+  rejection theorems are a **finite vector set**, not the general law the
+  proposal promises. Prove, for **all** `s`:
 
-  After 6.2, work the tracked queue in `tasks.md` § "6.5 — Remaining order after
-  6.2": **6.3 → 6.4 → 6.11 _then_ 6.6 → 4.4 (closes itself)**. 6.11 must precede
-  6.6 — both changes MODIFY the same requirement block and archive silently
-  keeps one version. Section 7 is a separate change, out of scope.
+  - **(a)** any byte `b` with `b64Valid b.toNat = false` ⇒ `decodeFullB64 s = none`
+    (generalise the existing `reject_invalid_char`, which is index-0 only, to
+    **every** index);
+  - **(b)** a `=` at a **non-terminal** position ⇒ `none` (the `Zg==Zg==` /
+    `MY======MY======` class — currently only implicit in the D8 `≤ 1` guard,
+    no theorem states it);
+  - **(c)** `n % 4 ≠ 0` ⇒ `none` (and `n % 8 ≠ 0` for base32). **This is the
+    only genuinely hard one** — it needs the arity argument lifted off the named
+    vectors rather than case-split per example.
+
+  Mirror all three for base32; every law `[propext, Quot.sound]`-only, gated in
+  `Axioms.lean`, and given a bench vector. Work in `../lean-basen`, in that
+  repo's own `nix develop`.
+
+  Useful starting points in `../lean-basen`: `decodeFullB64_some` (the
+  decompose-into-blocks-plus-≤1-tail witness), `Rel_b64BlockElem_len` (blocks
+  are 4 bytes), `relB64Tail_len` (tail is 4 bytes), the D8 `tails.length ≤ 1`
+  guard in `decodeFullB64_reject_ZgAAAA`, and `b64BlockDecodeLenient`'s
+  pad-rejection arms. For (c), the arity argument is: `b64Split`'s block run
+  consumes `4 · blocks.length` and the tail `0` or `4`, so `n` must be `4·k`.
+
+  **Then** the tracked queue in `tasks.md` § "6.5 — Remaining order": after 6.4,
+  **6.11 _then_ 6.6**. 6.11 must precede 6.6 — both changes MODIFY the same
+  requirement block and archive silently keeps one version. Section 7 is a
+  separate change, out of scope.
 
   Read `../lean-basen/REVIEW-basen-rfc-conformance.md` for the severity-tagged
   evidence behind every §6 task.
 
   ### State as of this session (verified, pushed)
 
-  `../lean-basen` `HEAD` = `f5e65fa`; `../lean-codec` = `249d636`. Landed and
-  green: **6.1** (bench asserts the real encoder output for all 11 RFC vectors;
-  mutation-tested), **6.5** (design D7 corrected — it said the
-  `head?`/`filterMap` shape was _removed_; it is retained), **6.7**
-  (`relB{64,32}Block_all_size3` → `_len3`/`_len5`), **6.8** (generic
-  `Common.relRepeat_block_len` hoisted; the two genuinely non-generic pairs
-  documented with why), **6.9** (`Axioms.lean` — 37 `#guard_msgs` gates wired
-  into `lake build`, verified to fail on both a wrong expectation and a real
-  axiom change), **6.10** + **6.12** (honest docstrings; base16 RFC §8
-  divergence stated as a divergence, `0x66` is `'f'` not `"6f"`).
+  `../lean-basen` `HEAD` = `73f2583`; `../lean-codec` = `8cb0d5b`.
+  **This session landed 6.2 and 6.3** (plus 4.4, which was the same theorem as
+  6.2):
+
+  - **6.2 (CRITICAL C2) — injectivity now _is_ the spec's law.** The spec
+    Scenario is `encode{X} v = encode{X} v' → v = v'`; the shipped theorems
+    assumed both sides `= some ⟨n,s⟩`, silently relying on unproved totality.
+    Fixed by **proving totality and restating**, not by weakening the spec.
+    Seven `{…}_injective_eq` laws, each literally the spec's proposition. The
+    totality layer: `Common.encode_satisfy_ne_none` / `encode_seq_ne_none` /
+    `count_satisfy_encode_ne_none` (generic), `{x}BlockUnapply_digits` →
+    `{x}Elem_encode_ne_none` → `encode{X}_ne_none` (fixed-width 2/4/8/10/16),
+    and `b{64,32}BlockUnapply_len{3,5}`, `b{64,32}TailUnapply_len{12,14}`,
+    `b{64,32}Split_ofBytes_shape_bounds`, `encodeB{64,32}Tail_ne_none`,
+    `encodeB{64,32}'_ne_none`, `encodeB{64,32}_ne_none` (padded).
+  - **6.3 (MEDIUM M3) — the "unique canonical inverse" law** as one iff:
+    `decodeFullB{64,32} s = some v ↔ ∃ w, encodeB{64,32} w = some ⟨n,s⟩ ∧ v = w`.
+    Pure assembly over `decodeFullB*_conv` (→) and `decodeFullB*_roundtrip` (←),
+    exactly as the queue predicted.
 
   Gate state: `lake build` **24 jobs** (the gate is a `@[default_target]`
   lean_lib), `lake build bench` **43 jobs**, zero warnings, zero `sorry`, every
-  law `[propext, Quot.sound]`-only **and now mechanically enforced**.
-  `openspec validate` green.
+  law `[propext, Quot.sound]`-only. `Axioms.lean` now carries **63**
+  `#guard_msgs` gates (was 38; +23 for 6.2, +2 for 6.3), and the gate was
+  re-verified to **fail** on a wrong expectation.
+  `nix build .#checks.<system>.lean` green; `openspec validate` green.
+
+  **`nix build .#bench` note:** `lake build bench` typechecks `Bench.lean`
+  (`lake env lean Bench.lean` is clean) but the final _link_ fails in a bare
+  `nix develop -c` invocation with `ld: library 'c++' not found` — that is the
+  known dev-shell/`libc++` note at the end of this file, not a regression. Use
+  `nix build .#bench` (sandbox clang) for the real executable.
 
   ### Do not re-litigate (settled, verified)
   - The padded-base converse and injectivity _proofs_ are correct;
     `[propext, Quot.sound]`-only is real; the `tails.length ≤ 1` D8 guard is
     load-bearing. The remaining work is statement fidelity, not soundness.
-  - **6.2 direction**: prove totality, don't weaken the spec (see §6.2 plan).
+  - **6.2 direction**: totality was proved, the spec was **not** weakened. Done.
+  - **`Classical.choice` trap (cost real time this session, now in the `lean`
+    skill):** a _dependent_ `cases`/`match` on a list whose **equation**
+    (`bs.length = 1 ∨ bs.length = 2`, `ds.length = k`) sits in context leaks
+    `Classical.choice` even when every cited lemma is `[propext]`-clean.
+    Restate the hypothesis numerically (`1 ≤ bs.length`, `bs.length ≤ 2`) or
+    derive the index from the term (`count ds.length …`) so the match stays
+    non-dependent. Bisect by shrinking the body to `⟨_, rfl⟩`: if it still
+    leaks, it is the match, not the arithmetic.
   - **6.8**: only the block-run length law is hoistable;
     `b{64,32}Split_blocks_tail` is about each base's own `split` equations, and
     `encodeB{64,32}Tail_of_rel` would need an arity witness threaded through
     `Rel` — more machinery than the duplication saves. Documented in place.
   - **6.12(a)** (the `encodeB64Tail_of_rel` `rcases` cascade) was deliberately
     left alone: pure proof ergonomics, real churn risk, zero semantic gain.
-
-  The companion `lean-basen` change (seven `Codec`-value bases) is complete
-  except seven mechanical polish items.
-  History ("we used to / reverted / this session") belongs in that ledger,
-  **never** in this file or the README.
-  (`single-carrier-bytes` is archived as
-  `openspec/changes/archive/2026-10-17-single-carrier-bytes`; `carrier-performance-tuning`
-  is complete 11/11; `partial-remainder-fast-path` is complete 7/7.)
 
   The companion `lean-basen` change (seven `Codec`-value bases) is complete
   except seven mechanical polish items.
