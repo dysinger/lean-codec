@@ -250,22 +250,31 @@ n = 4` (empty tail or one padded block) — `../lean-basen` `c0cf50d`.
       `[c₀..c₄,=×3]`/`[c₀..c₆,=]` (b32 — 1/2/3/4-byte tails → 6/4/3/1 pads), so the output is alphabet-or-pad
       with terminal, RFC-arity-correct `=`. Uses the key helper `b32TailApply_block`
       (`b32TailApply a = some ys → b32BlockApply a = some ys`). `List.ofFn (concat s₀ s₁) =
-  List.ofFn s₀ ++ List.ofFn s₁` from `Codec.ofFn_concat`.)_
+List.ofFn s₀ ++ List.ofFn s₁` from `Codec.ofFn_concat`.)_
 - [ ] 4.3 Per base: `decode … = some v → encode v = some ⟨n, s⟩` (converse).
       _(**NEXT SESSION — the padded bases only (fixed-width 4.3/4.4 already done via
       `decode_encode_inverse`/`encode_injective` in Base2/4/8/10/16).** The converse for base32/64 is
-      `decodeFullB64 s = some v → encodeB64 v = some ⟨n,s⟩` (and the B32 mirror). **Precondition (D8):**
-      the terminal-tail decode must first be a single bounded block (`decode b64TailElem` once, not
-      `decodeFull`/repeat) so the converse is true — with the current multi-block `decodeFull`, input
-      `"Zg==Zg=="` decodes to `[f,f]` but re-encodes to `"Zm8="` (converse false, verified `#eval`; see
-      D8). Once the single-block-tail `decodeFullB64` is in place, `decodeFullB64_some` decomposes
-      `v = blocks.flatten ++ tailBlock` with `(blocks, t) ∈ decodeRepeat b64BlockElem … s` and a *single*
-      `tailBlock` (0/1/2 bytes) from `decode b64TailElem t.bytes` with empty suffix; since `v`'s
-      `b64Split_ofBytes (b64OfBytes v)` recovers those exact `blocks`/`tailBlock` (each block 3 bytes by
-      `Rel_b64BlockElem_size`, the tail 1–2 bytes by `Rel_b64TailElem_size`), `encodeB64 v` reproduces `s`
-      via `encodeRepeat`/`encodeB64Tail`. The roundtrip (`decodeFullB64_roundtrip`, task 1.4) gives the other
-      direction, so 4.3 closes the partial-isomorphism loop. Expect `List.ofFn`/`Bytes` boundary-pin transport
-      similar to `b64_boundary_pin`.)_
+      `decodeFullB64 s = some v → encodeB64 v = some ⟨n,s⟩` (and the B32 mirror).
+
+      **D8 is LANDED (`../lean-basen` `c0c55cd`).** The decoder fix is the `tail.length ≤ 1` **guard** on
+      the existing `decodeFull b64TailElem`/`decodeFull b32TailElem` (NOT the single-element `decode`
+      re-shape: the guard keeps `tails : List (List UInt8)`, so the roundtrip/rejection proofs stay put and
+      only thread one extra `tails.length ≤ 1` conjunct). This rejects the `"Zg==Zg=="`/`"MY======MY======"`
+      class (data after terminal `=` that IS a valid padded block), so the converse is now **true** over every
+      successful decode.
+
+      **Remaining proof shape for 4.3:** `decodeFullB64_some` now yields `blocks`, `t`, `tails` with
+      `tails.length ≤ 1`, `decodeFull b64TailElem t.bytes = some tails`, and `v = blocks.flatten ++ tails.flatten`.
+      Since `tails = []` or `[x]` (the `≤ 1` bound), `b64Split_ofBytes (b64OfBytes v) = (blocks, tails.flatten)`
+      (each block is 3 bytes by `Rel_b64BlockElem_size`, each tail 1–2 bytes by `Rel_b64TailElem_size`). Then
+      re-encode via `encodeRepeat_of_rel b64BlockElem b64BlockElem_functional` (block side) and, for the tail,
+      `(bidir b64TailElem x t.remaining t.bytes).2` + `encode_of_decode b64TailElem b64TailElem_functional`
+      (single-element tail, giving `encodeB64Tail x = Codec.encode b64TailElem x`), and assemble
+      `encodeB64 v = some ⟨n, s⟩` from `s = t.prepend s₀` + `t.bytes`. The two fiddly sub-steps are:
+      (1) `b64Split_blocks_tail` (a run of 3-byte blocks + a ≤2-byte tail splits back exactly);
+      (2) bridging the single decoded tail block `sx` to `t.bytes` (a `relRepeat_cons`/`splice` boundary).
+      The roundtrip (`decodeFullB64_roundtrip`) gives the other direction, so 4.3 closes the partial-iso loop.)_
+
 - [ ] 4.4 Per base: `encode v = encode v' → v = v'` (injectivity).
       _(**NEXT SESSION — padded bases only.** `encodeB64 v = some ⟨n,s⟩ → encodeB64 v' = some ⟨n,s⟩ → v = v'`.
       Both decompose (via `encodeB64_canonical`/`encodeB32_canonical`, landed 4.2) into alphabet-only full blocks

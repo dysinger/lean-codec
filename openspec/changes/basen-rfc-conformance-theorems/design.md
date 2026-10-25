@@ -282,7 +282,7 @@ _Consequence for task order:_ 1.4 (roundtrip) is the gate for 1.1 (delete the
 strict triples + shims); then the bench re-anchor (5.1) and the conformance
 families (3.x/4.x), exactly as stated — there is **no** facade task.
 
-### D8 — The terminal tail is decoded as **exactly one** bounded block, not `decodeFull` (a single-element `decode`), so the converse holds unconditionally
+### D8 — The terminal tail is decoded as **at most one** bounded block (a `≤ 1` guard on `decodeFull`), so the converse holds unconditionally
 
 This is the completion of D7's deferred "substep 6" (the `head?`/`filterMap`
 re-shape), and it is **load-bearing**, not cosmetic. The first implementation of
@@ -298,22 +298,30 @@ the end"), and it makes the **converse** (`decodeFullB64 s = some v → encodeB6
 some ⟨n, s⟩`, task 4.3) **false**: `decodeFullB64 "Zg==Zg==" = some [f, f]` but
 `encodeB64 [f, f] = "Zm8=" ≠ "Zg==Zg=="` (verified `#eval`).
 
-**Decision:** the terminal tail is decoded as **exactly one** `b64TailElem`/
-`b32TailElem` block via the _single-element_ `decode` (not `decodeFull`), requiring
-the resulting suffix to be empty (`t₂.remaining = 0`); an empty tail is `some []`
-when `t.remaining = 0`. This admits only `tail = []` or `tail = [one 1–2-byte
-block]`, so:
+**Decision (LANDED `../lean-basen` `c0c55cd`):** the whole-input decoder's filter
+step adds a **`tail.length ≤ 1` guard** on the result of `decodeFull b64TailElem`/
+`decodeFull b32TailElem` (a multi-block tail — `tail.length ≥ 2` — returns `none`,
+not `some`). This admits only `tail = []` or `tail = [one 1–2-byte block]`, so:
 
 - data after a terminal `=` (even a valid appendable padded block) is **rejected**
   (completing 3.1/3.2's "any data after the terminal `=`" mandate — the
   `Zg==Zg==`/`MY======MY======` class was previously unproven);
-- the converse's tail is **definitionally** a singleton, so the task-4.3 note's
-  "the tail 1–2 bytes" assumption is a fact, not an unstated precondition;
-- the whole-input roundtrip (`decodeFullB64_roundtrip`) and the rejection family
-  are **re-derived** over the single-block tail (the tail value in
-  `decodeFullB64_some` is now a single `List UInt8`, not `List (List UInt8)`).
+- the converse's tail is a **provable** singleton (the `≤ 1` bound is a conjunct
+  of the new `decodeFullB64_some`/`decodeFullB32_some`), so the task-4.3 note's
+  "the tail 1–2 bytes" assumption is a fact, not an unstated precondition.
 
-The full-block `Run` `▸` single-block tail (`▸ iso`) composition is precisely the
+**Why a guard and not the single-element `decode` re-shape:** the re-shape (decode
+`b64TailElem` once via `decode`, requiring `t₂.remaining = 0`) changes the tail
+value from `List (List UInt8)` to a single `List UInt8`, which ripples through
+`decodeFullB64_some`, the whole roundtrip singleton proof, and the rejection
+family (re-deriving the `b64_boundary_pin`/`b64_block_run_of_boundary` inputs).
+The guard is semantically identical but keeps `decodeFull b64TailElem` (hence
+`relRepeat (Rel b64TailElem)` machinery and the boundary pin) intact: the only
+surfaced delta is one extra `tails.length ≤ 1` conjunct threaded through
+`decodeFullB64_some`/`_mem_encode`/`_roundtrip` and the rejection `rcases`. Both
+bases' `lake build` are green, zero `sorry`.
+
+The full-block `Run` `▸` (at-most-one-block) tail (`▸ iso`) composition is precisely the
 D7 shape; this change discharges the last deferred piece of D7.
 
 ## Risks / trade-offs
