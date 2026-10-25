@@ -234,7 +234,20 @@ re-spelled over the uniform entry points.
 `hexElem` stays a strict uppercase `Iso`. Lowercase `6f` is a rejection, not an
 alias.
 
-### D7 — The padded whole-input decoder is a **composition** (full-block `Run` + terminal-tail `Codec`, `iso`-ed to `B64`/`B32`), **not** `head?`/`filterMap`
+### D7 — The padded whole-input decoder is a **composition** (full-block `Run` + terminal-tail `Codec`, `iso`-ed to `B64`/`B32`); its result is **still flattened via `head?`/`filterMap`**
+
+> **Correction (task 6.5).** An earlier revision of this heading claimed the
+> decoder was "**not** `head?`/`filterMap`", and the body below claimed the work
+> "removes the flattened `List UInt8`/`head?`/`filterMap` step". **Both claims were
+> false.** The shipped `decodeFullB64` (`BaseN/Base64.lean`) and `decodeFullB32`
+> (`BaseN/Base32.lean`) are literally
+> `List.head? ((decodeRepeat {x}BlockElem … s).filterMap …)`. The shape is
+> **retained**. What D8 actually bought is not removal of `head?`/`filterMap` but
+> the `tails.length ≤ 1` guard that makes the _chosen_ `filterMap` hit unique —
+> `head?` then picks the only candidate. The `head?`-determinism therefore still
+> rests on the `boundary_pin`/`head?_eq_some_of_mem_eq`/split-uniqueness machinery,
+> exactly as D7 originally described. D7 is a _structural_ statement about which
+> `Codec` values are composed, not a claim about the result-carrier shape.
 
 The first implementation of `decodeFullB64`/`decodeFullB32` (and `encodeB64`/
 `encodeB32`) returned a _flattened_ `List UInt8` built by `List.head? ((decodeRepeat
@@ -273,7 +286,9 @@ promised one AST value where D0 proves none exists. The honest shape is
 full-block `Run` `▸` terminal-tail `Codec` `▸` `iso` to `B64`/`B32`, with the
 roundtrip law = inherited `decodeRepeat_spec`/`encodeRepeat_rel` (blocks) +
 inherited `decodeFull_spec` (tail) + the one split-uniqueness composition lemma.
-This removes the flattened `List UInt8`/`head?`/`filterMap` step and makes the
+This **restructures the decode around** the block-`Run`/terminal-tail split (the
+`head?`/`filterMap` shape is **retained** — see the correction at the top of D7;
+D8's `≤ 1` guard, not a removal, is what makes it deterministic), and makes the
 base32 mirror (5 tail shapes) fall out of the same tail-`alt` template. Each
 base is decoded/encoded by `Codec.decodeFull`/`Codec.encode` on its own value —
 **no** `BaseN.lean` facade and **no** `BaseN.Bridge` type-erasure.
