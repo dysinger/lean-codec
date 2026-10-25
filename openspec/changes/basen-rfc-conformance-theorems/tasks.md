@@ -267,12 +267,48 @@ List.ofFn s₀ ++ List.ofFn s₁` from `Codec.ofFn_concat`.)_
       replaced with explicit `simp only [List.length_cons] … ; omega` (the `nat_lt_four`-style discipline).)_
 
 - [ ] 4.4 Per base: `encode v = encode v' → v = v'` (injectivity). **REOPENED by review (C2).**
-      _(**DONE (`../lean-basen` `9babcab`/`6d7ba52`), `[propext, Quot.sound]`-only, zero `sorry`.** The padded
-      bases: `encodeB64_injective`/`encodeB32_injective`. The clean proof avoids the boundary-pin/unambiguity
-      machinery entirely: both `v` and `v'` encode to the same `⟨n, s⟩`, so `decodeFullB64_roundtrip` gives
-      `decodeFullB64 s = some v` and `= some v'`, whence `Option.some.inj` yields `v = v'` (decode is the left
-      inverse, encode a partial bijection). The fixed-width bases already had `encode_injective` (via
-      `relHex_/_relB64…_unambiguous`).)_
+      _(**Status: proved, but the statement is weaker than the spec — not done.** What landed
+      (`../lean-basen` `9babcab`/`6d7ba52`, `[propext, Quot.sound]`-only, zero `sorry`):
+
+      ```lean
+      -- BaseN/Base64.lean:2538  (Base32.lean:2915 identical)
+      theorem encodeB64_injective {v v' : List UInt8} {n : Nat} {s : Bytes n}
+          (h : encodeB64 v = some ⟨n, s⟩) (h' : encodeB64 v' = some ⟨n, s⟩) : v = v'
+      ```
+      and the five fixed-width twins (`Base2:561`, `Base4:455`, `Base8:589`, `Base10:411`,
+      `Base16:399`) have the same both-succeed shape, e.g. `Base16.encode_injective :
+      encodeHex v = some ⟨n,s⟩ → encodeHex v' = some ⟨n,s⟩ → v = v'`. The proof is the clean
+      roundtrip one: both encode to `⟨n,s⟩` ⇒ `decodeFull…_roundtrip` gives `some v` and `some v'`
+      ⇒ `Option.some.inj`. No boundary-pin machinery needed.
+
+      **The gap (C2).** `specs/basen/spec.md` Scenario "Encoding is injective" states the law as
+      **`encode{X} v = encode{X} v'`** — equality of the two `Option (Sigma …)` *results*, i.e. the
+      `Option`-equality form `encode v = encode v' → v = v'`. The Lean statement replaces that with
+      *two hypotheses both `= some ⟨n,s⟩`*, which is a strictly **different** statement:
+
+      * it **misses the `none = none` branch** — `encode v = none = encode v'` is a hypothesis of the
+        spec law that the Lean theorem simply cannot be applied to (no `some` witness exists);
+      * the bridge from the spec form to the Lean form is **`encode` is total** (`encode v ≠ none`),
+        which is **never proved** — grep finds no `encodeB64_ne_none`/`isSome`, no
+        `encodeHex_ne_none`. It *is* true (`#eval` shows `(encodeB64 v).isSome = true` for `[]`,
+        `[0x66]`, `[0x66,0x6F,0x6F]`, `replicate 100`), so the intended law holds — but the shipped
+        theorem is not it, and the docstring's "a partial bijection" (Base64.lean:2535) relies on the
+        unproved totality.
+
+      **Fix (pick one, keep spec and code in agreement):**
+      1. *Prove totality and restate.* Add `theorem encodeB64_ne_none (v : List UInt8) :
+         encodeB64 v ≠ none` (mirror base32 + the five fixed-width `encode{X}_ne_none`), then restate
+         `encodeB64_injective : encodeB64 v = encodeB64 v' → v = v'` — split the `Option` equality:
+         `some/some` case → existing proof; `none/none` case → `totality v` refutes it; mixed →
+         contradictory. Do the same for `encodeB32` and `Base{2,4,8,10,16}`.
+      2. *Keep the both-succeed theorem but make the spec honest.* Amend the Scenario to
+         "... both `= some ⟨n, s⟩`" **and** state `encode{X}_ne_none` alongside it, so the
+         weakening is explicit rather than silent.
+      Do **not** leave the spec sentence as-is with a differently-shaped theorem underneath it.
+
+      **Acceptance:** `#print axioms` still `[propext, Quot.sound]`; the Lean statement, quoted next to
+      the spec sentence, is *literally* the spec's form (or the spec is amended to match); a
+      `#check`/doc-test shows the `none = none` case is covered.)_
 
 ## 5. Bench lane + gate
 
@@ -281,17 +317,60 @@ List.ofFn s₀ ++ List.ofFn s₁` from `Codec.ofFn_concat`.)_
       `example`s (`Zg==AAAA`/`MY======AAAAAAAA`), converse + overflow vectors, all
       through `Codec.decodeFull`/`Codec.encode` (and `decodeFullB64`/`decodeFullB32`),
       never a bespoke fn and never a facade.
-      _(**DONE (`../lean-basen` `44c0edf`).** The bench deleted every reference to the removed
-      `decodeB64Strict`/`encodeB64Strict`/`decodeB32Strict`/`encodeB32Strict` triples. Every vector now names a
-      base's own value: the block vectors (`b64BlockUnapply`/`b32BlockUnapply`), the fixed-width roundtrips
-      (`Base{X}.roundtrip`), the padded roundtrips (`decodeFullB64_roundtrip`/`decodeFullB32_roundtrip`), the
-      canonical-decomposition laws (`encodeB64_canonical`/`encodeB32_canonical`), the rejection flagships
-      (`decodeFullB64_reject_ZgAAAA`/`decodeFullB32_reject_MYAAAA`), the converse
-      (`decodeFullB64_conv`/`decodeFullB32_conv`), injectivity
-      (`encodeB64_injective`/`encodeB32_injective`/`Base16.encode_injective`), the fixed-width converse
-      (`Base16.decode_encode_inverse`), and the overflow vectors (`Base8.rejects_overflow`/
-      `Base10.rejects_overflow`). Base16 lowercase is recorded as the non-goal (`rejects_lowercase`).
-      `lake build bench` green, zero warnings.)_
+      _(**Status: the rewiring landed, but the canonical vectors prove nothing — not done.**
+      The good half (`../lean-basen` `44c0edf`): every reference to the deleted
+      `decodeB64Strict`/`encodeB64Strict`/`decodeB32Strict`/`encodeB32Strict` triples is gone, and the
+      bench now names a base's own value throughout (roundtrips `Base{X}.roundtrip`,
+      `decodeFullB64_roundtrip`/`decodeFullB32_roundtrip`; rejection flagships
+      `decodeFullB64_reject_ZgAAAA`/`decodeFullB32_reject_MYAAAA`; converse
+      `decodeFullB64_conv`/`decodeFullB32_conv`; injectivity; `Base8/10.rejects_overflow`).
+      `lake build bench` green, zero warnings.
+
+      **The gap (C1): the "canonical vectors" are tautologies.** `Bench.lean:101-118` contains two
+      `example`s of the form
+
+      ```lean
+      example (n : Nat) (s : Bytes n) (he : Base64.encodeB64 foobar = some ⟨n, s⟩) :
+          ∃ blocks m₁ m₂ blkBytes tailBytes,
+            Codec.encodeRepeat b64BlockElem blocks = some ⟨m₁, blkBytes⟩ ∧
+            Base64.encodeB64Tail (…(b64OfBytes foobar)).2 = some ⟨m₂, tailBytes⟩ ∧
+            List.ofFn s = List.ofFn blkBytes ++ List.ofFn tailBytes := by
+        obtain ⟨blocks, m₁, m₂, blkBytes, tailBytes, hblk, htail, hlen, _, _⟩ :=
+          Base64.encodeB64_canonical foobar he       -- NOTE: the final `_, _`
+        exact ⟨blocks, m₁, m₂, blkBytes, tailBytes, hblk, htail, hlen⟩
+      ```
+
+      `encodeB64_canonical` (Base64.lean:2230) returns **five** conjuncts; the `_, _` in the `obtain`
+      **drops conjuncts 4 and 5**, which are the only two that say anything about the RFC:
+
+      * 4 — `∀ b ∈ List.ofFn blkBytes, b64Valid b.toNat = true` (blocks are alphabet-only), and
+      * 5 — the pad-arity disjunction `List.ofFn tailBytes = [] ∨ [c₀,c₁,=,=] ∨ [c₀,c₁,c₂,=]`.
+
+      So the `example` re-states the decomposition of *whatever* `encodeB64` happened to emit and
+      verifies **nothing** about the bytes: a buggy encoder (lowercase output, or wrong pad count)
+      would still satisfy it. Worse, there is **no `example` anywhere** asserting the real output —
+      `encodeB64 foobar = some ⟨8, "Zm9vYmFy"⟩` never appears. The only concrete base64/base32 strings
+      in the bench are `b64BlockUnapply`/`b32BlockUnapply` `rfl`s at `Bench.lean:44-56`, which test the
+      *block* function, never the whole-input `encodeB64`/`encodeB32`.
+
+      **Fix.**
+      1. Delete the two ∃-repacking `example`s.
+      2. Add concrete whole-input value asserts for every RFC §10 vector, e.g.
+         `example : Base64.encodeB64 f = some ⟨4, fun i : Fin 4 => [0x5A, 0x67, 0x3D, 0x3D][i]⟩ := rfl`
+         (the repo's `Bytes n := Fin n → UInt8` function-literal idiom, as in the existing `zgAAAA`/
+         `zgEqEq` vectors; use `decide`/a `List.ofFn` equality if `rfl` does not fire), for
+         `f/fo/foo` → `Zg==`/`Zm8=`/`Zm9v`,
+         `foob/fooba/foobar` → `Zm9vYg==`/`Zm9vYmE=`/`Zm9vYmFy`; base32
+         `f/fo/foo/foob/fooba` → `MY======`/`MZXQ====`/`MZXW6===`/`MZXW6YQ=`/`MZXW6YTB`.
+      3. If the existential decomposition is still wanted, keep it **with all five conjuncts** (drop
+         the `_, _`) so the alphabet-only and pad-arity facts are actually exercised.
+      4. Also assert the *pad-count* per tail length (base64 1→2, 2→1; base32 1→6, 2→4, 3→3, 4→1) —
+         the spec's "Padding is terminal and arity-correct" scenario.
+
+      **Acceptance (the point of the task):** a deliberately broken encoder — e.g. one emitting
+      lowercase, or `Zg=` instead of `Zg==` — must **fail** `lake build bench`. Today it would not.
+      Keep `#print axioms`-clean and zero warnings.)_
+
 - [x] 5.2 `lake build` and `lake build bench` green, zero `sorry`/warnings;
       `#print axioms` = `[propext, Quot.sound]` (or `[propext]`) for the new laws;
       `nix flake check` green (checks.lean + checks.formatting).
@@ -423,7 +502,7 @@ List.ofFn s₀ ++ List.ofFn s₁` from `Codec.ofFn_concat`.)_
 
 - [ ] 6.12 **Proof-quality cleanups (LOW L1/L2, NIT).** (a) `encodeB64Tail_of_rel`'s 4-branch
       `rcases x with _ | ⟨a,t⟩; cases t with …` cascade is overkill — `hxlen : x.length = 1 ∨
-    x.length = 2` is already in scope; replace with a 3-line length-dichotomy (`match x, hxlen`
+  x.length = 2` is already in scope; replace with a 3-line length-dichotomy (`match x, hxlen`
       or `cases x <;> cases hxlen <;> first | rfl | omega`). (b) `dsimp only []` is a no-op —
       remove. (c) `simp only [Suffix.empty, Nat.sub_zero] at st hrelt` + `subst hst_eq` are brittle
       — prefer `cases`/explicit `cast (Nat.sub_zero …)` and a comment that the `- 0` index is what
