@@ -473,7 +473,12 @@ List.ofFn s₀ ++ List.ofFn s₁` from `Codec.ofFn_concat`.)_
         both-succeed lemmas are retained and now described as the workhorse the `_eq` law
         reduces to.
 
-- [ ] 6.3 **"Unique canonical inverse" / total characterization is not proved (MEDIUM M3).**
+- [x] 6.3 **"Unique canonical inverse" / total characterization (MEDIUM M3) — DONE.**
+      `decodeFullB64_char` / `decodeFullB32_char` in `../lean-basen`, each
+      `[propext, Quot.sound]`-only, zero `sorry`, gate-pinned in `Axioms.lean`, with a bench
+      lane at the canonical vectors (`Zg==`, `MY======`). The law is pure assembly over the
+      already-proved halves — `→` is `decodeFullB*_conv`, `←` is `decodeFullB*_roundtrip` —
+      exactly as the queue predicted. The original finding, for the record:
       The requirement is titled "Decode is the unique canonical inverse"; the delivered laws
       are roundtrip + converse + injectivity (three separate statements). They yield "unique"
       only with `decode s = some v ↔ ∃ v', encode v' = some ⟨n, s⟩` (decode succeeds _iff_ `s`
