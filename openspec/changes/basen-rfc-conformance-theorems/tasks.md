@@ -218,7 +218,14 @@ n = 4` (empty tail or one padded block) — `../lean-basen` `c0cf50d`.
       plus the shared `decodeFullB64_reject_first_invalid` (4-byte first-byte-not-`b64Valid`) and
       `Rel_b64TailElem_first_char` (a tail's first byte is `valToB64`-valid, never `=`). All
       `[propext, Quot.sound]`-only, zero `sorry`, zero warnings.)_
-- [ ] 3.2 Base32: `decodeFullB32 … "MY======AAAAAAAA" = none` and the same family.
+- [x] 3.2 Base32: `decodeFullB32 … "MY======AAAAAAAA" = none` and the same family.
+      _(**DONE:** mirrors the base64 rejection family. Added `decodeFullB32_some` (the
+      decomposition bridge), `nat_lt_eight`, the flagship `decodeFullB32_reject_MYAAAA`
+      (`MY======AAAAAAAA`), `Rel_b32TailElem_first_char` (a tail's first byte is `b32Valid`,
+      over the four 1–4-byte tail shapes), `decodeFullB32_reject_first_invalid`, and the
+      vectors `decodeFullB32_reject_invalid_char` (`!==...`)/`_pad_first` (`===...`) /
+      `_bad_length` (`MY`). All `[propext, Quot.sound]`-only, zero `sorry`, zero warnings,
+      `lake build` green. `../lean-basen` `BaseN/Base32.lean`.)_
 - [x] 3.3 Fixed-width bases: the F\* rejection family per base (base16 non-hex +
       lowercase + odd arity; base2/4/8/10 invalid alphabet + wrong arity +
       base8/10 overflow).
@@ -226,10 +233,40 @@ n = 4` (empty tail or one padded block) — `../lean-basen` `c0cf50d`.
 ## 4. Canonical + converse + injectivity
 
 - [x] 4.1 Fixed-width bases: `encode{X}` alphabet-only.
-- [ ] 4.2 Base32/64: `encode` alphabet-or-pad, pad exactly the terminal tail's RFC
+- [x] 4.2 Base32/64: `encode` alphabet-or-pad, pad exactly the terminal tail's RFC
       arity, `=` never precedes non-`=`.
+      _(**DONE (4.2).** Landed `encodeB64_canonical`/`b64TailBlock_canonical` (base64) and
+      `encodeB32_canonical`/`b32TailBlock_canonical` (base32) in `../lean-basen`, all
+      `[propext, Quot.sound]`-only, zero `sorry`/warnings, `lake build` green. The canonical form
+      is a decomposition over `List.ofFn`: alphabet-only full blocks (`encodeReplace`/`encodeBlock_nopad`
+      lifted via `List.getElem_ofFn`) followed by a single padded tail whose `List.ofFn` is empty or exactly
+      `[c₀,c₁,=,=]` / `[c₀,c₁,c₂,=]` (b64 — 1/2-byte tails → 2/1 pads) or `[c₀,c₁,=×6]`/`[c₀,c₁,c₂,c₃,=×4]`/
+      `[c₀..c₄,=×3]`/`[c₀..c₆,=]` (b32 — 1/2/3/4-byte tails → 6/4/3/1 pads), so the output is alphabet-or-pad
+      with terminal, RFC-arity-correct `=`. Uses the key helper `b32TailApply_block`
+      (`b32TailApply a = some ys → b32BlockApply a = some ys`). `List.ofFn (concat s₀ s₁) =
+    List.ofFn s₀ ++ List.ofFn s₁` from `Codec.ofFn_concat`.)_
 - [ ] 4.3 Per base: `decode … = some v → encode v = some ⟨n, s⟩` (converse).
+      _(**NEXT SESSION — the padded bases only (fixed-width 4.3/4.4 already done via
+      `decode_encode_inverse`/`encode_injective` in Base2/4/8/10/16).** The converse for base32/64 is
+      `decodeFullB64 s = some v → encodeB64 v = some ⟨n,s⟩` (and the B32 mirror). `decodeFullB64_some`/
+      `decodeFullB32_some` (landed in 3.1/3.2) decompose `v = blocks.flatten ++ tails.flatten` with
+      `(blocks, t) ∈ decodeRepeat b64BlockElem … s` and `decodeFull b64TailElem … t.bytes = some tails`; since
+      `v`'s `b64Split_ofBytes (b64OfBytes v)` recovers those exact `blocks`/`tail` (each block is 3 bytes, the tail
+      1–2 bytes, by `Rel_b64BlockElem_size`/`Rel_b64TailElem_size`), `encodeB64 v` reproduces `s` via
+      `encodeRepeat`/`encodeB64Tail`. The roundtrip already landed (`decodeFullB64_roundtrip`, task 1.4) gives the
+      other direction, so 4.3 closes the partial-isomorphism loop. Expect `List.ofFn`/`Bytes` boundary-pin transport
+      similar to `b64_boundary_pin`.)_
 - [ ] 4.4 Per base: `encode v = encode v' → v = v'` (injectivity).
+      _(**NEXT SESSION — padded bases only.** `encodeB64 v = some ⟨n,s⟩ → encodeB64 v' = some ⟨n,s⟩ → v = v'`.
+      Both decompose (via `encodeB64_canonical`/`encodeB32_canonical`, landed 4.2) into alphabet-only full blocks
+  - a single padded tail; the shared `s` pins the block/tail boundary via `b64_boundary_pin`/`b32_boundary_pin`
+    (already landed in task 1.4), then `relB64Block_unambiguous`/`relB64Tail_unambiguous` (and the B32 mirrors)
+    pin `blocks = blocks'` and `tail = tail'`, so `v = blocks.flatten ++ tail = v'` via
+    `b64Split_ofBytes_shape` + `b64BytesOf_ofBytes`. The boundary pin is stated over `Bytes`; bridge the 4.2
+    `List.ofFn` decomposition via `Codec.ofFn_concat` + `List.getElem_ofFn` (the 4.2 proof pattern). All existing
+    helpers — `b64_boundary_pin`, `b64_block_run_of_boundary`, `encodeB64Block_nopad`, `encodeB64Tail_has_pad`,
+    `encodeB64Tail_len`, `relB64Block_unambiguous`, `relB64Tail_unambiguous` — are in place; no new subsurstence
+    lemmas expected.)_
 
 ## 5. Bench lane + gate
 
