@@ -312,7 +312,7 @@ List.ofFn s₀ ++ List.ofFn s₁` from `Codec.ofFn_concat`.)_
 
 ## 5. Bench lane + gate
 
-- [ ] 5.1 `Bench.lean`: rewire to the uniform surface **REOPENED by review (C1).** — roundtrip `example`s,
+- [x] 5.1 `Bench.lean`: rewire to the uniform surface (CLOSED by 6.1) — roundtrip `example`s,
       canonical vectors (`Zg==`/`Zm8=`/`Zm9v`, `MY======`/`MZXW6YTB`), rejection
       `example`s (`Zg==AAAA`/`MY======AAAAAAAA`), converse + overflow vectors, all
       through `Codec.decodeFull`/`Codec.encode` (and `decodeFullB64`/`decodeFullB32`),
@@ -421,7 +421,7 @@ List.ofFn s₀ ++ List.ofFn s₁` from `Codec.ofFn_concat`.)_
 > `openspec validate basen-rfc-conformance-theorems` (from `../lean-codec`) after any
 > spec-delta edit, and again after any §6.6/§6.11 change.
 
-- [ ] 6.1 **Bench canonical vectors are tautologies (CRITICAL C1).** The two canonical
+- [x] 6.1 **Bench canonical vectors are tautologies (CRITICAL C1).** The two canonical
       `example`s in `Bench.lean` unpack `encodeB64_canonical`'s ∃-hypothesis and repack only
       conjuncts 1–3, **dropping conjuncts 4–5** (alphabet-only + exact pad-arity) — the only
       RFC content. No `example` anywhere asserts the _actual_ encoder output
@@ -462,7 +462,7 @@ List.ofFn s₀ ++ List.ofFn s₁` from `Codec.ofFn_concat`.)_
       class explicitly — currently only implicit in the D8 `≤ 1` guard, no theorem states it);
       (c) `n % 4 ≠ 0` ⇒ `none` (and `n % 8 ≠ 0` for base32). Mirror; all `[propext, Quot.sound]`.
 
-- [ ] 6.5 **Design D7 header is false (HIGH H1).** `design.md:237` says the padded decoder is
+- [x] 6.5 **Design D7 header is false (HIGH H1).** `design.md:237` says the padded decoder is
       "**not** `head?`/`filterMap`", and `:276` "This removes the flattened `List UInt8`/`head?`/
       `filterMap` step" — but `Base64.lean:866`/`Base32.lean:1009` **are** exactly
       `List.head? ((decodeRepeat …).filterMap …)`. **Fix:** either perform the D7 rewrite
@@ -481,11 +481,11 @@ List.ofFn s₀ ++ List.ofFn s₁` from `Codec.ofFn_concat`.)_
       `decodeFullB{32,64}`/`encodeB{32,64}`" — or make those `abbrev`s and document them as the
       composition D7/D8 promise.
 
-- [ ] 6.7 **`relB32Block_all_size3` proves length 5 (HIGH H3).** `relB64Block_all_size3` proves
+- [x] 6.7 **`relB32Block_all_size3` proves length 5 (HIGH H3).** `relB64Block_all_size3` proves
       `b.length = 3`, the base32 twin proves `b.length = 5` — same name, different content.
       **Fix:** rename to `relB64Block_len3`/`relB32Block_len5` (or `…_all_len` with a comment).
 
-- [ ] 6.8 **Duplicated Common-eligible helpers (HIGH H4 / tech-debt).** Three lemma pairs are
+- [x] 6.8 **Duplicated Common-eligible helpers (HIGH H4 / tech-debt).** Three lemma pairs are
       structurally identical and re-derived per base: `relB{64,32}Block_all_size3` (same
       induction), `b{64,32}Split_blocks_tail` (same split-back, differing only in block size
       3/5 and tail bound 2/4), `encodeB{64,32}Tail_of_rel` (same functionality-pins-bytes shape).
@@ -495,14 +495,14 @@ List.ofFn s₀ ++ List.ofFn s₁` from `Codec.ofFn_concat`.)_
       equations, and a `encodeTail_of_rel` parameterized by the tail element; or at minimum add a
       docstring per base documenting the mirror and why the `split`/tail-shape stays per-base.
 
-- [ ] 6.9 **Axiom gate is manual, not automated (MEDIUM M1).** `[propext, Quot.sound]`-only was
+- [x] 6.9 **Axiom gate is manual, not automated (MEDIUM M1).** `[propext, Quot.sound]`-only was
       verified by hand this session (and a `Classical.choice` leak was already caught once — see
       the 4.3 note). AGENTS' "`#print axioms Codec.roundtrip` is the check" is not what runs here.
       **Fix:** add an `Axioms.lean` (or a `#print axioms` block wired into `lake build`) covering
       **every** new law for all seven bases, so a future `simp`/`omega` regression that picks up
       `Classical.choice` fails the build.
 
-- [ ] 6.10 **`rejects_lowercase` is a passing vector labelled a non-goal (HIGH H2 / LOW L6, N2).**
+- [x] 6.10 **`rejects_lowercase` is a passing vector labelled a non-goal (HIGH H2 / LOW L6, N2).**
       `Bench.lean:181` is a **passing** `example` whose own comment says "not a passing vector",
       contradicting `proposal.md` ("recorded as a non-goal, **not** a passing vector"); and its
       comment says "lowercase `6f`" while the byte is `0x66` (`'f'`) and the theorem is arity-1.
@@ -520,7 +520,7 @@ List.ofFn s₀ ++ List.ofFn s₁` from `Codec.ofFn_concat`.)_
       `openspec validate basen-rfc-conformance-theorems` + `openspec validate lean-basen` before
       archiving; carry every existing scenario in the MODIFIED block.
 
-- [ ] 6.12 **Proof-quality cleanups (LOW L1/L2, NIT).** (a) `encodeB64Tail_of_rel`'s 4-branch
+- [x] 6.12 **Proof-quality cleanups (LOW L1/L2, NIT).** (a) `encodeB64Tail_of_rel`'s 4-branch
       `rcases x with _ | ⟨a,t⟩; cases t with …` cascade is overkill — `hxlen : x.length = 1 ∨
 x.length = 2` is already in scope; replace with a 3-line length-dichotomy (`match x, hxlen`
       or `cases x <;> cases hxlen <;> first | rfl | omega`). (b) `dsimp only []` is a no-op —
