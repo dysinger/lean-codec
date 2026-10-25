@@ -74,6 +74,32 @@ of `List UInt8`), not a type that makes the malformed shape unrepresentable.
   whole number of code words for that base (e.g. 2 base64 chars, 3 base32 chars)
 - **THEN** the result is `none`.
 
+#### Scenario: Rejection is the general law, not a vector set
+
+The rejection requirement is quantified over **every** input, and the shipped
+theorems are that quantifier — not a collection of named examples. For each of
+`Base64` and `Base32`:
+
+- **WHEN** a byte failing the base's alphabet-or-pad predicate (`b64OrPad`/
+  `b32OrPad`) occurs at **any** index `i : Fin n` of a `Bytes n`
+- **THEN** `decodeFullB{64,32} s = none`
+  (`decodeFullB{64,32}_reject_invalid_at`) — generalising the index-0-only
+  `reject_first_invalid` to every position.
+- **WHEN** a `=` occurs at code-word slot `0` or `1` (i.e. `i % 4 ∈ {0,1}` for
+  base64, `i % 8 ∈ {0,1}` for base32) — the non-terminal-padding class, of which
+  `"Zg==Zg=="` / `"MY======MY======"` are instances
+- **THEN** `decodeFullB{64,32} s = none`
+  (`decodeFullB{64,32}_reject_pad_at_low_slot`). This holds for **all** `s`: the
+  full-block region is alphabet-only and code-word aligned, and a terminal-tail
+  block pads only at slots `≥ 2` (`Rel_b{64,32}TailElem_pad_pos`).
+- **WHEN** the byte count is not a whole number of code words — `n % 4 ≠ 0` for
+  base64, `n % 8 ≠ 0` for base32
+- **THEN** `decodeFullB{64,32} s = none` (`decodeFullB{64,32}_reject_arity`),
+  because a successful decode consumes exactly `4 · (|blocks| + |tails|)` bytes
+  (resp. `8 · …`) — see `decodeFullB{64,32}_arity`.
+- **AND** each of these is `[propext, Quot.sound]`-only, pinned by the `Axioms.lean`
+  gate, with a concrete bench vector.
+
 #### Scenario: An overflowing reconstructed byte is rejected
 
 - **WHEN** a fixed-digit base (base8/base10) decoder is applied to a digit trio

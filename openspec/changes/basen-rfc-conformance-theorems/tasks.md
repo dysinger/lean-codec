@@ -487,14 +487,37 @@ List.ofFn s₀ ++ List.ofFn s₁` from `Codec.ofFn_concat`.)_
       (and the B32 mirror), `[propext, Quot.sound]`-only. This is what the proposal's
       "decode succeeds exactly on the RFC-valid inputs" actually means, and it subsumes 6.4.
 
-- [ ] 6.4 **Rejection is a finite vector set, not the general law (MEDIUM M4).** The rejection
-      theorems are named instances (`reject_ZgAAAA`, `reject_MYAAAA`, `reject_invalid_char`,
-      `reject_pad_first`, `reject_bad_length`, `reject_overflow`). The proposal promises the
-      _general_ statement. **Fix:** prove, for **all** `s`: (a) any byte `b64Valid = false` ⇒
-      `decodeFullB64 s = none` (generalize `reject_first_invalid` from index 0 to all indices);
-      (b) a `=` at a non-terminal position ⇒ `none` (cover the `Zg==Zg==`/`MY======MY======`
-      class explicitly — currently only implicit in the D8 `≤ 1` guard, no theorem states it);
-      (c) `n % 4 ≠ 0` ⇒ `none` (and `n % 8 ≠ 0` for base32). Mirror; all `[propext, Quot.sound]`.
+- [x] 6.4 **Rejection is a finite vector set, not the general law (MEDIUM M4) — DONE.**
+      Proved for **all** `s`, for both padded bases, each `[propext, Quot.sound]`-only,
+      zero `sorry`, gate-pinned in `Axioms.lean`, bench-covered. `../lean-basen`
+      `729e14f` (base64), `c8cf82f` (base32), `306e951` (gate + bench):
+
+      - **(a) invalid byte at any index.** `decodeFullB{64,32}_reject_invalid_at`:
+        `b{64,32}OrPad (s i) = false` at **any** `i : Fin n` ⇒ `none`. Generalises
+        `reject_first_invalid` (index-0 only) to every index; supported by
+        `decodeFullB{64,32}_consumed_alphabet` (every consumed byte is
+        alphabet-or-pad — block region `b{64,32}Char`, tail region `b{64,32}OrPad`).
+      - **(b) `=` at a non-terminal position.**
+        `decodeFullB{64,32}_reject_pad_at_low_slot`: `s i = '='` with
+        `i % 4 ∈ {0,1}` (base64) / `i % 8 ∈ {0,1}` (base32) ⇒ `none` — the
+        `Zg==Zg==` / `MY======MY======` class, previously only implicit in the D8
+        `tails.length ≤ 1` guard. Split-free: both regions are code-word aligned, and
+        a tail block pads only at slots ≥ 2 (`Rel_b{64,32}TailElem_pad_pos`, proved by
+        enumerating the 1/2-byte and 1/2/3/4-byte tail shapes: slots 0 and 1 are always
+        `valToB{64,32}` outputs, never `=`).
+      - **(c) wrong arity.** `decodeFullB{64,32}_reject_arity`: `n % 4 ≠ 0`
+        (base32: `n % 8 ≠ 0`) ⇒ `none`. **The law that was expected to be hard** closes
+        without case-splitting: `relB{64,32}Block_len` gives
+        `n - t.remaining = 4·|blocks|` (8 for base32) and `relB{64,32}Tail_len` gives
+        `t.remaining = 4·|tails|`, so `n = 4·(|blocks| + |tails|)` and `n % 4 = 0` by
+        `Nat.mul_mod_right` (this is `decodeFullB{64,32}_arity`).
+
+      Supporting lemma also added: `decodeFullB64_block_region` (the block region is
+      alphabet-only, with its length exposed as `4 · blocks.length`).
+      The original finding, for the record:
+      The rejection theorems were named instances (`reject_ZgAAAA`, `reject_MYAAAA`,
+      `reject_invalid_char`, `reject_pad_first`, `reject_bad_length`,
+      `reject_overflow`) while the proposal promised the _general_ statement.
 
 - [x] 6.5 **Design D7 header is false (HIGH H1).** `design.md:237` says the padded decoder is
       "**not** `head?`/`filterMap`", and `:276` "This removes the flattened `List UInt8`/`head?`/
@@ -629,13 +652,13 @@ branch is covered by a `#check`-visible totality hypothesis; `lake build`
 Everything below is **tracked, not yet started**. Do them in this order; the
 rationale is that each one unblocks or de-risks the next.
 
-| #   | Task                                                                                                                                                                                          | Nature                                                                                                                              | Depends on                         |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| 1   | **6.3** (M3) — the "unique canonical inverse" iff: `decodeFullB{64,32} s = some v ↔ ∃ v', encodeB{v} v' = some ⟨n,s⟩ ∧ v = v'`                                                                | new theorem; after 6.2 the `→` half is `decodeFullB64_conv` and the `←` half is `decodeFullB64_roundtrip`, so it is mostly assembly | 6.2                                |
-| 2   | **6.4** (M4) — generalise rejection from named vectors to the law: (a) any invalid alphabet byte at **any** index, (b) a `=` at a non-terminal position, (c) `n % 4 ≠ 0` (base32 `n % 8 ≠ 0`) | new theorems; (c) is the only genuinely hard one — it needs the arity argument lifted off the named vectors                         | 6.3 (shares the image/iff framing) |
-| 3   | **6.6** (C3) — synced `lean-codec/openspec/specs/basen/spec.md:24-31` still asserts the **withdrawn** "illegal data after `=` is unrepresentable" and "no bespoke per-format function"        | spec edit                                                                                                                           | **6.11 first**                     |
-| 4   | **6.11** (E) — the archive hazard: `lean-basen` change MODIFIES "The `basen` bases are `Codec` values", and the 6.6 fix would modify it again                                                 | process                                                                                                                             | coordinate; see below              |
-| 5   | **4.4** — closes automatically once 6.2 lands (it is the same theorem); re-verify then flip                                                                                                   | bookkeeping                                                                                                                         | 6.2                                |
+| #   | Task                                                                                                                                                                                                                | Nature                                                                                                                              | Depends on                         |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| 1   | **6.3** (M3) — the "unique canonical inverse" iff: `decodeFullB{64,32} s = some v ↔ ∃ v', encodeB{v} v' = some ⟨n,s⟩ ∧ v = v'`                                                                                      | new theorem; after 6.2 the `→` half is `decodeFullB64_conv` and the `←` half is `decodeFullB64_roundtrip`, so it is mostly assembly | 6.2                                |
+| 2   | ~~**6.4** (M4)~~ — **DONE** (`729e14f` / `c8cf82f` / `306e951`): (a) invalid alphabet byte at **any** index, (b) `=` at code-word slot 0/1, (c) `n % 4 ≠ 0` (base32 `n % 8 ≠ 0`), both bases, gated + bench-covered | new theorems                                                                                                                        | 6.3 (shares the image/iff framing) |
+| 3   | **6.6** (C3) — synced `lean-codec/openspec/specs/basen/spec.md:24-31` still asserts the **withdrawn** "illegal data after `=` is unrepresentable" and "no bespoke per-format function"                              | spec edit                                                                                                                           | **6.11 first**                     |
+| 4   | **6.11** (E) — the archive hazard: `lean-basen` change MODIFIES "The `basen` bases are `Codec` values", and the 6.6 fix would modify it again                                                                       | process                                                                                                                             | coordinate; see below              |
+| 5   | **4.4** — closes automatically once 6.2 lands (it is the same theorem); re-verify then flip                                                                                                                         | bookkeeping                                                                                                                         | 6.2                                |
 
 **6.11 must be resolved before 6.6, not after.** Both changes MODIFY the same
 requirement block, and OpenSpec's archive takes one version silently (see
