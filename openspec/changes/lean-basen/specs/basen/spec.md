@@ -74,37 +74,59 @@ seam is introduced: this package is pure Lean.
 ### Requirement: The `basen` bases are `Codec` values
 
 Each `BaseN` base SHALL be a `codec` `Codec` **element** plus a productive
-repetition **run triple** — **not** a single `Codec (List UInt8)` value and
-**not** a bespoke `encode`/`decode` function. The fixed-width bases (2/4/8/10/16)
-have element `{x}Elem : Codec UInt8` (one byte per element); the block bases
-(32/64) have element `b32Elem`/`b64Elem : Codec (List UInt8)` (a 5-byte / 3-byte
-block), each composed from `satisfy`/`count`/`iso` (no `many` constructor
-exists; the repetition layer is `decodeRepeat`/`encodeRepeat`). The run triple
-is `decode{X} = decodeRepeat {x}Elem {x}ConsumesByte`, `encode{X} =
-encodeRepeat {x}Elem`, `rel{X} = relRepeat (Rel {x}Elem)`; the whole-input
-decoder is `Codec.decodeFull {x}Elem {x}ConsumesByte` (result `List UInt8` for
-fixed-width, `List (List UInt8)` for block bases) and the encoder is
-`encode{X}`/`encodeB{X}` over the `Bytes n` substrate.
+repetition **run** — **not** a single `Codec (List UInt8)` value and **not** a
+bespoke per-format decoder/encoder _triple_. The fixed-width bases (2/4/8/10/16)
+have element `{x}Elem : Codec UInt8` (one byte per element); the padded bases
+(32/64) are a composition of a full-block element `b32BlockElem`/`b64BlockElem :
+Codec (List UInt8)` (a 5-byte / 3-byte block) run through the derived repetition
+layer, followed by a terminal-tail element `b32TailElem`/`b64TailElem`, `iso`-ed
+to the terminal-tail value type `B32`/`B64`. Each element is composed from
+`satisfy`/`count`/`iso` (no `many` constructor exists; the repetition layer is
+`relRepeat`/`decodeRepeat`/`encodeRepeat`). The whole-input decoder is
+`Codec.decodeFull`/the base's own `decodeFullB{32,64}` over the composition, and
+the encoder is `encode{X}`/`encodeB{X}` over the `Bytes n` substrate; `B32`/`B64`
+is a proved total bijective relabeling of `List UInt8`.
+
+The padded bases' shape does **not** make illegal "data after `=`"
+unrepresentable — the earlier claim to that effect is **withdrawn**. `B32`/`B64`
+is a relabeling, and the run-level decoder accepts a byte window; "no data after
+the terminal `=`" is established by the proof obligation below (the rejection
+laws), not by the type.
+
+"No bespoke `encode`/`decode`" SHALL be read as **no per-format decoder/encoder
+triple** (no `parseB64`/`encodeB64Strict`/`decodeB64Strict`): the whole-input
+base32/64 composition is legitimately exposed as `decodeFullB{32,64}`/
+`encodeB{32,64}` over the `Bytes n` substrate, and those are the value's own
+entry points, not a parallel bespoke implementation.
 
 #### Scenario: Base16/32/64 are Codec values
 
 - **WHEN** a consumer uses base16/32/64
-- **THEN** each is a `Codec` **element** (`hexElem : Codec UInt8`,
-  `b32Elem`/`b64Elem : Codec (List UInt8)`) plus a run triple; the entry points
-  are `Codec.decodeFull {x}Elem {x}ConsumesByte` and `encode{X}`/`encodeB{X}` —
-  there is no `BaseN.Base16.decode` bespoke function.
+- **THEN** each is a `Codec`-based value decoded/encoded by `Codec.decode`/
+  `Codec.encode` (base16 an element `Codec UInt8` + its `Run`; base32/64 the
+  terminal-tail `B32`/`B64` value type reached via `iso` over the block-run +
+  tail composition); there is no `BaseN.Base16.decode`-style per-format function.
 
 #### Scenario: The bases compose from the codec primitives
 
 - **WHEN** a base module is inspected
 - **THEN** its element is `Codec.iso <blockIso> (count k (Codec.satisfy <digit>))`
   and its decoder/encoder are `decodeRepeat`/`encodeRepeat` — no hand-written
-  per-format `decode`/`encode`.
+  per-format `decode`/`encode` triple.
 
 #### Scenario: A decoder rejects malformed input (whole-input)
 
-- **WHEN** `Codec.decodeFull {x}Elem {x}ConsumesByte` is applied to a `Bytes n`
-  that is not a whole number of valid code words for that base
+- **WHEN** `Codec.decodeFull {x}Elem {x}ConsumesByte` (or `decodeFullB{32,64}` over
+  the padded composition) is applied to a `Bytes n` that is not a whole number of
+  valid code words for that base
 - **THEN** the result is `none`. (The full rejection contract — bad alphabet
   byte, illegal padding, wrong arity, trailing data after `=`, overflow — is the
   separate `basen-rfc-conformance-theorems` change, not this one.)
+
+#### Scenario: Trailing data after `=` is rejected by proof, not by the type
+
+- **WHEN** the padded bases' decoder is applied to input carrying data after a
+  terminal `=`
+- **THEN** the result is `none`, established by the rejection laws (an
+  inequation over the composition) rather than by unrepresentability in
+  `B32`/`B64` — the record of the withdrawn "unrepresentable" claim.

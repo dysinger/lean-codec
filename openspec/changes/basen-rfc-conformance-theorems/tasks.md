@@ -527,7 +527,7 @@ List.ofFn s₀ ++ List.ofFn s₁` from `Codec.ofFn_concat`.)_
       D7's header/body to state the shape is retained and guarded by the D8 `≤ 1` bound. The
       honest note currently buried in a task parenthetical must move into D7 itself.
 
-- [ ] 6.6 **Synced main spec still asserts withdrawn claims (CRITICAL C3).**
+- [x] 6.6 **Synced main spec asserts withdrawn claims (CRITICAL C3) — DONE.**
       `../lean-codec/openspec/specs/basen/spec.md:24-31` still says the padded bases are composed
       "so illegal 'data after `=`' is **unrepresentable**" (the proposal explicitly **withdraws**
       this: "the earlier … 'unrepresentable' … claims were false … withdrawn") and still says
@@ -537,6 +537,16 @@ List.ofFn s₀ ++ List.ofFn s₁` from `Codec.ofFn_concat`.)_
       "no per-format _decoder triple_; the whole-input base32/64 composition is exposed as
       `decodeFullB{32,64}`/`encodeB{32,64}`" — or make those `abbrev`s and document them as the
       composition D7/D8 promise.
+
+      **Landed.** The synced `openspec/specs/basen/spec.md` requirement now (i) states that the
+      padded composition does **not** make "data after `=`" unrepresentable — `B32`/`B64` is a
+      proved total bijective relabeling and the run-level decoder accepts a byte window, so the
+      property is established by the conformance rejection laws (task 6.4), not by the type; and
+      (ii) reads "no bespoke `encode`/`decode`" as **no per-format decoder/encoder _triple_**,
+      naming `decodeFullB{32,64}`/`encodeB{32,64}` as the value's own entry points. A new
+      Scenario "Trailing data after `=` is rejected by proof, not by the type" records the
+      correction. The same wording was mirrored into `lean-basen`'s MODIFIED block (see 6.11),
+      so the two changes no longer disagree; `openspec validate --all` green (8/8).
 
 - [x] 6.7 **`relB32Block_all_size3` proves length 5 (HIGH H3).** `relB64Block_all_size3` proves
       `b.length = 3`, the base32 twin proves `b.length = 5` — same name, different content.
@@ -569,13 +579,23 @@ List.ofFn s₀ ++ List.ofFn s₁` from `Codec.ofFn_concat`.)_
       comment; also add the interesting vector (`decodeFull … 2 "6f" = none`) if the two-char
       lowercase form is meant.
 
-- [ ] 6.11 **Archive hazard: overlapping MODIFIED block (openspec integrity, E).** The
+- [x] 6.11 **Archive hazard: overlapping MODIFIED block (openspec integrity, E) — DONE.** The
       `lean-basen` change **MODIFIES** "The `basen` bases are `Codec` values" and so would the
       6.6 fix — the AGENTS-documented "two changes each MODIFY the same requirement ⇒ archive
       silently drops one version" trap. **Fix:** apply the 6.6 edit to the **synced** spec once
       (coordinate the two changes / archive `lean-basen` first), and re-run
       `openspec validate basen-rfc-conformance-theorems` + `openspec validate lean-basen` before
       archiving; carry every existing scenario in the MODIFIED block.
+
+      **Resolved (before 6.6, in this order).** The correction was applied to **both** places in
+      one pass so they cannot diverge: the synced `openspec/specs/basen/spec.md` requirement, and
+      `openspec/changes/lean-basen/specs/basen/spec.md`'s MODIFIED block. That block now carries
+      **all** the synced scenarios (`Base16/32/64 are Codec values`) plus its own
+      (`The bases compose from the codec primitives`, `A decoder rejects malformed input
+      (whole-input)`, `Trailing data after = is rejected by proof, not by the type`), and states
+      the same withdrawn-claim correction — so archiving `lean-basen` yields exactly the synced
+      text, with no scenario silently dropped. `openspec validate lean-basen` and
+      `openspec validate --all` are green.
 
 - [x] 6.12 **Proof-quality cleanups (LOW L1/L2, NIT).** (a) `encodeB64Tail_of_rel`'s 4-branch
       `rcases x with _ | ⟨a,t⟩; cases t with …` cascade is overkill — `hxlen : x.length = 1 ∨
