@@ -39,11 +39,14 @@
 
 ## 4. Facade, bench lane, and gate
 
-- [x] 4.1 Add the `BaseN` facade re-exporting all seven bases + an inductive
-      `Base := B2 | B4 | B8 | B10 | B16 | B32 | B64` (module re-exports only —
-      **no** `roundtrip` dispatch theorem; the bespoke facade `roundtrip` was
-      removed in `basen-uniform-leaf-api`, and the per-base `roundtrip` laws are
-      the surface, each `BaseN.Base{X}.roundtrip`)
+- [x] 4.1 Re-export all seven bases from the `BaseN` root (module re-exports
+      only). **No facade, no `Base` inductive, no `encode (b : Base)`/
+      `decode (b : Base)` dispatcher:** each base is its own `Codec` value,
+      decoded/encoded by the single uniform `Codec.decode`/`Codec.encode`
+      (`Codec.decodeFull hexElem …`, `decodeFullB64 s`, `encodeB32 bs`). The
+      radix lives in the value the caller holds, never a dispatch index. The
+      per-base roundtrip laws are the surface (`BaseN.Base{X}.roundtrip`, plus
+      `decodeFullB64_roundtrip`/`decodeFullB32_roundtrip` for the padded bases).
 - [x] 4.2 Add a bench lane value-checking each base byte-for-byte (RFC 4648 §10
       for 16/32/64, hand vectors for 2/4/8/10) and the roundtrip laws
 - [x] 4.3 Gate: `lake build` zero `sorry`/warnings; `#print axioms` on each
