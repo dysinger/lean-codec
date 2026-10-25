@@ -56,15 +56,16 @@ reminder that the toolchain is _flake-scoped_, not host-global.)
   with a layman "why"):** `README.md`.
 - **Engineering state & task ledger (spec-driven):** `openspec/`. Every change
   lives under `openspec/changes/` as proposal / spec delta / design / tasks. The
-  **active change is `basen-rfc-conformance-theorems`** (planning done — the
-  re-anchored RFC 4648 conformance plan for `lean-basen`: rejection / canonical
-  encoding / converse-injectivity theorems over the `Codec`-value surface; the
-  first implementation step is the **D3 run-level terminal-padding guard** for
-  base32/64, whose mechanism — full-block-run + optional tail vs. post-condition
-  theorem — must be settled before any theorem) — consult
-  `openspec/changes/basen-rfc-conformance-theorems/{tasks,design}.md` for the
-  task status and next steps. The companion `lean-basen` change (seven
-  `Codec`-value bases, done) is complete except seven mechanical polish items.
+  **`basen-rfc-conformance-theorems` change is COMPLETE (16/16 tasks, `all_done`,
+  `openspec validate` green)** — the RFC 4648 conformance contract for
+  `lean-basen` over the `Codec`-value surface: rejection / canonical encoding /
+  converse / injectivity theorems, all `[propext, Quot.sound]`-only. The
+  padded-base converse + injectivity (`decodeFullB64_conv`/`encodeB64_injective`
+  and the `B32` mirrors), the bench rewire to the uniform surface, and the
+  `nix flake check` gate all landed (`../lean-basen` `9babcab`, `6d7ba52`,
+  `44c0edf`, pushed). **Next: archive it** (`/opsx-archive`), then the pending
+  `lean-basen` polish items. The companion `lean-basen` change (seven
+  `Codec`-value bases) is complete except seven mechanical polish items.
   History ("we used to / reverted / this session") belongs in that ledger,
   **never** in this file or the README.
   (`single-carrier-bytes` is archived as
