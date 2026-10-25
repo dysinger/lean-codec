@@ -56,21 +56,78 @@ reminder that the toolchain is _flake-scoped_, not host-global.)
   with a layman "why"):** `README.md`.
 - **Engineering state & task ledger (spec-driven):** `openspec/`. Every change
   lives under `openspec/changes/` as proposal / spec delta / design / tasks. The
-  **`basen-rfc-conformance-theorems` change is COMPLETE (16/16 tasks, `all_done`,
-  `openspec validate` green)** — the RFC 4648 conformance contract for
-  `lean-basen` over the `Codec`-value surface: rejection / canonical encoding /
-  converse / injectivity theorems, all `[propext, Quot.sound]`-only. The
-  padded-base converse + injectivity (`decodeFullB64_conv`/`encodeB64_injective`
-  and the `B32` mirrors), the bench rewire to the uniform surface, and the
-  `nix flake check` gate all landed (`../lean-basen` `9babcab`, `6d7ba52`,
-  `44c0edf`, pushed). **Next: archive it** (`/opsx-archive`), then the pending
-  `lean-basen` polish items. The companion `lean-basen` change (seven
-  `Codec`-value bases) is complete except seven mechanical polish items.
+  **`basen-rfc-conformance-theorems` is the ACTIVE change — 14/31 tasks done,
+  state `ready` (reopened by adversarial review).** Do **not** archive it.
+
+  **NEXT SESSION — start here, nothing else.**
+
+  Open `openspec/changes/basen-rfc-conformance-theorems/tasks.md` and work
+  **section 6 in order (6.1 → 6.12)**, then decide on section 7 (a separate
+  change). Read `../lean-basen/REVIEW-basen-rfc-conformance.md` first — it is
+  the evidence for every task in §6 (severity-tagged C1/C2/C3/H1–H4/M1–M5/L1–L6).
+
+  **What already landed and is verified sound** (`../lean-basen` `9babcab`,
+  `6d7ba52`, `44c0edf` + review `b57ff43`, all pushed): the padded-base converse
+  `decodeFullB64_conv`/`decodeFullB32_conv`, injectivity
+  `encodeB64_injective`/`encodeB32_injective`, the bench rewiring, and the gate.
+  Every new law is `[propext, Quot.sound]`-only (two helpers `[propext]`-only),
+  no `sorry`/`Classical.choice`; `lake build`, `lake build bench`,
+  `nix flake check` (checks.lean + checks.formatting) and `openspec validate`
+  are all green **as of `44c0edf`**. Nothing landed this session is _unsound_.
+
+  **Why it is not done.** The review found the proofs valid _for the statements
+  they state_, but the statements/docs are wrong in places. In fix order:
+
+  1. **6.1 (C1) — bench canonical vectors are tautologies.** `Bench.lean:101-118`
+     unpacks `encodeB64_canonical`'s ∃ and repacks conjuncts 1–3, dropping 4–5
+     (alphabet-only + pad-arity = the only RFC content). **Nothing in the bench
+     asserts the real encoder output** (`encodeB64 foobar = some ⟨8,"Zm9vYmFy">`
+     appears nowhere; the only concrete strings are block-level
+     `b64BlockUnapply` `rfl`s). Fix: delete the two ∃-repackings; add per-vector
+     `example : encode{X} v = some ⟨k, fun i : Fin k => [bytes][i]⟩ := rfl` for
+     base64 `f/fo/foo/foob/fooba/foobar` → `Zg==`/`Zm8=`/`Zm9v`/`Zm9vYg==`/
+     `Zm9vYmE=`/`Zm9vYmFy` and base32 → `MY======`/`MZXQ====`/`MZXW6===`/
+     `MZXW6YQ=`/`MZXW6YTB`. **Acceptance: a deliberately broken encoder must fail
+     `lake build bench`.**
+  2. **4.4 (C2) — injectivity is weaker than the spec.** Spec says
+     `encode v = encode v' → v = v'` (Option equality); code says both
+     `= some ⟨n,s⟩`, which misses `none = none` and silently assumes `encode` is
+     total (no `encode{X}_ne_none` exists). Fix: prove `encode{X}_ne_none` and
+     restate as the Option-equality form (or amend the spec Scenario + state
+     totality). Applies to `encodeB{64,32}_injective` **and** the five
+     fixed-width `encode_injective` (`Base2:561 Base4:455 Base8:589 Base10:411
+Base16:399`).
+  3. **6.3 (M3) — "unique canonical inverse" is not proved.** Add
+     `decodeFullB64 s = some v ↔ ∃ v', encodeB64 v' = some ⟨n,s⟩ ∧ v = v'`
+     (+ B32). This is the real "total characterization" and subsumes 6.4.
+  4. **6.6 (C3) + 6.11 (archive hazard) — the SYNCED spec**
+     `openspec/specs/basen/spec.md:24-31` still says "illegal data after `=` is
+     unrepresentable" (proposal **withdraws** this) and "no bespoke
+     `encode`/`decode`" (the repo has `decodeFullB{32,64}`/`encodeB{32,64}`).
+     **Edit the synced spec once, coordinated with `lean-basen`** — both changes
+     MODIFY "The `basen` bases are `Codec` values"; naive edits silently drop a
+     scenario at archive (see the §Openspec workflow note above).
+  5. Then the cheap ones: **6.5** (design D7 header says "not
+     `head?`/`filterMap`" — it _is_) , **6.4** (general rejection laws not just
+     named vectors), **6.7** (`relB32Block_all_size3` proves length **5** —
+     rename), **6.9** (automate the axiom gate), **6.10** (`rejects_lowercase`
+     is a passing `example` while the proposal calls it a non-goal; comment says
+     `6f` but byte is `0x66`), **6.8** (hoist 3 duplicated helper pairs to
+     `BaseN.Common`), **6.12** (proof cleanups).
+
+  **Do not re-litigate** (settled, verified): the padded-base converse and
+  injectivity _proofs_ are correct; `[propext, Quot.sound]`-only is real; the
+  `tails.length ≤ 1` D8 guard is load-bearing and correct; `nix flake check` is
+  green. The open work is statement/documentation fidelity, not soundness.
+
+  The companion `lean-basen` change (seven `Codec`-value bases) is complete
+  except seven mechanical polish items.
   History ("we used to / reverted / this session") belongs in that ledger,
   **never** in this file or the README.
   (`single-carrier-bytes` is archived as
   `openspec/changes/archive/2026-10-17-single-carrier-bytes`; `carrier-performance-tuning`
   is complete 11/11; `partial-remainder-fast-path` is complete 7/7.)
+
 - **Library source (module `Codec`):** `Codec/`.
   - `Iso.lean` — partial isomorphisms + folded combinators (`foldl`/`foldr`).
   - `Codec.lean` — the description AST, the length-indexed substrate `Bytes n`,

@@ -401,6 +401,26 @@ List.ofFn s₀ ++ List.ofFn s₁` from `Codec.ofFn_concat`.)_
 > characterization" (the proposal's headline) is _not_ proved — only converse + injectivity +
 > named rejection vectors. These tasks close the review. Nothing here is a soundness bug.
 
+> **Verification recipe (run from `../lean-basen`; no tooling is on the host PATH).**
+>
+> ```
+> nix develop --command lake build        # the library: zero sorry / zero warnings
+> nix develop --command lake build bench  # the bench lane (task 5.1/6.1 lives here)
+> ```
+>
+> Axiom gate — write `/tmp/chk.lean` importing `BaseN` and, for **every** new law,
+> `#print axioms BaseN.Base64.decodeFullB64_conv` … then
+> `nix develop --command lake env lean /tmp/chk.lean`. Expected today (all verified at
+> `44c0edf`): every law `[propext, Quot.sound]`, with `b64Split_blocks_tail` /
+> `b32Split_blocks_tail` even `[propext]`-only. **A `Classical.choice` in the output is a
+> regression** — the usual culprits are `simp at h` on a list-length contradiction, and
+> `omega`/`decide` in a dependent context (see the `lean` skill entries dated 2026-10-25).
+> `nix flake check` (checks.lean + checks.formatting) is a _long_ build — launch it
+> detached (`nohup nix flake check > /tmp/fc.log 2>&1 &`) and poll the log with short
+> calls; never foreground it (AGENTS.md "Long builds" rule).
+> `openspec validate basen-rfc-conformance-theorems` (from `../lean-codec`) after any
+> spec-delta edit, and again after any §6.6/§6.11 change.
+
 - [ ] 6.1 **Bench canonical vectors are tautologies (CRITICAL C1).** The two canonical
       `example`s in `Bench.lean` unpack `encodeB64_canonical`'s ∃-hypothesis and repack only
       conjuncts 1–3, **dropping conjuncts 4–5** (alphabet-only + exact pad-arity) — the only
@@ -502,7 +522,7 @@ List.ofFn s₀ ++ List.ofFn s₁` from `Codec.ofFn_concat`.)_
 
 - [ ] 6.12 **Proof-quality cleanups (LOW L1/L2, NIT).** (a) `encodeB64Tail_of_rel`'s 4-branch
       `rcases x with _ | ⟨a,t⟩; cases t with …` cascade is overkill — `hxlen : x.length = 1 ∨
-  x.length = 2` is already in scope; replace with a 3-line length-dichotomy (`match x, hxlen`
+x.length = 2` is already in scope; replace with a 3-line length-dichotomy (`match x, hxlen`
       or `cases x <;> cases hxlen <;> first | rfl | omega`). (b) `dsimp only []` is a no-op —
       remove. (c) `simp only [Suffix.empty, Nat.sub_zero] at st hrelt` + `subst hst_eq` are brittle
       — prefer `cases`/explicit `cast (Nat.sub_zero …)` and a comment that the `- 0` index is what
