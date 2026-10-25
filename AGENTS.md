@@ -56,44 +56,78 @@ reminder that the toolchain is _flake-scoped_, not host-global.)
   with a layman "why"):** `README.md`.
 - **Engineering state & task ledger (spec-driven):** `openspec/`. Every change
   lives under `openspec/changes/` as proposal / spec delta / design / tasks. The
-  **`basen-rfc-conformance-theorems` is the ACTIVE change — 25/31 tasks done,
-  `openspec validate` green.** Do **not** archive it.
+  **`basen-rfc-conformance-theorems` is the ACTIVE change — 28/31 tasks done,
+  `openspec validate --all` green (8/8).** Do **not** archive it yet — see the
+  archive ordering below.
 
-  ### NEXT SESSION — start here, nothing else
+  ### NEXT SESSION — start here
 
-  **Implement task 6.4** (MEDIUM M4 — the last substantive §6 item that is not a
-  spec-edit or a process item). Its finding, verbatim from `tasks.md`: the
-  rejection theorems are a **finite vector set**, not the general law the
-  proposal promises. Prove, for **all** `s`:
+  **The in-scope queue is EMPTY.** Tasks 6.4, 6.11 and 6.6 landed last session.
+  The only unchecked tasks are 7.1 / 7.2 / 7.3, which `tasks.md` §7 explicitly
+  scopes to a **separate change** (`basen-rfc-total-characterization`) — do not
+  absorb them into this one.
 
-  - **(a)** any byte `b` with `b64Valid b.toNat = false` ⇒ `decodeFullB64 s = none`
-    (generalise the existing `reject_invalid_char`, which is index-0 only, to
-    **every** index);
-  - **(b)** a `=` at a **non-terminal** position ⇒ `none` (the `Zg==Zg==` /
-    `MY======MY======` class — currently only implicit in the D8 `≤ 1` guard,
-    no theorem states it);
-  - **(c)** `n % 4 ≠ 0` ⇒ `none` (and `n % 8 ≠ 0` for base32). **This is the
-    only genuinely hard one** — it needs the arity argument lifted off the named
-    vectors rather than case-split per example.
+  So the first step is a **choice of work item, which only the user can make**:
 
-  Mirror all three for base32; every law `[propext, Quot.sound]`-only, gated in
-  `Axioms.lean`, and given a bench vector. Work in `../lean-basen`, in that
-  repo's own `nix develop`.
+  1. archive `lean-basen`, then this change, then start
+     `basen-rfc-total-characterization` for §7 (see archive ordering);
+  2. start §7 as a new change without archiving this one;
+  3. anything else the user asks for.
 
-  Useful starting points in `../lean-basen`: `decodeFullB64_some` (the
-  decompose-into-blocks-plus-≤1-tail witness), `Rel_b64BlockElem_len` (blocks
-  are 4 bytes), `relB64Tail_len` (tail is 4 bytes), the D8 `tails.length ≤ 1`
-  guard in `decodeFullB64_reject_ZgAAAA`, and `b64BlockDecodeLenient`'s
-  pad-rejection arms. For (c), the arity argument is: `b64Split`'s block run
-  consumes `4 · blocks.length` and the tail `0` or `4`, so `n` must be `4·k`.
+  **Ask; do not guess.** Full handoff — what landed, the seam that looked hard and
+  wasn't, the archive ordering, the verification recipe and the git rules that bit
+  us — is in
+  `openspec/changes/basen-rfc-conformance-theorems/NEXT-SESSION.md`. Read that
+  first; it is the single source of truth for the next session.
 
-  **Then** the tracked queue in `tasks.md` § "6.5 — Remaining order": after 6.4,
-  **6.11 _then_ 6.6**. 6.11 must precede 6.6 — both changes MODIFY the same
-  requirement block and archive silently keeps one version. Section 7 is a
-  separate change, out of scope.
+  **Archive ordering (do not get this wrong):** `lean-basen` and this change both
+  MODIFY the requirement "The `basen` bases are `Codec` values", and archive
+  silently keeps one version. The two MODIFIED/ synced texts were deliberately made
+  identical last session (task 6.11), so either order is now _safe_ — but still
+  archive **`lean-basen` first**, then this change, re-running
+  `openspec validate --all` after each.
 
   Read `../lean-basen/REVIEW-basen-rfc-conformance.md` for the severity-tagged
   evidence behind every §6 task.
+
+  ### State as of this session (verified, pushed)
+
+  `../lean-basen` `HEAD` = `306e951`; `../lean-codec` = `1fc75e4`.
+  **This session landed 6.4 (both bases), then 6.11, then 6.6:**
+
+  - **6.4 (MEDIUM M4) — rejection is now the general law, not a vector set.**
+    For **every** `s`, both padded bases, `[propext, Quot.sound]`-only, gated in
+    `Axioms.lean` (13 new `#guard_msgs`, re-verified load-bearing), bench-covered:
+    (a) `decodeFullB{64,32}_reject_invalid_at` — an invalid alphabet byte at **any**
+    index; (b) `decodeFullB{64,32}_reject_pad_at_low_slot` — a `=` at code-word slot
+    0/1 (the `Zg==Zg==` / `MY======MY======` class, previously only implicit in the
+    D8 `≤ 1` guard); (c) `decodeFullB{64,32}_reject_arity` — `n % 4 ≠ 0` (resp.
+    `% 8`). **Part (c), billed as the hard one, needed no case-split:** the two
+    region-length lemmas give `n = 4 · (|blocks| + |tails|)`, hence
+    `Nat.mul_mod_right`. Supporting: `decodeFullB{64,32}_consumed_alphabet`,
+    `Rel_b{64,32}TailElem_pad_pos`, `decodeFullB64_block_region`,
+    `decodeFullB{64,32}_arity`.
+  - **6.11 then 6.6 — the withdrawn-claims correction, applied once to both places.**
+    The synced `openspec/specs/basen/spec.md` requirement no longer asserts that
+    "data after `=` is unrepresentable" (withdrawn: `B32`/`B64` is a proved total
+    bijective relabeling, and the property comes from the 6.4 rejection laws), and
+    reads "no bespoke `encode`/`decode`" as **no per-format decoder/encoder
+    _triple_**, naming `decodeFullB{32,64}`/`encodeB{32,64}` as the value's own
+    entry points. A new Scenario records the correction. `lean-basen`'s MODIFIED
+    block carries the identical text plus every synced scenario, so archiving either
+    change cannot drop a scenario.
+
+  ### Prior session (for reference) — 6.2 and 6.3 (plus 4.4)
+
+  **This session landed 6.2 and 6.3** (plus 4.4, which was the same theorem as
+  6.2):
+
+  - **6.2 (CRITICAL C2) — injectivity now _is_ the spec's law.** The spec
+    Scenario is `encode{X} v = encode{X} v' → v = v'`; the shipped theorems
+    assumed both sides `= some ⟨n,s⟩`, silently relying on unproved totality.
+    Fixed by **proving totality and restating**, not by weakening the spec.
+    Seven `{…}_injective_eq` laws, each literally the spec's proposition. The
+    totality layer: `Common.encode_satisfy_ne_none` / `encode_seq_ne_none` /
 
   ### State as of this session (verified, pushed)
 
@@ -188,10 +222,12 @@ reminder that the toolchain is _flake-scoped_, not host-global.)
   layer, deleting the bespoke `encode`/`decode`.** The facade + bench are
   rewired to the Codec-value surface (`bef44ae` in `../lean-basen`); `lake build`
   green, zero `sorry`/warnings, every per-base `BaseN.Base{X}.roundtrip`
-  `[propext, Quot.sound]`-only, `nix flake check` green. The **next active
-  downstream work is `basen-rfc-conformance-theorems`** (the RFC 4648 conformance
-  plan — rejection / canonical / converse-injectivity; see the active-change
-  pointer above). Work in `../lean-basen`'s own `nix develop`, not this one's.
+  `[propext, Quot.sound]`-only, `nix flake check` green. The **active
+  downstream change is `basen-rfc-conformance-theorems`** (the RFC 4648 conformance
+  plan — rejection / canonical / converse-injectivity), now at **28/31** with its
+  in-scope queue complete; its §7 remainder is a separate change. See the
+  active-change pointer above. Work in `../lean-basen`'s own `nix develop`, not this
+  one's.
 
   Task 4.3 (`nix flake check green`) is **done**: `codec` is now
   a flake input (`github:dysinger/lean-codec`) threaded into `default.nix`, which
