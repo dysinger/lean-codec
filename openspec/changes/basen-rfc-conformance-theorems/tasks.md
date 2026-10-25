@@ -434,7 +434,7 @@ List.ofFn s₀ ++ List.ofFn s₁` from `Codec.ofFn_concat`.)_
       `List.ofFn` equality); delete the ∃-repackings. **Acceptance:** a deliberately-wrong
       encoder (lowercase, or wrong pad count) must fail the bench.
 
-- [ ] 6.2 **Injectivity stated weaker than the spec (CRITICAL C2).** Spec
+- [ ] 6.2 **Injectivity stated weaker than the spec (CRITICAL C2) — NEXT, planned below.** Spec
       (`specs/basen/spec.md`, Scenario "Encoding is injective"): `encode v = encode v' → v = v'`
       (Option equality). `encodeB64_injective`/`encodeB32_injective` and the five fixed-width
       `encode_injective` all assume **both** sides `= some ⟨n,s⟩`, so they miss the
@@ -528,6 +528,87 @@ x.length = 2` is already in scope; replace with a 3-line length-dichotomy (`matc
       — prefer `cases`/explicit `cast (Nat.sub_zero …)` and a comment that the `- 0` index is what
       is being normalised. (d) `encodeB64_injective`'s docstring "partial bijection" overstates —
       it proves injectivity only (totality unproved, see 6.2).
+
+### 6.2 — implementation plan (settled; execute in the next session)
+
+**Decision taken: prove totality and restate injectivity as the spec's
+`Option`-equality law.** The spec Scenario "Encoding is injective" says
+`encode{X} v = encode{X} v' → v = v'`. Rather than weaken the spec to match the
+shipped both-succeed theorems, prove the stronger law — `encode` genuinely _is_
+total for all seven bases, so the spec sentence is achievable as written.
+
+**Why it is provable (the key fact, verified this session).** For the padded
+bases the only `none` branches are in `encodeB64Tail`/`encodeB32Tail`, whose
+`_ => none` arms are _unreachable from a split_: `b64Split` only ever produces
+tails of length 0–2 and `b32Split` 0–4, which are exactly the arms that
+`Codec.encode b64TailElem`/`b32TailElem` handle (both are total on their
+1/2- and 1–4-byte domains by `Rel_b64TailElem_size`/`Rel_b32TailElem_size` +
+`encode_ne_none`). For the five fixed-width bases `encode{X} = encodeRepeat
+{x}Elem`, and `encodeRepeat` is total when the element encoder is
+(`encodeRepeat_ne_none` at `Codec/Sound.lean:719`, already proved and in use in
+`Common.encodeRepeat_of_rel`).
+
+**The change set (11 theorems + 7 restatements + 1 bench update):**
+
+1. **Totality lemmas** (new, `[propext, Quot.sound]`-only each):
+   - `Base{2,4,8,10,16}.encode{X}_ne_none : encode{X} v ≠ none` — immediate from
+     `encodeRepeat_ne_none` _if_ the element relation always has a witness; if
+     not, prove directly by `encodeRepeat` case analysis (no `Rel` needed).
+   - `Base64.encodeB64_ne_none` / `Base32.encodeB32_ne_none` — the real work:
+     unfold `encodeB64`/`encodeB32` → `encodeB64'` → the two components. Needs a
+     **tail-length bound lemma** first:
+     `b64Split_tail_len : (b64Split bs).2.length ≤ 2` (and base32 `≤ 4`),
+     proved by `b64Split.induct` — the `_ => none` arm is then excluded by
+     `omega`. Then the block run is total by `encodeRepeat_ne_none` and the tail
+     by the bound + `encode_ne_none`.
+2. **Restate the seven injectivity theorems** as the spec's form:
+   `encode{X} v = encode{X} v' → v = v'`, disposing of the three `Option` cases:
+   `some/some` → existing both-succeed proof; `none/none` → refuted by
+   `encode{X}_ne_none v`; `some/none` / `none/some` → contradiction on one side.
+   (A small `Option`-case helper per file keeps this 4 lines each.)
+3. **Bench** (`Bench.lean`): the three injectivity `example`s currently pass
+   `h h'` to the old signature — restate them in the new form.
+4. **`Axioms.lean`**: add the seven `encode{X}_ne_none` laws (and the two
+   tail-length bounds) to the gate. The gate pins exact text, so it will fail
+   until they are added — that is the intended behaviour.
+5. **Docstrings**: `encodeB64_injective`/`encodeB32_injective` lose the
+   "not yet the spec's law / task 6.2" caveat added in `f5e65fa`, and may once
+   again say "bijection" — this time it is earned.
+
+**Acceptance:** the Lean statement of each injectivity law, read aloud next to
+the spec's Scenario line, is _literally the same proposition_; the `none = none`
+branch is covered by a `#check`-visible totality hypothesis; `lake build`
+(24+ jobs), `lake build bench`, zero warnings, `Axioms` green.
+
+**Risk / watch-items:**
+
+- The base32 tail bound is `≤ 4` and its `encodeB32Tail` has four `some` arms;
+  mirror base64 exactly rather than generalising (see task 6.8's note on why
+  these stay per-base).
+- `Classical.choice` is the usual accident: prefer explicit `omega`/`cases` over
+  `simp at` on length contradictions (this leaked once already, per the 4.3 note).
+- `b64Split.induct` needs the `case1..case4` naming; base32 has `case1..case6`.
+  If `simp [b64Split]` does not close a base case, use `rfl`.
+
+## 6.5 — Remaining order after 6.2 (the tracked queue)
+
+Everything below is **tracked, not yet started**. Do them in this order; the
+rationale is that each one unblocks or de-risks the next.
+
+| #   | Task                                                                                                                                                                                          | Nature                                                                                                                              | Depends on                         |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| 1   | **6.3** (M3) — the "unique canonical inverse" iff: `decodeFullB{64,32} s = some v ↔ ∃ v', encodeB{v} v' = some ⟨n,s⟩ ∧ v = v'`                                                                | new theorem; after 6.2 the `→` half is `decodeFullB64_conv` and the `←` half is `decodeFullB64_roundtrip`, so it is mostly assembly | 6.2                                |
+| 2   | **6.4** (M4) — generalise rejection from named vectors to the law: (a) any invalid alphabet byte at **any** index, (b) a `=` at a non-terminal position, (c) `n % 4 ≠ 0` (base32 `n % 8 ≠ 0`) | new theorems; (c) is the only genuinely hard one — it needs the arity argument lifted off the named vectors                         | 6.3 (shares the image/iff framing) |
+| 3   | **6.6** (C3) — synced `lean-codec/openspec/specs/basen/spec.md:24-31` still asserts the **withdrawn** "illegal data after `=` is unrepresentable" and "no bespoke per-format function"        | spec edit                                                                                                                           | **6.11 first**                     |
+| 4   | **6.11** (E) — the archive hazard: `lean-basen` change MODIFIES "The `basen` bases are `Codec` values", and the 6.6 fix would modify it again                                                 | process                                                                                                                             | coordinate; see below              |
+| 5   | **4.4** — closes automatically once 6.2 lands (it is the same theorem); re-verify then flip                                                                                                   | bookkeeping                                                                                                                         | 6.2                                |
+
+**6.11 must be resolved before 6.6, not after.** Both changes MODIFY the same
+requirement block, and OpenSpec's archive takes one version silently (see
+AGENTS.md "Openspec workflow"). The safe sequence is: apply the 6.6 wording to
+the **synced** spec once, in whichever change syncs first, and carry every
+existing scenario of that requirement into the MODIFIED block of whichever
+change edits it second — then `openspec validate` **both** changes.
 
 ## 7. Follow-on change (out of scope for `basen-rfc-conformance-theorems`)
 
