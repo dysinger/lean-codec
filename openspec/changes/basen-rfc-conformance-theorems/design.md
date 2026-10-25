@@ -282,6 +282,40 @@ _Consequence for task order:_ 1.4 (roundtrip) is the gate for 1.1 (delete the
 strict triples + shims); then the bench re-anchor (5.1) and the conformance
 families (3.x/4.x), exactly as stated — there is **no** facade task.
 
+### D8 — The terminal tail is decoded as **exactly one** bounded block, not `decodeFull` (a single-element `decode`), so the converse holds unconditionally
+
+This is the completion of D7's deferred "substep 6" (the `head?`/`filterMap`
+re-shape), and it is **load-bearing**, not cosmetic. The first implementation of
+`decodeFullB64`/`decodeFullB32` decoded the terminal tail with
+`decodeFull b64TailElem`/`decodeFull b32TailElem`. Because `decodeFull` is
+`decodeRepeat` with full consumption, it admits a **multi-block** tail: an input
+with data _after_ a terminal `=` that is _itself_ a valid padded tail block —
+`"Zg==Zg=="` (two 1-byte blocks `[[f],[f]]`), `"MY======MY======"` (base32) —
+decodes successfully to `[0x66, 0x66]`.
+
+That is a genuine RFC 4648 §3.2 rejection failure ("padding … only performed at
+the end"), and it makes the **converse** (`decodeFullB64 s = some v → encodeB64 v =
+some ⟨n, s⟩`, task 4.3) **false**: `decodeFullB64 "Zg==Zg==" = some [f, f]` but
+`encodeB64 [f, f] = "Zm8=" ≠ "Zg==Zg=="` (verified `#eval`).
+
+**Decision:** the terminal tail is decoded as **exactly one** `b64TailElem`/
+`b32TailElem` block via the _single-element_ `decode` (not `decodeFull`), requiring
+the resulting suffix to be empty (`t₂.remaining = 0`); an empty tail is `some []`
+when `t.remaining = 0`. This admits only `tail = []` or `tail = [one 1–2-byte
+block]`, so:
+
+- data after a terminal `=` (even a valid appendable padded block) is **rejected**
+  (completing 3.1/3.2's "any data after the terminal `=`" mandate — the
+  `Zg==Zg==`/`MY======MY======` class was previously unproven);
+- the converse's tail is **definitionally** a singleton, so the task-4.3 note's
+  "the tail 1–2 bytes" assumption is a fact, not an unstated precondition;
+- the whole-input roundtrip (`decodeFullB64_roundtrip`) and the rejection family
+  are **re-derived** over the single-block tail (the tail value in
+  `decodeFullB64_some` is now a single `List UInt8`, not `List (List UInt8)`).
+
+The full-block `Run` `▸` single-block tail (`▸ iso`) composition is precisely the
+D7 shape; this change discharges the last deferred piece of D7.
+
 ## Risks / trade-offs
 
 - **[Not a `Codec` constructor, by verified necessity]** — this is _not_ a

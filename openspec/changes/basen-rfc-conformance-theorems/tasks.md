@@ -210,14 +210,17 @@ n = 4` (empty tail or one padded block) — `../lean-basen` `c0cf50d`.
       inequation: the full-block run stops at the first `=`, the leftover
       alphabet-only bytes cannot decode as a `b64TailElem`), plus invalid-char,
       pad-first, bad-length, and pad-shape vectors — all over the uniform decoder.
-      _(**DONE:** the flagship `decodeFullB64_reject_ZgAAAA` is `[propext, Quot.sound]`-clean
+      _(**DONE + D8 completes it:** the flagship `decodeFullB64_reject_ZgAAAA` is `[propext, Quot.sound]`-clean
       (the `Classical.choice` leak was traced to `omega`'s `Nat.lt_or_gt_of_ne` trichotomy in the
       `hall` byte-extraction; replaced with the clean `BaseN.Common.nat_lt_four` case analysis).
       Added the full F\* rejection family over `decodeFullB64`: `decodeFullB64_reject_invalid_char`
       (`!g==`), `decodeFullB64_reject_pad_first` (`=g==`), `decodeFullB64_reject_bad_length` (`Zg`),
       plus the shared `decodeFullB64_reject_first_invalid` (4-byte first-byte-not-`b64Valid`) and
       `Rel_b64TailElem_first_char` (a tail's first byte is `valToB64`-valid, never `=`). All
-      `[propext, Quot.sound]`-only, zero `sorry`, zero warnings.)_
+      `[propext, Quot.sound]`-only, zero `sorry`, zero warnings.
+      **D8 (this change) closes the remaining gap:** the above reject only the `Zg==AAAA` class
+      (trailing alphabet-only data, not a tail). The single-block-tail decode rejects the
+      `Zg==Zg==` class (data after terminal `=` that IS a valid padded block) too — see D8.)_
 - [x] 3.2 Base32: `decodeFullB32 … "MY======AAAAAAAA" = none` and the same family.
       _(**DONE:** mirrors the base64 rejection family. Added `decodeFullB32_some` (the
       decomposition bridge), `nat_lt_eight`, the flagship `decodeFullB32_reject_MYAAAA`
@@ -225,7 +228,10 @@ n = 4` (empty tail or one padded block) — `../lean-basen` `c0cf50d`.
       over the four 1–4-byte tail shapes), `decodeFullB32_reject_first_invalid`, and the
       vectors `decodeFullB32_reject_invalid_char` (`!==...`)/`_pad_first` (`===...`) /
       `_bad_length` (`MY`). All `[propext, Quot.sound]`-only, zero `sorry`, zero warnings,
-      `lake build` green. `../lean-basen` `BaseN/Base32.lean`.)_
+      `lake build` green. `../lean-basen` `BaseN/Base32.lean`.
+      **D8 (this change) closes the remaining gap:** the `MY======MY======` class (data
+      after terminal `=` that IS a valid padded block) is rejected by the single-block-tail
+      decode — see D8.)_
 - [x] 3.3 Fixed-width bases: the F\* rejection family per base (base16 non-hex +
       lowercase + odd arity; base2/4/8/10 invalid alphabet + wrong arity +
       base8/10 overflow).
@@ -244,17 +250,21 @@ n = 4` (empty tail or one padded block) — `../lean-basen` `c0cf50d`.
       `[c₀..c₄,=×3]`/`[c₀..c₆,=]` (b32 — 1/2/3/4-byte tails → 6/4/3/1 pads), so the output is alphabet-or-pad
       with terminal, RFC-arity-correct `=`. Uses the key helper `b32TailApply_block`
       (`b32TailApply a = some ys → b32BlockApply a = some ys`). `List.ofFn (concat s₀ s₁) =
-    List.ofFn s₀ ++ List.ofFn s₁` from `Codec.ofFn_concat`.)_
+  List.ofFn s₀ ++ List.ofFn s₁` from `Codec.ofFn_concat`.)_
 - [ ] 4.3 Per base: `decode … = some v → encode v = some ⟨n, s⟩` (converse).
       _(**NEXT SESSION — the padded bases only (fixed-width 4.3/4.4 already done via
       `decode_encode_inverse`/`encode_injective` in Base2/4/8/10/16).** The converse for base32/64 is
-      `decodeFullB64 s = some v → encodeB64 v = some ⟨n,s⟩` (and the B32 mirror). `decodeFullB64_some`/
-      `decodeFullB32_some` (landed in 3.1/3.2) decompose `v = blocks.flatten ++ tails.flatten` with
-      `(blocks, t) ∈ decodeRepeat b64BlockElem … s` and `decodeFull b64TailElem … t.bytes = some tails`; since
-      `v`'s `b64Split_ofBytes (b64OfBytes v)` recovers those exact `blocks`/`tail` (each block is 3 bytes, the tail
-      1–2 bytes, by `Rel_b64BlockElem_size`/`Rel_b64TailElem_size`), `encodeB64 v` reproduces `s` via
-      `encodeRepeat`/`encodeB64Tail`. The roundtrip already landed (`decodeFullB64_roundtrip`, task 1.4) gives the
-      other direction, so 4.3 closes the partial-isomorphism loop. Expect `List.ofFn`/`Bytes` boundary-pin transport
+      `decodeFullB64 s = some v → encodeB64 v = some ⟨n,s⟩` (and the B32 mirror). **Precondition (D8):**
+      the terminal-tail decode must first be a single bounded block (`decode b64TailElem` once, not
+      `decodeFull`/repeat) so the converse is true — with the current multi-block `decodeFull`, input
+      `"Zg==Zg=="` decodes to `[f,f]` but re-encodes to `"Zm8="` (converse false, verified `#eval`; see
+      D8). Once the single-block-tail `decodeFullB64` is in place, `decodeFullB64_some` decomposes
+      `v = blocks.flatten ++ tailBlock` with `(blocks, t) ∈ decodeRepeat b64BlockElem … s` and a *single*
+      `tailBlock` (0/1/2 bytes) from `decode b64TailElem t.bytes` with empty suffix; since `v`'s
+      `b64Split_ofBytes (b64OfBytes v)` recovers those exact `blocks`/`tailBlock` (each block 3 bytes by
+      `Rel_b64BlockElem_size`, the tail 1–2 bytes by `Rel_b64TailElem_size`), `encodeB64 v` reproduces `s`
+      via `encodeRepeat`/`encodeB64Tail`. The roundtrip (`decodeFullB64_roundtrip`, task 1.4) gives the other
+      direction, so 4.3 closes the partial-isomorphism loop. Expect `List.ofFn`/`Bytes` boundary-pin transport
       similar to `b64_boundary_pin`.)_
 - [ ] 4.4 Per base: `encode v = encode v' → v = v'` (injectivity).
       _(**NEXT SESSION — padded bases only.** `encodeB64 v = some ⟨n,s⟩ → encodeB64 v' = some ⟨n,s⟩ → v = v'`.
