@@ -206,23 +206,18 @@ n = 4` (empty tail or one padded block) — `../lean-basen` `c0cf50d`.
 
 ## 3. Rejection theorems (proved as `= none` inequations over the composition)
 
-- [ ] 3.1 Base64: `decodeFullB64 … "Zg==AAAA" = none` (pad-dichotomy
+- [x] 3.1 Base64: `decodeFullB64 … "Zg==AAAA" = none` (pad-dichotomy
       inequation: the full-block run stops at the first `=`, the leftover
       alphabet-only bytes cannot decode as a `b64TailElem`), plus invalid-char,
       pad-first, bad-length, and pad-shape vectors — all over the uniform decoder.
-      _(In progress: the **flagship** `decodeFullB64_reject_ZgAAAA : decodeFullB64
-    zgAAAA = none` is **proved** (`../lean-basen`, uncommitted), together with
-      the characterization lemma `decodeFullB64_some` (`[propext, Quot.sound]`)
-      and the `BaseN.Common.decodeRepeat_nil_mem_eq_id` helper (`[propext,
-    Quot.sound]`, gives `t = Suffix.id n s₀` for the empty-blocks result).
-      **The remaining sub-issue (open):** `#print axioms decodeFullB64_reject_ZgAAAA`
-      currently reports `[propext, Classical.choice, Quot.sound]` — a `Classical.choice`
-      leaks from an `omega`/`decide`-synthesized `Decidable` somewhere in the
-      `hblock_stop`/`hall` byte-extraction (the `Fin`/`List` instance search, not any
-      named lemma — every direct dependency was verified `[propext, Quot.sound]`-clean).
-      It must be tightened to `[propext, Quot.sound]` before 3.1 is done. The five
-      additional invalid-char/pad-first/bad-length/pad-shape vectors are also still
-      open, and use the same `decodeFullB64_some` contrapositive.)_
+      _(**DONE:** the flagship `decodeFullB64_reject_ZgAAAA` is `[propext, Quot.sound]`-clean
+      (the `Classical.choice` leak was traced to `omega`'s `Nat.lt_or_gt_of_ne` trichotomy in the
+      `hall` byte-extraction; replaced with the clean `BaseN.Common.nat_lt_four` case analysis).
+      Added the full F\* rejection family over `decodeFullB64`: `decodeFullB64_reject_invalid_char`
+      (`!g==`), `decodeFullB64_reject_pad_first` (`=g==`), `decodeFullB64_reject_bad_length` (`Zg`),
+      plus the shared `decodeFullB64_reject_first_invalid` (4-byte first-byte-not-`b64Valid`) and
+      `Rel_b64TailElem_first_char` (a tail's first byte is `valToB64`-valid, never `=`). All
+      `[propext, Quot.sound]`-only, zero `sorry`, zero warnings.)_
 - [ ] 3.2 Base32: `decodeFullB32 … "MY======AAAAAAAA" = none` and the same family.
 - [x] 3.3 Fixed-width bases: the F\* rejection family per base (base16 non-hex +
       lowercase + odd arity; base2/4/8/10 invalid alphabet + wrong arity +
