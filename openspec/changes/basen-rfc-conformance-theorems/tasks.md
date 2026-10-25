@@ -266,7 +266,13 @@ List.ofFn s₀ ++ List.ofFn s₁` from `Codec.ofFn_concat`.)_
       `decodeRepeat_spec` tail witness leaked `Classical.choice` via `simp at` on a list-length contradiction —
       replaced with explicit `simp only [List.length_cons] … ; omega` (the `nat_lt_four`-style discipline).)_
 
-- [ ] 4.4 Per base: `encode v = encode v' → v = v'` (injectivity). **REOPENED by review (C2).**
+- [x] 4.4 Per base: `encode v = encode v' → v = v'` (injectivity). **CLOSED by 6.2** — the spec's
+      plain `Option`-equality law, proved for all seven bases as `{encode{X}}_injective_eq`
+      (`Base2.encodeBit_injective_eq`, `Base4.encodeQuartet_injective_eq`,
+      `Base8.encodeOct_injective_eq`, `Base10.encodeDig_injective_eq`,
+      `Base16.encodeHex_injective_eq`, `Base32.encodeB32_injective_eq`,
+      `Base64.encodeB64_injective_eq`), each `[propext, Quot.sound]`-only and gate-pinned in
+      `Axioms.lean`. (`REOPENED by review (C2)` is resolved; the history is in 6.2.)
       _(**Status: proved, but the statement is weaker than the spec — not done.** What landed
       (`../lean-basen` `9babcab`/`6d7ba52`, `[propext, Quot.sound]`-only, zero `sorry`):
 
@@ -434,15 +440,38 @@ List.ofFn s₀ ++ List.ofFn s₁` from `Codec.ofFn_concat`.)_
       `List.ofFn` equality); delete the ∃-repackings. **Acceptance:** a deliberately-wrong
       encoder (lowercase, or wrong pad count) must fail the bench.
 
-- [ ] 6.2 **Injectivity stated weaker than the spec (CRITICAL C2) — NEXT, planned below.** Spec
+- [x] 6.2 **Injectivity stated weaker than the spec (CRITICAL C2) — DONE.** Spec
       (`specs/basen/spec.md`, Scenario "Encoding is injective"): `encode v = encode v' → v = v'`
       (Option equality). `encodeB64_injective`/`encodeB32_injective` and the five fixed-width
-      `encode_injective` all assume **both** sides `= some ⟨n,s⟩`, so they miss the
-      `none = none` branch and silently rely on an unproved totality fact (no `encode…_ne_none`
-      exists). **Fix:** prove `encode{X}_ne_none`/`isSome` (totality — it _is_ total, per
-      `#eval`) and restate injectivity as the spec's `Option`-equality form; **or** if keeping
-      the both-succeed form, amend the spec Scenario to say so explicitly _and_ state the
-      totality lemma beside it. Do not leave the spec sentence mismatched.
+      `encode_injective` all assumed **both** sides `= some ⟨n,s⟩`, so they missed the
+      `none = none` branch and silently relied on an unproved totality fact. **Fix (as planned):
+      proved totality and restated injectivity as the spec's `Option`-equality law** — the spec
+      was not weakened. Landed in `../lean-basen`, all `[propext, Quot.sound]`-only, zero
+      `sorry`/warnings, `lake build` 24 jobs green:
+
+      - **Totality (generic, `Codec`-free of per-base logic):**
+        `BaseN.Common.encode_satisfy_ne_none`, `BaseN.Common.encode_seq_ne_none`,
+        `BaseN.Common.count_satisfy_encode_ne_none`. The last is stated with the `count` width
+        *derived from `ds.length`* — an abstract `k` plus `ds.length = k` forces a dependent
+        `cases`, whose `Eq.ndrec` path drags in `Classical.choice` (the gate caught exactly that
+        during development; the `≤`/`=`-bound restructuring is what removes it).
+      - **Fixed-width totality:** `{x}BlockUnapply_digits` (total + length + all digits valid;
+        8/4/3/3/2 digits for 2/4/8/10/16) → `{x}Elem_encode_ne_none` →
+        `encode{Bit,Quartet,Oct,Dig,Hex}_ne_none`.
+      - **Padded totality:** `b64BlockUnapply_len3` / `b32BlockUnapply_chars`+`_len5`,
+        `b64TailUnapply_len12` / `b32TailUnapply_len14`,
+        `b{64,32}Split_ofBytes_shape_bounds` (blocks 3/5 bytes, tail ≤ 2/4),
+        `encodeB{64,32}Tail_ne_none`, `encodeB{64,32}'_ne_none`, `encodeB{64,32}_ne_none`.
+      - **The spec law itself:** `encode{Bit,Quartet,Oct,Dig,Hex}B?64?32??_injective_eq` —
+        seven theorems whose statement, read next to the spec Scenario, is literally the same
+        proposition (`encode{X} v = encode{X} v' → v = v'`). Each destructures the common
+        `Option` result with totality (`…_ne_none`) refuting `none`.
+      - **Gate:** 23 new `#guard_msgs` entries in `Axioms.lean` (verified to fail on a wrong
+        expectation). **Bench:** the three old both-succeed `example`s are restated in the
+        `Option`-equality form and widened to all seven bases.
+      - **Docstrings:** the `f5e65fa` "not yet the spec's law / task 6.2" caveats are gone; the
+        both-succeed lemmas are retained and now described as the workhorse the `_eq` law
+        reduces to.
 
 - [ ] 6.3 **"Unique canonical inverse" / total characterization is not proved (MEDIUM M3).**
       The requirement is titled "Decode is the unique canonical inverse"; the delivered laws
