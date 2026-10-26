@@ -35,11 +35,19 @@ roundtrip given by the inherited per-component
 `decodeRepeat_spec`/`encodeRepeat_rel`/`decodeFull_spec` laws, plus one block-run/
 tail split-uniqueness lemma for the padded bases.
 
-The padded bases' composition does **not** make illegal "data after `=`"
-unrepresentable — `B32`/`B64` is a proved total bijective relabeling of
-`List UInt8`, and the run-level decoder accepts a byte window. "No data after the
-terminal `=`" is established by the conformance rejection laws (an inequation
-over the decoder composition), not by the type.
+The padded bases' composition makes illegal "data after `=`" unrepresentable **at
+the canonical value type**, and this is a proved equivalence, not a convenience.
+`B32`/`B64` are block/tail spines with **terminal** tails (`nil` / `full` /
+`tail1`…/`tail2`…) and no constructor that continues after a tail, and they are a
+proved total bijection with `List UInt8` (`b{64,32}BytesOf_ofBytes` /
+`b{64,32}OfBytes_bytesOf`). The characterization law
+`decodeFullB{64,32}_char_via_type` shows the decoder's image is **exactly** the
+image of `encodeB{64,32} ∘ b{64,32}BytesOf`: a byte string decodes iff it is the
+encoding of some canonical `B32`/`B64`. A string carrying data after a terminal
+`=` admits no such value, because the type has no inhabitant for the tail-followed-
+by-block shape (`b{64,32}BytesOf_tail1_eq` makes terminality definitional). The
+conformance rejection laws state the same fact as an inequation over the decoder
+composition; the two agree.
 
 There is no per-format decoder/encoder **triple** (no `parseB64`/
 `encodeB64Strict`/`decodeB64Strict`); the whole-input base32/64 composition is
@@ -53,9 +61,13 @@ exposed as `decodeFullB{32,64}`/`encodeB{32,64}`, the value's own entry points.
   terminal-tail `B32`/`B64` value type reached via `iso` over the block-run +
   tail composition); there is no `BaseN.Base16.decode`-style per-format function.
 
-#### Scenario: Trailing data after `=` is rejected by proof, not by the type
+#### Scenario: Trailing data after `=` is rejected by proof _and_ by the type
 
 - **WHEN** the padded bases' decoder is applied to input carrying data after a
   terminal `=`
-- **THEN** the result is `none`, established by the conformance rejection laws
-  rather than by unrepresentability in `B32`/`B64`.
+- **THEN** the result is `none`, and this is established two ways that are proved
+  to agree: by the conformance rejection laws (an inequation over the decoder
+  composition), and by the type-level characterization
+  `decodeFullB{64,32}_char_via_type`, whose right-hand side quantifies only over
+  canonical `B32`/`B64` values — and the terminal-tail shape of those values has
+  no constructor that can carry trailing data.
