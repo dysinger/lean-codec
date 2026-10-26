@@ -1,7 +1,15 @@
 # Tasks
 
-> **Surface (read first).** This change is **remediation of an adversarial
-> review**, recorded verbatim in `review.md`. Each task cites findings as
+> **Surface (read first).** This change **REOPENS
+> `codec-normal-form-case-quotient` (16/16) and `basen-rfc-conformance-theorems`
+> (31/31)**. Those changes were marked complete on the strength of their own
+> authored tasks; the review found 2 CRITICAL defects in that same work, so their
+> completion claims are withdrawn. Both carry a `DO NOT ARCHIVE` banner, and
+> **nothing is archived until §1–§4 below are green.** The 41 tasks are the
+> remainder of the previous changes' work, not polish on finished work.
+>
+> This change is **remediation of an adversarial review**, recorded verbatim in
+> `review.md`. Each task cites findings as
 > `R<lens>.<n>`, matching that file's index. Anchors `[D#]`/`[S#]` are **not**
 > renumbered — only the text under them changes (design D6).
 >
@@ -18,6 +26,18 @@
 >
 > **Definition of done for every task:** the cited finding's evidence no longer
 > reproduces, and `nix develop --command lake build` is green with zero warnings.
+
+## 0. Correct the completion record (done — this is the mutual understanding)
+
+- [x] 0.1 Both reopened changes carry a `STATUS: NOT COMPLETE — DO NOT ARCHIVE`
+      banner at the top of their `tasks.md`.
+- [x] 0.2 `AGENTS.md`'s `Current state` says **NOTHING IS COMPLETE**, explains
+      that ticked counts are not completion claims, and records that
+      `openspec validate --all` checks schema conformance, not truth.
+- [x] 0.3 `AGENTS.md`'s archive section is retitled **BLOCKED** and states why
+      archiving now would freeze the defective spec text into `openspec/specs/`.
+- [x] 0.4 This change's `proposal.md` and `design.md` state that it REOPENS the
+      two changes rather than adding a workstream beside them.
 
 ## 1. The three cross-lens defects (do these first)
 
@@ -298,9 +318,9 @@
 
 - [ ] 4.6 **Stop calling `bench` an "extraction"** (R3.10).
       `lakefile.lean` declares a plain `lean_exe bench` (`root := \`Bench`) that
-    links the Layer-2 C object; there is no extraction step. This also
-    contradicts `AGENTS.md`'s own "all codecs are pure Lean". Fix the wording
-    here **and** in `default.nix`'s comment, and state that §10.5 extraction is
+  links the Layer-2 C object; there is no extraction step. This also
+  contradicts `AGENTS.md`'s own "all codecs are pure Lean". Fix the wording
+  here **and** in `default.nix`'s comment, and state that §10.5 extraction is
       not implemented so nobody goes looking.
 
 ## 5. The global `lean` skill (outside this repo — do last)

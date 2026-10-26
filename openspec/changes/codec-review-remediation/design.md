@@ -23,6 +23,20 @@ The constraint set is unchanged from the library's own rules:
   held (`Iso.law` has no escape hatch, zero `sorry` in the tree, all four C seams
   match on reachable inputs). Re-litigating those would be waste.
 
+## This change reopens the two "complete" changes
+
+`codec-normal-form-case-quotient` (16/16) and `basen-rfc-conformance-theorems`
+(31/31) were marked complete on the strength of their own task lists, then the
+review found 2 CRITICAL defects in that same work. A change is not complete while
+its own docs and gate are defective, so:
+
+- both carry a `STATUS: NOT COMPLETE — DO NOT ARCHIVE` banner in their `tasks.md`;
+- both are reopened here;
+- nothing is archived until §1–§4 of `tasks.md` is green.
+
+This is a **correction of a completion claim**, not a new workstream. The 41 tasks
+are the remainder of the previous two changes' work.
+
 ## Goals / Non-Goals
 
 **Goals:**

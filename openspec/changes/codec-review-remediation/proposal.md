@@ -1,5 +1,33 @@
 # Proposal
 
+## Status — this change REOPENS two changes marked complete
+
+**Read this first.** This change is not a new workstream alongside the others. It
+is the record that **`codec-normal-form-case-quotient` (16/16) and
+`basen-rfc-conformance-theorems` (31/31) are NOT complete**, despite every one of
+their task checkboxes being ticked.
+
+Those changes were marked complete on the strength of their own task lists. An
+adversarial review of the same work then produced 74 findings, 2 CRITICAL,
+including that the "zero-`sorry` proof gate" the completion reports relied on is
+**not enforced by the build**, and that `CHANGELOG.md` misstates the substrate
+type. A change cannot be complete while its own documentation and gate are
+defective.
+
+Consequences that are now binding:
+
+- Neither change SHALL be archived until the tasks in §1–§4 of `tasks.md` land.
+  Archiving freezes the spec text into `openspec/specs/`, including the passages
+  the review found wrong.
+- "Complete" for those changes means **their spec text and gate survive this
+  review** — not "the tasks I authored are ticked."
+- `openspec validate --all` returning green measures **schema conformance, not
+  truth**. It was green while these defects were live and must not be cited as
+  evidence of completion.
+
+The 41 tasks are therefore **the remainder of the previous changes' work**, not
+additional polish on top of finished work. See `review.md` for the evidence base.
+
 ## Why
 
 An adversarial review of this repo was run with four independent lenses —
@@ -9,7 +37,7 @@ surface vs its own claims, (3) `AGENTS.md` as agent operating instructions, and
 compiled or grepped rather than asserted. The reviews are preserved verbatim in
 `review.md`.
 
-They found **71 findings** (2 CRITICAL, 6 HIGH, 20 MEDIUM, 43 LOW), and three of
+They found **74 findings** (2 CRITICAL, 11 HIGH, 20 MEDIUM, 33 LOW, 8 INFO), and three of
 them are the kind that actively misinform a future reader or agent:
 
 - **`CHANGELOG.md` states the wrong type for `Bytes`.** It says
