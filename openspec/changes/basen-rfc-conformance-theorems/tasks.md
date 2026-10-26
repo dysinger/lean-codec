@@ -726,5 +726,51 @@ change edits it second — then `openspec validate` **both** changes.
       this change's delta, and `lean-basen`'s MODIFIED block — kept identical for archive safety).
       Bench includes discriminating examples: the tail-followed-by-block shape has no `B64`/`B32`
       inhabitant at all.
-- [ ] 7.3 Base16 case-insensitive decoder (RFC §8 "MUST accept both cases") — currently a non-goal;
-      if pursued it breaks `Unambiguous` (per design) and needs a documented relaxation.
+- [ ] 7.3 Base16 case-insensitive decoder (RFC §8 "MUST accept both cases").
+
+      **PAUSED — do not start until `codec-normal-form-case-quotient` task 5.1 lands.**
+
+      **The previous rationale was FALSE and is withdrawn.** Earlier text said a
+      case-insensitive decoder "breaks `Unambiguous` (per design)". It does not:
+      `Unambiguous` (`Codec/Sound.lean:621`) says one input yields at most one value,
+      and folding case *before* decoding is a total function, so it introduces no
+      alternative results. What a non-canonical *encoder* would threaten is
+      `Functional` (one value, one spelling), and that is preserved because the
+      encoder keeps emitting uppercase. The real constraint is **canonicality of
+      encode**, not unambiguity.
+
+      **The real fix is now available:** `lean-codec`'s `Codec.Normal`
+      (`Normal`/`Normalizer`/`fill`/`decodeNormal`, committed and pushed) makes this
+      expressible without weakening `Iso.law` — the quotient lives in the *object*.
+      The case variation is a length-preserving normalizer folding `a`–`f` **up** to
+      `A`–`F`, chosen so the encoder's uppercase output is a fold fixed point (that
+      is exactly `decodeNormal_encode`'s `hfix` obligation).
+
+      **Work this task needs, once unblocked:**
+      1. `../lean-basen` `Base16.lean`: `foldByte`/`foldList`/`normalList`,
+         `hexBlockIsoF : Iso UInt8 (Normal (List UInt8) foldList)`, `decodeHexFold`,
+         and the §8 both-cases theorem. Full lemma inventory and the three-way
+         case-split shape are recorded in
+         `openspec/changes/codec-normal-form-case-quotient/tasks.md` §5.1.
+      2. **This change's spec delta contradicts §8 and must be amended** —
+         `specs/basen/spec.md:34` currently reads "(for base16, outside the
+         **uppercase canonical** alphabet `0-9A-F` — lowercase `a-f` is _not_
+         accepted by the `Codec` value …)". Replace with the two-level rule: the
+         *canonical* alphabet is uppercase and `encode` emits only it (§8's SHOULD);
+         the *decode* side folds case before the `Iso`, so both cases are accepted
+         (§8's MUST).
+      3. **Task 3.3's rejection family must drop `lowercase`** — it is currently
+         listed as a positively-proved rejection, which is the opposite of what §8
+         requires.
+      4. `proposal.md:120` ("explicit non-goal") and `design.md` D6 must be rewritten
+         to in-scope, citing the corrected reason.
+      5. `../lean-basen/BaseN/Base16.lean`'s module docstring ("intentionally not
+         part of this `Codec` value") and `rejects_lowercase`'s docstring ("a
+         case-insensitive alphabet would break `Unambiguous`") must be corrected.
+      6. Reconcile the MODIFIED block of the `lean-basen` change (archive safety),
+         then `openspec validate --all`.
+
+      **Original entry, for the record:** "currently a non-goal; if pursued it breaks
+      `Unambiguous` (per design) and needs a documented relaxation." — the `Unambiguous`
+      claim is false (see above); the "documented relaxation" is
+      `codec-normal-form-case-quotient`, which relaxes nothing.
