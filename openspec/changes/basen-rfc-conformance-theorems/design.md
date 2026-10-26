@@ -229,10 +229,35 @@ length-cast gotcha). This is the one shared primitive all seven bases need.
 `decodeB32Strict`. The F\* rejection/canonical/converse vectors survive,
 re-spelled over the uniform entry points.
 
-### D6 — Base16 case-insensitivity is out of scope (carried over)
+### D6 — Base16 case-insensitivity: in scope (reversed — task 7.3)
 
-`hexElem` stays a strict uppercase `Iso`. Lowercase `6f` is a rejection, not an
-alias.
+> **Reversal.** This section originally read "Base16 case-insensitivity is out of
+> scope (carried over) — `hexElem` stays a strict uppercase `Iso`, lowercase `6f`
+> is a rejection, not an alias", and justified it by "a case-insensitive alphabet
+> would break `Unambiguous`". **That justification was false.** `Unambiguous`
+> (`Codec/Sound.lean`) says one input yields at most one value; folding case
+> _before_ decoding is a total function and introduces no alternative results. The
+> real constraint is the **canonicality of encode** — one value, one spelling —
+> and it is preserved because the encoder keeps emitting uppercase.
+
+The RFC 4648 §8 MUST is now satisfied, without weakening `Iso.law`:
+`lean-codec`'s `Codec.Normal` puts the quotient in the **object**
+(`Normal (List UInt8) foldList`), so `hexBlockIsoF : Iso UInt8 (Normal (List UInt8)
+foldList)` is an ordinary `Iso`. The fold is **upward** (`a`–`f` → `A`–`F`) so the
+canonical uppercase encoding is a fixed point — exactly `decodeNormal_encode`'s
+`hfix` obligation, discharged as `foldList_hexBlockUnapply`.
+
+Two shapes of the layer, both proved in `BaseN/Base16.lean`:
+`decodeHexBlockFold` (one block) and `decodeHexFold` (whole input: `foldByteBytes`
+applied to `Bytes n` first, then the strict `hexRun`). The strict `hexElem`/
+`hexRun`/`encodeHex` are untouched — only **decoding** widens.
+
+**The §8 widening is a one-directional preservation, not an identity.**
+`hexBlockApply (foldList cs) = hexBlockApply cs` is **false**: `['6','f']` is
+rejected by the strict `apply` yet folds to the accepted `['6','F']`. The lemma
+the `Iso` law needs is `hexBlockApply cs = some b → hexBlockApply (foldList cs) =
+some b` (`hexBlockApply_foldList`), with the refutation recorded as
+`hexBlockApply_foldList_ne`.
 
 ### D7 — The padded whole-input decoder is a **composition** (full-block `Run` + terminal-tail `Codec`, `iso`-ed to `B64`/`B32`); its result is **still flattened via `head?`/`filterMap`**
 
