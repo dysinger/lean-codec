@@ -97,20 +97,29 @@ longer than the commit that wrote it. As of this writing:
   (`Codec/Normal.lean`, below). Every law is `[propext, Quot.sound]`-only, zero
   `sorry`. `@[default_target] lean_lib codec` is the proof gate; `lean_exe bench`
   is the benchmark.
-- **One open change scoped to this repo: `codec-review-remediation` (0/41).** It
-  is the remediation of an adversarial review of `README.md`, `PAPER.md`, this
-  file, the global `lean` skill and the code. The four verbatim reviews are in
-  `openspec/changes/codec-review-remediation/review.md` (74 findings, ids
-  `R<lens>.<n>`); read that before any doc or seam edit, and read its
-  **"Verified-correct claims — do not re-litigate these"** list before re-opening
-  anything. Its three highest-value items: `CHANGELOG.md` states `Bytes` as
-  `List UInt8` (source is `Fin n → UInt8`), the zero-`sorry` gate is not actually
-  enforced by the build, and the `Classical.choice` catalogue below is incomplete.
-- `codec-normal-form-case-quotient` is **16/16** and ready to archive;
-  `basen-rfc-conformance-theorems` is **31/31** and ready to archive; `lean-basen`
-  is 18/25 (seven mechanical polish items only).
+- **NOTHING IS COMPLETE. Do not archive anything.** An adversarial review
+  (`openspec/changes/codec-review-remediation/`, 74 findings, 2 CRITICAL) found
+  the documentation and the proof gate defective _in the work that was marked
+  complete_. The task checkboxes are not the measure; the review is.
+- **The ticked counts are not completion claims.** `codec-normal-form-case-quotient`
+  16/16 and `basen-rfc-conformance-theorems` 31/31 mean _their own authored tasks
+  are done_. Both carry a `> STATUS: NOT COMPLETE — DO NOT ARCHIVE` banner in
+  their `tasks.md`, and both are **reopened** by `codec-review-remediation`
+  (0/41). "Complete" for them means _their spec text and gate survive the review_
+  — remediation tasks §1–§4.
+- **Why the checkboxes lied:** `codec-normal-form-case-quotient` was marked
+  16/16 and called "ready to archive" while (a) the zero-`sorry` gate it relied on
+  was never enforced by the build, and (b) `CHANGELOG.md` advertised the removed
+  `List UInt8` substrate. `openspec validate --all` was green throughout — it
+  checks **schema conformance, not truth**. Never cite it as evidence of
+  completion.
+- **The evidence base:** `codec-review-remediation/review.md` (four verbatim
+  reviews, ids `R<lens>.<n>`). Read its **"Verified-correct claims — do not
+  re-litigate these"** list before re-opening anything; it records what was
+  tested and held so it is not re-derived.
+- `lean-basen` is 18/25 (seven mechanical polish items).
 
-### `codec-normal-form-case-quotient` — complete (16/16)
+### `codec-normal-form-case-quotient` — tasks ticked 16/16, **NOT complete**, reopened
 
 The information-free-variation layer (`Codec/Normal.lean`): `Normal S norm` (the
 quotient `S/~` as the fixed points of a total idempotent `norm`), `Normalizer S
@@ -124,7 +133,7 @@ with `decodeNormal_of_fixed` / `decodeNormal_encode`. **`Iso.law` is untouched.*
 
 Task 5.1 (its downstream consumer) is **done** — see `../lean-basen` below.
 
-### `../lean-basen` — RFC change complete (31/31)
+### `../lean-basen` — tasks ticked 31/31, **NOT complete**, reopened
 
 The active downstream is `../lean-basen` (sibling repo — package `basen`, module
 `BaseN`; base-2/4/8/10/16/32/64, all seven landed and proven as `Codec` values).
@@ -133,7 +142,8 @@ pushing `lean-codec` and running `lake update codec` in `../lean-basen`. Its
 `BaseN/Common.lean` already imports `Codec.Normal`. **Work there, in its own
 `nix develop`.**
 
-`openspec/changes/basen-rfc-conformance-theorems/` is **31/31** — all tasks done.
+`openspec/changes/basen-rfc-conformance-theorems/` has its **31/31** tasks ticked,
+but is **NOT complete** — reopened by `codec-review-remediation` (see above).
 
 - **7.1, 7.2 (DONE)** — all seven bases state the in-image converse
   (`decodeFull_B{2,4,8,10,16}_char` join `decodeFullB{64,32}_char`), and the
@@ -162,12 +172,20 @@ pushing `lean-codec` and running `lake update codec` in `../lean-basen`. Its
   `openspec/changes/lean-basen/tasks.md` under "Still open — mechanical polish".
   Read them there; they are doc/tidy items, not proofs.
 
-**Archive ordering.** Both changes MODIFY the requirement "The `basen` bases are
-`Codec` values", and archiving keeps only one version. The two MODIFIED/synced
-texts were deliberately made identical (task 6.11), so either order is now _safe_ —
-but archive **`lean-basen` first**, then `basen-rfc-conformance-theorems`, running
-`openspec validate --all` after **each**. Re-reconcile the MODIFIED blocks if the
-§8 wording lands in both.
+**Archive ordering — BLOCKED, not just "in this order".** Nothing is archivable
+now. When it becomes unblocked (remediation §1–§4 green), the ordering constraint
+is: both changes MODIFY the requirement "The `basen` bases are `Codec` values",
+and archiving keeps only one version. The two MODIFIED/synced texts were
+deliberately made identical (task 6.11), so either order is then _safe_ — but
+archive **`lean-basen` first**, then `basen-rfc-conformance-theorems`, running
+`openspec validate --all` after **each**, and re-reconcile the MODIFIED blocks if
+the §8 wording lands in both.
+
+**Why archiving is blocked:** archive freezes the change's spec text into
+`openspec/specs/`. The review found passages in that text wrong (`[D4]`'s
+mechanism, the `[S1]`/`[S4]` contradiction, the `[S6]` `sepBy` claim, and the
+base16 case wording). Freezing them would make the defect permanent and propagate
+it to every downstream repo that reads `openspec/specs/`.
 
 Severity-tagged evidence behind every §6 task:
 `../lean-basen/REVIEW-basen-rfc-conformance.md`.
