@@ -97,10 +97,11 @@ longer than the commit that wrote it. As of this writing:
   (`Codec/Normal.lean`, below). Every law is `[propext, Quot.sound]`-only, zero
   `sorry`. `@[default_target] lean_lib codec` is the proof gate; `lean_exe bench`
   is the benchmark.
-- **One open change in this repo:** `codec-normal-form-case-quotient`, **15/16**.
-  Its core half is landed and pushed; only its downstream task 5.1 remains.
+- **No open change in this repo.** `codec-normal-form-case-quotient` is **16/16**
+  and ready to archive; `basen-rfc-conformance-theorems` is **31/31** and ready to
+  archive; `lean-basen` is 18/25 (seven mechanical polish items only).
 
-### `codec-normal-form-case-quotient` — landed, one task left
+### `codec-normal-form-case-quotient` — complete (16/16)
 
 The information-free-variation layer (`Codec/Normal.lean`): `Normal S norm` (the
 quotient `S/~` as the fixed points of a total idempotent `norm`), `Normalizer S
@@ -108,35 +109,13 @@ norm` (idempotence in the **type**; `norm` is a **parameter**, not a field, so
 `Normal S norm` is definitionally shared), `fill`, `fill_fixed` (`norm ∘ fill =
 id`, **no axioms**), `fill_surj`, `fill_inj`, and `decodeNormal` (the normalising
 decoder — `norm` composed **outside** an ordinary `Iso`; not an `Iso`, no inverse)
-with `decodeNormal_of_fixed` / `decodeNormal_encode`. **`Iso.law` is untouched**:
-the quotient lives in the object, so RFC 4648 §8 case-insensitivity is expressible
-without weakening the inverse law. `Codec/Normal.lean` is fully **generic** —
-polymorphic in `S : Type`, no `UInt8`/`Bytes`/hex/ASCII/text in the code, so
-`[S3]` holds (only docstrings cite RFC 4648 §8 as the motivating consumer).
+with `decodeNormal_of_fixed` / `decodeNormal_encode`. **`Iso.law` is untouched.**
+`Codec/Normal.lean` is fully **generic** — polymorphic in `S : Type`, no
+`UInt8`/`Bytes`/hex/ASCII/text in the code, so `[S3]` holds.
 
-**Task 5.1 (the only open task).** Two findings are already verified; do not
-rediscover them:
+Task 5.1 (its downstream consumer) is **done** — see `../lean-basen` below.
 
-1. **The fold must go UP** — `a`–`f` (97..102) → `A`–`F` (65..70). The canonical
-   hex alphabet is uppercase, so the encoder's output must be a `norm` fixed
-   point; that is exactly `decodeNormal_encode`'s `hfix`. Folding down makes the
-   normalising decoder fail on its own encoder's output.
-2. **The blocker is semantic, not `List.ofFn` plumbing.** `hexBlockApply` is
-   uppercase-only, so `unapply f := hexBlockApply f.raw` is **wrong** (a class
-   with a lowercase representative will not apply). `unapply` must fold first:
-   `hexBlockApply (foldList f.raw)`.
-
-   The lemma `hexToNibble (foldByte b).toNat = hexToNibble b.toNat` is **false as
-   one equation** (the non-lowercase branch would demand
-   `hexToNibble b.toNat = b.toNat`). It needs a **three-way case split**: digit
-   `48..57` (fixpoint, equal), upper `65..70` (fixpoint, equal), lower `97..102`
-   (folds to `−32`, nibble equal by the digit lemma).
-
-   Order: three-way lemma → `hexBlockApply_fold` → `hexElemF` + law →
-   `decodeHexFold` + §8 both-cases → discharge `hfix` → the ledger edits in
-   `basen-rfc-conformance-theorems` 7.3.
-
-### `../lean-basen` — the paused RFC change
+### `../lean-basen` — RFC change complete (31/31)
 
 The active downstream is `../lean-basen` (sibling repo — package `basen`, module
 `BaseN`; base-2/4/8/10/16/32/64, all seven landed and proven as `Codec` values).
@@ -145,20 +124,30 @@ pushing `lean-codec` and running `lake update codec` in `../lean-basen`. Its
 `BaseN/Common.lean` already imports `Codec.Normal`. **Work there, in its own
 `nix develop`.**
 
-`openspec/changes/basen-rfc-conformance-theorems/` is **30/31**.
+`openspec/changes/basen-rfc-conformance-theorems/` is **31/31** — all tasks done.
 
 - **7.1, 7.2 (DONE)** — all seven bases state the in-image converse
   (`decodeFull_B{2,4,8,10,16}_char` join `decodeFullB{64,32}_char`), and the
   withdrawal of the "unrepresentable" claim is reversed via
   `decodeFullB{64,32}_char_via_type` / `_spine` / `b{64,32}BytesOf_tail1_eq`.
-- **7.3 (PAUSED — the only open task).** Base16 case-insensitive decoding
-  (RFC 4648 §8). **Its old rationale was false and is withdrawn:** folding case
-  does _not_ break `Unambiguous` (that says one input yields at most one value,
-  and folding is a total function). The real constraint is canonicality of
-  encode. It is blocked on `codec-normal-form-case-quotient` task 5.1; that task's
-  ledger entry lists the six concrete steps, including that
-  `specs/basen/spec.md:34` **currently requires lowercase rejection** — the
-  opposite of §8 — and that task 3.3's rejection family must drop `lowercase`.
+- **7.3 (DONE).** Base16 case-insensitive decoding (RFC 4648 §8), landed in
+  `BaseN/Base16.lean`. Its old rationale — "folding case breaks `Unambiguous`" —
+  was **false** and is withdrawn: `Unambiguous` constrains one input to at most one
+  value, and folding case is a total function. The real constraint is the
+  **canonicality of encode**, which holds (`encodeHex` emits uppercase only).
+  Spec delta, `proposal.md`, `design.md` D6 and task 3.3 are amended;
+  `rejects_lowercase`'s false rationale is withdrawn in-tree.
+
+  **Two findings that changed the plan, both verified — do not rediscover them:**
+  1. The planned commutation `hexBlockApply (foldList cs) = hexBlockApply cs` is
+     **false**: `['6','f']` is rejected yet folds to the accepted `['6','F']` —
+     that rejection-to-acceptance IS the §8 widening. The `Iso` law needs the
+     one-directional `hexBlockApply_foldList` (`= some b → … = some b`); the
+     refutation is `hexBlockApply_foldList_ne`.
+  2. `decide_eq_true (by omega)` on a **disjunction** leaks `Classical.choice`
+     (`omega` case-splits) — build the disjunct explicitly. A `match` on a `Bool`
+     **in the goal** leaks too — split into `_true`/`_false` lemmas.
+
 - **`lean-basen` shows 18/25** but is complete except **seven mechanical polish
   items** (5.2, 5.3, 5.4, 5.8, 5.9, 5.12, 5.13), listed in
   `openspec/changes/lean-basen/tasks.md` under "Still open — mechanical polish".
