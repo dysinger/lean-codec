@@ -175,14 +175,51 @@ Option α := i.unapply (fill nz s)`. Docstring SHALL say: _not_ an `Iso`; has no
 > theorem; (5) discharge `hfix` (uppercase output is a fold fixed point — Finding 1);
 > (6) the ledger edits in §5.1 below.
 
-- [ ] 5.1 `../lean-basen`: RFC 4648 §8 Base16 case-insensitivity as `norm = ASCII
-fold` **upward** (see the note above) over the existing uppercase `hexBlockIso`, plus
-      the encoder-emits-uppercase
-      obligation (D3's hypothesis, already a proved canonicality law there) and the
-      both-cases theorem. This **closes `basen-rfc-conformance-theorems` task 7.3** and
-      replaces that task's false `Unambiguous` rationale. It also requires fixing that
-      change's spec clause which currently _requires_ lowercase rejection, and removing
-      `lowercase` from task 3.3's rejection family.
+- [x] 5.1 `../lean-basen`: RFC 4648 §8 Base16 case-insensitivity as `norm = ASCII
+    fold` **upward** over the existing uppercase `hexBlockIso`, plus the
+      encoder-emits-uppercase obligation (D3's hypothesis) and the both-cases
+      theorem. **DONE** — this closed `basen-rfc-conformance-theorems` task 7.3.
+
+      **The six planned steps were carried out, and two had to be corrected
+      because their stated mathematics was wrong.** Both corrections are verified,
+      not conjectures:
+
+      1. **The three-way lemma could not be one equation.** Confirmed: it is split
+         into `hexToNibble_foldByte_true` / `_false` (plus `_value`, the `if`-form
+         the `Iso` law consumes) and `hexNibbleValid_foldByte` for validity.
+      2. **The commutation lemma is one-directional, not an identity.** This note
+         said the `Iso` law needs `hexBlockApply (foldList cs) = hexBlockApply cs`.
+         **That equality is false.** `['6','f']` is rejected by the strict
+         `hexBlockApply` yet folds to the accepted `['6','F']` — `#eval`-verified
+         as `none` vs `some 0x6F` — which is exactly the §8 widening the layer
+         exists to produce, so no identity can hold. The law needs the
+         **preservation** form
+         `hexBlockApply cs = some b → hexBlockApply (foldList cs) = some b`
+         (landed as `hexBlockApply_foldList`), together with
+         `hexBlockApply_foldList_ne` recording the refutation of the plan's
+         equality. `hexBlockIsoF_law` then closes with that plus `fill_surj`.
+
+      **Landed in `../lean-basen` `BaseN/Base16.lean`** (commits `bddc8f8`,
+      `31c4250`, `ec62371`): `foldByte`/`foldList`/`foldByteBytes` + idempotence,
+      `hexChar`, `hexNibbleValid_foldByte`, the three-way split,
+      `hexBlockApply_foldList` + `_ne`, `hexBlockIsoF` + `hexBlockIsoF_law`,
+      `decodeHexBlockFold`, `decodeHexFold`, `foldList_hexBlockUnapply` (the `hfix`
+      discharge), `decodeHexFold_lowercase_eq`, `decodeHexFold_of_fixed`. Six new
+      `#guard_msgs` in `Axioms.lean`, seven new bench `example`s. `lake build` and
+      `lake build bench` green, zero `sorry`, every law `[propext,
+      Quot.sound]`-only.
+
+      **The `Classical.choice` trap, in its new disguise.** The first pass leaked
+      `Classical.choice` through *every* new law — not from a dependent `cases`, but
+      from `decide_eq_true (by omega)` on a **disjunction** goal: `omega` closes a
+      disjunction by case analysis, which drags in classical logic. Build the
+      disjunct explicitly (`decide_eq_true (Or.inl ⟨_, _⟩)`). A second, independent
+      leak was a `match` on a `Bool` **in the goal**; splitting the lemma into
+      `_true`/`_false` removed it.
+
+      Also done: spec delta, `proposal.md`, `design.md` D6 and task 3.3 amended in
+      `basen-rfc-conformance-theorems`; `rejects_lowercase`'s false `Unambiguous`
+      rationale withdrawn in-tree; the module docstring corrected.
 
 ## Explicitly not doing
 
