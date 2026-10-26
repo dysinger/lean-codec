@@ -1,5 +1,13 @@
 # Tasks
 
+> **STATUS: NOT COMPLETE — DO NOT ARCHIVE.** All below tasks are ticked, but an
+> adversarial review (`openspec/changes/codec-review-remediation/`) found the
+> surrounding documentation and proof gate defective (2 CRITICAL). This change is
+> complete only when the remediation tasks §1–§4 land; archiving before then
+> freezes the defective spec text into `openspec/specs/`. See that change's
+> `proposal.md` "Status" section. `openspec validate --all` green is **schema
+> conformance, not truth** — it was green while these defects were live.
+
 > **Surface (read first):** every base is a **run value** decoded/encoded by the
 > single `Codec.decode` / `Codec.encode` — "only the codec changes." The
 > fixed-width bases (2/4/8/10/16) are `count k (satisfy p) ≫ <block iso>` made
