@@ -97,9 +97,18 @@ longer than the commit that wrote it. As of this writing:
   (`Codec/Normal.lean`, below). Every law is `[propext, Quot.sound]`-only, zero
   `sorry`. `@[default_target] lean_lib codec` is the proof gate; `lean_exe bench`
   is the benchmark.
-- **No open change in this repo.** `codec-normal-form-case-quotient` is **16/16**
-  and ready to archive; `basen-rfc-conformance-theorems` is **31/31** and ready to
-  archive; `lean-basen` is 18/25 (seven mechanical polish items only).
+- **One open change scoped to this repo: `codec-review-remediation` (0/41).** It
+  is the remediation of an adversarial review of `README.md`, `PAPER.md`, this
+  file, the global `lean` skill and the code. The four verbatim reviews are in
+  `openspec/changes/codec-review-remediation/review.md` (74 findings, ids
+  `R<lens>.<n>`); read that before any doc or seam edit, and read its
+  **"Verified-correct claims — do not re-litigate these"** list before re-opening
+  anything. Its three highest-value items: `CHANGELOG.md` states `Bytes` as
+  `List UInt8` (source is `Fin n → UInt8`), the zero-`sorry` gate is not actually
+  enforced by the build, and the `Classical.choice` catalogue below is incomplete.
+- `codec-normal-form-case-quotient` is **16/16** and ready to archive;
+  `basen-rfc-conformance-theorems` is **31/31** and ready to archive; `lean-basen`
+  is 18/25 (seven mechanical polish items only).
 
 ### `codec-normal-form-case-quotient` — complete (16/16)
 
