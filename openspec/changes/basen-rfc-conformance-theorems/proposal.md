@@ -118,9 +118,13 @@ reproduces the input` (whenever the decoder accepts a value, it is the _unique_
   were false — `b32BytesOf_ofBytes`/`b32OfBytes_bytesOf` prove the bijection — and
   are withdrawn.)
 - **Base16 case-insensitivity** (RFC 4648 §8: a decoder MUST accept both cases)
-  is an **explicit non-goal** of this change: the `Codec`-value `hexElem` is a
-  strict uppercase bijection, and a case-insensitive decoder is not expressible
-  as a strict `Iso` without breaking `Unambiguous`. Recorded, not dropped.
+  is **in scope as of task 7.3** (the earlier "explicit non-goal" is reversed).
+  The original rationale — "not expressible as a strict `Iso` without breaking
+  `Unambiguous`" — was false: `Unambiguous` constrains decoders per input, and
+  folding case is a total function. The strict `Codec` value `hexElem` stays an
+  uppercase bijection; the case-insensitive surface is the separate decode-side
+  `decodeHexFold`, built on `lean-codec`'s `Codec.Normal` with the fold applied
+  **outside** the `Iso`. Encoding stays canonical (uppercase only). See design D6.
 - **New proofs**: three theorem families × seven bases, each stated over the
   base's own `Codec`/`Run` value (no facade, no `Base`-dispatching lemma).
   `#print axioms` stays
@@ -128,7 +132,7 @@ reproduces the input` (whenever the decoder accepts a value, it is the _unique_
 - **Bench**: each new rejection/converse law gets a concrete `example`/`#eval`
   vector (matching the F* reference's `decode_*_invalid` vectors, re-expressed
   over `Bytes n` via a `Bytes.ofList` helper), closing review findings 5.1 and
-  5.7; base16 case-insensitivity (finding 5.10) is recorded as a non-goal, not
-  a passing vector.
+  5.7; base16 case-insensitivity (finding 5.10) is **in scope** (task 7.3) and
+  gets both-cases vectors for the strict rejection and the folding decode.
 - **No substrate, carrier, or axiom-discipline change**: still pure Lean, still
   `Bytes n` / `List UInt8` values, still `[propext, Quot.sound]`.
