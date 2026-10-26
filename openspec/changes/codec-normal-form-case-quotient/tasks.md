@@ -129,7 +129,7 @@ Option α := i.unapply (fill nz s)`. Docstring SHALL say: _not_ an `Iso`; has no
 
 ## 5. Downstream follow-up — **out of scope here, recorded so it is not lost**
 
-> **HANDOFF (next session starts here).** This task is the _only_ remaining work in
+> **START HERE (next session).** Summary also lives in `AGENTS.md` §Current state.
 > this change, and the `lean-codec` half is complete and pushed. Two findings below
 > were verified in `/tmp` probes — they are facts, not plans; do not rediscover them.
 >
@@ -176,7 +176,7 @@ Option α := i.unapply (fill nz s)`. Docstring SHALL say: _not_ an `Iso`; has no
 > (6) the ledger edits in §5.1 below.
 
 - [ ] 5.1 `../lean-basen`: RFC 4648 §8 Base16 case-insensitivity as `norm = ASCII
-fold` **upward** (see HANDOFF above) over the existing uppercase `hexBlockIso`, plus
+fold` **upward** (see the note above) over the existing uppercase `hexBlockIso`, plus
       the encoder-emits-uppercase
       obligation (D3's hypothesis, already a proved canonicality law there) and the
       both-cases theorem. This **closes `basen-rfc-conformance-theorems` task 7.3** and
