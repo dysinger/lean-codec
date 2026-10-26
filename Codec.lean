@@ -15,6 +15,7 @@ library's components:
   * `Codec.Encode` — the partial encoder
   * `Codec.Sound` — the bidirectional and roundtrip laws
   * `Codec.Combinators` — derived combinators (`many`, `*>`, `<*`, …)
+  * `Codec.Normal` — normal forms: the information-free-variation layer
 -/
 
 import Codec.Iso
@@ -23,6 +24,7 @@ import Codec.Decode
 import Codec.Encode
 import Codec.Sound
 import Codec.Combinators
+import Codec.Normal
 import Codec.Packed
 import Codec.ByteSlice
 import Codec.DecodeOne

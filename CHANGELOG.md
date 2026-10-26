@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Codec.Normal`: the information-free-variation layer. `Normal S norm` (the
+  quotient of a concrete syntax by an information-free variation, reified as the
+  fixed points of a total idempotent `norm`), `Normalizer S norm` (carrying
+  idempotence in the type rather than as a per-call proof argument), `fill` (the
+  canonical representative), and `decodeNormal` (the normalising decoder — `norm`
+  composed **outside** a strict `Iso`, explicitly not an `Iso` and having no
+  inverse). Laws: `fill_fixed` (`norm ∘ fill = id` on the quotient, no axioms),
+  `fill_surj` (faithfulness of the fixed-point reification), `fill_inj` (two
+  spellings share a class iff they normalise equally), `decodeNormal_of_fixed`, and
+  `decodeNormal_encode` (with the per-codec obligation that the encoder emits a
+  normal form). `Iso.law` is untouched — the quotient lives in the object, so RFC
+  4648 §8 case-insensitivity becomes possible without weakening the inverse law.
+  Length-preserving normalizers only; README `[D4]` sharpened accordingly.
 - `Codec.Combinators` chain-combinator decode→encode and injectivity companions
   (`encodeChainl1_ne_none`/`encodeChainr1_ne_none`,
   `encodeChainl1_of_decode`/`encodeChainr1_of_decode`,

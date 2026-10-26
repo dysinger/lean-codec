@@ -98,6 +98,26 @@ repetition over a `subset p byte` step, not a new primitive). There is therefore
 **no `ignore` combinator in core**, and the strict inverse law holds
 unconditionally.
 
+**The diagnosis, sharpened (normal forms).** `ignore` cannot inhabit `Iso α S`
+_because it is not an `Iso`_ — it is the lossy _half_ of a codec whose honest
+object is a bijection with the **quotient of the concrete syntax by the
+information-free variation**. A format often accepts several spellings of one
+value (RFC 4648 §8: a Base16 decoder MUST accept both `6F` and `6f`, since case
+carries no information), so the quotient is `S/~` where `s ~ t ↔ norm s = norm t`
+for a total idempotent `norm`. `codec` puts that quotient in the **object** rather
+than relaxing the law in the **morphism**, which is the one thing `[S1]` forbids:
+`Codec/Normal.lean` supplies `Normal S norm` (the fixed points of `norm`, a type)
+and `Normalizer S norm` (carrying `norm`'s idempotence), so
+`Iso α (Normal S norm)` is an **ordinary `Iso`** with its `law` still a field. The
+lossy direction is `decodeNormal`, the normalizer composed _outside_ the `Iso`: it
+accepts input the `Iso` rejects, has no inverse, and is explicitly not a codec
+value. Capture-verbatim is then simply the **identity normalizer** — the degenerate
+case of the layer, not a prohibition on having one. Two consequences worth stating:
+the layer is **length-preserving** (`norm : Bytes n → Bytes n`, so case folding fits
+and collapsing a whitespace run does not — that needs a different carrier), and a
+codec using it owes the per-instance fact that its encoder emits a normal form,
+without which the normalising decoder can fail on its own encoder's output.
+
 **[D5] `|` needs no prefix-disjointness condition.** Some deterministic-parser
 designs require `|`'s branches to be _prefix-disjoint_ so at most one can match a
 given input. `codec` requires none — and admits none: with `|` as backtracking

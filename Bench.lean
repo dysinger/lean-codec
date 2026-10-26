@@ -35,6 +35,73 @@ namespace Codec.Bench
 
 open Codec
 
+/-! ## Value-checks for the normal-form layer (`Codec/Normal.lean`)
+
+These are `example`s, not timing lanes: the layer is a *type*, so its content is
+proved, and the bench's job is to value-check the concrete instance a consumer
+would build (here: a two-symbol alphabet folded to one canonical case). They back
+RFC 4648 §8's "a decoder MUST accept both cases" over an ordinary `Iso` — no `Iso`
+relaxation anywhere.
+
+Kept deliberately tiny (`UInt8` → `Bool`), so the arithmetic is decidable and the
+checks reduce; a real base's fold is the same shape over its own alphabet. -/
+
+/-- A total, idempotent normalizer on the two hex-ish symbols `0x41` and `0x61`:
+everything folds to `0x61`, everything else is unchanged. -/
+def foldNorm (b : UInt8) : UInt8 := if b == 0x41 then 0x61 else b
+
+theorem foldNorm_idem : ∀ x, foldNorm (foldNorm x) = foldNorm x := by
+  intro x
+  unfold foldNorm
+  split <;> (try split) <;> first | rfl | (exfalso; assumption)
+
+/-- The normalizer bundles the law — the type carries it (design D2). -/
+theorem foldNz : Normalizer UInt8 foldNorm := ⟨foldNorm_idem⟩
+
+/-- `fill` presents a byte as a normal form; both spellings reach the same class —
+which is the whole point of the layer. -/
+example : (fill foldNz (0x41 : UInt8)).raw = (fill foldNz (0x61 : UInt8)).raw := rfl
+
+/-- A strict `Iso` on normal forms: the value side **is** the quotient, so
+`apply`/`unapply` are honest inverses and the `law` stays a field.
+
+The honest way to see why the byte side must be the quotient: writing
+`unapply b := some ⟨b, h⟩` needs a proof that `b` is already normal, which is not
+free; and `unapply b := some (fill foldNz b)` makes `apply ∘ unapply ≠ some` on
+non-normal bytes. So an `Iso` into normal forms can only invert *normal* bytes —
+exactly why the lossy direction is a wrapper outside the `Iso`, not a relaxed law. -/
+def foldIso : Iso (Normal UInt8 foldNorm) (Normal UInt8 foldNorm) where
+  apply f := some f
+  unapply f := some f
+  law := by
+    intro f b
+    constructor
+    · intro h
+      have : f = b := by simpa using h
+      subst this
+      rfl
+    · intro h
+      have : b = f := by simpa using h
+      subst this
+      rfl
+
+/-- The **decode-only wrapper** over `foldIso`: the normalizer runs outside the
+`Iso`, so it takes arbitrary bytes (including `0x41`) where the `Iso` takes only
+normal forms. This is the RFC 4648 §8 shape. -/
+def decodeFold (b : UInt8) : Option (Normal UInt8 foldNorm) :=
+  decodeNormal foldNz foldIso b
+
+/-- Both spellings decode to the same value: §8, over a strict `Iso`. -/
+example : decodeFold (0x41 : UInt8) = decodeFold (0x61 : UInt8) := rfl
+
+/-- `fill` reaches every normal form, so the quotient is faithfully represented
+(design D7) — asserted for the concrete instance. -/
+example (f : Normal UInt8 foldNorm) : fill foldNz f.raw = f := fill_surj foldNz f
+
+/-- `fill_fixed`: `norm` on a normal form is the identity. -/
+example (b : UInt8) : foldNorm (fill foldNz b).raw = (fill foldNz b).raw :=
+  fill_fixed foldNz b
+
 /-- `n` copies of the byte `0x01` as a length-indexed `Bytes n` (a `Fin n → UInt8`,
 so a `Bytes n` is built by a constant function — no `List` cons cells). -/
 def bytesOf (n : Nat) : Bytes n := fun _ => (1 : UInt8)
