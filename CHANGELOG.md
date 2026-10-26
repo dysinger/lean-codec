@@ -22,6 +22,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   normal form). `Iso.law` is untouched — the quotient lives in the object, so RFC
   4648 §8 case-insensitivity becomes possible without weakening the inverse law.
   Length-preserving normalizers only; README `[D4]` sharpened accordingly.
+- `Codec.Normal`'s first downstream consumer: `../lean-basen` `BaseN/Base16.lean`
+  now provides RFC 4648 §8 case-insensitive decoding — a length-preserving ASCII
+  case fold (`foldByte`/`foldList`/`foldByteBytes`) applied **outside** the strict
+  `Iso`, folded **up** so the canonical uppercase encoding is a fixed point
+  (`hexBlockIsoF : Iso UInt8 (Normal (List UInt8) foldList)`, `decodeHexFold`,
+  `decodeHexFold_lowercase_eq`). Confirms the layer's design: `Iso.law` was not
+  touched, and only decoding widens.
 - `Codec.Combinators` chain-combinator decode→encode and injectivity companions
   (`encodeChainl1_ne_none`/`encodeChainr1_ne_none`,
   `encodeChainl1_of_decode`/`encodeChainr1_of_decode`,
