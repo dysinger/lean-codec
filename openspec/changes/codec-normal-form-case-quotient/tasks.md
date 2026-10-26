@@ -123,7 +123,7 @@ Option α := i.unapply (fill nz s)`. Docstring SHALL say: _not_ an `Iso`; has no
       carry it.
 - [x] 4.4 `CHANGELOG.md` entry (one bullet: the normal-form layer, length-preserving
       case variation only).
-- [ ] 4.5 `openspec validate --all` green; commit each file individually
+- [x] 4.5 `openspec validate --all` green; commit each file individually
       (`Codec/Normal.lean`, `Codec.lean`, `README.md`, `CHANGELOG.md`, the `openspec/`
       artifacts), with `nix fmt` clean before each commit.
 
