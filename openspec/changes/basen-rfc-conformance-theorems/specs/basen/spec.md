@@ -31,9 +31,11 @@ input `s` that is not a valid encoding for that base. There is no bespoke
 `decodeB32Strict`/`decodeB64Strict` function: rejection is a theorem over the
 uniform `Codec.decode`/`decodeFull` composition, not a per-format decoder. "Not valid" SHALL mean
 _any one_ of: (a) a byte outside the base's alphabet (for base16, outside the
-**uppercase canonical** alphabet `0-9A-F` — lowercase `a-f` is _not_ accepted by
-the `Codec` value, which is a strict uppercase bijection; see the non-goal
-below); (b) for the padded bases (base32/base64), a `=` in an illegal position
+**hex alphabet** `0-9a-fA-F` — the `Codec` value is a strict **uppercase**
+bijection, and RFC 4648 §8's requirement that a decoder accept both cases is
+satisfied by the separate case-insensitive decoder `Base16.decodeHexFold`, which
+applies the canonicality-preserving case fold **outside** that `Iso` via
+`Codec.Normal`; see the §8 requirement below); (b) for the padded bases (base32/base64), a `=` in an illegal position
 — including a `=` in the first/second/third data position of any block, a
 lone/partial `=` group, or **any data after the terminal `=`**; (c) a wrong
 arity (a whole-input byte count that is not a whole number of that base's code
@@ -180,3 +182,46 @@ exercises them, matching the F* reference's `decode_*_invalid` vector set.
 - **THEN** the build has zero `sorry`/warnings, `#print axioms` reports only
   `[propext, Quot.sound]` for each new theorem, and the bench lane value-checks
   each rejection/canonical vector byte-for-byte.
+
+### Requirement: Base16 decoding accepts both cases (RFC 4648 §8)
+
+The Base16 decoder SHALL accept hex digits in **either** case, as RFC 4648 §8
+requires, and SHALL return the same value for a block and its case-folded form.
+The canonical alphabet SHALL remain uppercase and the encoder SHALL emit only it.
+Case-insensitivity SHALL be supplied by a fold applied **outside** the strict
+`Iso` — never by weakening `Iso.law` — so the `Codec` value stays a strict
+uppercase bijection and the widening is confined to decoding.
+
+#### Scenario: Both cases decode to the same value
+
+- **WHEN** a byte string and its uppercase-folded form are decoded
+- **THEN** both produce the same value: `decodeHexFold s = decodeHexFold
+(foldList s)` for one block (`decodeHexBlockFold_case_insensitive`) and
+  `decodeHexFold s = decodeFull hexRun (foldByteBytes s)` at whole-input level.
+
+#### Scenario: The strict decoder still rejects lowercase
+
+- **WHEN** lowercase input is fed to the strict `Codec`-value decoder
+  `decodeFull hexElem hexConsumesByte`
+- **THEN** it returns `none` — the canonical bijection is unchanged
+  (`rejects_lowercase`), and this is **not** a §8 divergence because the
+  conformant surface is the separate `decodeHexFold`. The earlier
+  "a case-insensitive alphabet would break `Unambiguous`" rationale is withdrawn:
+  the constraint is the canonicality of encode.
+
+#### Scenario: The encoder emits a normal form (the layer's obligation)
+
+- **WHEN** the encoder produces a block (`hexBlockUnapply b = some cs`)
+- **THEN** that block is already a **fixed point** of the fold (`foldList cs = cs`,
+  `foldList_hexBlockUnapply`) — the per-instance hypothesis the normalising
+  decoder requires, without which `norm` applied before `unapply` could make
+  decoding fail on the encoder's own output.
+
+#### Scenario: The fold is upward, and idempotent
+
+- **WHEN** the case fold is applied
+- **THEN** it maps `a`–`f` **up** to `A`–`F` (so the canonical uppercase encoding
+  is a fixed point) and is idempotent (`foldByte_idem`, `foldList_idem`), which is
+  the `Normalizer` law that makes the quotient type well-formed. It is
+  length-preserving by construction (`Bytes n → Bytes n`), which is the class of
+  variation `Codec.Normal` is specified for.
