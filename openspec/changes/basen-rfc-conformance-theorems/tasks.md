@@ -687,15 +687,44 @@ the **synced** spec once, in whichever change syncs first, and carry every
 existing scenario of that requirement into the MODIFIED block of whichever
 change edits it second — then `openspec validate` **both** changes.
 
-## 7. Follow-on change (out of scope for `basen-rfc-conformance-theorems`)
+## 7. Total characterization — **in scope for this change**
 
-> Recorded so the scope split is explicit; create as its own change
-> (`basen-rfc-total-characterization`) rather than absorbing into this one.
+> **Scope correction.** An earlier revision of this section titled it "Follow-on change
+> (out of scope for `basen-rfc-conformance-theorems`)" and deferred it to a separate
+> change `basen-rfc-total-characterization`. That split is **withdrawn**: it contradicted
+> this change's own `proposal.md`, whose "Why" states the goal as — verbatim — "the
+> decoder is a _total characterization_ of the RFC — `decode` succeeds exactly on the
+> RFC-valid inputs and `encode` is the unique inverse", and whose "What Changes" item 3
+> already promises the converse law. `design.md` D6 already covers 7.3. The split lived
+> only in this file, so the tasks belong here. No `basen-rfc-total-characterization`
+> change is to be created.
 
-- [ ] 7.1 The general "decode succeeds iff `s ∈ image encode`" iff for all seven bases (the full
+- [x] 7.1 The general "decode succeeds iff `s ∈ image encode`" iff for all seven bases (the full
       consequence of 6.3 + 6.4; may simply be the 6.3 law promoted per base).
-- [ ] 7.2 Either legitimately prove a type-level `B64`/`B32` that cannot represent trailing data
+      **Done.** `decodeFull_B{2,4,8,10,16}_char` (Base2/4/8/10/16) join the existing
+      `decodeFullB{64,32}_char`, so all seven bases now state
+      `decodeFull … s = some v ↔ ∃ v', encode v' = some ⟨n, s⟩ ∧ v = v'`.
+      Pure assembly per base over its already-proved `decode_encode_inverse` (→) and
+      `roundtrip` (←) — the five fixed-width bases already had both halves under those
+      names, so no new mathematics was needed. `[propext, Quot.sound]`-only, gated by
+      five new `#guard_msgs` in `Axioms.lean` (gate re-verified load-bearing: flipping one
+      expectation to `[propext]` fails the build), bench-covered by five `example`s.
+- [x] 7.2 Either legitimately prove a type-level `B64`/`B32` that cannot represent trailing data
       (currently `B64`/`B32` is a bijective relabeling of `List UInt8`, so "unrepresentable" is
       false by construction), or keep the withdrawal and update the main spec (6.6).
+      **Done — neither branch, because the dichotomy was false.** `B64`/`B32` already _are_ the
+      type that cannot represent trailing data: terminal tails (`nil`/`full`/`tail1`/`tail2`…),
+      no constructor continuing after a tail, with the bijection to `List UInt8` already proved
+      (`b{64,32}OfBytes_bytesOf` / `b{64,32}BytesOf_ofBytes`). What was missing was any theorem
+      _connecting_ the type to the decoder — the spec's prose said "not the type" while the type
+      said it, unused. Now proved, per padded base:
+      `decodeFullB{64,32}_char_via_type` (the decoder's image is **exactly** the image of
+      `encodeB{64,32} ∘ b{64,32}BytesOf`), `decodeFullB{64,32}_spine` (every decoded value is a
+      canonical flattening), and `b{64,32}BytesOf_tail1_eq` (terminality is definitional — `rfl`,
+      **no axioms**). The rejection inequation and the type-level fact are now proved to agree,
+      so the withdrawal is **reversed** in all three spec sites (synced `openspec/specs/basen`,
+      this change's delta, and `lean-basen`'s MODIFIED block — kept identical for archive safety).
+      Bench includes discriminating examples: the tail-followed-by-block shape has no `B64`/`B32`
+      inhabitant at all.
 - [ ] 7.3 Base16 case-insensitive decoder (RFC §8 "MUST accept both cases") — currently a non-goal;
       if pursued it breaks `Unambiguous` (per design) and needs a documented relaxation.

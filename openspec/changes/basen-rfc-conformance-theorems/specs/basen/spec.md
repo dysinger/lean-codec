@@ -45,8 +45,12 @@ whole-input decoder is `List.head? ((decodeRepeat {x}Elem …).filterMap (decode
 pad-dichotomy: a full block never contains `=` (so the run cannot consume the
 trailing-data block), and a terminal-tail block must contain `=` (so the leftover
 alphabet-only bytes cannot decode as a tail). The `B32`/`B64` terminal-tail value
-types are the **canonical block/tail spine** (a total, proved bijective relabeling
-of `List UInt8`), not a type that makes the malformed shape unrepresentable.
+types are the **canonical block/tail spine** — a proved total bijection with
+`List UInt8` whose tails are terminal (no constructor continues after a tail).
+Because they are canonical, the malformed shape has no inhabitant, and
+`decodeFullB{64,32}_char_via_type` proves the decoder's image is exactly the image
+of `encodeB{64,32} ∘ b{64,32}BytesOf`: the inequation above and the type-level fact
+agree, rather than the type being merely decorative.
 
 #### Scenario: A byte outside the alphabet is rejected
 
