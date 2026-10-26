@@ -8,6 +8,15 @@ belongs in `openspec/` (the task ledger) and `CHANGELOG.md`. Do not append
 "session status" sections here; that practice is what made this file 536 lines
 of mutually-contradicting snapshots. Keep it short and true.
 
+**Where a session leaves its handoff: the `## Current state` block below, in
+place.** Rewrite that block; do not add to it, and do not create a new
+`HANDOFF.md`/`NOTES.md`/`STATUS.md` per session — a second handoff file is the
+same session-diary failure in a different filename, and it silently rots the
+moment `Current state` disagrees with it. The distinction that keeps this file
+honest: `Current state` states _what is true now and what is next_ (always
+rewritten, never appended), while _how it got there_ and _what was measured_ live
+in the change's `tasks.md` and in `CHANGELOG.md`.
+
 ## Project
 
 `codec` — a verified, byte-exact, bidirectional codec library in Lean 4
@@ -83,39 +92,75 @@ longer than the commit that wrote it. As of this writing:
 
 - **`lean-codec` (this repo) core is complete.** `Codec/Iso.lean`, `Codec.lean`,
   `Decode.lean`, `Encode.lean`, `Sound.lean`, `Combinators.lean`, plus the proved
-  packed layer (`Codec/Packed.lean`, `Codec/DecodeOne.lean`) and the Layer-2 trust
-  seam (`Codec/ByteSlice.lean` + `.c`). Every law is `[propext, Quot.sound]`-only,
-  zero `sorry`. `@[default_target] lean_lib codec` is the proof gate;
-  `lean_exe bench` is the benchmark.
-- **No open change in this repo.** The RFC-conformance work streams from
-  `../lean-basen`, not from here.
-- **The active downstream is `../lean-basen`** (sibling repo — package `basen`,
-  module `BaseN`; base-2/4/8/10/16/32/64). All seven bases are landed and proven
-  as `Codec` values; the facade dispatches `BaseN.roundtrip` over `B2..B64`;
-  `Bench.lean` value-checks them byte-for-byte. **Work there, in its own
-  `nix develop`, not this repo's.**
+  packed layer (`Codec/Packed.lean`, `Codec/DecodeOne.lean`), the Layer-2 trust
+  seam (`Codec/ByteSlice.lean` + `.c`), and the normal-form layer
+  (`Codec/Normal.lean`, below). Every law is `[propext, Quot.sound]`-only, zero
+  `sorry`. `@[default_target] lean_lib codec` is the proof gate; `lean_exe bench`
+  is the benchmark.
+- **One open change in this repo:** `codec-normal-form-case-quotient`, **15/16**.
+  Its core half is landed and pushed; only its downstream task 5.1 remains.
 
-### `../lean-basen` — the two open changes
+### `codec-normal-form-case-quotient` — landed, one task left
 
-`openspec/changes/basen-rfc-conformance-theorems/` is **30/31**. Only **7.3** remains.
+The information-free-variation layer (`Codec/Normal.lean`): `Normal S norm` (the
+quotient `S/~` as the fixed points of a total idempotent `norm`), `Normalizer S
+norm` (idempotence in the **type**; `norm` is a **parameter**, not a field, so
+`Normal S norm` is definitionally shared), `fill`, `fill_fixed` (`norm ∘ fill =
+id`, **no axioms**), `fill_surj`, `fill_inj`, and `decodeNormal` (the normalising
+decoder — `norm` composed **outside** an ordinary `Iso`; not an `Iso`, no inverse)
+with `decodeNormal_of_fixed` / `decodeNormal_encode`. **`Iso.law` is untouched**:
+the quotient lives in the object, so RFC 4648 §8 case-insensitivity is expressible
+without weakening the inverse law. `Codec/Normal.lean` is fully **generic** —
+polymorphic in `S : Type`, no `UInt8`/`Bytes`/hex/ASCII/text in the code, so
+`[S3]` holds (only docstrings cite RFC 4648 §8 as the motivating consumer).
 
-- **7.1 (DONE)** — `decodeFull_B{2,4,8,10,16}_char` join `decodeFullB{64,32}_char`, so all
-  seven bases state the in-image converse. Pure assembly over each base's already-proved
-  `decode_encode_inverse` (→) and `roundtrip` (←).
-- **7.2 (DONE)** — the task posed a false dichotomy ("prove a type-level `B64`/`B32`" vs
-  "keep the withdrawal"). `B64`/`B32` already _are_ that type (terminal tails, no
-  continuation) and the bijection was already proved; what was missing was any theorem
-  _connecting_ the type to the decoder. Now proved: `decodeFullB{64,32}_char_via_type`
-  (decoder image = image of `encodeB ∘ b*BytesOf`), `decodeFullB{64,32}_spine`, and
-  `b{64,32}BytesOf_tail1_eq` (terminality is `rfl`, **no axioms**). The withdrawal is
-  **reversed** in all three spec sites, kept textually identical for archive safety.
-- **7.3 (TODO — the only open task, in this change).** Base16 case-insensitive decoding
-  (RFC 4648 §8 "MUST accept both cases"). This is a **design decision before a proof**:
-  `design.md` D6 currently keeps `hexElem` strict uppercase, and case-folding breaks
-  `Unambiguous`, so a documented relaxation must land first. Do not start proving until
-  the relaxation is decided.
-- **`lean-basen` shows 18/25** but is complete except **seven mechanical polish items**
-  (5.2, 5.3, 5.4, 5.8, 5.9, 5.12, 5.13), listed in
+**Task 5.1 (the only open task).** Two findings are already verified; do not
+rediscover them:
+
+1. **The fold must go UP** — `a`–`f` (97..102) → `A`–`F` (65..70). The canonical
+   hex alphabet is uppercase, so the encoder's output must be a `norm` fixed
+   point; that is exactly `decodeNormal_encode`'s `hfix`. Folding down makes the
+   normalising decoder fail on its own encoder's output.
+2. **The blocker is semantic, not `List.ofFn` plumbing.** `hexBlockApply` is
+   uppercase-only, so `unapply f := hexBlockApply f.raw` is **wrong** (a class
+   with a lowercase representative will not apply). `unapply` must fold first:
+   `hexBlockApply (foldList f.raw)`.
+
+   The lemma `hexToNibble (foldByte b).toNat = hexToNibble b.toNat` is **false as
+   one equation** (the non-lowercase branch would demand
+   `hexToNibble b.toNat = b.toNat`). It needs a **three-way case split**: digit
+   `48..57` (fixpoint, equal), upper `65..70` (fixpoint, equal), lower `97..102`
+   (folds to `−32`, nibble equal by the digit lemma).
+
+   Order: three-way lemma → `hexBlockApply_fold` → `hexElemF` + law →
+   `decodeHexFold` + §8 both-cases → discharge `hfix` → the ledger edits in
+   `basen-rfc-conformance-theorems` 7.3.
+
+### `../lean-basen` — the paused RFC change
+
+The active downstream is `../lean-basen` (sibling repo — package `basen`, module
+`BaseN`; base-2/4/8/10/16/32/64, all seven landed and proven as `Codec` values).
+It consumes `codec` **by git input**, so a core change is only visible there after
+pushing `lean-codec` and running `lake update codec` in `../lean-basen`. Its
+`BaseN/Common.lean` already imports `Codec.Normal`. **Work there, in its own
+`nix develop`.**
+
+`openspec/changes/basen-rfc-conformance-theorems/` is **30/31**.
+
+- **7.1, 7.2 (DONE)** — all seven bases state the in-image converse
+  (`decodeFull_B{2,4,8,10,16}_char` join `decodeFullB{64,32}_char`), and the
+  withdrawal of the "unrepresentable" claim is reversed via
+  `decodeFullB{64,32}_char_via_type` / `_spine` / `b{64,32}BytesOf_tail1_eq`.
+- **7.3 (PAUSED — the only open task).** Base16 case-insensitive decoding
+  (RFC 4648 §8). **Its old rationale was false and is withdrawn:** folding case
+  does _not_ break `Unambiguous` (that says one input yields at most one value,
+  and folding is a total function). The real constraint is canonicality of
+  encode. It is blocked on `codec-normal-form-case-quotient` task 5.1; that task's
+  ledger entry lists the six concrete steps, including that
+  `specs/basen/spec.md:34` **currently requires lowercase rejection** — the
+  opposite of §8 — and that task 3.3's rejection family must drop `lowercase`.
+- **`lean-basen` shows 18/25** but is complete except **seven mechanical polish
+  items** (5.2, 5.3, 5.4, 5.8, 5.9, 5.12, 5.13), listed in
   `openspec/changes/lean-basen/tasks.md` under "Still open — mechanical polish".
   Read them there; they are doc/tidy items, not proofs.
 
@@ -123,7 +168,8 @@ longer than the commit that wrote it. As of this writing:
 `Codec` values", and archiving keeps only one version. The two MODIFIED/synced
 texts were deliberately made identical (task 6.11), so either order is now _safe_ —
 but archive **`lean-basen` first**, then `basen-rfc-conformance-theorems`, running
-`openspec validate --all` after **each**.
+`openspec validate --all` after **each**. Re-reconcile the MODIFIED blocks if the
+§8 wording lands in both.
 
 Severity-tagged evidence behind every §6 task:
 `../lean-basen/REVIEW-basen-rfc-conformance.md`.
