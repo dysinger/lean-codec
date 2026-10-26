@@ -129,8 +129,55 @@ Option α := i.unapply (fill nz s)`. Docstring SHALL say: _not_ an `Iso`; has no
 
 ## 5. Downstream follow-up — **out of scope here, recorded so it is not lost**
 
+> **HANDOFF (next session starts here).** This task is the _only_ remaining work in
+> this change, and the `lean-codec` half is complete and pushed. Two findings below
+> were verified in `/tmp` probes — they are facts, not plans; do not rediscover them.
+>
+> **Finding 1 — the fold direction must be UP.** The canonical hex alphabet is
+> uppercase, so the encoder's output must be a **fixed point** of `norm`; that is
+> exactly `decodeNormal_encode`'s `hfix` obligation. Therefore `norm` folds
+> `a`–`f` (97..102) **up** to `A`–`F` (65..70), _not_ down. Folding down makes the
+> encoder's output a non-fixed point and the normalising decoder fails on its own
+> encoder's output. Verified: `foldByte_idem` holds, and `A`, `F`, `9` are fixed
+> points while `a`→`A`, `f`→`F`.
+>
+> **Finding 2 — the blocker is semantic, not `List.ofFn` plumbing.** `hexBlockApply`
+> accepts **uppercase only**, so an `Iso` into normal forms with
+> `unapply f := hexBlockApply f.raw` is wrong: a class whose representative is
+> lowercase will not apply. The correct `unapply` **folds first**:
+> `unapply f := hexBlockApply (foldList f.raw)`. The `Iso` law then needs the
+> commutation lemma `hexBlockApply (foldList cs) = hexBlockApply cs` for a 2-element
+> digit list.
+>
+> **The lemma that defeated three attempts, and its correct shape.**
+> `hexToNibble (foldByte b).toNat = hexToNibble b.toNat` is **false as a single
+> equation** (in the non-lowercase branch it would demand
+> `hexToNibble b.toNat = b.toNat`, false for a non-digit). It must be stated as a
+> **three-way case split** — digit `48..57` (fixpoint, `hexToNibble` equal), upper
+> `65..70` (fixpoint, equal), lower `97..102` (folds to `b.toNat - 32`, nibble equal
+> by `hexToNibble_*`). Do the case split _first_; do not try to unify it.
+>
+> **Lemma inventory already proved in probes** (re-prove in-tree, they are short):
+> `foldByte_idem`; `foldByte_fixed (b) (¬(97 ≤ b.toNat ∧ b.toNat ≤ 102))`;
+> `nibbleToHex_not_lower (n) (n ≤ 15)`; `hexDigit_fixed (n) (n ≤ 15)` —
+> `foldByte (toByte (nibbleToHex n)) = toByte (nibbleToHex n)` (needs
+> `toByte_nibbleToHex`, which is `private` in `Base16.lean` — inline the
+> `UInt8.toNat_ofNat'` + `Nat.mod_eq_of_lt` bridge as the probe did);
+> `hexCanon_fixed (b) : (hexCanon b).map foldByte = hexCanon b` (needs
+> `b.toNat < 256` from `UInt8.toNat_lt b` for `omega`).
+>
+> **Do not** use `git checkout --` to reset a stuck file (`AGENTS.md` forbids it; it
+> was tried once this session and was only harmless by luck). Stub the one failing
+> theorem and iterate in `/tmp` against the built library.
+>
+> **Order:** (1) the three-way `hexToNibble`/`foldByte` lemma; (2)
+> `hexBlockApply_fold`; (3) `hexElemF` + law; (4) `decodeHexFold` + the §8 both-cases
+> theorem; (5) discharge `hfix` (uppercase output is a fold fixed point — Finding 1);
+> (6) the ledger edits in §5.1 below.
+
 - [ ] 5.1 `../lean-basen`: RFC 4648 §8 Base16 case-insensitivity as `norm = ASCII
-fold` over the existing uppercase `hexBlockIso`, plus the encoder-emits-uppercase
+fold` **upward** (see HANDOFF above) over the existing uppercase `hexBlockIso`, plus
+      the encoder-emits-uppercase
       obligation (D3's hypothesis, already a proved canonicality law there) and the
       both-cases theorem. This **closes `basen-rfc-conformance-theorems` task 7.3** and
       replaces that task's false `Unambiguous` rationale. It also requires fixing that
