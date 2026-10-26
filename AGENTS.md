@@ -256,6 +256,24 @@ After any spec-delta edit, `openspec validate --all` from `../lean-codec`.
   theorem** to `sorry`, get the build green, and iterate in `/tmp/probe.lean`
   against the built library. Commit per law-family so a revert is never tempting.
 
+## Standing preference (the owner's bias — apply it without being asked)
+
+**Always take the most correct solution, not the most convenient one.** This is a
+standing instruction, not a per-session choice. Concretely:
+
+- When a plan's stated lemma turns out to be **false**, prove the true statement
+  and fix the plan. Do not narrow, weaken, or paper over it to keep the plan. Do
+  not stop and offer "the weaker option" as an alternative.
+- Prefer the formulation that is actually true and sufficient, even when it is
+  more work, an extra case split, a stronger hypothesis, or an extra file.
+- If a choice is between _correct_ and _cheap_, take correct. If between two
+  correct options, take the one that is more honest about its preconditions.
+- Pause and ask only when the requirement itself is genuinely ambiguous or when
+  doing the correct thing would be **outside the change's declared scope** — never
+  merely because the correct path is harder.
+- Record findings and refutations where the next reader will look (`tasks.md`,
+  module docstrings), rather than silently diverging from the plan.
+
 ## OpenSpec workflow
 
 This repo uses OpenSpec (spec-driven). Changes live under `openspec/changes/`;
