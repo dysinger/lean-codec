@@ -233,8 +233,15 @@ n = 4` (empty tail or one padded block) — `../lean-basen` `c0cf50d`.
       after terminal `=` that IS a valid padded block) is rejected by the single-block-tail
       decode — see D8.)_
 - [x] 3.3 Fixed-width bases: the F\* rejection family per base (base16 non-hex +
-      lowercase + odd arity; base2/4/8/10 invalid alphabet + wrong arity +
-      base8/10 overflow).
+      odd arity; base2/4/8/10 invalid alphabet + wrong arity + base8/10 overflow).
+
+      **Amended by task 7.3:** `lowercase` is **dropped from this rejection
+      family**. It was listed as a positively-proved rejection, which is the
+      opposite of RFC 4648 §8. The strict decoder does still reject lowercase
+      (`rejects_lowercase`, retained), but it is a property of the canonical
+      bijection, not a conformance win — the conformant surface is the separate
+      case-insensitive `decodeHexFold` (7.3). Listing it here as a rejection
+      victory was the error.
 
 ## 4. Canonical + converse + injectivity
 
@@ -726,9 +733,48 @@ change edits it second — then `openspec validate` **both** changes.
       this change's delta, and `lean-basen`'s MODIFIED block — kept identical for archive safety).
       Bench includes discriminating examples: the tail-followed-by-block shape has no `B64`/`B32`
       inhabitant at all.
-- [ ] 7.3 Base16 case-insensitive decoder (RFC §8 "MUST accept both cases").
+- [x] 7.3 Base16 case-insensitive decoder (RFC §8 "MUST accept both cases").
 
-      **PAUSED — do not start until `codec-normal-form-case-quotient` task 5.1 lands.**
+      **DONE.** Landed in `../lean-basen` `BaseN/Base16.lean`, `lake build` green
+      (zero `sorry`/warnings), every new law `[propext, Quot.sound]`-only, gated by
+      six new `#guard_msgs` in `Axioms.lean` and value-checked by seven new bench
+      `example`s. The six planned steps were all carried out; **two of them had to
+      be corrected because the plan's stated mathematics was wrong**:
+
+      1. **The three-way lemma.** `hexToNibble_foldByte` is proved, but *not* as
+         `hexToNibble (foldByte b).toNat = hexToNibble b.toNat` (false off the
+         alphabet). It is split into `hexToNibble_foldByte_true` (a digit is a
+         fold fixpoint, nibble unchanged) and `hexToNibble_foldByte_false` (a
+         lowercase letter folds to `b−32`, nibble `b−87`), with
+         `hexToNibble_foldByte_value` the `if`-form the call site consumes.
+         `hexNibbleValid_foldByte` gives the validity form
+         (`hexNibbleValid (foldByte b) = hexNibbleValid b || isLower b`).
+      2. **The commutation lemma is one-directional, not an identity.** The plan
+         said the `Iso` law needs `hexBlockApply (foldList cs) = hexBlockApply cs`.
+         **That is false:** `['6','f']` is rejected by the strict `apply` yet folds
+         to the accepted `['6','F']` (`#eval`-verified) — which is precisely the §8
+         widening. The law needs `hexBlockApply_foldList : hexBlockApply cs = some b
+         → hexBlockApply (foldList cs) = some b`, and the refutation is recorded as
+         `hexBlockApply_foldList_ne`.
+
+      Also landed: `foldByte`/`foldList`/`foldByteBytes` + idempotence,
+      `hexChar` (both-case domain), `hexBlockIsoF` + `hexBlockIsoF_law` (an
+      ordinary `Iso` into `Normal (List UInt8) foldList`), `decodeHexBlockFold`,
+      `decodeHexFold`, `foldList_hexBlockUnapply` (the encoder-emits-uppercase
+      `hfix` obligation), `decodeHexFold_lowercase_eq` (the §8 both-cases law) and
+      `decodeHexFold_of_fixed`. Spec delta, `proposal.md`, `design.md` D6 and task
+      3.3 are amended; `rejects_lowercase`'s false `Unambiguous` rationale is
+      withdrawn in-tree.
+
+      **The `Classical.choice` trap, again (worth recording).** The first pass
+      leaked `Classical.choice` through *every* new law via `decide_eq_true (by
+      omega)` on a **disjunction** goal — `omega` closes a disjunctive goal by case
+      analysis, which drags in classical logic. The fix is to build the disjunct
+      explicitly (`decide_eq_true (Or.inl ⟨_, _⟩)`) instead of letting `omega`
+      split. A second, independent leak came from a `match` on a `Bool` **in the
+      goal**; splitting it into `_true`/`_false` lemmas removed it.
+
+      **Unblocked and complete** (`codec-normal-form-case-quotient` task 5.1 landed).
 
       **The previous rationale was FALSE and is withdrawn.** Earlier text said a
       case-insensitive decoder "breaks `Unambiguous` (per design)". It does not:
