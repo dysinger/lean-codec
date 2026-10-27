@@ -17,169 +17,77 @@ honest: `Current state` states _what is true now and what is next_ (always
 rewritten, never appended), while _how it got there_ and _what was measured_ live
 in the change's `tasks.md` and in `CHANGELOG.md`.
 
-## Project
-
-`codec` — a verified, byte-exact, bidirectional codec library in Lean 4
-(repo directory `lean-codec`). Takes Rendel & Ostermann's _Invertible Syntax
-Descriptions_ (2010) and makes it dependently typed, provable, and binary.
-
-Stdlib-only (no mathlib). Build with `lake build`; the proof gate is the same
-build with zero `sorry`.
-
-- **Reference paper:** `PAPER.md`.
-- **Architecture statement** (complete `[D1]`–`[D8]` departures / `[S1]`–`[S6]`
-  strengthenings, each with a layman "why"): `README.md`. Stable anchors — cite
-  them, don't restate them here.
-
-## Toolchain / environment: read first
-
-**This is a Nix flake project. Every tool is in the flake `devShells.default`, not
-on the host PATH.** Before doing anything, enter the dev shell:
-
-```bash
-nix develop
-```
-
-That shell provides the pinned `lean`/`lake` (Lean 4.34.1), `elan`, and the
-**`openspec` CLI** — none of which are guaranteed to be on the host. Then run the
-same commands (e.g. `openspec list --json`, `openspec status --change … --json`,
-`lake build`, `nix build '.#bench'`).
-
-Do **not**:
-
-- search the host filesystem to locate tools (e.g. `find / -name openspec …`) —
-  they live in the Nix store, reached via `nix develop`;
-- assume `openspec`/`lake`/`lean` are already on PATH — check with `nix develop`
-  first;
-- fall back to hand-editing `openspec/` artifacts when `openspec` is unavailable
-  on the host — get it from `nix develop`.
-
-**Long builds (HARD RULE):** never run a long `nix build` (toolchain, bench, or
-proof gate) in the foreground of a tool call, and never set a huge tool timeout
-(`600000`/`900000` seconds = days-to-weeks — absurd and forbidden):
-
-- launch them detached with `nohup … > /tmp/<name>.log 2>&1 &` and **poll** the
-  log with short `bash` calls (seconds, not minutes);
-- keep the `bash` tool `timeout` small (≤ ~120s) for polling; keep blocking work
-  tiny. If a command will exceed that, it must go detached;
-- never `sleep` for minutes inside a single foreground call to "wait out" a build.
-
-The dev shell is `pkgs.mkShellNoCC` **plus `pkgs.stdenv.cc`**, so `cc`/`clang`/
-`c++` resolve to a `libc++`-aware toolchain and `lake build bench` links, matching
-the `nix build .#bench` sandbox. (For general Nix usage see the `nix` skill; use
-`devenv`/`devenv-migration` only when actually migrating to devenv, never for
-this flake.)
-
-## Where the truth lives
-
-**One source of truth per concern.** When two files disagree, the left column wins:
-
-| Question                                        | Authoritative file                      |
-| ----------------------------------------------- | --------------------------------------- |
-| What is this library, why each design choice    | `README.md` (`[D#]`/`[S#]`), `PAPER.md` |
-| What work is open, and how done is done         | `openspec/changes/<name>/tasks.md`      |
-| What a change is _allowed_ to change            | `openspec/changes/<name>/proposal.md`   |
-| The behavioural contract                        | `openspec/specs/**/spec.md`             |
-| How this environment is set up and how to build | this file                               |
-
-**Anything else is a summary.** If a summary and an `openspec/` artifact differ,
-the artifact is correct and the summary is stale — fix the summary.
-
 ## Current state
 
 Run `openspec list --json` for the live answer; do not trust a snapshot here for
-longer than the commit that wrote it. As of this writing:
+longer than the commit that wrote it.
 
-- **`lean-codec` (this repo) core is complete.** `Codec/Iso.lean`, `Codec.lean`,
-  `Decode.lean`, `Encode.lean`, `Sound.lean`, `Combinators.lean`, plus the proved
-  packed layer (`Codec/Packed.lean`, `Codec/DecodeOne.lean`), the Layer-2 trust
-  seam (`Codec/ByteSlice.lean` + `.c`), and the normal-form layer
-  (`Codec/Normal.lean`, below). Every law is `[propext, Quot.sound]`-only, zero
-  `sorry`. `@[default_target] lean_lib codec` is the proof gate; `lean_exe bench`
-  is the benchmark.
-- **Two open changes; work ONE at a time.** `lean-basen` (18/25, seven mechanical
-  polish items) and `codec-review-remediation` (2/41, the post-completion audit).
-  Do not open a third to hold a review, an audit, or a cleanup — put the finding
-  in the change it belongs to, or report it and let the owner decide. Opening a
-  change is a scope decision, not a filing decision.
-- **Archived: `codec-normal-form-case-quotient` and
-  `basen-rfc-conformance-theorems`** (both 2026-10-27). Their deltas are merged
-  into `openspec/specs/` — `codec/normal-form` is a new capability, and `basen`
-  gained the RFC 4648 §8 requirement. Do not re-teach them from the change
-  directories; those are history.
-- **`codec-review-remediation` is a codebase-wide audit, independent of
-  `lean-basen`.** Its 41 tasks came from four adversarial reviews (74 findings,
-  ids `R<lens>.<n>`, evidence in that change's `review.md`). Read `review.md`'s
-  "do not re-litigate" list before re-opening anything: it pins what the audit
-  tested and found _correct_ (every paper quotation, `Iso.law`'s enforceability,
-  zero `sorry`, all four C seams) so it is not re-derived.
-- **`openspec validate --all` green is schema conformance, not truth.** It was
-  green while live defects sat in the tree. Check the claims themselves.
+### START HERE — `codec-review-remediation`
 
-### `codec-normal-form-case-quotient` — complete (16/16)
+**The next session works `openspec/changes/codec-review-remediation/` (2/41).**
+It is a codebase-wide audit: four adversarial reviews (74 findings, ids
+`R<lens>.<n>`) of the docs, the proof surface, `AGENTS.md`, and the global `lean`
+skill. Its `review.md` is the evidence base; its `tasks.md` is the work.
 
-The information-free-variation layer (`Codec/Normal.lean`): `Normal S norm` (the
-quotient `S/~` as the fixed points of a total idempotent `norm`), `Normalizer S
-norm` (idempotence in the **type**; `norm` is a **parameter**, not a field, so
-`Normal S norm` is definitionally shared), `fill`, `fill_fixed` (`norm ∘ fill =
-id`, **no axioms**), `fill_surj`, `fill_inj`, and `decodeNormal` (the normalising
-decoder — `norm` composed **outside** an ordinary `Iso`; not an `Iso`, no inverse)
-with `decodeNormal_of_fixed` / `decodeNormal_encode`. **`Iso.law` is untouched.**
-`Codec/Normal.lean` is fully **generic** — polymorphic in `S : Type`, no
-`UInt8`/`Bytes`/hex/ASCII/text in the code, so `[S3]` holds.
+- **Read first, in this order:** `tasks.md` §"Surface (read first)" →
+  `review.md`'s **"Verified-correct claims — do not re-litigate these"** → task 1.3.
+- **Task 1.3 is the one that matters most:** `AGENTS.md` calls zero-`sorry` "the
+  proof gate", but `default.nix`'s `check` runs a plain `lake build`, which only
+  _warns_ on `sorry`. Nothing enforces it. Fixing that is a `default.nix` change
+  and it makes the gate real for every change after this one.
+- **None of its findings concern `basen`.** Do not extend an archived change with
+  audit work.
+- Its 41 tasks are sequenced: §1 cross-lens defects (3), §2 Layer-2 seam (8), §3
+  `README.md` derivations (11), §4 `AGENTS.md` process (6), §5 the global `lean`
+  skill (11), §6 re-verify (1). Two are already done (1.1, 1.4).
 
-Task 5.1 (its downstream consumer) is **done** — see `../lean-basen` below.
+### The other open change — `lean-basen` (18/25)
 
-### `../lean-basen` — RFC change complete (31/31)
+`openspec/changes/lean-basen/tasks.md` holds **seven mechanical polish items**
+(5.2, 5.3, 5.4, 5.8, 5.9, 5.12, 5.13) under "Still open — mechanical polish".
+Doc/tidy items, not proofs. Its work happens in `../lean-basen` (sibling repo —
+package `basen`, module `BaseN`; all seven bases landed and proven as `Codec`
+values), in that repo's own `nix develop`.
 
-The active downstream is `../lean-basen` (sibling repo — package `basen`, module
-`BaseN`; base-2/4/8/10/16/32/64, all seven landed and proven as `Codec` values).
-It consumes `codec` **by git input**, so a core change is only visible there after
-pushing `lean-codec` and running `lake update codec` in `../lean-basen`. Its
-`BaseN/Common.lean` already imports `Codec.Normal`. **Work there, in its own
-`nix develop`.**
+**Archive hazard for `lean-basen` (the last one).** It MODIFIES the `basen`
+requirement "The `basen` bases are `Codec` values", and a MODIFIED block
+**replaces** the whole block on archive. Re-read `openspec/specs/basen/spec.md`
+immediately before archiving it, confirm the delta's text is a superset (it is
+today), then `openspec validate --all`.
 
-`openspec/changes/basen-rfc-conformance-theorems/` is **31/31** — all tasks done.
+### Landed and archived (do not re-teach)
 
-- **7.1, 7.2 (DONE)** — all seven bases state the in-image converse
-  (`decodeFull_B{2,4,8,10,16}_char` join `decodeFullB{64,32}_char`), and the
-  withdrawal of the "unrepresentable" claim is reversed via
-  `decodeFullB{64,32}_char_via_type` / `_spine` / `b{64,32}BytesOf_tail1_eq`.
-- **7.3 (DONE).** Base16 case-insensitive decoding (RFC 4648 §8), landed in
-  `BaseN/Base16.lean`. Its old rationale — "folding case breaks `Unambiguous`" —
-  was **false** and is withdrawn: `Unambiguous` constrains one input to at most one
-  value, and folding case is a total function. The real constraint is the
-  **canonicality of encode**, which holds (`encodeHex` emits uppercase only).
-  Spec delta, `proposal.md`, `design.md` D6 and task 3.3 are amended;
-  `rejects_lowercase`'s false rationale is withdrawn in-tree.
+- **`codec-normal-form-case-quotient`** (16/16) → `openspec/specs/codec/normal-form/`.
+  The information-free-variation layer (`Codec/Normal.lean`): `Normal S norm` (the
+  quotient `S/~` as the fixed points of a total idempotent `norm`), `Normalizer S
+norm` (idempotence carried by the _type_; `norm` is a parameter, not a field, so
+  `Normal S norm` is definitionally shared), `fill`, `fill_fixed` (`norm ∘ fill =
+id`, **no axioms**), `fill_surj`, `fill_inj`, and `decodeNormal` (`norm` composed
+  **outside** an ordinary `Iso`; not an `Iso`, no inverse) with
+  `decodeNormal_of_fixed` / `decodeNormal_encode`. **`Iso.law` untouched.** The
+  module is generic in `S : Type` — no `UInt8`/`Bytes`/hex/ASCII/text in the code,
+  so `[S3]` holds.
+- **`basen-rfc-conformance-theorems`** (31/31) → `openspec/specs/basen/`.
+  All seven bases state the in-image converse (`decodeFull_B{2,4,8,10,16}_char`
+  join `decodeFullB{64,32}_char`); `decodeFullB{64,32}_char_via_type` / `_spine` /
+  `b{64,32}BytesOf_tail1_eq` reverse the "unrepresentable" withdrawal; and
+  **RFC 4648 §8** Base16 case-insensitive decoding landed in
+  `../lean-basen/BaseN/Base16.lean`.
 
-  **Two findings that changed the plan, both verified — do not rediscover them:**
+  **Two verified findings from §8 — do not rediscover them:**
   1. The planned commutation `hexBlockApply (foldList cs) = hexBlockApply cs` is
      **false**: `['6','f']` is rejected yet folds to the accepted `['6','F']` —
-     that rejection-to-acceptance IS the §8 widening. The `Iso` law needs the
-     one-directional `hexBlockApply_foldList` (`= some b → … = some b`); the
-     refutation is `hexBlockApply_foldList_ne`.
-  2. `decide_eq_true (by omega)` on a **disjunction** leaks `Classical.choice`
-     (`omega` case-splits) — build the disjunct explicitly. A `match` on a `Bool`
-     **in the goal** leaks too — split into `_true`/`_false` lemmas.
+     that rejection-to-acceptance _is_ the §8 widening. The `Iso` law needs the
+     one-directional `hexBlockApply_foldList`; the refutation is
+     `hexBlockApply_foldList_ne`.
+  2. The old rationale "folding case breaks `Unambiguous`" was **false**:
+     `Unambiguous` constrains one input to at most one value, and folding is a
+     total function. The real constraint is the **canonicality of encode**, which
+     holds (`encodeHex` emits uppercase only).
 
-- **`lean-basen` shows 18/25** but is complete except **seven mechanical polish
-  items** (5.2, 5.3, 5.4, 5.8, 5.9, 5.12, 5.13), listed in
-  `openspec/changes/lean-basen/tasks.md` under "Still open — mechanical polish".
-  Read them there; they are doc/tidy items, not proofs.
-
-**Archive ordering.** `lean-basen` is the last open change that MODIFIES a
-`basen` requirement ("The `basen` bases are `Codec` values"). When it archives,
-its MODIFIED block **replaces** the current one — so re-read
-`openspec/specs/basen/spec.md` immediately before archiving, confirm the delta's
-text is a superset (it is today: it carries the `B32`/`B64` terminality and
-`decodeFullB{64,32}_char_via_type` wording), and run `openspec validate --all`
-after. The ordering hazard recorded here for `basen-rfc-conformance-theorems` is
-**resolved** — it was ADDED-only in both capabilities, so it could never replace a
-MODIFIED block, and it archived cleanly after `codec-normal-form-case-quotient`.
-
-Severity-tagged evidence behind every §6 task:
-`../lean-basen/REVIEW-basen-rfc-conformance.md`.
+Severity-tagged evidence behind the archived §6 hardening tasks lives in
+`../lean-basen/REVIEW-basen-rfc-conformance.md` — history for that archived
+change, not a to-do.
 
 ## Downstream ecosystem
 
@@ -196,14 +104,35 @@ public, so the `github:` input fetches anonymously — no token, no `--impure`.)
 
 ## Verification recipe
 
-The proof gate is the build. In `../lean-basen`, from **its own** `nix develop`:
+Every command below names **its own repository**. They are different flakes with
+different `checks` sets — never run one tree's recipe in the other.
+
+### In `lean-codec` (this repo)
+
+```bash
+nix develop --command lake build            # the proof gate (13 jobs, zero warnings)
+nix develop --command lake build bench      # the bench lane (links Codec/ByteSlice.c)
+nix develop --command openspec validate --all   # after ANY spec or task edit
+```
+
+`nix build '.#checks.aarch64-darwin.lean'` is the same build, sandboxed — it is a
+**long** build: detached with `nohup … > /tmp/x.log 2>&1 &`, then poll. Never
+foreground it. To check one law by hand (in-repo):
+
+```bash
+printf 'import Codec\n#print axioms Codec.roundtrip\n' > /tmp/c.lean
+nix develop --command lake env lean /tmp/c.lean    # expect [propext, Quot.sound]
+```
+
+### In `../lean-basen` (its own `nix develop`)
 
 ```bash
 nix develop --command lake build         # library + Axioms.lean: zero sorry/warnings
-nix develop --command lake build bench   # the bench lane
+nix develop --command lake build bench   # the bench lane (dev-loop; there is no
+                                         # packages.bench — that repo's task 5.3)
 ```
 
-`Axioms.lean` is a `@[default_target]` lib, so `lake build` runs the `#guard_msgs`
+`Axioms.lean` is a `@[default_target]` lib, so `lake build` runs its `#guard_msgs`
 gates; a `Classical.choice` regression fails the build. To check one law by hand:
 
 ```bash
@@ -211,8 +140,14 @@ printf 'import BaseN\n#print axioms BaseN.Base64.decodeFullB64_reject_arity\n' >
 nix develop --command lake env lean /tmp/c.lean    # expect [propext, Quot.sound]
 ```
 
-After any spec-delta edit, `openspec validate --all` from `../lean-codec`.
-`nix flake check` is a **long** build — detached with `nohup … &`, then poll;
+### The rail for a cross-repo import failure
+
+`bad import 'Codec.Normal'` (or any core module) from `../lean-basen`'s
+**sandboxed** build does **not** mean a bad import: the flake's `codec` pin
+predates that module. Check `../lean-basen/flake.lock` →
+`nodes.codec.locked.rev` against `git log --oneline -1 -- Codec/Normal.lean` here,
+then `nix flake update codec` (targeted — not all inputs) and `lake update codec`
+in `../lean-basen`. Never "fix" it by editing the importing Lean file.
 
 - **Axiom discipline.** Every law stays `[propext, Quot.sound]`-only, zero
   `Classical.choice`, zero `sorry`. `#print axioms Codec.roundtrip` is the check;
@@ -245,7 +180,8 @@ After any spec-delta edit, `openspec validate --all` from `../lean-codec`.
   un-implementable: the definition-order cycle `Codec → Productive → Rel → Codec`, and
   the mutual-inductive escape fails the universe check. Unbounded repetition is the
   already-proved `relRepeat`/`decodeRepeat`/`encodeRepeat` triple, exposed as a **run
-  value**. See `basen-rfc-conformance-theorems`'s `design.md` §D0/D7.
+  value**. See the archived `basen-rfc-conformance-theorems`'s `design.md`
+  §D0/D7 under `openspec/changes/archive/`.
 
 ## Lean proof ergonomics (learned the hard way)
 
