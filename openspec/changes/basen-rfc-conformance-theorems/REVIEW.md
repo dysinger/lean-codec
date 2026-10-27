@@ -1,122 +1,52 @@
 # Review evidence — four adversarial lenses
 
-This file is the **evidence base** for every task in `tasks.md`. Each task cites a
-finding by its `R<n>.<m>` id below. Findings carry the reviewer's own reproduced
-evidence (compile output, grep, `#print axioms`, command output) where the claim
-was mechanically checkable; where it was not, the finding says so.
+**Status: evidence only, not a work item.** This is the record of an adversarial
+review that was run at the user's request while this change's task 7.3 was being
+completed. It is kept because its findings have **external referents** — the paper
+text, the compiler, the C file — and can therefore be checked independently of
+whoever wrote the library.
 
-The reviews were run as four independent adversarial passes, each told to find
-defects and not to praise. Their verbatim reports follow, unedited. **Treat a
-finding as a claim, not a fact** — the corresponding task is only complete when
-the fix is in and the cited evidence no longer reproduces.
+It is _not_ a task list and does not gate this change. It originally had a
+41-task companion change (`codec-review-remediation`), which was an overreach:
+the review was requested as information, not as a work item. That change has been
+deleted, its findings kept here, and no finding is actioned unless the user adds
+an explicit task.
 
-| Lens | Reviewer mandate                    | Findings | CRITICAL | HIGH   | MEDIUM | LOW    | INFO  |
-| ---- | ----------------------------------- | -------- | -------- | ------ | ------ | ------ | ----- |
-| R1   | `README.md` vs `PAPER.md` vs source | 22       | 2        | 4      | 6      | 10     | 0     |
-| R2   | `Codec/*.lean` + `ByteSlice.c`      | 18       | 0        | 2      | 2      | 7      | 7     |
-| R3   | `AGENTS.md` as agent instructions   | 12       | 0        | 2      | 5      | 4      | 1     |
-| R4   | global `lean` skill                 | 22       | 0        | 3      | 7      | 12     | 0     |
-|      | **total**                           | **74**   | **2**    | **11** | **20** | **33** | **8** |
+Findings carry the reviewer's reproduced evidence (compile output, grep,
+`#print axioms`, command output) where the claim was mechanically checkable; where
+it was not, the finding says so. **Treat a finding as a claim, not a fact.**
 
-## Findings index (task-relevant)
+Reading order: the two CRITICAL findings first (`R1.1`, `R1.2`), then the HIGH
+findings; the rest is reference.
 
-Ids are `R<lens>.<finding number>`, matching the numbering in the verbatim
-reports below.
+| Lens | Mandate                             | Findings | CRIT  | HIGH   | MED    | LOW    | INFO  |
+| ---- | ----------------------------------- | -------- | ----- | ------ | ------ | ------ | ----- |
+| R1   | `README.md` vs `PAPER.md` vs source | 22       | 2     | 4      | 6      | 10     | 0     |
+| R2   | `Codec/*.lean` + `ByteSlice.c`      | 18       | 0     | 2      | 2      | 7      | 7     |
+| R3   | `AGENTS.md` as agent instructions   | 12       | 0     | 2      | 5      | 4      | 1     |
+| R4   | global `lean` skill                 | 22       | 0     | 3      | 7      | 12     | 0     |
+|      | **total**                           | **74**   | **2** | **11** | **20** | **33** | **8** |
 
-### R1 — prose (README / PAPER / source)
+The three findings more than one lens reached independently — and so the ones
+most worth the user's attention — are:
 
-| id          | sev      | one-line                                                                                                                                                                                                                                                                                                                                                                                      | task     |
-| ----------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| R1.1        | CRITICAL | `CHANGELOG.md` says `abbrev Bytes := List UInt8`; source and README say `Fin n → UInt8`                                                                                                                                                                                                                                                                                                       | 1.1, 1.2 |
-| R1.2        | CRITICAL | `[D2]` filed as a _departure_ while described as "keeps it that way", and mis-attributed to §4.3's `Rel` (which is whole-string, filtered)                                                                                                                                                                                                                                                    | 3.1      |
-| R1.3        | HIGH     | §7.5 quote is verbatim-correct but "almost as an aside"/"muses" undersells; §5 is the stronger hook                                                                                                                                                                                                                                                                                           | 3.2      |
-| R1.4        | HIGH     | `[D4]`'s reason is wrong: `ignore` fails by non-**injectivity** of `apply`, not by "`unapply` cannot invert both"                                                                                                                                                                                                                                                                             | 3.3      |
-| R1.5        | HIGH     | `[S1]` and `[S4]` contradict each other: `[S1]` lists `foldl` under "unconditional", but `foldl` restricts `apply` to terminal seeds                                                                                                                                                                                                                                                          | 3.4      |
-| R1.6        | HIGH     | `[D7]` invents a "chain-isolated in both directions" precondition (real one: `MeasureDecreases` on a `Nat` measure); and "`foldl` is all `chainl1` needs" is false — there is no `chainl1` value                                                                                                                                                                                              | 3.5      |
-| R1.7        | MEDIUM   | `[D4]`'s `skipSpace`/`optSpace` re-emission description reverses/muddles the paper                                                                                                                                                                                                                                                                                                            | 3.3      |
-| R1.8        | MEDIUM   | `[S6]` attributes `many`-as-value to laziness; the real cause is the `Syntax` typeclass (`[D6]`)                                                                                                                                                                                                                                                                                              | 3.6      |
-| R1.9        | MEDIUM   | `[S6]` says `sepBy` is one-or-more _and_ zero-or-more; core has only one-or-more (`relSepBy`)                                                                                                                                                                                                                                                                                                 | 3.7      |
-| R1.10       | MEDIUM   | `[D6]` presents the seven constructors as a 1:1 paper translation; `satisfy` has no paper counterpart                                                                                                                                                                                                                                                                                         | 3.8      |
-| R1.11       | MEDIUM   | `[D8]` claims `subset` now carries a decidable witness "instead of a `Bool`", but `Codec.satisfy` still takes a bare `(UInt8 → Bool)`                                                                                                                                                                                                                                                         | 3.9      |
-| R1.12       | MEDIUM   | `[D1]` mis-transcribes the paper's `newtype Parser α = Parser (String → [(α, String)])` and `data Rel α = Rel [(α, String)]`                                                                                                                                                                                                                                                                  | 3.10     |
-| R1.13–R1.22 | LOW      | venue not fully cited; §7.5 antecedent clipped; `[D3]` cites §4.2 not §3.3 for the asymmetry; `[D5]` names no foil and duplicates `[D3]`; §4.4 space-leak dropped; abstraction block's `decode`/`Rel` signatures unbound/wrong; `[D8]` mixes `Iso`/`Codec` namespaces; `[D6]` "instead" overclaims; `[S2]` "rename only" double-counts `[D1]`/`[D2]`; `[S4]` never states `foldr`'s step type | 3.11     |
+- **`R1.1` / `R3.1` (CRITICAL)** — `CHANGELOG.md` states the substrate as
+  `abbrev Bytes := List UInt8`; `Codec/Codec.lean:68` is
+  `abbrev Bytes (n : Nat) : Type := Fin n → UInt8`, and `README.md` devotes a
+  section to arguing the `List` carrier was deleted as "the defect".
+- **`R3.2` (HIGH)** — the "zero `sorry` proof gate" is asserted in `AGENTS.md`
+  twice, but `default.nix`'s `check` runs a plain `lake build`; `lake build`
+  reports `sorry` as a _warning_. Nothing enforces it.
+- **`R3.3` / `R4.1` (MEDIUM/HIGH)** — the `Classical.choice` leak catalogue
+  records 1 of 3 verified shapes; the disjunction case
+  (`decide_eq_true (by omega)`) reproduces deterministically and is absent.
 
-### R2 — code (proof surface + trust seam)
-
-| id                                            | sev    | one-line                                                                                                                                                                                                                                      | task          |
-| --------------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
-| R2.1                                          | HIGH   | `byteSlice` — the headline Layer-2 seam — has **no** Lean law, while `blitBytes`/`findByte` do                                                                                                                                                | 2.1           |
-| R2.2                                          | HIGH   | the only runtime C↔Lean boundary check (`benchSeamBoundaries`) is unreachable in a default `bench` run; an earlier lane crashes first                                                                                                         | 2.2           |
-| R2.3                                          | MEDIUM | `findByte`'s Lean body's `off + i` is `USize` addition with no stated bound                                                                                                                                                                   | 2.3           |
-| R2.4                                          | MEDIUM | `Packed.lean`'s header names `commitRemainder` as the deferred commit; the actual decoder uses a list-materializing transport and no library path uses the seam                                                                               | 2.4           |
-| R2.5                                          | LOW    | `Iso.element`/`Iso.subset` are dead API (zero callers)                                                                                                                                                                                        | 2.5           |
-| R2.6                                          | LOW    | `findByte_spec` needs `[propext]` while its siblings are axiom-free; header framing implies uniformity                                                                                                                                        | 2.6           |
-| R2.7                                          | LOW    | `decodeFull_spec` takes full-consumption uniqueness as a hypothesis and nothing in-repo supplies it                                                                                                                                           | 2.7           |
-| R2.11–R2.17                                   | LOW    | `blitBytes`'s C is `min`-AC-equal, not "term-for-term"; allocation-length invariant implicit in C; no aliasing test; `Unambiguous`/`Functional` never discharged for a concrete codec                                                         | 2.8           |
-| R2.8, R2.9, R2.10, R2.13, R2.14, R2.16, R2.18 | INFO   | **verified clean**: zero `sorry`; no `Classical.choice` in 18 samples; `Iso.law` has no escape hatch; `fill_fixed` axiom-free; `Normalizer.idem` load-bearing; termination honest; all four C seams match the Lean bodies on reachable inputs | — (no action) |
-
-### R3 — `AGENTS.md`
-
-| id         | sev    | one-line                                                                                                                                                                                                                                                                                                             | task |
-| ---------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| R3.1       | HIGH   | `Bytes` defined two ways across the doc set; `AGENTS.md` sides with README but nothing pins it                                                                                                                                                                                                                       | 1.2  |
-| R3.2       | HIGH   | "zero `sorry`" is called _the_ gate twice; nothing enforces it (`lake build` warns, `check` adds no scan)                                                                                                                                                                                                            | 1.3  |
-| R3.3       | MEDIUM | the `Classical.choice` trap section records one of three verified shapes; the other two are a buried parenthetical                                                                                                                                                                                                   | 1.4  |
-| R3.4       | MEDIUM | the verification recipe opens "In `../lean-basen`" then lists `openspec validate` (this repo) and a `BaseN` axiom probe                                                                                                                                                                                              | 4.1  |
-| R3.5       | MEDIUM | `nix build '.#bench'` used as the post-`nix develop` example, three lines above forbidding foreground builds                                                                                                                                                                                                         | 4.2  |
-| R3.6       | MEDIUM | the `../lean-basen` bench lane is a known-broken target (its task 5.3) and the recipe presents it as green                                                                                                                                                                                                           | 4.3  |
-| R3.7       | MEDIUM | the `bad import Codec.Normal` → stale `flake.lock` failure mode is recorded nowhere                                                                                                                                                                                                                                  | 4.4  |
-| R3.8–R3.12 | LOW    | `Current state` is ~90 lines and duplicates facts (header rule breach); no self-check command for its counts; `bench` described as an "extraction" step that does not exist; the `⟨_, rfl⟩` bisection heuristic has an unstated precondition; "No open change in this repo" misreads against a visible `in-progress` | 4.5  |
-
-### R4 — global `lean` skill
-
-| id          | sev    | one-line                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | task |
-| ----------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| R4.1        | HIGH   | missing the `decide_eq_true (by omega)`-on-a-disjunction leak (reproduced), the skill's most valuable absent lesson                                                                                                                                                                                                                                                                                                                                                                                                                                        | 5.3  |
-| R4.2        | HIGH   | ~130 project-specific hits in a file whose header promises "no project names/paths"                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | 5.1  |
-| R4.3        | HIGH   | the file's "official skill wins on proof engineering" clause silently voids its own stricter axiom gate (official permits `Classical.choice`)                                                                                                                                                                                                                                                                                                                                                                                                              | 5.2  |
-| R4.4        | MEDIUM | Bool-`match`-in-goal recorded at the wrong place, with a fix (`subst h; rfl`) that demonstrably fails                                                                                                                                                                                                                                                                                                                                                                                                                                                      | 5.3  |
-| R4.5        | MEDIUM | `ByteArray` "does not reduce / not provable mechanically" is qualified to Lean ≤ 4.30 and false on 4.34 (`ByteArray.append_assoc`)                                                                                                                                                                                                                                                                                                                                                                                                                         | 5.4  |
-| R4.6        | MEDIUM | `UInt64` arithmetic called boxed; it lowers to `uint64_t` + `lean_uint64_add`                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | 5.5  |
-| R4.7        | MEDIUM | `split_ifs` absence buried at line 1935 inside an unrelated dated entry                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | 5.6  |
-| R4.8        | MEDIUM | `if_pos`/`if_neg` deprecation half-recorded, with a replacement shape (`rw [ite_eq_right h]`) that does not work                                                                                                                                                                                                                                                                                                                                                                                                                                           | 5.7  |
-| R4.9        | MEDIUM | `-/`-in-doc-comment rule one-sided (block comments nest; a stray `/-` is equally fatal)                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | 5.8  |
-| R4.10       | MEDIUM | the `Classical.choice` catalogue scattered over 7 locations, out of date order, no index                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | 5.9  |
-| R4.11–R4.22 | LOW    | nav table misses §5/§6/Append; three claims stated without the qualifier that makes them true; an isolated probe presented as reproducing an in-context leak (it does not); `Suffix.ext` claim project-specific; structural Changelog duplication; unsearchable 60–120-word bold titles; advice pointing away from now-existing stdlib lemmas; precedence rule unoperationalised; `#print axioms` procedure split three ways; the "20–40× off C" figure with no conditions; `git stash` rule duplicated three places; no stdlib-only/4.34 scope disclaimer | 5.10 |
-
-## Cross-lens corroboration
-
-Three findings were reached independently by more than one lens, which is why
-they are sequenced first in `tasks.md`:
-
-- **`Bytes` contradiction** — R1.1 (prose lens: CHANGELOG vs README vs source) and
-  R3.1 (agents lens, from the truth-table angle). Both quote
-  `Codec/Codec.lean:68`.
-- **Unenforced zero-`sorry` gate** — R3.2, with the `default.nix` line numbers.
-- **Incomplete `Classical.choice` catalogue** — R3.3 (agents) and R4.1/R4.10
-  (skill), each reproducing the disjunction leak with a different probe.
-
-## Verified-correct claims — do not re-litigate these
-
-The reviews deliberately also tested claims that turned out **true**, so a later
-session does not re-open them. Confirmed by compilation/inspection:
-
-- Every paper quotation in `README.md` is verbatim-accurate, and every section
-  number checked (3.1, 3.3, 3.4, 4.1–4.4, 5.1–5.3, 6.1, 6.3, 7.5) resolves.
-  The defects in R1 are in the **derived reasoning**, not the quotations.
-- `Iso.law` has **no** escape hatch: no `axiom`/`unsafe`/`partial`/`opaque`/
-  `native_decide`/`implemented_by` anywhere in `Codec/`; all 14 `law :=` proofs
-  are real case analysis.
-- Zero `sorry` in the tree; no `Classical.choice` in 18 sampled theorems;
-  `fill_fixed` depends on no axioms; `Normalizer.idem` is load-bearing and cannot
-  be smuggled through `fill`; termination is honest (`WellFounded.fix` or a real
-  decreasing measure, no `decreasing_by sorry`).
-- All four Layer-2 C seams **match** their Lean bodies on every reachable edge
-  case tested (empty, `i == size`, `i > size`, `memchr` NULL, overlapping
-  windows) — the defects are in the seam's _laws_ and _evidence reachability_
-  (R2.1, R2.2), not in the C.
-- `codec-normal-form-case-quotient` and `basen-rfc-conformance-theorems` counts
-  (16/16, 31/31) and `lean-basen` (18/25) are all correct.
+`review.md` also records (**do not re-litigate**) what the reviewers tested and
+found _correct_: every paper quotation is verbatim-accurate and every cited
+section number resolves, `Iso.law` has no escape hatch, zero `sorry` exists in the
+tree, no `Classical.choice` appeared in 18 sampled theorems, and all four Layer-2
+C seams match their Lean bodies on reachable inputs. **The defects are in derived
+reasoning and evidence reachability, not in the mathematics.**
 
 ---
 
