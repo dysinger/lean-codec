@@ -97,23 +97,24 @@ longer than the commit that wrote it. As of this writing:
   (`Codec/Normal.lean`, below). Every law is `[propext, Quot.sound]`-only, zero
   `sorry`. `@[default_target] lean_lib codec` is the proof gate; `lean_exe bench`
   is the benchmark.
-- **Four open changes; work ONE at a time.** `basen-rfc-conformance-theorems`
-  (31/31, the RFC conformance work), `codec-normal-form-case-quotient` (16/16,
-  the normal-form layer), `lean-basen` (18/25, seven mechanical polish items), and
-  `codec-review-remediation` (2/41, the post-completion audit). Do not open a
-  fifth to hold a review, an audit, or a cleanup — put the finding in the change
-  it belongs to, or report it and let the owner decide. Opening a change is a
-  scope decision, not a filing decision.
-- **`codec-review-remediation` is a codebase-wide audit, independent of the other
-  three.** Its 41 tasks came from four adversarial reviews (74 findings, ids
-  `R<lens>.<n>`, evidence in that change's `review.md`). **No finding in it
-  concerns `basen` or RFC 4648** — do not extend `basen-rfc-conformance-theorems`
-  with audit work; it is complete at 31/31. Read `review.md`'s "do not
-  re-litigate" list before re-opening anything: it pins what the audit tested and
-  found _correct_ (every paper quotation, `Iso.law`'s enforceability, zero
-  `sorry`, all four C seams) so it is not re-derived.
+- **Two open changes; work ONE at a time.** `lean-basen` (18/25, seven mechanical
+  polish items) and `codec-review-remediation` (2/41, the post-completion audit).
+  Do not open a third to hold a review, an audit, or a cleanup — put the finding
+  in the change it belongs to, or report it and let the owner decide. Opening a
+  change is a scope decision, not a filing decision.
+- **Archived: `codec-normal-form-case-quotient` and
+  `basen-rfc-conformance-theorems`** (both 2026-10-27). Their deltas are merged
+  into `openspec/specs/` — `codec/normal-form` is a new capability, and `basen`
+  gained the RFC 4648 §8 requirement. Do not re-teach them from the change
+  directories; those are history.
+- **`codec-review-remediation` is a codebase-wide audit, independent of
+  `lean-basen`.** Its 41 tasks came from four adversarial reviews (74 findings,
+  ids `R<lens>.<n>`, evidence in that change's `review.md`). Read `review.md`'s
+  "do not re-litigate" list before re-opening anything: it pins what the audit
+  tested and found _correct_ (every paper quotation, `Iso.law`'s enforceability,
+  zero `sorry`, all four C seams) so it is not re-derived.
 - **`openspec validate --all` green is schema conformance, not truth.** It was
-  green while the two defects above were live.
+  green while live defects sat in the tree. Check the claims themselves.
 
 ### `codec-normal-form-case-quotient` — complete (16/16)
 
@@ -167,12 +168,15 @@ pushing `lean-codec` and running `lake update codec` in `../lean-basen`. Its
   `openspec/changes/lean-basen/tasks.md` under "Still open — mechanical polish".
   Read them there; they are doc/tidy items, not proofs.
 
-**Archive ordering.** Both changes MODIFY the requirement "The `basen` bases are
-`Codec` values", and archiving keeps only one version. The two MODIFIED/synced
-texts were deliberately made identical (task 6.11), so either order is _safe_ —
-but archive **`lean-basen` first**, then `basen-rfc-conformance-theorems`, running
-`openspec validate --all` after **each**. Re-reconcile the MODIFIED blocks if the
-§8 wording lands in both.
+**Archive ordering.** `lean-basen` is the last open change that MODIFIES a
+`basen` requirement ("The `basen` bases are `Codec` values"). When it archives,
+its MODIFIED block **replaces** the current one — so re-read
+`openspec/specs/basen/spec.md` immediately before archiving, confirm the delta's
+text is a superset (it is today: it carries the `B32`/`B64` terminality and
+`decodeFullB{64,32}_char_via_type` wording), and run `openspec validate --all`
+after. The ordering hazard recorded here for `basen-rfc-conformance-theorems` is
+**resolved** — it was ADDED-only in both capabilities, so it could never replace a
+MODIFIED block, and it archived cleanly after `codec-normal-form-case-quotient`.
 
 Severity-tagged evidence behind every §6 task:
 `../lean-basen/REVIEW-basen-rfc-conformance.md`.

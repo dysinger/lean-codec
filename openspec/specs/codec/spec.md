@@ -93,7 +93,17 @@ condition is required.
 
 Any run of bytes a codec's predicate permits SHALL be captured as part of the
 decoded value and re-emitted verbatim on encode; no byte SHALL be silently
-discarded.
+discarded. Capture-and-re-emit SHALL be understood as the **identity normalizer**
+(the degenerate case of the normal-form layer): the strict inverse law then holds
+with no normalisation and no relaxation. A codec MAY instead model
+**information-free variation** — presentation that carries no information, such as
+the case of a hexadecimal digit — as a normal form, provided: the variation is
+carried by a **total, idempotent, length-preserving** normalizer applied **outside**
+the partial isomorphism; the encoder is proved to emit a **normal form** (so
+decoding its own output still succeeds); and the encoder still emits exactly one
+canonical spelling. Formatting is not semantic: an AST SHALL NOT be required to
+carry presentation (whitespace-run length, leading zeros, case) in order to satisfy
+this requirement.
 
 #### Scenario: Optional bytes are preserved
 
@@ -102,6 +112,31 @@ discarded.
   `decodeRepeat`/`encodeRepeat`)
 - **THEN** that exact run is part of the decoded value and is re-emitted byte-for-
   byte on encode.
+
+#### Scenario: Capture-verbatim is the identity normalizer
+
+- **WHEN** a codec captures a permitted run and re-emits it verbatim
+- **THEN** its normalizer is the identity: no normalisation is applied and the
+  strict inverse law holds with no relaxation, which is the degenerate case of the
+  normal-form layer rather than an argument that no normal form can exist.
+
+#### Scenario: A normalising decoder leaves the `Iso` strict
+
+- **WHEN** a format accepts information-free variant spellings of the same value
+  (e.g. case-insensitive hex digits)
+- **THEN** the variants are absorbed by a total, idempotent, length-preserving
+  `norm` composed before the `Iso`'s `unapply`; the `Iso` and its field-carried
+  inverse law are unchanged; the encoder emits the one canonical spelling and is
+  proved to emit a normal form; and no byte is discarded by the encoder.
+
+#### Scenario: Presentation is not information
+
+- **WHEN** a format's concrete syntax permits presentation choices that carry no
+  information (case of a digit, amount of whitespace, number of leading zeros)
+- **THEN** the specification does not require the decoded value to preserve them;
+  preserving them is not a conformance obligation, and a codec that normalises them
+  away satisfies this requirement provided the encoder's output is canonical and
+  re-decodes to the same value.
 
 ### Requirement: Partial encoding
 
@@ -196,3 +231,60 @@ combinator (paper §3.4), never an AST node.
 - **THEN** it is `takeWhile highBitSet` + an `iso` folding the 7-bit groups — the
   terminator is the first byte with the high bit clear, expressed as a run, not
   a per-byte lookahead.
+
+### Requirement: Unbounded repetition is a derived run, surfaced as a first-class value
+
+Unbounded repetition SHALL remain a **derived** run over the three already-defined
+interpretations (`relRepeat (Rel p)`, `decodeRepeat p h`, `encodeRepeat p`), and
+a concrete format SHALL surface it as a **first-class run value** (a structure
+bundling the element description, its productivity witness, and the three
+interpretations) rather than a bespoke per-format function. There SHALL be no
+`many` constructor and no `decodeB32Strict`/`encodeB64Strict`-style leaf.
+
+#### Scenario: A base is one run value, not three functions
+
+- **WHEN** a base (e.g. base16, base64) is defined
+- **THEN** it is a single run value whose decode is `decodeRepeat <elem> <witness>`
+  and encode is `encodeRepeat <elem>`, with the laws inherited from
+  `decodeRepeat_spec`/`encodeRepeat_rel` — the caller holds one value, never names
+  `decodeB32Strict`.
+
+#### Scenario: Repetition is not a constructor
+
+- **WHEN** unbounded repetition is needed
+- **THEN** it is the existing `relRepeat`/`decodeRepeat`/`encodeRepeat` (the paper's
+  `many`, F\*'s `satisfy_many0`), **not** a `Codec.many` constructor — a
+  constructor carries a denotational productivity witness that is not definable in
+  Lean (definition-order cycle; rejected mutual-inductive universe mismatch).
+
+### Requirement: Concrete formats are `Codec`-surfaced values (uniform `decode`/`encode`)
+
+A concrete format SHALL be a value decoded/encoded by the single uniform
+`Codec.decode` / `Codec.encode` — the _same two operations_ every `Codec` value
+enjoys — never a bespoke per-format `encode`/`decode`/`rel`. There is **no**
+`Base` enum and no `encode (b : Base)` / `decode (b : Base)` dispatcher: a
+runtime radix selector is a bespoke function by another name, it erases the
+value type (`UInt8` vs the padded bases' full-block/tail split), and it has no
+client. The radix lives _in the value the caller already
+holds_ (`hexElem` vs `b32BlockElem`), never on a dispatch index.
+
+#### Scenario: base32/64 are values, not run triples
+
+- **WHEN** base32/base64 are defined
+- **THEN** each is a **composition** of a full-block `Run` (derived `many`) + a
+  finite terminal-tail `Codec`, with the result `iso`-ed to the terminal-tail
+  value type `B32`/`B64`; there is no `decodeB32Strict`/`encodeB64Strict`/
+  `relB64Strict` triple to call. (There is **no** single `Codec B32`/`Codec B64`
+  value: the `Codec` AST has no repetition node, and `many` is derived — the
+  unbounded full-block prefix is the `Run`'s `decodeRepeat`/`encodeRepeat`, not an
+  AST description.)
+
+#### Scenario: No radix-dispatching facade
+
+- **WHEN** a consumer encodes/decodes a value of some base
+- **THEN** it calls `Codec.decode`/`Codec.encode` (or `decodeRepeat`/`encodeRepeat`
+  for the run) on the base's own `Codec`/`Run` value — `Codec.decodeFull hexElem …`,
+  `encodeB32 bs`, `decodeFullB64 s` — and the value type is `List UInt8` (the whole
+  byte list), with `B32`/`B64` as the canonical block/tail spine used only to
+  specify the full-block/tail split. There is **no**
+  `encode (b : Base)` / `decode (b : Base)` and no `Base` inductive.
