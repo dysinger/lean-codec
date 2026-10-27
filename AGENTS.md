@@ -85,9 +85,10 @@ id`, **no axioms**), `fill_surj`, `fill_inj`, and `decodeNormal` (`norm` compose
      total function. The real constraint is the **canonicality of encode**, which
      holds (`encodeHex` emits uppercase only).
 
-Severity-tagged evidence behind the archived §6 hardening tasks lives in
-`../lean-basen/REVIEW-basen-rfc-conformance.md` — history for that archived
-change, not a to-do.
+Severity-tagged evidence behind the archived §6 hardening tasks is in that
+change's own `tasks.md` under `openspec/changes/archive/` — history, not a to-do.
+(Its once-separate `REVIEW-basen-rfc-conformance.md` was deleted: nothing
+referenced it, and direction comes from this file plus `openspec/`.)
 
 ## Downstream ecosystem
 
