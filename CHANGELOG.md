@@ -43,8 +43,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ByteArray.data`, the reducible `Array`), and the transported interpreters
   `decodeBuffer`/`encodeBuffer` with the bar-transferred laws
   (`decodeBuffer_eq`/`encodeBuffer_eq`/`decodeBuffer_spec`/`roundtripBuffer`).
-- `Bytes` (`abbrev Bytes := List UInt8`) as the named proof substrate, used
-  throughout the core in place of the bare `List UInt8`.
+- `Bytes` (`abbrev Bytes (n : Nat) : Type := Fin n → UInt8`) as the named
+  **length-indexed** proof substrate — one byte-string type for both the spec and
+  its scalar-read run-model, with no second `List`/`Array`/`ByteArray` carrier for
+  the laws (see README `[D1]` and "Representations").
 - A `bench` `lean_exe` (`Bench.lean`) and the `default.nix#bench`/`flake.nix`
   `bench` package: extracts the `decode`/`encodeRepeat`/`decodeRepeat`/`Buffer`
   transport hot path to C and links it against the Lean runtime (`§10.5`).
