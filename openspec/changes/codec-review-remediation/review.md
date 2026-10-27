@@ -1,23 +1,17 @@
 # Review evidence — four adversarial lenses
 
-**Status: evidence only, not a work item.** This is the record of an adversarial
-review that was run at the user's request while this change's task 7.3 was being
-completed. It is kept because its findings have **external referents** — the paper
-text, the compiler, the C file — and can therefore be checked independently of
-whoever wrote the library.
+This is the evidence base for `tasks.md`. Each task cites a finding by its
+`R<lens>.<n>` id. Findings carry the reviewer's reproduced evidence (compile
+output, grep, `#print axioms`, command output) where the claim was mechanically
+checkable; where it was not, the finding says so.
 
-It is _not_ a task list and does not gate this change. It originally had a
-41-task companion change (`codec-review-remediation`), which was an overreach:
-the review was requested as information, not as a work item. That change has been
-deleted, its findings kept here, and no finding is actioned unless the user adds
-an explicit task.
+**Treat a finding as a claim, not a fact.** A task is complete when the cited
+evidence no longer reproduces.
 
-Findings carry the reviewer's reproduced evidence (compile output, grep,
-`#print axioms`, command output) where the claim was mechanically checkable; where
-it was not, the finding says so. **Treat a finding as a claim, not a fact.**
-
-Reading order: the two CRITICAL findings first (`R1.1`, `R1.2`), then the HIGH
-findings; the rest is reference.
+**Scope.** The audit covered `README.md`, `PAPER.md`, `AGENTS.md`, the global
+`lean` skill, and all of `Codec/*.lean`. No finding concerns `basen` or RFC 4648
+conformance — those belong to `basen-rfc-conformance-theorems`, which is complete
+and independent.
 
 | Lens | Mandate                             | Findings | CRIT  | HIGH   | MED    | LOW    | INFO  |
 | ---- | ----------------------------------- | -------- | ----- | ------ | ------ | ------ | ----- |
@@ -27,26 +21,39 @@ findings; the rest is reference.
 | R4   | global `lean` skill                 | 22       | 0     | 3      | 7      | 12     | 0     |
 |      | **total**                           | **74**   | **2** | **11** | **20** | **33** | **8** |
 
-The three findings more than one lens reached independently — and so the ones
-most worth the user's attention — are:
+The three findings more than one lens reached independently:
 
-- **`R1.1` / `R3.1` (CRITICAL)** — `CHANGELOG.md` states the substrate as
+- **`R1.1` / `R3.1` (CRITICAL)** — `CHANGELOG.md` named the substrate
   `abbrev Bytes := List UInt8`; `Codec/Codec.lean:68` is
-  `abbrev Bytes (n : Nat) : Type := Fin n → UInt8`, and `README.md` devotes a
-  section to arguing the `List` carrier was deleted as "the defect".
+  `abbrev Bytes (n : Nat) : Type := Fin n → UInt8`. _Fixed (`57d91ac`)._
 - **`R3.2` (HIGH)** — the "zero `sorry` proof gate" is asserted in `AGENTS.md`
-  twice, but `default.nix`'s `check` runs a plain `lake build`; `lake build`
-  reports `sorry` as a _warning_. Nothing enforces it.
-- **`R3.3` / `R4.1` (MEDIUM/HIGH)** — the `Classical.choice` leak catalogue
-  records 1 of 3 verified shapes; the disjunction case
-  (`decide_eq_true (by omega)`) reproduces deterministically and is absent.
+  twice, but `default.nix`'s `check` runs a plain `lake build`, which only
+  _warns_ on `sorry`. Nothing enforces it. _Open — task 1.3._
+- **`R3.3` / `R4.1` (MEDIUM/HIGH)** — the `Classical.choice` catalogue recorded
+  1 of 3 verified shapes; the disjunction case (`decide_eq_true (by omega)`)
+  reproduces deterministically. _Fixed (`e72be59`)._
 
-`review.md` also records (**do not re-litigate**) what the reviewers tested and
-found _correct_: every paper quotation is verbatim-accurate and every cited
-section number resolves, `Iso.law` has no escape hatch, zero `sorry` exists in the
-tree, no `Classical.choice` appeared in 18 sampled theorems, and all four Layer-2
-C seams match their Lean bodies on reachable inputs. **The defects are in derived
-reasoning and evidence reachability, not in the mathematics.**
+## Verified-correct claims — do not re-litigate these
+
+The reviewers also tested claims that turned out **true**, so a later session does
+not re-open them. Confirmed by compilation/inspection:
+
+- Every paper quotation in `README.md` is **verbatim-accurate**, and every section
+  number checked (3.1, 3.3, 3.4, 4.1–4.4, 5.1–5.3, 6.1, 6.3, 7.5) resolves. The
+  defects in R1 are in the **derived reasoning**, not the quotations.
+- `Iso.law` has **no** escape hatch: no
+  `axiom`/`unsafe`/`partial`/`opaque`/`native_decide`/`implemented_by` anywhere in
+  `Codec/`; all 14 `law :=` proofs are real case analysis.
+- Zero `sorry` in the tree; no `Classical.choice` in 18 sampled theorems;
+  `fill_fixed` depends on no axioms; `Normalizer.idem` is load-bearing and cannot
+  be smuggled through `fill`; termination is honest (`WellFounded.fix` or a real
+  decreasing measure, no `decreasing_by sorry`).
+- All four Layer-2 C seams **match** their Lean bodies on every reachable edge
+  case tested (empty, `i == size`, `i > size`, `memchr` NULL, overlapping
+  windows). The defects are in the seam's _laws_ and _evidence reachability_
+  (R2.1, R2.2), not in the C.
+- The `basen` change counts (31/31) and `codec-normal-form-case-quotient`
+  (16/16), `lean-basen` (18/25) are all correct.
 
 ---
 

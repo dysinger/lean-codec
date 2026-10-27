@@ -97,23 +97,21 @@ longer than the commit that wrote it. As of this writing:
   (`Codec/Normal.lean`, below). Every law is `[propext, Quot.sound]`-only, zero
   `sorry`. `@[default_target] lean_lib codec` is the proof gate; `lean_exe bench`
   is the benchmark.
-- **Three open changes; work ONE at a time.** `basen-rfc-conformance-theorems`
+- **Four open changes; work ONE at a time.** `basen-rfc-conformance-theorems`
   (31/31, the RFC conformance work), `codec-normal-form-case-quotient` (16/16,
-  the normal-form layer), `lean-basen` (18/25, seven mechanical polish items).
-  Do not open a fourth to hold a review, an audit, or a cleanup — put the finding
-  in the change it belongs to, or report it and let the owner decide. Opening a
-  change is a scope decision, not a filing decision.
-- **`basen-rfc-conformance-theorems/REVIEW.md` is evidence, not a backlog.** Four
-  adversarial reviews (74 findings, ids `R<lens>.<n>`) of this codebase, run
-  during task 7.3. Several findings are live: `CHANGELOG.md` names the substrate
-  `List UInt8` where `Codec/Codec.lean:68` is `Fin n → UInt8`; the "zero `sorry`
-  gate" is asserted in this file but `default.nix`'s `check` runs a plain
-  `lake build`, which only _warns_ on `sorry`; and the `Classical.choice` trap
-  section below used to record 1 of 3 verified shapes — all three are now
-  recorded there. **Action none of the rest unless it is turned into an explicit
-  task in an open change.** Also read that file's
-  "do not re-litigate" list — it pins what the reviewers tested and found
-  correct, so it is not re-derived.
+  the normal-form layer), `lean-basen` (18/25, seven mechanical polish items), and
+  `codec-review-remediation` (2/41, the post-completion audit). Do not open a
+  fifth to hold a review, an audit, or a cleanup — put the finding in the change
+  it belongs to, or report it and let the owner decide. Opening a change is a
+  scope decision, not a filing decision.
+- **`codec-review-remediation` is a codebase-wide audit, independent of the other
+  three.** Its 41 tasks came from four adversarial reviews (74 findings, ids
+  `R<lens>.<n>`, evidence in that change's `review.md`). **No finding in it
+  concerns `basen` or RFC 4648** — do not extend `basen-rfc-conformance-theorems`
+  with audit work; it is complete at 31/31. Read `review.md`'s "do not
+  re-litigate" list before re-opening anything: it pins what the audit tested and
+  found _correct_ (every paper quotation, `Iso.law`'s enforceability, zero
+  `sorry`, all four C seams) so it is not re-derived.
 - **`openspec validate --all` green is schema conformance, not truth.** It was
   green while the two defects above were live.
 
