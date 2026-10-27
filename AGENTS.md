@@ -97,29 +97,27 @@ longer than the commit that wrote it. As of this writing:
   (`Codec/Normal.lean`, below). Every law is `[propext, Quot.sound]`-only, zero
   `sorry`. `@[default_target] lean_lib codec` is the proof gate; `lean_exe bench`
   is the benchmark.
-- **NOTHING IS COMPLETE. Do not archive anything.** An adversarial review
-  (`openspec/changes/codec-review-remediation/`, 74 findings, 2 CRITICAL) found
-  the documentation and the proof gate defective _in the work that was marked
-  complete_. The task checkboxes are not the measure; the review is.
-- **The ticked counts are not completion claims.** `codec-normal-form-case-quotient`
-  16/16 and `basen-rfc-conformance-theorems` 31/31 mean _their own authored tasks
-  are done_. Both carry a `> STATUS: NOT COMPLETE — DO NOT ARCHIVE` banner in
-  their `tasks.md`, and both are **reopened** by `codec-review-remediation`
-  (0/41). "Complete" for them means _their spec text and gate survive the review_
-  — remediation tasks §1–§4.
-- **Why the checkboxes lied:** `codec-normal-form-case-quotient` was marked
-  16/16 and called "ready to archive" while (a) the zero-`sorry` gate it relied on
-  was never enforced by the build, and (b) `CHANGELOG.md` advertised the removed
-  `List UInt8` substrate. `openspec validate --all` was green throughout — it
-  checks **schema conformance, not truth**. Never cite it as evidence of
-  completion.
-- **The evidence base:** `codec-review-remediation/review.md` (four verbatim
-  reviews, ids `R<lens>.<n>`). Read its **"Verified-correct claims — do not
-  re-litigate these"** list before re-opening anything; it records what was
-  tested and held so it is not re-derived.
-- `lean-basen` is 18/25 (seven mechanical polish items).
+- **Three open changes; work ONE at a time.** `basen-rfc-conformance-theorems`
+  (31/31, the RFC conformance work), `codec-normal-form-case-quotient` (16/16,
+  the normal-form layer), `lean-basen` (18/25, seven mechanical polish items).
+  Do not open a fourth to hold a review, an audit, or a cleanup — put the finding
+  in the change it belongs to, or report it and let the owner decide. Opening a
+  change is a scope decision, not a filing decision.
+- **`basen-rfc-conformance-theorems/REVIEW.md` is evidence, not a backlog.** Four
+  adversarial reviews (74 findings, ids `R<lens>.<n>`) of this codebase, run
+  during task 7.3. Several findings are live: `CHANGELOG.md` names the substrate
+  `List UInt8` where `Codec/Codec.lean:68` is `Fin n → UInt8`; the "zero `sorry`
+  gate" is asserted in this file but `default.nix`'s `check` runs a plain
+  `lake build`, which only _warns_ on `sorry`; and the `Classical.choice` trap
+  section below used to record 1 of 3 verified shapes — all three are now
+  recorded there. **Action none of the rest unless it is turned into an explicit
+  task in an open change.** Also read that file's
+  "do not re-litigate" list — it pins what the reviewers tested and found
+  correct, so it is not re-derived.
+- **`openspec validate --all` green is schema conformance, not truth.** It was
+  green while the two defects above were live.
 
-### `codec-normal-form-case-quotient` — tasks ticked 16/16, **NOT complete**, reopened
+### `codec-normal-form-case-quotient` — complete (16/16)
 
 The information-free-variation layer (`Codec/Normal.lean`): `Normal S norm` (the
 quotient `S/~` as the fixed points of a total idempotent `norm`), `Normalizer S
@@ -133,7 +131,7 @@ with `decodeNormal_of_fixed` / `decodeNormal_encode`. **`Iso.law` is untouched.*
 
 Task 5.1 (its downstream consumer) is **done** — see `../lean-basen` below.
 
-### `../lean-basen` — tasks ticked 31/31, **NOT complete**, reopened
+### `../lean-basen` — RFC change complete (31/31)
 
 The active downstream is `../lean-basen` (sibling repo — package `basen`, module
 `BaseN`; base-2/4/8/10/16/32/64, all seven landed and proven as `Codec` values).
@@ -142,8 +140,7 @@ pushing `lean-codec` and running `lake update codec` in `../lean-basen`. Its
 `BaseN/Common.lean` already imports `Codec.Normal`. **Work there, in its own
 `nix develop`.**
 
-`openspec/changes/basen-rfc-conformance-theorems/` has its **31/31** tasks ticked,
-but is **NOT complete** — reopened by `codec-review-remediation` (see above).
+`openspec/changes/basen-rfc-conformance-theorems/` is **31/31** — all tasks done.
 
 - **7.1, 7.2 (DONE)** — all seven bases state the in-image converse
   (`decodeFull_B{2,4,8,10,16}_char` join `decodeFullB{64,32}_char`), and the
@@ -172,20 +169,12 @@ but is **NOT complete** — reopened by `codec-review-remediation` (see above).
   `openspec/changes/lean-basen/tasks.md` under "Still open — mechanical polish".
   Read them there; they are doc/tidy items, not proofs.
 
-**Archive ordering — BLOCKED, not just "in this order".** Nothing is archivable
-now. When it becomes unblocked (remediation §1–§4 green), the ordering constraint
-is: both changes MODIFY the requirement "The `basen` bases are `Codec` values",
-and archiving keeps only one version. The two MODIFIED/synced texts were
-deliberately made identical (task 6.11), so either order is then _safe_ — but
-archive **`lean-basen` first**, then `basen-rfc-conformance-theorems`, running
-`openspec validate --all` after **each**, and re-reconcile the MODIFIED blocks if
-the §8 wording lands in both.
-
-**Why archiving is blocked:** archive freezes the change's spec text into
-`openspec/specs/`. The review found passages in that text wrong (`[D4]`'s
-mechanism, the `[S1]`/`[S4]` contradiction, the `[S6]` `sepBy` claim, and the
-base16 case wording). Freezing them would make the defect permanent and propagate
-it to every downstream repo that reads `openspec/specs/`.
+**Archive ordering.** Both changes MODIFY the requirement "The `basen` bases are
+`Codec` values", and archiving keeps only one version. The two MODIFIED/synced
+texts were deliberately made identical (task 6.11), so either order is _safe_ —
+but archive **`lean-basen` first**, then `basen-rfc-conformance-theorems`, running
+`openspec validate --all` after **each**. Re-reconcile the MODIFIED blocks if the
+§8 wording lands in both.
 
 Severity-tagged evidence behind every §6 task:
 `../lean-basen/REVIEW-basen-rfc-conformance.md`.
@@ -258,15 +247,29 @@ After any spec-delta edit, `openspec validate --all` from `../lean-codec`.
 
 ## Lean proof ergonomics (learned the hard way)
 
-- **`Classical.choice` trap.** A _dependent_ `cases`/`match` on a list whose
-  **equation** sits in context (`bs.length = 1 ∨ bs.length = 2`, `ds.length = k`)
-  leaks `Classical.choice` even when every cited lemma is `[propext]`-clean.
-  Restate the hypothesis numerically (`1 ≤ bs.length`, `bs.length ≤ 2`) or derive
-  the index from the term (`count ds.length …`) so the match stays non-dependent.
-  Bisect by shrinking the body to `⟨_, rfl⟩`: if it still leaks, it is the match,
-  not the arithmetic.
-- **`omega` does not reason modulo.** It cannot derive `n % 4 = 0` from
-  `n = 4 * k`. Convert to the equational form and `rw [hn, Nat.mul_mod_right]`.
+- **`Classical.choice` trap — three verified shapes.** All three are silent (`#print
+axioms` on the enclosing theorem is the only check) and all three happened here:
+  1. **Dependent `cases`/`match` on a list whose _equation_ sits in context**
+     (`bs.length = 1 ∨ bs.length = 2`, `ds.length = k`) — leaks even when every
+     cited lemma is `[propext]`-clean. Fix: restate the hypothesis numerically
+     (`1 ≤ bs.length`, `bs.length ≤ 2`) or derive the index from the term
+     (`count ds.length …`) so the match stays non-dependent. **Only when the goal
+     is a sigma/`∃`** does bisecting with `⟨_, rfl⟩` work.
+  2. **`decide_eq_true (by omega)` on a disjunction** — `omega` closes a disjunction
+     by case analysis, which pulls in classical logic. `decide` alone is fine; the
+     _disjunctive_ proof is not. Fix: build the disjunct explicitly
+     (`decide_eq_true (Or.inl ⟨a, b⟩)`) and let `omega` close only the arithmetic
+     leaf. Reproducer: a `decide ((48 ≤ n ∧ n ≤ 57) ∨ (65 ≤ n ∧ n ≤ 70)) = true`
+     goal closed with `decide_eq_true (by omega)` reports
+     `[propext, Classical.choice, Quot.sound]`.
+  3. **A `match`/`if` on a `Bool` in the _goal_** — a dependent match: `cases b`
+     fails with "Dependent elimination failed", and `subst h; rfl` fails with
+     "not definitionally equal to `match true, ⋯`". Fix: split the claim into
+     `_true`/`_false` lemmas, or `cases b <;> simp_all`.
+- **`omega` and modulo.** It **cannot** use a modulo _hypothesis_
+  (`n % 4 = 0`) or prove an existential from one; the equational form
+  `n = 4 * k → n % 4 = 0` _is_ in its fragment. When it stalls, rewrite to the
+  equational form and `rw [hn, Nat.mul_mod_right]`.
 - **Never `git stash` / `git reset` / `git checkout -- <file>` to "start clean"** —
   it has destroyed verified work here. If a proof will not compile, stub **that one
   theorem** to `sorry`, get the build green, and iterate in `/tmp/probe.lean`
