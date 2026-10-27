@@ -1,13 +1,5 @@
 # Tasks
 
-> **STATUS: NOT COMPLETE — DO NOT ARCHIVE.** All below tasks are ticked, but an
-> adversarial review (`openspec/changes/codec-review-remediation/`) found the
-> surrounding documentation and proof gate defective (2 CRITICAL). This change is
-> complete only when the remediation tasks §1–§4 land; archiving before then
-> freezes the defective spec text into `openspec/specs/`. See that change's
-> `proposal.md` "Status" section. `openspec validate --all` green is **schema
-> conformance, not truth** — it was green while these defects were live.
-
 > **Surface (read first):** this change is **additive**. No existing declaration
 > changes shape: `Iso`, `Codec`, `decode`, `encode`, `Rel`, `Unambiguous`,
 > `Functional` and every proved law stay exactly as they are. The change is one new
@@ -184,7 +176,7 @@ Option α := i.unapply (fill nz s)`. Docstring SHALL say: _not_ an `Iso`; has no
 > (6) the ledger edits in §5.1 below.
 
 - [x] 5.1 `../lean-basen`: RFC 4648 §8 Base16 case-insensitivity as `norm = ASCII
-  fold` **upward** over the existing uppercase `hexBlockIso`, plus the
+fold` **upward** over the existing uppercase `hexBlockIso`, plus the
       encoder-emits-uppercase obligation (D3's hypothesis) and the both-cases
       theorem. **DONE** — this closed `basen-rfc-conformance-theorems` task 7.3.
 
