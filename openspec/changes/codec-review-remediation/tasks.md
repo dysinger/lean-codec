@@ -402,12 +402,21 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
 > fixed numbers. `AGENTS.md`'s "one change at a time" rule is satisfied: this is
 > still `codec-review-remediation`.
 
-- [ ] 6.1 **Re-express the repetition decoders as structural recursion** (R5.1 —
-      CRITICAL). `decodeFull` and `decodeRepeat` are defined by
-      `WellFounded.fix` on `Sigma fun k => Bytes k` (`Codec/Decode.lean:115-127`,
-      `194-205`). A structural fold over the index does identical work on
-      identical types and is **588× faster** at n=4096 with a bit-identical
-      result (`review.md` R5.1). Requirements, all mandatory:
+- [ ] 6.1 **Give `decodeFull` a single-pass formulation** (R5.1 — CRITICAL).
+      **Revised 2026-10-28 — the originally-prescribed fix is REFUTED; do not
+      attempt it.** This task used to say "re-express as structural recursion".
+      That was implemented and measured as a **no-op**: a `termination_by`-
+      structural `decodeFull` runs at 93,691 µs against the shipped
+      `WellFounded.fix` version's 94,137 µs at n=4096, because Lean elaborates
+      `termination_by` to the _same_ well-founded recursion. `decodeRepeatS` vs
+      `decodeRepeat` likewise (623 ms vs 633 ms). See `review.md` R5.1
+      §"The refuted diagnosis".
+      **The actual defect is the algorithm.** `decodeFullStep` is a backtracking
+      search that, at each of the n levels, calls `decode p s` over the whole
+      remaining buffer and recurses into candidates — Θ(n²) _work_. A single
+      linear pass over the same `decode`/`bdrop` costs 176 µs where `decodeFull`
+      costs 91,382 µs (519×), with a bit-identical result. Requirements, all
+      mandatory:
       (a) keep every existing theorem — `decodeRepeat_eq`, `decodeFull_zero`,
       `decodeFull_some`, `decodeFull_ne_none`, `decodeFull_spec`,
       `decodeRepeat_spec`, `relRepeat_*` — and keep `[propext, Quot.sound]`-only
@@ -419,9 +428,29 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
       `decreasing_by sorry`, and no `partial`;
       (d) keep it `#eval`-able (the reason `WellFounded.fix` was chosen —
       `Codec/Decode.lean:141`).
+      **Scope note:** `decodeRepeat` is out of scope for a speed fix. Its Θ(n²) is
+      inherent to its all-prefix return type `List (List α × Suffix n)` (the
+      paper's §4.4 cost), and 6.2 must say so in the docs rather than imply it can
+      be optimized away. The fixable target is `decodeFull`.
       Re-measure with the R5.1 probe and record the before/after ratio in this
       task. If the honest new definition turns out _not_ to be provably equal,
       the fix is the stronger hypothesis, not a weaker statement.
+      **Established this session (2026-10-28), so it is not rediscovered:** - The characterising law is `decodeFull_spec` (`Codec/Decode.lean:367`),
+      which relates `decodeFull` to `decodeRepeat`, not to a standalone
+      definition. A replacement must therefore reproduce **both**
+      `decodeFull_some` (forward) and `decodeFull_ne_none` (completeness) —
+      those two are the bridge, and `decodeFull_spec` then follows with only
+      `huniq` unchanged. Keep `huniq` as a hypothesis (2.6(b) is the item that
+      decides whether to derive it). - A single-pass formulation needs a **mutual** recursion
+      (`decodeFullP` over the length index, plus a `scan` helper over the
+      candidate list), and its termination is **lexicographic**: `scan` either
+      descends in the remainder (`h : ConsumesByte`) or in `List.length`. Lean
+      will not infer that measure; it needs an explicit
+      `termination_by _ l => (l.head?.map (·.2.remaining) |>.getD 0, l.length)`
+      plus a `decreasing_by` discharging the `ConsumesByte` step from the head
+      pair. Budget for that before starting. - Partial progress is preserved here rather than stubbed into the tree:
+      this session's attempts did not compile, so `Codec/Decode.lean` is
+      UNCHANGED. Nothing is half-landed.
 
 - [ ] 6.2 **Re-baseline the documented performance claims** (R5.1). `README.md`
       §"The honest ceiling" (`512-530`) and the `AGENTS.md` bullet (`171-176`)
