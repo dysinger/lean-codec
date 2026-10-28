@@ -24,22 +24,52 @@ longer than the commit that wrote it.
 
 ### START HERE — `codec-review-remediation`
 
-**The next session works `openspec/changes/codec-review-remediation/` (2/41).**
-It is a codebase-wide audit: four adversarial reviews (74 findings, ids
-`R<lens>.<n>`) of the docs, the proof surface, `AGENTS.md`, and the global `lean`
-skill. Its `review.md` is the evidence base; its `tasks.md` is the work.
+**The next session works `openspec/changes/codec-review-remediation/` and nothing
+else.** Run the live counts with `nix develop --command openspec list --json`
+(strip the dev-shell banner: `| sed -n '/^{/,$p'`); do not trust a snapshot here
+for longer than the commit that wrote it. Currently **2/45**.
 
-- **Read first, in this order:** `tasks.md` §"Surface (read first)" →
-  `review.md`'s **"Verified-correct claims — do not re-litigate these"** → task 1.3.
-- **Task 1.3 is the one that matters most:** `AGENTS.md` calls zero-`sorry` "the
-  proof gate", but `default.nix`'s `check` runs a plain `lake build`, which only
-  _warns_ on `sorry`. Nothing enforces it. Fixing that is a `default.nix` change
-  and it makes the gate real for every change after this one.
+It is a codebase-wide audit. Four adversarial _reading_ lenses (74 findings, ids
+`R<lens>.<n>`) cover the docs, the proof surface, `AGENTS.md`, and the global
+`lean` skill; a fifth, **`R5`, added later because it _runs_ the binary**, is a
+CRITICAL performance finding (id `R5.1`). `review.md` is the evidence base;
+`tasks.md` is the work.
+
+**Work order — do it in this sequence:**
+
+1. **§1** — tasks 1.2, **1.3**, 1.5. Small, and 1.3 is the one that matters: it
+   makes the proof gate real for every task after it.
+2. **§6** — the `R5.1` performance defect (4 tasks). **This must run before §3
+   and §4**, because those rewrite the very paragraphs that currently quote the
+   defect's numbers; correcting prose against unfixed numbers would canonize the
+   defect.
+3. **§2** — the Layer-2 seam.
+4. **§3**, then **§4** — the doc rewrites, now against fixed numbers.
+5. **§5** — the global `lean` skill, last (outside this repo).
+
+- **Task 1.3 makes the proof gate real.** `AGENTS.md` used to call zero-`sorry`
+  "the proof gate" while `default.nix`'s `check` ran a plain `lake build`, which
+  only _warns_ on `sorry`. Fixing that is a `default.nix` change and it makes the
+  gate real for every change after this one.
+- **`R5.1` is the one that changes the library.** `decodeFull`/`decodeRepeat` are
+  `WellFounded.fix`-on-a-`Sigma`, which does not compile to a loop; an equivalent
+  structural fold over the same types is **588× faster** at n=4096 with a
+  bit-identical result, so decode runs at ~0.01 MiB/s against a 1,344 MiB/s
+  `memcpy` floor. The "20–40× off C" ceiling this file used to assert is false by
+  ~4 orders on that path — it is marked false in the Axiom-discipline section
+  below, and **do not quote any ceiling until 6.1/6.2 land** and the figure is
+  re-measured alongside them.
+- **`R5.1` carries the change's one shape-changing carve-out** (design D9): §6 may
+  change `decodeFull`/`decodeRepeat`'s recursion scheme, but must keep every
+  theorem's statement, prove the new definition equal to the old, and preserve
+  `[propext, Quot.sound]`-only / zero `sorry` / `#eval`-ability. Nothing else may
+  change a declaration shape.
 - **None of its findings concern `basen`.** Do not extend an archived change with
   audit work.
-- Its 41 tasks are sequenced: §1 cross-lens defects (3), §2 Layer-2 seam (8), §3
-  `README.md` derivations (11), §4 `AGENTS.md` process (6), §5 the global `lean`
-  skill (11), §6 re-verify (1). Two are already done (1.1, 1.4).
+- Its 45 tasks are sequenced: §1 cross-lens defects (5), §2 Layer-2 seam (8), §3
+  `README.md` derivations (12), §4 `AGENTS.md` process (6), §5 the global `lean`
+  skill (10), §6 the `R5.1` performance defect (4). Two are already done (1.1,
+  1.4).
 
 ### The other open change — `lean-basen` (18/25)
 
@@ -111,10 +141,15 @@ different `checks` sets — never run one tree's recipe in the other.
 ### In `lean-codec` (this repo)
 
 ```bash
-nix develop --command lake build            # the proof gate (13 jobs, zero warnings)
+nix develop --command lake build            # 13 jobs, zero warnings — NOT yet a sorry gate
 nix develop --command lake build bench      # the bench lane (links Codec/ByteSlice.c)
 nix develop --command openspec validate --all   # after ANY spec or task edit
 ```
+
+**`lake build` does not enforce zero-`sorry` today** — it reports `sorry` as a
+_warning_. Task 1.3 adds `-DwarningAsError=true` to `default.nix`'s `check`
+derivation; until it lands, check by hand (`grep -rn 'sorry' Codec/` → zero, in
+prose only) and do not describe the gate as enforced.
 
 `nix build '.#checks.aarch64-darwin.lean'` is the same build, sandboxed — it is a
 **long** build: detached with `nohup … > /tmp/x.log 2>&1 &`, then poll. Never
@@ -153,7 +188,9 @@ in `../lean-basen`. Never "fix" it by editing the importing Lean file.
 - **Axiom discipline.** Every law stays `[propext, Quot.sound]`-only, zero
   `Classical.choice`, zero `sorry`. `#print axioms Codec.roundtrip` is the check;
   `../lean-basen`'s `Axioms.lean` is a `@[default_target]` lib so `lake build`
-  enforces its `#guard_msgs` gates.
+  enforces its `#guard_msgs` gates. **In _this_ repo the gate is not yet enforced**
+  (`lake build` only warns on `sorry`) — task 1.3 makes it real; until then verify
+  by hand and say "observed", not "enforced".
 - **The `Bytes n` spec substrate is single.** `Bytes n := Fin n → UInt8` is both
   the proof substrate and its own scalar-read run-model. The packed (`Array UInt8`)
   and byte-slice (`ByteArray`) carriers are proved-equal or trust-seam
@@ -168,11 +205,18 @@ in `../lean-basen`. Never "fix" it by editing the importing Lean file.
 - **All codecs are pure Lean.** C is only generic bulk byte movement
   (`memcpy`/`memchr` shapes). **No per-format C, no C that parses digits, numbers,
   fields, or format structure.** That is a hard design rule.
-- **Pure-Lean parsing has a ~20–40×-off-C ceiling, and that is accepted.** Lean
+- **Pure-Lean parsing is slower than C, and the _number_ is under revision.** Lean
   4.34.1's C backend boxes `Nat`/`UInt8`/`UInt64` arithmetic; `USize` is an unboxed
   `size_t` only as an `@[extern]` argument and re-boxes once stored in a
   `Prod`/`Option`. Rewriting a parser to thread a `USize` cursor made it _slower_.
   Do not re-attempt pure-Lean micro-optimization to close the gap.
+  **The "~20–40×-off-C ceiling" this bullet used to assert is FALSE as measured**
+  (2026-10-28, `review.md` `R5.1`): decode runs at ~0.01 MiB/s against a
+  1,344 MiB/s `memcpy` floor (~10^5× off), because `decodeFull`/`decodeRepeat`
+  are `WellFounded.fix`-on-a-`Sigma` and do not compile to a loop — an equivalent
+  structural fold is 588× faster at n=4096 with a bit-identical result. The
+  compiler's boxing is **one** of three causes, not the ceiling. Do not quote a
+  ceiling until §6.1/§6.2 land and the figure is re-measured alongside it.
 - **The packed cursor is `Nat`, not `USize`.** A `System.Platform.numBits = 64`
   premise would break the `[propext, Quot.sound]`-only gate. `commitRemainder` is
   `USize`-indexed (matching `byteSlice`) so there is no `Nat ↔ USize` roundtrip;
