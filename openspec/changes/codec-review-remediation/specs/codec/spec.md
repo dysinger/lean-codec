@@ -30,10 +30,26 @@ over the same types, calling the same `decode`/`bdrop` and returning the same
 `Option (List UInt8)`, with a bit-identical result. Any exception to the
 structural requirement SHALL carry a recorded measurement justifying it.
 
+**Decode and encode SHALL run within a small single-digit multiple of C.** The
+reference for "C" SHALL be a `memcpy`-class bulk byte operation measured in the
+same process and run, and the ratio SHALL be reported as a ratio to it, not as a
+machine-dependent absolute figure. This SHALL be verified by a bench lane that
+**fails** when the ratio exceeds a stated bar, so the property cannot regress
+silently.
+
+The literal-decoding result types SHALL NOT be the runtime carrier. A decode step
+SHALL return its value and a consumed count (a cursor), not a `List` of results
+and not a materialized remainder; materializing either SHALL be confined to a
+specification-level surface with a proved refinement. Rationale, measured: with
+the cursor shape a bulk decode runs ~8.5× the `memcpy` floor, while the shipped
+`List`-returning per-step shape runs ~47× and the search-shaped repetition
+decoder ~10^5× — i.e. the deficit is the result type, not the language.
+
 Documented throughput SHALL be a **measured** figure with its cause attributed,
-distinguishing at minimum (a) the recursion scheme, (b) the result shape, and
-(c) boxed scalar arithmetic. A single ratio SHALL NOT be presented as "the"
-ceiling for the library without naming which of those it reflects.
+distinguishing at minimum (a) the algorithm (search vs single pass), (b) the
+result shape, and (c) boxed scalar arithmetic. A single ratio SHALL NOT be
+presented as "the" ceiling for the library without naming which of those it
+reflects.
 
 #### Scenario: Productive repetition decodes in bounded steps
 
@@ -76,6 +92,26 @@ ceiling for the library without naming which of those it reflects.
   `decodeFull_ne_none`, `decodeFull_spec`, the `relRepeat` family) still holds
   for its stated statement, and the axiom footprint is still
   `[propext, Quot.sound]`-only with zero `Classical.choice` and zero `sorry`.
+
+#### Scenario: Decode and encode are within a small multiple of C
+
+- **WHEN** a decode or encode path is measured against a `memcpy`-class bulk
+  operation in the same process and run
+- **THEN** the reported figure is a **ratio** to that reference, the ratio is
+  within a small single-digit multiple, and a bench lane asserts the bound and
+  fails when it is exceeded — so an order-of-magnitude regression cannot land
+  unnoticed. An absolute "MiB/s" floor SHALL NOT be used as the assertion, because
+  it is machine-dependent and is tuned down rather than investigated.
+
+#### Scenario: The decoder's result type is a cursor, not a list
+
+- **WHEN** a decode step is checked for its runtime shape
+- **THEN** it returns the decoded value together with a consumed count (so the
+  caller can advance a cursor), rather than a `List` of candidates or a
+  materialized remainder buffer; any `List`-returning spec form SHALL be tied to
+  it by a proved refinement (`decodeArray_eq`-shaped) and SHALL NOT be the carrier
+  the fast path runs on. Rationale is measured, not stylistic: the cursor shape
+  runs ~8.5× the `memcpy` floor and the `List` per-step shape ~47×.
 
 #### Scenario: A performance regression fails the bench
 
