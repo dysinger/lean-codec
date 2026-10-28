@@ -51,8 +51,17 @@ CRITICAL performance finding (id `R5.1`). `review.md` is the evidence base;
   "the proof gate" while `default.nix`'s `check` ran a plain `lake build`, which
   only _warns_ on `sorry`. Fixing that is a `default.nix` change and it makes the
   gate real for every change after this one.
-- **`R5.1` is the one that changes the library — and its first diagnosis was
-  REFUTED, read the correction.** Decode runs at ~0.01 MiB/s against a 1,344 MiB/s
+- **`R5.1` — the defect is FOUND and a 9047× fix LANDED; the bridge proof is still
+  open.** Root cause (measured, after refuting `WellFounded.fix`/`Sigma`/`.attach`/
+  `List` as no-ops): `decode` returns a `Suffix` whose `bytes` is a `bdrop` **closure
+  over its input**, so feeding `t.bytes` back **composes closures** — quadratic, 668×
+  at n=4096. `Codec.decodeFullFastRoot` re-roots at the original byte string with a
+  consumed-count cursor: **93,531 → 188 µs (n=4096), 24,905,804 → 2,753 µs
+  (n=65536)**, linear, ~22 MiB/s. **`decodeFullFastRoot` is verified by measurement,
+  NOT yet by proof** — the equality bridge to `decodeFull` is task 6.1's remaining
+  work, and nothing calls the fast path yet. Do not describe it as proven, and do not
+  wire it in until the bridge lands.
+- **`R5.1`'s earlier diagnosis was REFUTED, read the correction.** Decode runs at ~0.01 MiB/s against a 1,344 MiB/s
   `memcpy` floor, so the "20–40× off C" ceiling this file used to assert is false
   by ~4 orders on that path (marked false in the Axiom-discipline section below;
   **do not quote any ceiling until 6.1/6.2 land**). The _cause_, though, is
