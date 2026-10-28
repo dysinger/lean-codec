@@ -211,19 +211,20 @@ in `../lean-basen`. Never "fix" it by editing the importing Lean file.
 - **All codecs are pure Lean.** C is only generic bulk byte movement
   (`memcpy`/`memchr` shapes). **No per-format C, no C that parses digits, numbers,
   fields, or format structure.** That is a hard design rule.
-- **Pure-Lean parsing is slower than C, and the _number_ is under revision.** Lean
-  4.34.1's C backend boxes `Nat`/`UInt8`/`UInt64` arithmetic; `USize` is an unboxed
-  `size_t` only as an `@[extern]` argument and re-boxes once stored in a
-  `Prod`/`Option`. Rewriting a parser to thread a `USize` cursor made it _slower_.
-  Do not re-attempt pure-Lean micro-optimization to close the gap.
-  **The "~20–40×-off-C ceiling" this bullet used to assert is FALSE as measured**
-  (2026-10-28, `review.md` `R5.1`): decode runs at ~0.01 MiB/s against a
-  1,344 MiB/s `memcpy` floor (~10^5× off). The compiler's boxing is **one** of
-  three causes, not the ceiling; the dominant one on the decode path is
-  `decodeFullStep`'s backtracking search (Θ(n²) work, 519× slower than a single
-  pass), **not** the recursion scheme — a structural rewrite was measured as a
-  no-op. Do not quote a ceiling until §6.1/§6.2 land and the figure is
-  re-measured alongside it.
+- **Decode/encode must stay within a small single-digit multiple of C — a
+  requirement, not an aspiration.** Measured achievable floor: **~8.5×** a
+  `memcpy` floor (222 vs 1,891 MiB/s) with the cursor shape. Lean 4.34.1's C
+  backend boxes `Nat`/`UInt8`/`UInt64` arithmetic; `USize` is an unboxed `size_t`
+  only as an `@[extern]` argument and re-boxes once stored in a `Prod`/`Option`.
+  Rewriting a parser to thread a `USize` cursor made it _slower_ — but that is a
+  fact about **boxed scalars**, not a licence for a 47× or 10^5× path. Those come
+  from **result types**: `decodeArray`'s per-step `List` costs 47×, and
+  `decodeFull`'s backtracking search ~10^5× (`R5.1`). Fast shape:
+  `Array UInt8` + integer cursor + accumulating `Id.run` loop returning
+  `(value, consumed)`. Do not quote an absolute MiB/s target — assert the **ratio**
+  to a same-run `memcpy` (§6.4). Do not re-attempt pure-Lean micro-optimization
+  _below_ the bar; that rule is what the old "20–40×" claim was propping up, and
+  it was false.
 - **The packed cursor is `Nat`, not `USize`.** A `System.Platform.numBits = 64`
   premise would break the `[propext, Quot.sound]`-only gate. `commitRemainder` is
   `USize`-indexed (matching `byteSlice`) so there is no `Nat ↔ USize` roundtrip;
