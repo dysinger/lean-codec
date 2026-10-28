@@ -2238,6 +2238,40 @@ The real lever is `decodeFull`'s **allocation-free single pass**: consume
 consumption, and never re-scan. That is what `walk` demonstrates at 176 µs, and
 it is what `decodeArray`'s cursor shape already achieves in the packed lane.
 
+### The feasibility answer — a small multiple of C IS reachable, and it is a _type_ decision
+
+Measured 2026-10-28 on the same binary, n=262144 (MiB/s, against the Layer-2
+`memcpy` floor measured in the same process):
+
+| path                                             | MiB/s   | vs `memcpy` |
+| ------------------------------------------------ | ------- | ----------- |
+| `blitBytes` (Layer-2 `memcpy` floor)             | 1,891   | 1×          |
+| **bulk cursor decode** (read byte, `Array.push`) | **222** | **8.5×**    |
+| plain `Array.get` loop                           | 307     | 6.2×        |
+| `decodeArray` (shipped packed path)              | 40      | 47×         |
+| `decodeFull` (shipped repetition path)           | ~0.01   | ~10^5×      |
+
+**The requirement "a small order of magnitude slower than C" is therefore met by
+an architecture that already exists** — `Array UInt8` + an integer cursor + an
+`Id.run do` loop — and every order of magnitude of the _current_ deficit is our
+**result types**, not Lean:
+
+- `decodeFull`'s ~10^5× is the backtracking search (this finding).
+- `decodeArray`'s 47× is its **per-step `List`**: `[(a[i], i+1)]` allocates a cons
+  cell, a `Prod`, and a boxed `Nat` for every byte. Measured: 6,100 µs at
+  n=262144 for steps that are one array read, against 767 µs for the same reads
+  in a plain loop.
+- The 8.5× residual is the genuine floor: boxed scalar arithmetic plus one
+  `Array.push`. `AGENTS.md`'s "pure-Lean parsing has a floor" is true _about this
+  number_, and it is a much better number than the "20–40×" it currently claims.
+
+So the fast shape is **not** `Codec α → Bytes n → List (α × Suffix n)`. It is
+`Codec α → Array UInt8 → Nat → Option (α × Nat)` for a step (value + consumed
+count, no list, no suffix) and an accumulating loop over it. `decodeArray` is
+already exactly that per-step shape and is already proved equal to `decode`
+(`decodeArray_eq`); what it lacks is (a) a whole-input loop that does not allocate
+per step, and (b) any caller.
+
 **SUGGESTED FIX** — see `tasks.md` §6 (as revised). In outline: give
 `decodeFull` a **single-pass** formulation that consumes `decode p s` once per
 level and never re-scans the remaining buffer, keep every existing theorem, and
