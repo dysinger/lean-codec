@@ -5,16 +5,33 @@
 > `R<lens>.<n>`, matching that file's index. Anchors `[D#]`/`[S#]` are **not**
 > renumbered — only the text under them changes (design D6).
 >
-> **What must NOT change.** No theorem, proof, or declaration shape. No anchor
-> id. No paper _quotation_ — R1 verified every quotation in `README.md` as
+> **Five lenses, not four.** `R1`–`R4` read the tree; **`R5` ran it**. `R5.1`
+> (added after the initial review) is a measured CRITICAL: the repetition
+> decoders are defined by `WellFounded.fix` on a dependent `Sigma` and are
+> ~588× slower than an equivalent structural definition, which makes the
+> documented "20–40× off C" ceiling false by ~4 orders on the decode path. See
+> §6.
+>
+> **What must NOT change.** No theorem, proof, or declaration **statement**. No
+> anchor id. No paper _quotation_ — R1 verified every quotation in `README.md` as
 > verbatim-correct; the defects are in the **derived reasoning**. `review.md`'s
 > "Verified-correct claims — do not re-litigate these" lists what was tested and
 > held; re-opening those is out of scope.
 >
+> **The one carve-out, introduced by R5.** §6 **may** change a definition's
+> _shape_ (`decodeFull`/`decodeRepeat` recursion scheme) where a measurement
+> proves the shape is the defect — but it must keep every existing theorem true,
+> prove the new definition equal to the old, and hold the axiom discipline. That
+> is a deliberate, narrow exception to "no declaration shape changes", and it
+> exists because R5.1 is a CRITICAL performance defect in an audit: leaving it
+> out would be the very kind of false assurance this change exists to remove.
+>
 > **Ordering.** §1 is the three findings that more than one lens reached
 > independently (substrate type, unenforced gate, incomplete leak catalogue) —
 > they are the ones that can cause a _wrong implementation_ or a _false sense of
-> assurance_. §5 is last because it edits a file outside this repo.
+> assurance_. §6 is the one measured CRITICAL, and it **must start before 3.x and
+> 4.x** (both rewrite performance claims that currently describe the defect); see
+> §6's header. §5 is last because it edits a file outside this repo.
 >
 > **Definition of done for every task:** the cited finding's evidence no longer
 > reproduces, and `nix develop --command lake build` is green with zero warnings.
@@ -298,9 +315,9 @@
 
 - [ ] 4.6 **Stop calling `bench` an "extraction"** (R3.10).
       `lakefile.lean` declares a plain `lean_exe bench` (`root := \`Bench`) that
-  links the Layer-2 C object; there is no extraction step. This also
-  contradicts `AGENTS.md`'s own "all codecs are pure Lean". Fix the wording
-  here **and** in `default.nix`'s comment, and state that §10.5 extraction is
+links the Layer-2 C object; there is no extraction step. This also
+contradicts `AGENTS.md`'s own "all codecs are pure Lean". Fix the wording
+here **and** in `default.nix`'s comment, and state that §10.5 extraction is
       not implemented so nobody goes looking.
 
 ## 5. The global `lean` skill (outside this repo — do last)
@@ -373,15 +390,90 @@
       disclaimer (stdlib-only, 4.34-pinned) and attach conditions to the
       "20–40× off C" figure.
 
+## 6. `R5` — the decode performance defect (CRITICAL, added after the four lenses)
+
+> **Why this is here and why it is §6.** `R5.1` was found by _running_ the built
+> binary, not by reading it, so it is new evidence in an existing change, not a
+> new change. It is numbered last because tasks 1–5 were already sequenced and
+> partly done; it must nevertheless be **started before 3.x and 4.x**, because
+> 3.x rewrites `README.md` §Performance and 4.x rewrites the `AGENTS.md`
+> performance bullet, and correcting those claims against the _current_
+> numbers would canonize a defect. Do §6.2 → §6.1 → then 3.x/4.x against the
+> fixed numbers. `AGENTS.md`'s "one change at a time" rule is satisfied: this is
+> still `codec-review-remediation`.
+
+- [ ] 6.1 **Re-express the repetition decoders as structural recursion** (R5.1 —
+      CRITICAL). `decodeFull` and `decodeRepeat` are defined by
+      `WellFounded.fix` on `Sigma fun k => Bytes k` (`Codec/Decode.lean:115-127`,
+      `194-205`). A structural fold over the index does identical work on
+      identical types and is **588× faster** at n=4096 with a bit-identical
+      result (`review.md` R5.1). Requirements, all mandatory:
+      (a) keep every existing theorem — `decodeRepeat_eq`, `decodeFull_zero`,
+      `decodeFull_some`, `decodeFull_ne_none`, `decodeFull_spec`,
+      `decodeRepeat_spec`, `relRepeat_*` — and keep `[propext, Quot.sound]`-only
+      with zero `Classical.choice`;
+      (b) prove the new definition **equal** to the old (a `…_eq` bridge theorem)
+      so the specification surface does not move and downstream `basen` is
+      untouched;
+      (c) a termination that `lake build` accepts with no `sorry`, no
+      `decreasing_by sorry`, and no `partial`;
+      (d) keep it `#eval`-able (the reason `WellFounded.fix` was chosen —
+      `Codec/Decode.lean:141`).
+      Re-measure with the R5.1 probe and record the before/after ratio in this
+      task. If the honest new definition turns out _not_ to be provably equal,
+      the fix is the stronger hypothesis, not a weaker statement.
+
+- [ ] 6.2 **Re-baseline the documented performance claims** (R5.1). `README.md`
+      §"The honest ceiling" (`512-530`) and the `AGENTS.md` bullet (`171-176`)
+      claim a "~20–40×-off-C ceiling" and attribute it to boxed arithmetic.
+      Measured: decode ≈ 0.01 MiB/s (~10^5× off the `memcpy` floor), encode
+      ≈ 31 MiB/s (~43× off). Rewrite both to **measured** figures, name the
+      three distinct causes (recursion scheme / result shape / boxed
+      arithmetic) instead of one, and stop presenting a single number as "the"
+      ceiling. **Do this after 6.1**, so the numbers quoted are the fixed ones
+      and not a snapshot of the defect.
+      Note: this supersedes the _figures_ in 3.12's "mention the space leak"
+      item only in the sense that the ceiling discussion is rewritten wholesale;
+      **coordinate with 3.x so the two edits do not fight over the same
+      paragraphs.**
+
+- [ ] 6.3 **Wire the fast path and retire the slow default** (R5.1, R2.4 —
+      design D8's deferred work). `decodeArray`'s `(α × Nat)` cursor shape is the
+      already-proved fast design (`decodeArray_eq`) and has **no library caller**.
+      Either (a) make the packed cursor path the one the docs point readers at as
+      the fast route, with `Bytes n`/`Suffix n` stated as the specification, or
+      (b) wire `commitRemainder`/`byteSlice` into it and prove the two transports
+      equal. Choose (a) if (b) balloons; **do not** leave the two module headers
+      disagreeing about whether the seam is live (that is 2.4, and this task must
+      not re-open it). Record the choice and its rationale here.
+
+- [ ] 6.4 **Make the bench defend the numbers** (R5.1, R2.2). The bench currently
+      has no lane that would fail if decode regressed 588×, because
+      `benchDecodeFull` only asserts the _value_, not a bound. Add a throughput
+      **floor** assertion (e.g. decode ≥ some MiB/s at a fixed n, with the
+      threshold chosen from the post-6.1 measurement with margin) so a
+      `WellFounded.fix`-shaped regression fails the bench instead of only being
+      visible by re-running a probe. Keep `benchSeamBoundaries` first in `main`
+      (2.2(a)) — a floor assertion that runs after a slow lane is unreachable
+      evidence again.
+
 ## Explicitly not doing
 
 - **Re-litigating the verified-clean claims.** `review.md` lists them: no
   escape hatch in `Iso.law`, zero `sorry` in the tree, all four C seams matching
   on reachable inputs, `Normalizer.idem` load-bearing, honest termination. They
   were tested; do not re-open.
-- **Rewiring `commitRemainder` into the packed path.** That needs an equality law
-  between two transports — a proof/perf change, its own change. Task 2.4 only
-  corrects the header's claim.
+- **A general performance push.** §6 fixes **one** measured defect (`R5.1`: the
+  recursion scheme) and re-baselines the claims against it. It is **not** an
+  invitation to micro-optimize the pure-Lean paths: `AGENTS.md`'s "do not
+  re-attempt pure-Lean micro-optimization" rule still stands, and the boxed
+  arithmetic ceiling is still accepted. If §6.1's fix leaves a further
+  structural defect, that is a new measured finding for `review.md`, not
+  scope creep here.
+- **Rewiring `commitRemainder` into the packed path**, _unless_ 6.3 chooses
+  option (b). Default is (a): point the docs at the cursor path. Wiring it in
+  needs an equality law between two transports — a proof change of its own
+  weight — and task 2.4 only corrects the header's claim.
 - **Renumbering `[D#]`/`[S#]`.** They are cross-referenced by code and downstream
   repos; task 3.1 refiles `[D2]` while keeping its id.
 - **A repo-wide typo/grammar pass.** Only the cited findings.
