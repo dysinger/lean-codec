@@ -13,13 +13,20 @@ evidence no longer reproduces.
 conformance — those belong to `basen-rfc-conformance-theorems`, which is complete
 and independent.
 
-| Lens | Mandate                             | Findings | CRIT  | HIGH   | MED    | LOW    | INFO  |
-| ---- | ----------------------------------- | -------- | ----- | ------ | ------ | ------ | ----- |
-| R1   | `README.md` vs `PAPER.md` vs source | 22       | 2     | 4      | 6      | 10     | 0     |
-| R2   | `Codec/*.lean` + `ByteSlice.c`      | 18       | 0     | 2      | 2      | 7      | 7     |
-| R3   | `AGENTS.md` as agent instructions   | 12       | 0     | 2      | 5      | 4      | 1     |
-| R4   | global `lean` skill                 | 22       | 0     | 3      | 7      | 12     | 0     |
-|      | **total**                           | **74**   | **2** | **11** | **20** | **33** | **8** |
+| Lens | Mandate                                        | Findings | CRIT  | HIGH   | MED    | LOW    | INFO  |
+| ---- | ---------------------------------------------- | -------- | ----- | ------ | ------ | ------ | ----- |
+| R1   | `README.md` vs `PAPER.md` vs source            | 22       | 2     | 4      | 6      | 10     | 0     |
+| R2   | `Codec/*.lean` + `ByteSlice.c`                 | 18       | 0     | 2      | 2      | 7      | 7     |
+| R3   | `AGENTS.md` as agent instructions              | 12       | 0     | 2      | 5      | 4      | 1     |
+| R4   | global `lean` skill                            | 22       | 0     | 3      | 7      | 12     | 0     |
+| R5   | measured performance vs documented performance | 1        | 1     | 0      | 0      | 0      | 0     |
+|      | **total**                                      | **75**   | **3** | **11** | **20** | **33** | **8** |
+
+R5 was added after the initial four lenses: it is a _measured_ lens (run the
+built binary, compare against the documented ceiling), not a reading lens, and
+it was reached by building the `bench` lane rather than by reading it. Its
+single finding spans two modules and two documents, which is why it is its own
+lens instead of an `R2` addendum.
 
 The three findings more than one lens reached independently:
 
@@ -32,6 +39,12 @@ The three findings more than one lens reached independently:
 - **`R3.3` / `R4.1` (MEDIUM/HIGH)** — the `Classical.choice` catalogue recorded
   1 of 3 verified shapes; the disjunction case (`decide_eq_true (by omega)`)
   reproduces deterministically. _Fixed (`e72be59`)._
+- **`R5.1` (CRITICAL)** — `decodeFull`/`decodeRepeat` are defined by
+  `WellFounded.fix` on a dependent `Sigma`, which does not compile to a loop. An
+  equivalent structural fold over the _same_ types is **588× faster** at
+  n=4096, so `decodeFull` is ~3 orders of magnitude slower than necessary and the
+  documented "20–40× off C" ceiling is false by ~4 orders on the decode path.
+  _Open — tasks 6.1–6.3._
 
 ## Verified-correct claims — do not re-litigate these
 
@@ -2059,3 +2072,164 @@ failing (68); `at` unusable as a `rciter` binder (line 350, `error: unexpected t
 the `open Codec` constructor-shadowing trap (897); `Except`/`Option` `do`-blocks reducing by
 `rfl` (line 92's `do` warning is _too strong_ — `do` does reduce on 4.34, see finding 4's
 neighbourhood); `by_contra` genuinely unknown without `import Init.Classical` (1081).
+
+---
+
+# Adversarial performance review — measured, not read
+
+Scope: the public decode/encode paths (`Codec/Decode.lean`, `Codec/Encode.lean`,
+`Codec/Packed.lean`) and the performance claims in `README.md` §Performance and
+`AGENTS.md` ("Axiom discipline" / performance bullets).
+
+Method: compile a `lean_exe` that links `Codec/ByteSlice.c`, run the built binary
+under `IO.monoNanosNow`, and A/B each candidate against a hand-written equivalent
+that uses the **same** types and the **same** helpers. Every figure below is a
+whole-program measurement of the emitted native binary — **not** `#eval`, not
+`lake env lean` (see finding R5.1's "measurement trap" note, which cost this
+review two wrong intermediate conclusions).
+
+Severity keys as before: **CRITICAL** (unsound / divergence), **HIGH** (claim not
+upheld), **MEDIUM** (gap / wasted work), **LOW** (hygiene), **INFO**.
+
+---
+
+## 1. CRITICAL — `decodeFull`/`decodeRepeat` recurse via `WellFounded.fix` on a dependent `Sigma`, costing ~588× against an equivalent structural definition; the documented "20–40× off C" ceiling is therefore false by ~4 orders of magnitude on the decode path
+
+**LOCATION**
+
+- `Codec/Decode.lean:115-127` (`decodeRepeat` def) and `Codec/Decode.lean:194-205`
+  (`decodeFull` def) — both are
+  `WellFounded.fix (InvImage.wf (fun ns : Sigma fun k => Bytes k => ns.1) Nat.lt_wfRel.wf) …`.
+- `Codec/Decode.lean:171-173` (docstring naming `decodeFull` "the same denotation
+  restricted to the single full-consumption result … **without building every
+  intermediate prefix**", implying it is the fast path).
+- `README.md:512-530` ("The honest ceiling") and `README.md:515`
+  ("bottoms out around **20–40× slower than hand-written C**").
+- `AGENTS.md:171-176` ("**Pure-Lean parsing has a ~20–40×-off-C ceiling, and that
+  is accepted.**").
+
+**WHAT IS WRONG**
+
+Three compounding claims are false as stated, and the dominant term is **our own
+recursion scheme**, not the compiler.
+
+1. **`decodeFull` is ~588× slower than a structurally-equivalent definition.** A
+   `foldr` over `List.range n` that calls the _same_ `decode`, the _same_ `bdrop`,
+   consumes the _same_ `Bytes n`, and returns the _same_ `Option (List UInt8)` is
+   588× faster at n=4096 — and returns a **bit-identical value** (verified for
+   n ∈ {0,1,5,64}). The only difference is the recursion scheme: `WellFounded.fix`
+   on `Sigma fun k => Bytes k` is `Acc`-based well-founded recursion, which does
+   **not** compile to a loop, and each level additionally re-runs `decode p s` on a
+   freshly-built `bdrop` chain.
+2. **The 20–40× figure does not describe the decode path at all.** On the shipped
+   public decoder it is ~95 µs/byte ≈ **0.01 MiB/s** — roughly **10^5× off** the
+   1,344 MiB/s `memcpy` floor measured on the same machine in the same run. Even
+   `encodeRepeat`, the _fast_ public path, is ~31 MiB/s ≈ **43× off** that floor,
+   which is at the optimistic end of the documented range and only for encode.
+3. **The README attributes the whole gap to boxed arithmetic** (`lean_nat_mul`,
+   `lean_uint8_to_nat`, `instAddUInt64`). Boxed arithmetic is real, but it is not
+   the dominant term for decode: the dominant term is the well-founded recursion
+   plus result-shape allocation. A reader who acts on the README ("the compiler is
+   the limit; do not micro-optimize") would leave a 588× implementation defect in
+   place. That is precisely the false assurance this change exists to remove.
+
+**EVIDENCE** (`lake build <probe>` then run the binary; probe source in the table's
+footnote)
+
+Required reduction, n=4096, one process, three consecutive calls:
+
+```
+n=4096:
+  decodeFull (shipped, WellFounded.fix on Sigma): 100614 us (v 4096)
+  walk (structural fold, same types):               171 us (v 4096)
+```
+
+**588×**, with the values equal. Repeated at n ∈ {1024, 2048} the ratio is
+188× and 306× (it grows with n, consistent with the fix-machinery being
+super-linear relative to the structural fold).
+
+Value agreement (so this is genuine equivalent work, not `walk` doing less):
+
+```
+n=0: decodeFull=(some 0) walk=(some 0) AGREE=true
+n=1: decodeFull=(some 1) walk=(some 1) AGREE=true
+n=5: decodeFull=(some 5) walk=(some 5) AGREE=true
+n=64: decodeFull=(some 64) walk=(some 64) AGREE=true
+```
+
+Absolute throughput, n=16384, same binary:
+
+```
+n=16384:
+  decodeFull:              1561265 us   0 MiB/s   (bytes 16384)   ~95 us/byte
+  encodeRepeat:                491 us  31 MiB/s   (bytes 16384)
+  byteSlice (memcpy floor):     11 us 1344 MiB/s  (bytes 16384)
+```
+
+So decode is ~1.1×10^5 off the `memcpy` floor on this machine, encode ~43× off.
+`decodeRepeat` is separately and _inherently_ Θ(n²) — its return type
+`List (List α × Suffix n)` demands all n+1 prefixes — which is the paper's §4.4
+cost and is documented; **`decodeFull` was added to escape that and does not**,
+because it keeps the same fix-on-sigma scheme.
+
+**MEASUREMENT TRAP (recorded so it is not re-entered).** Two intermediate
+conclusions in this review were wrong and are worth recording:
+
+- `lake env lean file.lean` **interprets**; a `main` defined there does not run,
+  and timings from it are meaningless (they read as `0 us`).
+- `#eval`/interpreted probes and any binary where only `.length` is forced get
+  **dead-code eliminated**, again reporting `0 us`. A lane only measures the
+  computation if the value is forced through a returned tuple, which is what
+  `Bench.lean`'s `timeBatch` does — hence the `let (out, dt) ← timeBatch …`
+  shape. Treat any `0 us` result as "not measured", never as "instant".
+- consequently `Bench.lean:706`'s placement of the seam checks is not excused by
+  a crash: the default-size run is slow, and the remedy is ordering, per R2.2.
+
+**SUGGESTED FIX** — see `tasks.md` §6. In outline: re-express `decodeFull`
+(and the productive step of `decodeRepeat`) as structural recursion over the
+length index / a cursor, keep every existing theorem, and prove the new
+definition equal to the old so the specification surface does not move. Then
+re-baseline `README.md` §Performance and the `AGENTS.md` bullet against measured
+figures, attribute the residual gap correctly (recursion scheme vs. result shape
+vs. boxed arithmetic), and stop presenting one number as "the" ceiling.
+
+Footnote — the probe is `import Codec; open Codec`, with
+
+```lean
+def bytesOf (n : Nat) : Bytes n := fun _ => (1 : UInt8)
+
+def walk (n : Nat) (s : Bytes n) : Option (List UInt8) :=
+  (List.range n).foldr (fun k acc =>
+    match decode Codec.byte (bdrop k s) with
+    | [(x, _)] => some (x :: acc.getD [])
+    | _ => none) (some [])
+```
+
+and a `lean_exe` that links `byteSliceO`. The `lean_exe` must be added to
+`lakefile.lean` temporarily and removed afterwards — `lake env lean` will not
+produce a runnable binary.
+
+---
+
+## Counts
+
+| severity  | count    |
+| --------- | -------- |
+| CRITICAL  | 1 (R5.1) |
+| HIGH      | 0        |
+| MEDIUM    | 0        |
+| LOW       | 0        |
+| **total** | **1**    |
+
+### Verified-correct claims (do not re-litigate)
+
+- The `Bytes n` substrate is **not** the performance problem. `bdrop` applied at
+  every prefix length is **flat** (28/8/14 µs at n=1024/2048/4096) and **~460×
+  faster** than the `List UInt8` `List.drop` it replaced (6,490 µs at n=4096).
+  The single-carrier collapse was a speedup, not a regression.
+- The `Suffix n` carrier and `.attach` are **not** the cost: `.attach` plus
+  forcing every witness costs 206 µs at n=4096 against 184 µs plain.
+- `decodeArray`'s packed shape (`(α × Nat)` cursor, no suffix materialization) is
+  the already-proved fast design (`decodeArray_eq`); it is a design answer, not a
+  defect. It has no library caller — R2.4, unchanged by this lens.
+- Layer 2 is at the `memcpy` floor (1,344 MiB/s measured), as documented.
