@@ -2093,7 +2093,15 @@ upheld), **MEDIUM** (gap / wasted work), **LOW** (hygiene), **INFO**.
 
 ---
 
-## 1. CRITICAL — `decodeFull`/`decodeRepeat` recurse via `WellFounded.fix` on a dependent `Sigma`, costing ~588× against an equivalent structural definition; the documented "20–40× off C" ceiling is therefore false by ~4 orders of magnitude on the decode path
+## 1. CRITICAL — `decodeFull` is a Θ(n²) _search_ that re-decodes at every level, ~530× slower than a single-pass fold; the documented "20–40× off C" ceiling is therefore false by ~4 orders of magnitude on the decode path
+
+> **CORRECTED 2026-10-28, before any fix was attempted.** This finding was first
+> filed as "`WellFounded.fix` on a dependent `Sigma` does not compile to a loop",
+> with the fix "re-express as structural recursion". **The measurement was right;
+> that diagnosis was wrong, and the prescribed fix was implemented and measured as
+> a no-op** (see "The refuted diagnosis" below). The cause is the _algorithm_, not
+> the recursion scheme. The finding id, severity and the headline numbers stand;
+> the mechanism and the suggested fix are rewritten.
 
 **LOCATION**
 
@@ -2113,14 +2121,19 @@ upheld), **MEDIUM** (gap / wasted work), **LOW** (hygiene), **INFO**.
 Three compounding claims are false as stated, and the dominant term is **our own
 recursion scheme**, not the compiler.
 
-1. **`decodeFull` is ~588× slower than a structurally-equivalent definition.** A
-   `foldr` over `List.range n` that calls the _same_ `decode`, the _same_ `bdrop`,
-   consumes the _same_ `Bytes n`, and returns the _same_ `Option (List UInt8)` is
-   588× faster at n=4096 — and returns a **bit-identical value** (verified for
-   n ∈ {0,1,5,64}). The only difference is the recursion scheme: `WellFounded.fix`
-   on `Sigma fun k => Bytes k` is `Acc`-based well-founded recursion, which does
-   **not** compile to a loop, and each level additionally re-runs `decode p s` on a
-   freshly-built `bdrop` chain.
+1. **`decodeFull` is ~519× slower than a single-pass fold.** A `foldr` over
+   `List.range n` that calls the _same_ `decode`, the _same_ `bdrop`, consumes the
+   _same_ `Bytes n`, and returns the _same_ `Option (List UInt8)` is 519× faster at
+   n=4096 (176 µs vs 91,382 µs) — and returns a **bit-identical value** (verified
+   for n ∈ {0..7}). **The cost is the algorithm, not the recursion scheme.**
+   `decodeFullStep` is a _backtracking search_ that, at each of the n levels, calls
+   `decode p s` over the _whole remaining buffer_ and recurses into the candidates.
+   For `Codec.byte` there is exactly one candidate per level, so it performs n
+   nested steps each doing O(n) scan work — Θ(n²) _work_. The `walk` fold makes one
+   linear pass. Measured decomposition at n=4096: all n `decode` calls in a plain
+   loop cost **140 µs**, `.attach` adds nothing measurable, and building the result
+   list adds nothing measurable — yet `decodeFull` pays 91,382 µs for the same
+   `decode` calls, because it makes them again at every level of the search.
 2. **The 20–40× figure does not describe the decode path at all.** On the shipped
    public decoder it is ~95 µs/byte ≈ **0.01 MiB/s** — roughly **10^5× off** the
    1,344 MiB/s `memcpy` floor measured on the same machine in the same run. Even
@@ -2185,13 +2198,55 @@ conclusions in this review were wrong and are worth recording:
 - consequently `Bench.lean:706`'s placement of the seam checks is not excused by
   a crash: the default-size run is slow, and the remedy is ordering, per R2.2.
 
-**SUGGESTED FIX** — see `tasks.md` §6. In outline: re-express `decodeFull`
+### The refuted diagnosis — structural recursion is a no-op here
+
+The original fix for this finding was `tasks.md` 6.1: "re-express `decodeFull`
 (and the productive step of `decodeRepeat`) as structural recursion over the
-length index / a cursor, keep every existing theorem, and prove the new
-definition equal to the old so the specification surface does not move. Then
-re-baseline `README.md` §Performance and the `AGENTS.md` bullet against measured
-figures, attribute the residual gap correctly (recursion scheme vs. result shape
-vs. boxed arithmetic), and stop presenting one number as "the" ceiling.
+length index / a cursor". That was implemented and measured before it was
+discarded, because it does not work:
+
+```
+n=4096:
+  decodeFull  (shipped, WellFounded.fix on Sigma):  94137 us
+  decodeFullS (structural, termination_by n _ => n): 93691 us    <- no improvement
+  walk        (single-pass fold):                      176 us     <- 519x faster
+```
+
+```
+n=4096:
+  decodeRepeat  (WellFounded.fix): 633395 us
+  decodeRepeatS (structural):      623507 us    <- no improvement
+```
+
+Two conclusions, both worth recording so this is not re-attempted:
+
+1. **`WellFounded.fix` is not the cost.** Lean's `termination_by` elaborates to
+   the _same_ well-founded recursion, so a "structural" rewrite is not even a
+   codegen change — `decodeFullS` and `decodeFull` differ by 0.5%, i.e. noise.
+   (`Codec/Decode.lean`'s `decodeRepeat` and `decodeFull` are instrumented in the
+   emitted IR as `lp_codec_WellFounded_fixC___at___00Codec_decodeFull_spec__0`,
+   allocated closures per level; that looks alarming but is measurably irrelevant
+   beside the Θ(n²) work described above.)
+2. **`decodeRepeat` is _not_ slow for this reason at all.** It is Θ(n²) because
+   its return type `List (List α × Suffix n)` demands all n+1 prefixes — the
+   paper's §4.4 cost, already correctly recorded in this file's
+   "Verified-correct claims" block. A structural rewrite cannot change that, and
+   `decodeRepeatS` confirms it (623 ms vs 633 ms at n=4096).
+
+The real lever is `decodeFull`'s **allocation-free single pass**: consume
+`decode p s` once, take the candidate whose remainder recurses to a full
+consumption, and never re-scan. That is what `walk` demonstrates at 176 µs, and
+it is what `decodeArray`'s cursor shape already achieves in the packed lane.
+
+**SUGGESTED FIX** — see `tasks.md` §6 (as revised). In outline: give
+`decodeFull` a **single-pass** formulation that consumes `decode p s` once per
+level and never re-scans the remaining buffer, keep every existing theorem, and
+prove the new definition equal to the old so the specification surface does not
+move. Do **not** attempt the structural-recursion rewrite: it is measured as a
+no-op. Then re-baseline `README.md` §Performance and the `AGENTS.md` bullet
+against measured figures, attribute the residual gap correctly (**algorithm** vs.
+result shape vs. boxed arithmetic), and stop presenting one number as "the"
+ceiling.
 
 Footnote — the probe is `import Codec; open Codec`, with
 
@@ -2228,7 +2283,13 @@ produce a runnable binary.
   faster** than the `List UInt8` `List.drop` it replaced (6,490 µs at n=4096).
   The single-carrier collapse was a speedup, not a regression.
 - The `Suffix n` carrier and `.attach` are **not** the cost: `.attach` plus
-  forcing every witness costs 206 µs at n=4096 against 184 µs plain.
+  forcing every witness costs 206 µs at n=4096 against 184 µs plain (and `.attach`
+  over all n levels costs 80-141 µs on its own).
+- **The recursion scheme is not the cost either** - corrected 2026-10-28. A
+  `termination_by`-structural `decodeFull` measures 93,691 µs against the shipped
+  `WellFounded.fix` version's 94,137 µs at n=4096. See "The refuted diagnosis".
+- `decodeRepeat`'s Θ(n²) _is_ inherent to its all-prefix return type, and a
+  structural rewrite leaves it untouched (623 ms vs 633 ms at n=4096).
 - `decodeArray`'s packed shape (`(α × Nat)` cursor, no suffix materialization) is
   the already-proved fast design (`decodeArray_eq`); it is a design answer, not a
   defect. It has no library caller — R2.4, unchanged by this lens.
