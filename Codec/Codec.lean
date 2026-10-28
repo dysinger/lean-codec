@@ -584,6 +584,25 @@ theorem cast_bytes_irrel {n m : Nat} (e₁ e₂ : n = m) (s : Bytes n) :
     cast (congrArg Bytes e₁) s = cast (congrArg Bytes e₂) s := by
   rw [Nat.eq_irrel e₁ e₂]
 
+/-- **`bdrop` composes.** Dropping `k` then `m` is dropping `k + m`, up to the
+length-cast that the type index forces. This is what lets a decoder re-root at the
+original byte string instead of composing `bdrop` closures: a flat cursor
+`bdrop m root` names exactly the same bytes as the chained `bdrop m (bdrop k …)`,
+so no closure chain has to be built (see `Codec.decodeFullFast` and `review.md`
+R5.1 — the chain is Θ(n²) in closure application, 668× measured at n=4096).
+`[propext, Quot.sound]`-only. -/
+theorem bdrop_bdrop {n : Nat} (s : Bytes n) (k m : Nat)
+    (e : n - (k + m) = n - k - m) :
+    bdrop m (bdrop k s) = cast (congrArg Bytes e) (bdrop (k + m) s) := by
+  funext i
+  rw [cast_bytes_val']
+  case e => exact e
+  simp only [bdrop]
+  apply congrArg s
+  apply Fin.ext
+  show i.val + m + k = i.val + (k + m)
+  omega
+
 /-- Dropping the first `m` bytes of a `splice hm s₁ s₂` recovers the suffix `s₂`. This
 is the ``concat``/``splice`` counterpart of the old ``drop_append`` fact, used by
 `decode_spec`'s `seq` completeness (the ``s₂ ++ r`` intermediary). `[propext, Quot.sound]`-only. -/
