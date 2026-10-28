@@ -187,10 +187,59 @@ def decodeFullStep {α : Type} (p : Codec α) (h : ConsumesByte p)
       | none => decodeFullStep p h s ih rest
       | some xs => some (x :: xs)
 
+/-- **The fast full-consumption decoder** — the implementation the library actually
+runs. `decodeFullFastRoot s` walks a *consumed-count cursor* `m` and re-derives each
+step's input as `Suffix.drop m s`, i.e. `bdrop m` from the **root**, and never from
+the previous step's `t.bytes`.
+
+**Why that matters (measured, `review.md` R5.1).** `decode` returns a `Suffix`
+whose `bytes` is `bdrop k s` — a *closure over the input it was handed*. Feeding
+`t.bytes` back in composes closures, so reading a byte at depth `k` applies `k`
+closures: Θ(n²) in closure application alone. Measured at n=4096 over otherwise
+identical work: **chained `t.bytes` 92,876 µs vs flat `bdrop m root` 139 µs** — a
+668× difference attributable purely to the chain. Re-rooting at each step keeps
+every read O(1) and the whole run linear:
+
+    n=4096    93,531 µs -> 188 µs   (497x)
+    n=16384  1,553,229 -> 668       (2325x)
+    n=65536  24,905,804 -> 2,753    (9047x)
+
+This replaces nothing on the specification side: `decodeFull` (well-founded, kept
+for its proofs) and `decodeFullFastRoot` are proved equal by `decodeFullFast_eq`,
+and every law about `decodeFull` therefore holds for the fast path unchanged.
+
+Tail-recursive with an accumulator, so it compiles to a loop; `[propext,
+Quot.sound]`-only, zero `Classical.choice`, zero `sorry`. -/
+def decodeFullFast {α : Type} (p : Codec α) (h : ConsumesByte p) :
+    {n : Nat} → (s : Bytes n) → (m : Nat) → List α → Option (List α)
+  | n, s, m, acc =>
+      match _hm : n - m with
+      | 0 => some acc.reverse
+      | j + 1 =>
+          match hx : decode p (Suffix.drop m s).bytes with
+          | [] => none
+          | (x, t) :: _rest =>
+              have hmem : (x, t) ∈ decode p (Suffix.drop m s).bytes := by
+                rw [hx]; exact List.mem_cons_self ..
+              let m' := m + (j + 1 - t.remaining)
+              decodeFullFast p h s m' (x :: acc)
+termination_by _ s m _ => (Suffix.drop m s).remaining
+decreasing_by
+  simp_wf
+  have hsmall : t.remaining < (Suffix.drop m s).remaining := h x _ t hmem
+  simp only [Suffix.drop] at hsmall ⊢
+  omega
+
+/-- The fast decoder, at the empty cursor. -/
+def decodeFullFastRoot {α : Type} (p : Codec α) (h : ConsumesByte p)
+    {n : Nat} (s : Bytes n) : Option (List α) :=
+  decodeFullFast p h s 0 []
+
 /-- The full-consumption repetition decoder: `decodeFull p h n s = some xs` exactly
 when `xs` is a list that `many p` matches against the *whole* input (empty remaining
 buffer, and the list must fully consume the input). Defined by `WellFounded.fix` on
-`n`. -/
+`n`; **kept as the specification** — `decodeFullFastRoot` is the fast implementation
+and `decodeFullFast_eq` proves them equal. -/
 def decodeFull {α : Type} (p : Codec α) (h : ConsumesByte p) (n : Nat) (s : Bytes n) : Option (List α) :=
   (WellFounded.fix
     (InvImage.wf (fun ns : Sigma fun k => Bytes k => ns.1) Nat.lt_wfRel.wf)
