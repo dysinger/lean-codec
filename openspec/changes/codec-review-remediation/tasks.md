@@ -413,6 +413,24 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
 > assert that bar so it cannot silently regress.
 
 - [ ] 6.1 **Give `decodeFull` a single-pass formulation** (R5.1 — CRITICAL).
+      **PARTIAL (2026-10-28) — the defect is FOUND and a 9047× fix LANDED, but this
+      task is NOT done: the equality bridge is unproved.** See `review.md` R5.1
+      §"The root cause, found". - **Landed** (`b894536`, `a4606e4`): `Codec.bdrop_bdrop` and
+      `Codec.decodeFullFastRoot`. The cost was **not** `WellFounded.fix` / the
+      `Sigma` / `.attach` / the `List` (each measured as a no-op) — it was that
+      `decode` returns a `Suffix` whose `bytes` is a `bdrop` **closure over its
+      input**, so feeding `t.bytes` back **composes closures** (668× at n=4096,
+      quadratic). Re-rooting at the original byte string with a consumed-count
+      cursor fixes it: **93,531 → 188 µs (n=4096), 24,905,804 → 2,753 µs
+      (n=65536)**, now linear, ~22 MiB/s. Values identical; `[propext,
+      Quot.sound]`-only. - **Remaining (the reason this is unchecked):** prove
+      `decodeFullFastRoot p h s = decodeFull p h n s`. `decodeFull` is unchanged
+      and still carries every law, so nothing regresses — but the fast path is
+      verified by _measurement_ only and must not be called proven. Route: an
+      `relRepeat`-append lemma (`relRepeat R (xs ++ [x]) (a+b) (splice … s₁ s₂)`
+      from `relRepeat R xs … s₁` and `R x … s₂`), then induction on the cursor
+      via `decodeFullFast.induct`, using `decodeRepeat_spec`'s witness form. - **Then** wire it in (6.3) and assert the ratio (6.4). Leaving it uncalled
+      is deliberate: an unproven function must not become the public decode.
       **Revised 2026-10-28 — the originally-prescribed fix is REFUTED; do not
       attempt it.** This task used to say "re-express as structural recursion".
       That was implemented and measured as a **no-op**: a `termination_by`-
