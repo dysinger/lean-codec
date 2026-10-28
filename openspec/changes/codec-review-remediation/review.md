@@ -2238,6 +2238,53 @@ The real lever is `decodeFull`'s **allocation-free single pass**: consume
 consumption, and never re-scan. That is what `walk` demonstrates at 176 µs, and
 it is what `decodeArray`'s cursor shape already achieves in the packed lane.
 
+### The root cause, found — the `bdrop` closure chain (fixed 2026-10-28)
+
+After ruling out (by measurement) `WellFounded.fix`, the `Sigma`, `.attach`, the
+`List` result, and the structural-vs-well-founded distinction — **all** of which
+were no-ops — the cost is the one thing none of those touch: **`decode` returns a
+`Suffix` whose `bytes` is `bdrop k s`, a closure over the input it was handed.**
+Feeding `t.bytes` into the next step _composes_ closures, so reading a byte at
+depth `k` applies `k` closures.
+
+Measured over otherwise identical work (n `decode` calls, same helpers):
+
+| input to each step  | n=1024    | n=4096     |
+| ------------------- | --------- | ---------- |
+| chained `t.bytes`   | 13,397 µs | 92,876 µs  |
+| flat `bdrop m root` | 69 µs     | **139 µs** |
+
+**668×**, purely from the chain, and quadratic in it.
+
+**The fix**: keep the root byte string fixed and carry a consumed-count cursor,
+re-deriving each step as `Suffix.drop m s` (i.e. `bdrop` from the **root**). Every
+read is O(1), the walk is linear, and it is tail-recursive with an accumulator so it
+compiles to a loop. `Codec.decodeFullFastRoot`; the enabling lemma is
+`Codec.bdrop_bdrop` (dropping `k` then `m` is dropping `k+m`).
+
+    n=4096      93,531 us ->     188 us   ( 497x)
+    n=16384  1,553,229 us ->     668 us   (2325x)
+    n=65536 24,905,804 us ->   2,753 us   (9047x)
+
+Linear growth at ~22 MiB/s, up from 0.01 MiB/s. Values identical (checksums equal
+for n ∈ {0,1,2,5,64}); `[propext, Quot.sound]`-only, zero `Classical.choice`, zero
+`sorry`.
+
+**Status: NOT CLOSED.** Two things remain before 6.1 can be checked off:
+
+1. **The equality bridge is unproved.** `decodeFullFastRoot` is verified _by
+   measurement_ (it agrees with the proven `decodeFull` on every input tested), not
+   yet _by proof_. `decodeFull` is kept unchanged as the specification, so nothing
+   regresses; but until an equality theorem lands, `decodeFullFastRoot` is not
+   covered by `decodeFull_some`/`decodeFull_ne_none` and must not be described as
+   proven. The proof reduces to showing the fast path's accumulator carries the
+   `relRepeat` witness that `decodeRepeat_spec` characterises: i.e. an
+   `relRepeat`-append lemma (`relRepeat R (xs ++ [x]) … (splice … s₁ s₂)` from
+   `relRepeat R xs … s₁` and `R x … s₂`), then induction on the cursor using
+   `decodeFullFast.induct`. That is a multi-lemma obligation, not a tail-of-session
+   edit.
+2. **Nothing calls it.** Wiring it into the public surface is task 6.3.
+
 ### The feasibility answer — a small multiple of C IS reachable, and it is a _type_ decision
 
 Measured 2026-10-28 on the same binary, n=262144 (MiB/s, against the Layer-2
