@@ -29,14 +29,20 @@ The constraint set is unchanged from the library's own rules:
 
 1. Remove every finding that can cause a **wrong implementation** or a **false
    sense of assurance**: the `Bytes` contradiction, the unenforced gate, the
-   incomplete leak catalogue, the unpinned seam, the unreachable seam check.
+   incomplete leak catalogue, the unpinned seam, the unreachable seam check, and
+   (`R5.1`) the decode path's 588× recursion-scheme defect plus the "20–40×"
+   claim that hides it.
 2. Make the documentation's _derivations_ as accurate as its quotations.
 3. Leave exactly one home for each fact, and delete the duplicates rather than
    reconciling them in place.
 
 **Non-Goals:**
 
-- No theorem, proof, or `[D#]`/`[S#]` anchor change. No new mathematics.
+- No theorem, proof, or `[D#]`/`[S#]` anchor change. No new mathematics. **One
+  narrow exception:** §6 may change `decodeFull`/`decodeRepeat`'s recursion
+  scheme, because `R5.1` measures a 588× defect there. It must keep every
+  theorem's statement, prove the new definition equal to the old, and preserve
+  the axiom discipline — see D9.
 - No rewrite of `README.md`'s structure. The anchors are cross-referenced by
   code and downstream repos; only the text under an anchor changes.
 - No attempt to fix R2's INFO findings — they are verifications, kept in
@@ -167,12 +173,64 @@ of false assurance this change is removing.
 `ByteSlice.lean` says plainly that `byteSlice` has no library-internal caller.
 `Packed.lean` says the memcpy is "deferred to a `commitRemainder` at commitment
 time", which is false — the proven decoder uses a list-materializing transport.
-_Fix:_ copy the honest phrasing. Not wiring `commitRemainder` into the packed path
-would be a proof/perf change (it needs an equality law between two transports),
-which is out of scope here and would be its own change.
+_Fix:_ copy the honest phrasing. Wiring `commitRemainder` into the packed path
+needs an equality law between two transports, a proof change of its own weight;
+this change corrects the header and points the docs at the cursor path (task
+6.3, option (a)) unless that turns out cheap.
+
+### D9 — A measured CRITICAL joins the audit, and it earns the one shape-changing carve-out
+
+R5.1 was found by **building and running** the binary, after the four reading
+lenses had completed. It is a CRITICAL: `decodeFull`/`decodeRepeat` use
+`WellFounded.fix` on `Sigma fun k => Bytes k`, which does not compile to a loop,
+and an equivalent structural fold over the same types on the same inputs is
+**588× faster at n=4096 with a bit-identical result**. Decode therefore runs at
+~0.01 MiB/s, and the "20–40× off C" ceiling asserted in `README.md:515` and
+`AGENTS.md:171` is false by ~4 orders of magnitude on the path it most obviously
+describes.
+
+_Decision:_ it goes into **this change**, as §6, and not into a separate one.
+Three reasons:
+
+1. **It is an audit finding.** The change's mandate is to remove false assurance
+   from the docs and the code they describe. A documentation claim refuted by
+   4 orders of magnitude is exactly that, and it is CRITICAL by the review's own
+   severity key (a claim not upheld, at the level where it misleads an
+   implementer).
+2. **Splitting would recreate the defect.** §3 rewrites `README.md`
+   §Performance and §4 rewrites the `AGENTS.md` bullet. If the numbers are
+   corrected against a snapshot taken _before_ §6.1, the change would canonize
+   the defect it just measured. The two edits must be in one change so the
+   claims and the fix are reconciled together.
+3. **`AGENTS.md`'s one-change-at-a-time rule** argues for this: a second,
+   concurrently-open change in this repo is what the rule forbids.
+
+_Consequence — the carve-out._ §6.1 changes a **definition's shape**, which the
+tasks file previously forbade outright. That prohibition is amended, narrowly:
+§6 may change the recursion scheme, but must keep every theorem's statement,
+prove the new definition equal to the old (a `…_eq` bridge), and preserve
+`[propext, Quot.sound]`-only with zero `Classical.choice`, zero `sorry`, and
+`#eval`-ability. Nothing else in the change may change a declaration shape.
+
+_Rejected:_ (i) a separate `codec-decode-fast` change — see reason 2, it
+recreates the split this change exists to close; (ii) recording the finding
+without a fix — that leaves a CRITICAL open in a change whose output the next
+session will trust; (iii) fixing only the docs — that would make the docs honest
+about a defect instead of removing it, which the owner's standing preference
+("most correct, not most convenient") rules out.
+
+_Ordering._ §6.1 lands before §6.2, and both before §3.x/§4.x, so the corrected
+claims quote the **fixed** numbers rather than a snapshot of the defect.
 
 ## Risks / Trade-offs
 
+- **§6.1 touches the recursion scheme of the two most-proved functions in the
+  tree.** `decodeFull_some`, `decodeFull_ne_none`, `decodeFull_spec`,
+  `decodeRepeat_eq`, `decodeRepeat_spec` and the `relRepeat` family all cite the
+  current equations. → Mitigation: a `…_eq` bridge that states the new definition
+  equals the old, then every existing proof is rewritten through it rather than
+  re-derived. If a proof cannot survive the bridge, that is a signal the new
+  definition is genuinely different and must be reconsidered, not patched.
 - **`-DwarningAsError` may surface latent warnings** → good, but it can fail the
   build for an unrelated pre-existing warning. Mitigation: run it first, fix or
   document each, and land the flag only when green.
