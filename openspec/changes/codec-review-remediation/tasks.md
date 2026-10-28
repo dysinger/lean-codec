@@ -402,6 +402,16 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
 > fixed numbers. `AGENTS.md`'s "one change at a time" rule is satisfied: this is
 > still `codec-review-remediation`.
 
+> **The acceptance bar (owner requirement, 2026-10-28): decode and encode must
+> run within a _small single-digit multiple_ of C, or the effort has no value.**
+> Measured feasible (`review.md` R5.1 §"The feasibility answer"): a bulk cursor
+> decode runs at **222 MiB/s** against a **1,891 MiB/s** `memcpy` floor — **8.5×**
+> — in the architecture that already exists (`Array UInt8` + cursor + `Id.run`
+> loop). The shipped paths sit at 47× (`decodeArray`) and ~10^5× (`decodeFull`)
+> because of their **result types**. So §6 is not a micro-optimization: it is the
+> work that moves decode from 10^5×/47× down to the achievable ~8×, and 6.4 must
+> assert that bar so it cannot silently regress.
+
 - [ ] 6.1 **Give `decodeFull` a single-pass formulation** (R5.1 — CRITICAL).
       **Revised 2026-10-28 — the originally-prescribed fix is REFUTED; do not
       attempt it.** This task used to say "re-express as structural recursion".
@@ -476,15 +486,18 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
       disagreeing about whether the seam is live (that is 2.4, and this task must
       not re-open it). Record the choice and its rationale here.
 
-- [ ] 6.4 **Make the bench defend the numbers** (R5.1, R2.2). The bench currently
-      has no lane that would fail if decode regressed 588×, because
-      `benchDecodeFull` only asserts the _value_, not a bound. Add a throughput
-      **floor** assertion (e.g. decode ≥ some MiB/s at a fixed n, with the
-      threshold chosen from the post-6.1 measurement with margin) so a
-      `WellFounded.fix`-shaped regression fails the bench instead of only being
-      visible by re-running a probe. Keep `benchSeamBoundaries` first in `main`
-      (2.2(a)) — a floor assertion that runs after a slow lane is unreachable
-      evidence again.
+- [ ] 6.4 **Make the bench defend the ratio** (R5.1, R2.2). The bench has no lane
+      that would fail if decode regressed 500×, because `benchDecodeFull` asserts
+      the _value_, not a bound. Add a lane that measures decode **against
+      `memcpy` measured in the same run** and fails when the ratio exceeds a
+      stated bar — the owner's requirement is a small single-digit multiple, so
+      assert `≤ 20×` the `memcpy` floor at a fixed `n` (threshold chosen from the
+      post-6.3 measurement with margin), **printing both numbers** so the ratio
+      is visible rather than inferred. A ratio, not an absolute MiB/s: an
+      absolute floor is machine-dependent and gets tuned down the first time CI
+      is slow, while a ratio to `memcpy` on the same machine is the property we
+      actually mean. Keep `benchSeamBoundaries` first in `main` (2.2(a)) — a bound
+      that runs after a slow lane is unreachable evidence.
 
 ## Explicitly not doing
 
@@ -492,12 +505,14 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
   escape hatch in `Iso.law`, zero `sorry` in the tree, all four C seams matching
   on reachable inputs, `Normalizer.idem` load-bearing, honest termination. They
   were tested; do not re-open.
-- **A general performance push.** §6 fixes **one** measured defect (`R5.1`: the
-  recursion scheme) and re-baselines the claims against it. It is **not** an
-  invitation to micro-optimize the pure-Lean paths: `AGENTS.md`'s "do not
-  re-attempt pure-Lean micro-optimization" rule still stands, and the boxed
-  arithmetic ceiling is still accepted. If §6.1's fix leaves a further
-  structural defect, that is a new measured finding for `review.md`, not
+- **A general performance push beyond §6.** §6 owns decode/encode throughput and
+  is bounded by a stated acceptance bar: **within a small single-digit multiple
+  of C** (measured feasible at 8.5× — see §6's header). That is the owner's
+  requirement and it replaces the old "20–40× is accepted" posture, which was
+  false anyway. It is still **not** an invitation to micro-optimize arbitrary
+  pure-Lean code: `AGENTS.md`'s "do not re-attempt pure-Lean micro-optimization"
+  rule stands _below the bar_. Once decode/encode are within the bar, further
+  work on unrelated hot paths is a new measured finding for `review.md`, not
   scope creep here.
 - **Rewiring `commitRemainder` into the packed path**, _unless_ 6.3 chooses
   option (b). Default is (a): point the docs at the cursor path. Wiring it in
