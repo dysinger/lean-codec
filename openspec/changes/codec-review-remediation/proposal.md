@@ -9,7 +9,12 @@ surface vs its own claims, (3) `AGENTS.md` as agent operating instructions, and
 compiled or grepped rather than asserted. The reviews are preserved verbatim in
 `review.md`.
 
-They found **74 findings** (2 CRITICAL, 11 HIGH, 20 MEDIUM, 33 LOW, 8 INFO), and three of
+A **fifth lens was added afterwards** — `R5`, which _runs_ the built binary
+rather than reading it — and it produced a second CRITICAL. It is recorded in
+`review.md` alongside the others and scheduled as `tasks.md` §6, so the total is
+now **75 findings** (3 CRITICAL, 11 HIGH, 20 MEDIUM, 33 LOW, 8 INFO).
+
+They found **75 findings** (3 CRITICAL, 11 HIGH, 20 MEDIUM, 33 LOW, 8 INFO), and four of
 them are the kind that actively misinform a future reader or agent:
 
 - **`CHANGELOG.md` stated the wrong type for `Bytes`.** It said
@@ -31,6 +36,17 @@ them are the kind that actively misinform a future reader or agent:
   closes a disjunction by case analysis. The fact is recorded only as a
   parenthetical inside a completed change's history, not in the ergonomics
   section a reader would consult.
+- **`R5.1` — the decode path is ~588× slower than necessary, and both documents
+  report a performance ceiling that hides it.** `decodeFull` and `decodeRepeat`
+  are defined by `WellFounded.fix` on a dependent `Sigma`, which does not compile
+  to a loop. A structural fold over the _same_ types, calling the _same_
+  `decode`/`bdrop`, returning the _same_ `Option (List UInt8)`, is **588× faster
+  at n=4096 with a bit-identical result** (100,614 µs vs 171 µs). Measured decode
+  throughput is ~0.01 MiB/s against a 1,344 MiB/s `memcpy` floor measured in the
+  same run. Meanwhile `README.md:515` and `AGENTS.md:171` both assert a
+  "~20–40× off C" ceiling and attribute it to boxed arithmetic — off by ~4 orders
+  on the path it most obviously describes, and pointing an optimizer at the wrong
+  cause.
 
 Beyond those, the review found two HIGH defects in the **Layer-2 trust seam**'s
 evidence chain (`byteSlice` — the headline seam — has no Lean law pinning it,
@@ -80,11 +96,20 @@ Every finding is small and mechanical; none requires new mathematics.
   section mixes `lean-codec` and `../lean-basen` commands under one heading, the
   `nix build .#bench` example contradicts the no-foreground rule, and the
   `bad import Codec.Normal` → stale-flake-lock failure mode is recorded nowhere.
+- **Fix the measured decode-performance defect (`R5.1`)**: re-express
+  `decodeFull`/`decodeRepeat` as structural recursion instead of
+  `WellFounded.fix`-on-a-`Sigma` (588× measured at n=4096), keep every existing
+  theorem by proving the new definition equal to the old, re-baseline the
+  `README.md`/`AGENTS.md` performance claims against the fixed numbers, and add a
+  bench throughput floor so the defect cannot silently return.
 
-Explicitly **not** changing: any theorem statement or proof (the review verified
-zero `sorry`, no `Classical.choice` in 18 sample theorems, `Iso.law` with no
-escape hatches, and no C-vs-Lean divergence on reachable inputs), the `[D#]`/`[S#]`
-anchor identifiers, or the paper quotations themselves.
+Explicitly **not** changing: any theorem statement's _content_ (the review
+verified zero `sorry`, no `Classical.choice` in 18 sample theorems, `Iso.law` with
+no escape hatches, and no C-vs-Lean divergence on reachable inputs), the
+`[D#]`/`[S#]` anchor identifiers, or the paper quotations themselves. **One
+narrow exception:** `R5.1`'s fix changes the _shape_ of `decodeFull`'s and
+`decodeRepeat`'s definitions (recursion scheme only), under the equality-bridge
+and axiom-discipline conditions in design D9.
 
 ## Capabilities
 
@@ -101,6 +126,11 @@ anchor identifiers, or the paper quotations themselves.
 - `codec/partial-remainder`: each Layer-2 seam SHALL carry a Lean law pinning its
   body (`byteSlice` currently does not), and the seam's runtime value-checks SHALL
   be reachable in a default `bench` run.
+- `codec` (the "Unbounded repetition is a total denotation" requirement): the
+  repetition decoders SHALL be defined by a recursion scheme that compiles to a
+  loop (structural on the length index or a cursor), not by `WellFounded.fix` on
+  a dependent `Sigma`, and the documented throughput SHALL be a measured figure
+  with its cause attributed.
 
 ## Impact
 
@@ -110,14 +140,18 @@ anchor identifiers, or the paper quotations themselves.
   attribution, `bad import` rail).
 - **Build**: `default.nix`'s `check` derivation gains a `sorry` gate — a real
   behaviour change to the proof gate, so a stray `sorry` now fails the build.
-- **Code (additive)**: `Codec/ByteSlice.lean` gains `byteSlice_spec`;
+- **Code (mostly additive)**: `Codec/ByteSlice.lean` gains `byteSlice_spec`;
   `Codec/Packed.lean`'s header is corrected; `Bench.lean` reorders/fixes the
-  scalar-index lane so `benchSeamBoundaries` runs.
+  scalar-index lane so `benchSeamBoundaries` runs and gains a throughput floor.
+  **One shape change**: `Codec/Decode.lean`'s `decodeFull`/`decodeRepeat`
+  recursion scheme (design D9) — same statements, new definitions, bridged by an
+  equality law.
 - **Global skill**: `~/.pi/agent/skills/lean/SKILL.md` is split and corrected.
   This is outside the repo, so it is tracked here as a task with an explicit
   external-path note, not as a repo edit.
-- **No theorem, proof, or `[D#]`/`[S#]` anchor changes.** No new mathematics. No
-  substrate or carrier change — the whole point is that `Fin n → UInt8` is the
-  one substrate and the docs now agree.
-- **Tracking**: the four verbatim reviews are captured in `review.md` so every
+- **No theorem statement, proof statement, or `[D#]`/`[S#]` anchor changes.** No
+  new mathematics. No substrate or carrier change — the whole point is that
+  `Fin n → UInt8` is the one substrate and the docs now agree. The only definition
+  shape that changes is `decodeFull`/`decodeRepeat`'s recursion scheme (D9).
+- **Tracking**: the five verbatim reviews are captured in `review.md` so every
   task cites a reproducible finding rather than a memory.
