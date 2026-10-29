@@ -6,7 +6,7 @@
 # Takes the Lean 4 toolchain (the `lean4` derivation) as a concrete input — no
 # `pkgs` blob, no overlay assumption — and returns:
 #   - `native` — the `lake build` library (`.olean` artifacts + `libcodec.a`),
-#   - `check`  — the Lean proof-validation gate (`lake build` with no `sorry`),
+#   - `check`  — the Lean proof-validation gate (`lake build`, fails on `sorry`),
 #   - `bench`  — the §10.5 extraction + benchmark executable (`lake build bench`).
 #
 # `native`/`check` are the SAME `lake build`; `check` is the proof gate,
@@ -92,14 +92,18 @@ in
     '';
   };
 
-  # `check` — the Lean proof-validation gate (the same `lake build`, zero `sorry`).
+  # `check` — the Lean proof-validation gate (`lake build`, which FAILS on
+  # `sorry`: `lakefile.lean` sets `-DwarningAsError=true` on the library, so the
+  # compiler's `declaration uses 'sorry'` warning is an error).
   check = mkLakeBuild {
     name = "check";
     description = "${meta.description} (proof-validation gate)";
     install = ''
       runHook preInstall
-      # The check is the build itself (zero `sorry`); produce an (empty) `$out`
-      # so the derivation satisfies Nix's output requirement.
+      # The check is the build itself: `lake build` with `-DwarningAsError=true`
+      # (from `lakefile.lean`), so a `sorry` fails here rather than warning.
+      # Produce an (empty) `$out` so the derivation satisfies Nix's output
+      # requirement.
       mkdir -p "$out"
       runHook postInstall
     '';
