@@ -61,18 +61,20 @@ CRITICAL performance finding (id `R5.1`). `review.md` is the evidence base;
   NOT yet by proof** — the equality bridge to `decodeFull` is task 6.1's remaining
   work, and nothing calls the fast path yet. Do not describe it as proven, and do not
   wire it in until the bridge lands.
-- **`R5.1`'s earlier diagnosis was REFUTED, read the correction.** Decode runs at ~0.01 MiB/s against a 1,344 MiB/s
-  `memcpy` floor, so the "20–40× off C" ceiling this file used to assert is false
-  by ~4 orders on that path (marked false in the Axiom-discipline section below;
-  **do not quote any ceiling until 6.1/6.2 land**). The _cause_, though, is
-  **not** `WellFounded.fix`: re-expressing `decodeFull` structurally was measured
-  as a **no-op** (93,691 µs vs 94,137 µs at n=4096), because Lean's
-  `termination_by` elaborates to the same well-founded recursion. The cause is
-  that `decodeFullStep` is a **backtracking search** re-calling `decode p s` over
-  the whole remaining buffer at every level — Θ(n²) work, 519× slower than a
-  single pass (176 µs). `decodeRepeat`'s Θ(n²) is separate and inherent to its
-  all-prefix return type; it is **not** in scope for a speed fix. See `review.md`
-  `R5.1` §"The refuted diagnosis" **before** touching `Codec/Decode.lean`.
+- **Two earlier diagnoses of `R5.1` were REFUTED — do not re-measure them.** Both
+  looked plausible and both were no-ops:
+  1. _"`WellFounded.fix` on a `Sigma` doesn't compile to a loop."_ Re-expressing
+     structurally measured **0.5%** apart (93,691 vs 94,137 µs at n=4096) — Lean's
+     `termination_by` elaborates to the same well-founded recursion. See
+     `review.md` §"The refuted diagnosis".
+  2. _"`decodeFullStep` is a backtracking search."_ It does re-call `decode p s`
+     per level, but a tail-recursive rewrite with the same calls was **still**
+     1.5 s at n=16384; the search was never the cost. See
+     `review.md` §"The root cause, found".
+     What _is_ settled: the **`bdrop` closure chain** (bullet above), which was found
+     by A/B-ing chained `t.bytes` against flat `bdrop m root` over identical work.
+     `decodeRepeat`'s Θ(n²) is separate and inherent to its all-prefix return type;
+     it is **not** in scope for a speed fix.
 - **`R5.1` carries the change's one shape-changing carve-out** (design D9): §6 may
   change `decodeFull`'s _algorithm_, but must keep every theorem's statement,
   prove the new definition equal to the old (`decodeFull_some` +
@@ -227,8 +229,8 @@ in `../lean-basen`. Never "fix" it by editing the importing Lean file.
   only as an `@[extern]` argument and re-boxes once stored in a `Prod`/`Option`.
   Rewriting a parser to thread a `USize` cursor made it _slower_ — but that is a
   fact about **boxed scalars**, not a licence for a 47× or 10^5× path. Those come
-  from **result types**: `decodeArray`'s per-step `List` costs 47×, and
-  `decodeFull`'s backtracking search ~10^5× (`R5.1`). Fast shape:
+  from the **data you hand the next step**: `decodeArray`'s per-step `List` costs
+  47×, and `decodeFull`'s chained `bdrop` closures cost ~10^5× (`R5.1`). Fast shape:
   `Array UInt8` + integer cursor + accumulating `Id.run` loop returning
   `(value, consumed)`. Do not quote an absolute MiB/s target — assert the **ratio**
   to a same-run `memcpy` (§6.4). Do not re-attempt pure-Lean micro-optimization
