@@ -51,7 +51,9 @@ longer than the commit that wrote it.
 **The next session works `openspec/changes/codec-review-remediation/` and nothing
 else.** Run the live counts with `nix develop --command openspec list --json`
 (strip the dev-shell banner: `| sed -n '/^{/,$p'`); do not trust a snapshot here
-for longer than the commit that wrote it. Currently **2/50**.
+for longer than the commit that wrote it. Currently **5/50**, and the next
+concrete step is **6.1a** — see the bullet below, which names the one missing
+lemma.
 
 It is a codebase-wide audit. Four adversarial _reading_ lenses (74 findings, ids
 `R<lens>.<n>`) cover the docs, the proof surface, `AGENTS.md`, and the global
@@ -65,6 +67,7 @@ is the summary):
 
 1. **§6** — performance, in this internal order. **§6 must run before §3/§4**,
    because those rewrite the very paragraphs that quote the defect's numbers.
+   **6.1a is where the next session starts** (see the bullet below).
    - **6.1a — the bridge proof. This is a hard gate on all of §6.** Every
      optimization multiplies `decodeFullFastRoot`; with the bridge unproved, one
      false bridge invalidates every downstream ratio at once. **Nothing in §6 or
@@ -83,17 +86,26 @@ is the summary):
   fails `lake build` (and therefore `checks.lean`) instead of warning. Verified
   load-bearing by stubbing `Codec.roundtrip` and observing a non-zero exit naming
   the declaration. Every task after this one inherits it.
-- **`R5.1` — the defect is FOUND and a 9047× fix LANDED; the bridge proof is still
-  open.** Root cause (measured, after refuting `WellFounded.fix`/`Sigma`/`.attach`/
-  `List` as no-ops): `decode` returns a `Suffix` whose `bytes` is a `bdrop` **closure
-  over its input**, so feeding `t.bytes` back **composes closures** — quadratic, 668×
-  at n=4096. `Codec.decodeFullFastRoot` re-roots at the original byte string with a
+- **`R5.1` — the defect is FOUND and a 9047× fix LANDED; the bridge proof is
+  ~90% done and its one open step is named.** Root cause (measured, after
+  refuting `WellFounded.fix`/`Sigma`/`.attach`/`List` as no-ops): `decode` returns
+  a `Suffix` whose `bytes` is a `bdrop` **closure over its input**, so feeding
+  `t.bytes` back **composes closures** — quadratic, 668× at n=4096.
+  `Codec.decodeFullFastRoot` re-roots at the original byte string with a
   consumed-count cursor: **93,531 → 188 µs (n=4096), 24,905,804 → 2,753 µs
-  (n=65536)**, linear, ~22 MiB/s. **`decodeFullFastRoot` is verified by measurement,
-  NOT yet by proof** — the equality bridge to `decodeFull` is task **6.1a**, and
-  nothing calls the fast path yet. Do not describe it as proven, and do not wire it
-  in — nor build any further optimization on it (6.1b/6.5/6.3 all multiply it) —
-  until 6.1a lands.
+  (n=65536)**, linear, ~22 MiB/s. **`decodeFullFastRoot` is still verified by
+  measurement, NOT yet by proof.** The equality bridge is 6.1a:
+  `openspec/changes/codec-review-remediation/bridge-wip.lean` is a probe holding
+  **five** proven, axiom-clean lemmas plus `decodeFullFast.induct` cases 1–2
+  closed. Its single `sorry` needs one `bdrop`-composition lemma (re-root
+  `bdrop m' s` at `bdrop (n - t.remaining) s`, composed with the already-landed
+  `decode_genuine_suffix`) — `tasks.md` 6.1a has the full derivation. **Do not
+  wire the fast path in, and do not build 6.1b/6.5 on it, until 6.1a lands.**
+- **§1 is complete (1.2, 1.3, 1.5 landed).** The proof gate is real:
+  `lakefile.lean` sets `moreLeanArgs := #["-DwarningAsError=true"]` on the
+  `codec` lib, so `sorry` **fails** `lake build` instead of warning (verified by
+  stubbing `Codec.roundtrip`). A command-line `-D` does **not** work — args after
+  `lake build --` are targets, and `LEAN_OPTS`/`-K` never reach the compiler.
 - **Two earlier diagnoses of `R5.1` were REFUTED — do not re-measure them.** Both
   looked plausible and both were no-ops:
   1. _"`WellFounded.fix` on a `Sigma` doesn't compile to a loop."_ Re-expressing
@@ -118,8 +130,7 @@ is the summary):
   audit work.
 - Its 50 tasks are sequenced: §1 cross-lens defects (5), §2 Layer-2 seam (8), §3
   `README.md` derivations (12), §4 `AGENTS.md` process (6), §5 the global `lean`
-  skill (10), §6 performance (9, incl. 6.1a/6.1b). Two are already done (1.1,
-  1.4).
+  skill (10), §6 performance (9, incl. 6.1a/6.1b). **Five are done** (1.1–1.5).
 - **§6's measured landscape** (one process, n=65536, `memcpy` = 2,136 MiB/s;
   re-take with the 6.4 lane rather than trusting this): `memcpy` 1× ·
   `encodeArray` 18× · `Id.run` cursor decode floor 36× · `decodeArray` 71× ·
