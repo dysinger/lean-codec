@@ -50,14 +50,20 @@
       defect", and its `Array.extract`/`toList` transport lemmas were the source
       of the `Classical.choice` leaks the single carrier removed.
 
-- [ ] 1.2 **Pin the substrate type in `AGENTS.md`'s truth table** (R3.1).
+- [x] 1.2 **Pin the substrate type in `AGENTS.md`'s truth table** (R3.1).
       Add to the "Where the truth lives" table, or as a bullet immediately under
       it: `Bytes n` means `Fin n → UInt8` (`Codec/Codec.lean:68`) — this is the
       definition; `CHANGELOG.md` is a record, not a definition, and a
       `List UInt8`/`Array` spelling in any doc is a defect. Rationale: a
       corrected changelog can drift again; a stated precedence cannot.
+      **Done — and the table had to be restored first.** Commit `4d976b7` deleted
+      the whole "Where the truth lives" section (it is absent from the tree the
+      review was written against, so R3.1's cited line ~85 no longer existed).
+      Reinstated it in `AGENTS.md` with `Bytes`'s definition as the **first** row
+      (the substrate type is prior to every other authority), and added the
+      `Fin n → UInt8` pin as a paragraph directly under it.
 
-- [ ] 1.3 **Make the zero-`sorry` proof gate real** (R3.2 — HIGH; design D2).
+- [x] 1.3 **Make the zero-`sorry` proof gate real** (R3.2 — HIGH; design D2).
       Two parts, both required:
       (a) `default.nix`'s `check` derivation: add `-DwarningAsError=true` to its
       `lake build` invocation (or an equivalent explicit `sorry`/`admit`
@@ -71,6 +77,27 @@
       Then update the two places that call zero-`sorry` "the proof gate"
       (`AGENTS.md` header bullet and the axiom-discipline bullet) to say it is
       **enforced by the gate** rather than observed.
+      **Done, with a correction to the planned mechanism.** The flag cannot be
+      added where the task says: `lake build -DwarningAsError=true` and
+      `lake build -- -DwarningAsError=true` are both rejected/wrong (`unknown
+    short option '-D'`; args after `--` are _targets_), and `LEAN_OPTS` /
+      `-K` are not forwarded by Lake 5.0.0 to the compiler invocation. The
+      mechanism that works is **`moreLeanArgs := #["-DwarningAsError=true"]` on
+      the `lean_lib codec` in `lakefile.lean`**, which is strictly better than
+      the plan: the flag rides on the _library_, so every consumer that compiles
+      `Codec` inherits it (`bench`, the sandboxed `check`) — there is no way to
+      build the library unguarded. Verified by `lake build`'s own trace line:
+      `lean -DwarningAsError=true …`.
+      **Observed failure (part b), in this tree:** stubbing `Codec.roundtrip`
+      (`Codec/Sound.lean:441`) to `sorry` gives
+      `✖ [9/13] Building Codec.Sound` → `error: Codec/Sound.lean:441:8:
+    declaration uses \`sorry\``→`error: build failed`, exit **1**. Before the
+    flag the same stub produced `warning: … declaration uses 'sorry'`and
+   `Build completed successfully (13 jobs)`, exit **0** — so the gate is
+    load-bearing, not decorative. Restored, then re-verified green
+    (`13 jobs`, zero warnings) and `nix build '.#checks.aarch64-darwin.lean'`    green in the sandbox too. Docs updated:`AGENTS.md`'s verification recipe,
+    its axiom-discipline bullet, and the `default.nix` header/`check` comments
+      (which all still said "same build, zero sorry" / "NOT yet a sorry gate").
 
 - [x] 1.4 **Complete the `Classical.choice` trap catalogue, in one place**
       (R3.3, R4.1, R4.10, R4.4; design D3).
@@ -88,11 +115,17 @@
       history block and replace it with a pointer to the ergonomics entry — the
       file's own header forbids a fact living in two places.
 
-- [ ] 1.5 **Qualify the `⟨_, rfl⟩` bisection heuristic** (R3.11).
+- [x] 1.5 **Qualify the `⟨_, rfl⟩` bisection heuristic** (R3.11).
       It is sound only when the goal is a sigma/`∃`. On a `decide … = true` goal
       it does not typecheck at all (so the prescribed bisection silently fails).
       Reword: "when the goal is a sigma/`∃`, bisect by shrinking the body to
       `⟨_, rfl⟩`; for other goal shapes prefer rewriting the proof shape."
+      **Done, and re-verified rather than taken from the review.** Probe
+      (`/tmp/bisect.lean`): on `decide ((48 ≤ n ∧ n ≤ 57) ∨ (65 ≤ n ∧ n ≤ 70)) =
+    true`, `fail_if_success exact ⟨_, rfl⟩` **succeeds as a failure** (i.e. the
+      term is rejected), and the goal closes with
+      `decide_eq_true (Or.inr h)`; on `∃ x : Nat, x = 3`, `exact ⟨_, rfl⟩` closes
+      it. So the heuristic is goal-shaped exactly as R3.11 says.
 
 ## 2. Layer-2 seam: make the assurance it claims actually exist
 
