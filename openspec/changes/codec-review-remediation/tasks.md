@@ -80,7 +80,7 @@
       **Done, with a correction to the planned mechanism.** The flag cannot be
       added where the task says: `lake build -DwarningAsError=true` and
       `lake build -- -DwarningAsError=true` are both rejected/wrong (`unknown
-    short option '-D'`; args after `--` are _targets_), and `LEAN_OPTS` /
+  short option '-D'`; args after `--` are _targets_), and `LEAN_OPTS` /
       `-K` are not forwarded by Lake 5.0.0 to the compiler invocation. The
       mechanism that works is **`moreLeanArgs := #["-DwarningAsError=true"]` on
       the `lean_lib codec` in `lakefile.lean`**, which is strictly better than
@@ -91,12 +91,12 @@
       **Observed failure (part b), in this tree:** stubbing `Codec.roundtrip`
       (`Codec/Sound.lean:441`) to `sorry` gives
       `✖ [9/13] Building Codec.Sound` → `error: Codec/Sound.lean:441:8:
-    declaration uses \`sorry\``→`error: build failed`, exit **1**. Before the
-    flag the same stub produced `warning: … declaration uses 'sorry'`and
-   `Build completed successfully (13 jobs)`, exit **0** — so the gate is
-    load-bearing, not decorative. Restored, then re-verified green
-    (`13 jobs`, zero warnings) and `nix build '.#checks.aarch64-darwin.lean'`    green in the sandbox too. Docs updated:`AGENTS.md`'s verification recipe,
-    its axiom-discipline bullet, and the `default.nix` header/`check` comments
+  declaration uses \`sorry\``→`error: build failed`, exit **1**. Before the
+  flag the same stub produced `warning: … declaration uses 'sorry'`and
+ `Build completed successfully (13 jobs)`, exit **0** — so the gate is
+  load-bearing, not decorative. Restored, then re-verified green
+  (`13 jobs`, zero warnings) and `nix build '.#checks.aarch64-darwin.lean'`    green in the sandbox too. Docs updated:`AGENTS.md`'s verification recipe,
+  its axiom-discipline bullet, and the `default.nix` header/`check` comments
       (which all still said "same build, zero sorry" / "NOT yet a sorry gate").
 
 - [x] 1.4 **Complete the `Classical.choice` trap catalogue, in one place**
@@ -122,7 +122,7 @@
       `⟨_, rfl⟩`; for other goal shapes prefer rewriting the proof shape."
       **Done, and re-verified rather than taken from the review.** Probe
       (`/tmp/bisect.lean`): on `decide ((48 ≤ n ∧ n ≤ 57) ∨ (65 ≤ n ∧ n ≤ 70)) =
-    true`, `fail_if_success exact ⟨_, rfl⟩` **succeeds as a failure** (i.e. the
+  true`, `fail_if_success exact ⟨_, rfl⟩` **succeeds as a failure** (i.e. the
       term is rejected), and the goal closes with
       `decide_eq_true (Or.inr h)`; on `∃ x : Nat, x = 3`, `exact ⟨_, rfl⟩` closes
       it. So the heuristic is goal-shaped exactly as R3.11 says.
@@ -481,6 +481,66 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
       making the same calls was still 1.5 s at n=16384). The cost was the
       **`bdrop` closure chain**; see `review.md` §"The refuted diagnosis" and
       §"The root cause, found".
+
+      **IN PROGRESS — the route above was WRONG, and the real one is ~90% done.**
+      `decodeFullFast.induct` is the right induction (not an `relRepeat`-append
+      lemma). Work preserved verbatim in `bridge-wip.lean` beside this file; it
+      loads and its proven lemmas typecheck against the built library
+      (`nix develop --command lake env lean <path>`; the remaining errors are the
+      one `sorry`'s own sub-goals, not syntax).
+
+      **Verified, `[propext, Quot.sound]`-clean, ready to copy into
+      `Codec/Decode.lean` as-is:**
+      1. `decodeFull_at_zero : k = 0 → decodeFull p h k t = some []` — needed
+         because `decodeFull_zero` is stated at the literal root `0` and the
+         bridge's root is `n - n`; rewriting `n - n` inside `decodeFull`'s index
+         is **blocked by the dependent `Bytes` argument**, so the arithmetic has
+         to arrive as a hypothesis (`subst hk; exact decodeFull_zero`).
+      2. `decodeFull_succ' : k = j + 1 → decodeFull p h k s =
+         decodeFullStep … (decode p s).attach` — same reason. Proof:
+         `subst hk; rw [decodeFull, WellFounded.fix_eq];
+         simp only [Nat.add_one]; congr 2`. **`congr 2` is load-bearing** — the
+         residual compares `WellFounded.fix`'s `ih` against `decodeFull` and *is*
+         the fix point; without it the goal does not close.
+      3. `decodeFullStep_step` — `decodeFullStep` over an *attached cons*, stated
+         with the list as a parameter. Proof: `rw [decodeFullStep];
+         cases ih … <;> rfl`.
+      4. `attach_eq_cons` — `attach` of a list known to be a cons starts with that
+         head. **Must be stated existentially** (`∃ hm l, d.attach =
+         ⟨x,hm⟩ :: l`) and proved by `subst _h`, not `rw` — `rw` fails on the
+         dependent motive `_a.attach = …`.
+      5. `attach_pair_eq` — the two heads of the same attached list are the same
+         pair. **This was the case-3 blocker, and parameterizing the list instead
+         of deriving it from `.attach` is what unblocked it**: after
+         `cases d` + `simp only [List.attach_cons, List.cons.injEq,
+         Subtype.mk.injEq]`, both `e1.1`/`e2.1` are `… = hd`, so chain them
+         (`e1.1.symm.trans e2.1`) and project. This is the same shape
+         `decodeFullStep_some` already uses (it takes the attached list as a
+         *parameter* and `induction`s — never rewrites under `.attach`).
+      6. `decodeFullFast_eq_core`'s **statement**, which must keep the `m ≤ n`
+         hypothesis: `∀ n s m acc, m ≤ n → decodeFullFast p h s m acc =
+         (decodeFull p h (n - m) (bdrop m s)).map (acc.reverse ++ ·)`. The `m ≤ n`
+         premise is **not** decoration — `decodeFullFast` has no cursor bound and
+         at `m > n` still hits the `n - m = 0` branch, so a bridge without it is
+         *false*. The caller discharges it at `m = 0`.
+      `decodeFullFast.induct` **cases 1 and 2 are fully closed** in the probe.
+
+      **The one `sorry` left (case 3), and exactly what it needs.** After the
+      `attach_pair_eq` unification both sides are reduced to a single `match` and
+      the pairs agree; what remains is the **reassembly**: the specification side
+      reads `decodeFull h t.remaining t.bytes`, while the induction hypothesis
+      gives `decodeFull h (n - m') (bdrop m' s)` with
+      `m' = m + (j + 1 - t.remaining)`. They agree because
+      1. `n - m' = t.remaining` — `omega` from `t0.hle` (with
+         `(Suffix.drop m s).remaining = n - m` definitional), and
+      2. `t.bytes = bdrop (n - t.remaining) s` — **this is
+         `decode_genuine_suffix`**, already in the library.
+      Because the hypothesis's `bdrop` is rooted at `m'`, not at `s`, the two
+      need one `bdrop`-composition lemma (re-root `bdrop m' s` at
+      `bdrop (n - t.remaining) s` — i.e. `bdrop_bdrop` again, with the `n - m`
+      arithmetic). **The next session should start here:** write that
+      composition lemma, then the `none` and `some` sub-cases of case 3 close by
+      `rw [IH …, hd]` + `simp`. Nothing else in the bridge is open.
 
 - [ ] 6.1b **Move the fast decode onto an `Array UInt8` + `Nat` cursor**
       (≈**6.5×**: 9 → 59 MiB/s measured). `decodeFullFastRoot` avoids the closure
