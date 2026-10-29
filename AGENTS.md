@@ -17,6 +17,30 @@ honest: `Current state` states _what is true now and what is next_ (always
 rewritten, never appended), while _how it got there_ and _what was measured_ live
 in the change's `tasks.md` and in `CHANGELOG.md`.
 
+## Where the truth lives
+
+**One source of truth per concern.** When two files disagree, the left column wins:
+
+| Question                                        | Authoritative file                      |
+| ----------------------------------------------- | --------------------------------------- |
+| The `Bytes` type's definition                   | `Codec/Codec.lean:68`                   |
+| What is this library, why each design choice    | `README.md` (`[D#]`/`[S#]`), `PAPER.md` |
+| What work is open, and how done is done         | `openspec/changes/<name>/tasks.md`      |
+| What a change is _allowed_ to change            | `openspec/changes/<name>/proposal.md`   |
+| The behavioural contract                        | `openspec/specs/**/spec.md`             |
+| How this environment is set up and how to build | this file                               |
+
+**Anything else is a summary.** If a summary and an `openspec/` artifact differ,
+the artifact is correct and the summary is stale — fix the summary.
+
+**`Bytes n` means `Fin n → UInt8`** (`Codec/Codec.lean:68`). That line is the
+definition; every other document is a _record_ of it. A `Bytes` spelled without
+its length index, or as `List UInt8`/`Array UInt8`/`ByteArray`, is a **defect**
+in whichever doc contains it (including a changelog entry — a corrected entry can
+drift again; a stated precedence cannot). The removed `List`-carrier's
+`Array.extract`/`toList` transport lemmas are the `Classical.choice` source
+`README.md`'s "Representations" section exists to keep out.
+
 ## Current state
 
 Run `openspec list --json` for the live answer; do not trust a snapshot here for
@@ -39,9 +63,7 @@ CRITICAL performance finding (id `R5.1`). `review.md` is the evidence base;
 justification for each step, is at the end of `tasks.md` §6 — read it there; this
 is the summary):
 
-1. **§1** — tasks 1.2, **1.3**, 1.5. Small, and 1.3 is the one that matters: it
-   makes the proof gate real for every task after it.
-2. **§6** — performance, in this internal order. **§6 must run before §3/§4**,
+1. **§6** — performance, in this internal order. **§6 must run before §3/§4**,
    because those rewrite the very paragraphs that quote the defect's numbers.
    - **6.1a — the bridge proof. This is a hard gate on all of §6.** Every
      optimization multiplies `decodeFullFastRoot`; with the bridge unproved, one
@@ -52,14 +74,15 @@ is the summary):
      _fixed_ numbers) → **6.3** (wire it) → **6.7** (wire the seam, once there
      is a consumer) → **6.4** (assert the ratio; threshold from 6.1b/6.3) →
      **6.6** (the carrier decision the bar forces).
-3. **§2** — the Layer-2 seam (non-performance items).
-4. **§3**, then **§4** — the doc rewrites, now against fixed numbers.
-5. **§5** — the global `lean` skill, last (outside this repo).
+2. **§2** — the Layer-2 seam (non-performance items).
+3. **§3**, then **§4** — the doc rewrites, now against fixed numbers.
+4. **§5** — the global `lean` skill, last (outside this repo).
 
-- **Task 1.3 makes the proof gate real.** `AGENTS.md` used to call zero-`sorry`
-  "the proof gate" while `default.nix`'s `check` ran a plain `lake build`, which
-  only _warns_ on `sorry`. Fixing that is a `default.nix` change and it makes the
-  gate real for every change after this one.
+- **The proof gate is real (1.3, done).** `lakefile.lean` sets
+  `moreLeanArgs := #["-DwarningAsError=true"]` on the `codec` library, so a `sorry`
+  fails `lake build` (and therefore `checks.lean`) instead of warning. Verified
+  load-bearing by stubbing `Codec.roundtrip` and observing a non-zero exit naming
+  the declaration. Every task after this one inherits it.
 - **`R5.1` — the defect is FOUND and a 9047× fix LANDED; the bridge proof is still
   open.** Root cause (measured, after refuting `WellFounded.fix`/`Sigma`/`.attach`/
   `List` as no-ops): `decode` returns a `Suffix` whose `bytes` is a `bdrop` **closure
@@ -176,15 +199,22 @@ different `checks` sets — never run one tree's recipe in the other.
 ### In `lean-codec` (this repo)
 
 ```bash
-nix develop --command lake build            # 13 jobs, zero warnings — NOT yet a sorry gate
+nix develop --command lake build            # 13 jobs, zero warnings; FAILS on `sorry`
 nix develop --command lake build bench      # the bench lane (links Codec/ByteSlice.c)
 nix develop --command openspec validate --all   # after ANY spec or task edit
 ```
 
-**`lake build` does not enforce zero-`sorry` today** — it reports `sorry` as a
-_warning_. Task 1.3 adds `-DwarningAsError=true` to `default.nix`'s `check`
-derivation; until it lands, check by hand (`grep -rn 'sorry' Codec/` → zero, in
-prose only) and do not describe the gate as enforced.
+**`lake build` enforces zero-`sorry`.** `lakefile.lean`'s `codec` lib carries
+`moreLeanArgs := #["-DwarningAsError=true"]`, so `sorry`'s
+`declaration uses 'sorry'` warning becomes an **error** and the build exits
+non-zero naming the declaration. `default.nix`'s `check` runs that same build, so
+`nix build '.#checks.…'` is the gate, not an observation. Verified load-bearing:
+stubbing `Codec.roundtrip` to `sorry` fails the build with
+`error: Codec/Sound.lean:441:8: declaration uses \`sorry\``.
+
+Because the flag is on the _library_ rather than on one consumer, every path that
+compiles `Codec` inherits it (including `bench` and the sandboxed `check`) —
+there is no separate lint to drift from the compiler.
 
 `nix build '.#checks.aarch64-darwin.lean'` is the same build, sandboxed — it is a
 **long** build: detached with `nohup … > /tmp/x.log 2>&1 &`, then poll. Never
@@ -223,9 +253,11 @@ in `../lean-basen`. Never "fix" it by editing the importing Lean file.
 - **Axiom discipline.** Every law stays `[propext, Quot.sound]`-only, zero
   `Classical.choice`, zero `sorry`. `#print axioms Codec.roundtrip` is the check;
   `../lean-basen`'s `Axioms.lean` is a `@[default_target]` lib so `lake build`
-  enforces its `#guard_msgs` gates. **In _this_ repo the gate is not yet enforced**
-  (`lake build` only warns on `sorry`) — task 1.3 makes it real; until then verify
-  by hand and say "observed", not "enforced".
+  enforces its `#guard_msgs` gates. **In _this_ repo the gate is enforced too**
+  (`moreLeanArgs := #["-DwarningAsError=true"]` in `lakefile.lean`): a `sorry`
+  fails `lake build` instead of warning. What is _not_ machine-enforced here is
+  the `Classical.choice` half — that is what `#print axioms` is for, run per law
+  family rather than by the build.
 - **The `Bytes n` spec substrate is single.** `Bytes n := Fin n → UInt8` is both
   the proof substrate and its own scalar-read run-model. The packed (`Array UInt8`)
   and byte-slice (`ByteArray`) carriers are proved-equal or trust-seam
@@ -273,8 +305,13 @@ axioms` on the enclosing theorem is the only check) and all three happened here:
      (`bs.length = 1 ∨ bs.length = 2`, `ds.length = k`) — leaks even when every
      cited lemma is `[propext]`-clean. Fix: restate the hypothesis numerically
      (`1 ≤ bs.length`, `bs.length ≤ 2`) or derive the index from the term
-     (`count ds.length …`) so the match stays non-dependent. **Only when the goal
-     is a sigma/`∃`** does bisecting with `⟨_, rfl⟩` work.
+     (`count ds.length …`) so the match stays non-dependent.
+     **Bisection is goal-shaped, not universal.** Shrinking the body to
+     `⟨_, rfl⟩` bisects a **sigma/`∃`** goal. On any other goal shape it does not
+     typecheck at all (`⟨_, rfl⟩` is not a term there), so the prescribed
+     bisection silently fails rather than isolating the leak. For a
+     `decide … = true` goal, prefer rewriting the _proof shape_ — the disjunction
+     form of shape 2 below is often the real culprit.
   2. **`decide_eq_true (by omega)` on a disjunction** — `omega` closes a disjunction
      by case analysis, which pulls in classical logic. `decide` alone is fine; the
      _disjunctive_ proof is not. Fix: build the disjunct explicitly
