@@ -390,132 +390,165 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
       disclaimer (stdlib-only, 4.34-pinned) and attach conditions to the
       "20–40× off C" figure.
 
-## 6. `R5` — the decode performance defect (CRITICAL, added after the four lenses)
+## 6. `R5` — decode/encode performance (CRITICAL, added after the four lenses)
 
 > **Why this is here and why it is §6.** `R5.1` was found by _running_ the built
 > binary, not by reading it, so it is new evidence in an existing change, not a
 > new change. It is numbered last because tasks 1–5 were already sequenced and
 > partly done; it must nevertheless be **started before 3.x and 4.x**, because
 > 3.x rewrites `README.md` §Performance and 4.x rewrites the `AGENTS.md`
-> performance bullet, and correcting those claims against the _current_
-> numbers would canonize a defect. Do §6.2 → §6.1 → then 3.x/4.x against the
-> fixed numbers. `AGENTS.md`'s "one change at a time" rule is satisfied: this is
-> still `codec-review-remediation`.
-
+> performance bullet, and correcting those claims against the _current_ numbers
+> would canonize a defect. `AGENTS.md`'s "one change at a time" rule is satisfied:
+> this is still `codec-review-remediation`.
+>
 > **The acceptance bar (owner requirement, 2026-10-28): decode and encode must
 > run within a _small single-digit multiple_ of C, or the effort has no value.**
-> Measured feasible (`review.md` R5.1 §"The feasibility answer"): a bulk cursor
-> decode runs at **222 MiB/s** against a **1,891 MiB/s** `memcpy` floor — **8.5×**
-> — in the architecture that already exists (`Array UInt8` + cursor + `Id.run`
-> loop). The shipped paths sit at 47× (`decodeArray`) and ~10^5× (`decodeFull`)
-> because of their **result types**. So §6 is not a micro-optimization: it is the
-> work that moves decode from 10^5×/47× down to the achievable ~8×, and 6.4 must
-> assert that bar so it cannot silently regress.
+> See `review.md` R5.1 §"The feasibility answer" for the numbers, and the honest
+> caveat at the end of §6.2 below: **no measured path reaches single digits yet**,
+> and closing the last order of magnitude is an architecture decision, not an
+> optimization (6.6).
+>
+> **Measured landscape, one process, n=65536, `memcpy` = 2,136 MiB/s** (re-take
+> with the 6.4 lane rather than trusting this snapshot):
+>
+> | path                           | MiB/s   | vs `memcpy` | note                                  |
+> | ------------------------------ | ------- | ----------- | ------------------------------------- |
+> | `memcpy` (Layer-2 floor)       | 2,136   | 1×          | the reference                         |
+> | `encodeArray` (packed)         | **119** | **18×**     | best codec number in the tree         |
+> | `Id.run` cursor decode (floor) | 59      | 36×         | the decode ceiling as it stands       |
+> | `decodeArray` cursor walk      | 30      | 71×         | right return shape, `List` per step   |
+> | `fastEncodeRepeat`             | 27      | 79×         | public encode path                    |
+> | `encodeRepeat`                 | 19      | 112×        | public encode path                    |
+> | `decodeFullFastRoot`           | 9       | 237×        | landed 6.1a; still allocates per step |
+>
+> Read the table before starting: **the fast shapes already exist**
+> (`encodeArray`, `decodeArray`, the cursor floor) and the public API does not use
+> them. Most of §6 is wiring plus proof, not invention.
 
-- [ ] 6.1 **Give `decodeFull` a single-pass formulation** (R5.1 — CRITICAL).
-      **PARTIAL (2026-10-28) — the defect is FOUND and a 9047× fix LANDED, but this
-      task is NOT done: the equality bridge is unproved.** See `review.md` R5.1
-      §"The root cause, found". - **Landed** (`b894536`, `a4606e4`): `Codec.bdrop_bdrop` and
-      `Codec.decodeFullFastRoot`. The cost was **not** `WellFounded.fix` / the
-      `Sigma` / `.attach` / the `List` (each measured as a no-op) — it was that
-      `decode` returns a `Suffix` whose `bytes` is a `bdrop` **closure over its
-      input**, so feeding `t.bytes` back **composes closures** (668× at n=4096,
-      quadratic). Re-rooting at the original byte string with a consumed-count
-      cursor fixes it: **93,531 → 188 µs (n=4096), 24,905,804 → 2,753 µs
-      (n=65536)**, now linear, ~22 MiB/s. Values identical; `[propext,
-      Quot.sound]`-only. - **Remaining (the reason this is unchecked):** prove
-      `decodeFullFastRoot p h s = decodeFull p h n s`. `decodeFull` is unchanged
-      and still carries every law, so nothing regresses — but the fast path is
-      verified by _measurement_ only and must not be called proven. Route: an
-      `relRepeat`-append lemma (`relRepeat R (xs ++ [x]) (a+b) (splice … s₁ s₂)`
-      from `relRepeat R xs … s₁` and `R x … s₂`), then induction on the cursor
-      via `decodeFullFast.induct`, using `decodeRepeat_spec`'s witness form. - **Then** wire it in (6.3) and assert the ratio (6.4). Leaving it uncalled
-      is deliberate: an unproven function must not become the public decode.
-      **Revised 2026-10-28 — the originally-prescribed fix is REFUTED; do not
-      attempt it.** This task used to say "re-express as structural recursion".
-      That was implemented and measured as a **no-op**: a `termination_by`-
-      structural `decodeFull` runs at 93,691 µs against the shipped
-      `WellFounded.fix` version's 94,137 µs at n=4096, because Lean elaborates
-      `termination_by` to the _same_ well-founded recursion. `decodeRepeatS` vs
-      `decodeRepeat` likewise (623 ms vs 633 ms). See `review.md` R5.1
-      §"The refuted diagnosis".
-      **The actual defect is the algorithm.** `decodeFullStep` is a backtracking
-      search that, at each of the n levels, calls `decode p s` over the whole
-      remaining buffer and recurses into candidates — Θ(n²) _work_. A single
-      linear pass over the same `decode`/`bdrop` costs 176 µs where `decodeFull`
-      costs 91,382 µs (519×), with a bit-identical result. Requirements, all
-      mandatory:
-      (a) keep every existing theorem — `decodeRepeat_eq`, `decodeFull_zero`,
-      `decodeFull_some`, `decodeFull_ne_none`, `decodeFull_spec`,
-      `decodeRepeat_spec`, `relRepeat_*` — and keep `[propext, Quot.sound]`-only
-      with zero `Classical.choice`;
-      (b) prove the new definition **equal** to the old (a `…_eq` bridge theorem)
-      so the specification surface does not move and downstream `basen` is
-      untouched;
-      (c) a termination that `lake build` accepts with no `sorry`, no
-      `decreasing_by sorry`, and no `partial`;
-      (d) keep it `#eval`-able (the reason `WellFounded.fix` was chosen —
-      `Codec/Decode.lean:141`).
-      **Scope note:** `decodeRepeat` is out of scope for a speed fix. Its Θ(n²) is
-      inherent to its all-prefix return type `List (List α × Suffix n)` (the
-      paper's §4.4 cost), and 6.2 must say so in the docs rather than imply it can
-      be optimized away. The fixable target is `decodeFull`.
-      Re-measure with the R5.1 probe and record the before/after ratio in this
-      task. If the honest new definition turns out _not_ to be provably equal,
-      the fix is the stronger hypothesis, not a weaker statement.
-      **Established this session (2026-10-28), so it is not rediscovered:** - The characterising law is `decodeFull_spec` (`Codec/Decode.lean:367`),
-      which relates `decodeFull` to `decodeRepeat`, not to a standalone
-      definition. A replacement must therefore reproduce **both**
-      `decodeFull_some` (forward) and `decodeFull_ne_none` (completeness) —
-      those two are the bridge, and `decodeFull_spec` then follows with only
-      `huniq` unchanged. Keep `huniq` as a hypothesis (2.6(b) is the item that
-      decides whether to derive it). - A single-pass formulation needs a **mutual** recursion
-      (`decodeFullP` over the length index, plus a `scan` helper over the
-      candidate list), and its termination is **lexicographic**: `scan` either
-      descends in the remainder (`h : ConsumesByte`) or in `List.length`. Lean
-      will not infer that measure; it needs an explicit
-      `termination_by _ l => (l.head?.map (·.2.remaining) |>.getD 0, l.length)`
-      plus a `decreasing_by` discharging the `ConsumesByte` step from the head
-      pair. Budget for that before starting. - Partial progress is preserved here rather than stubbed into the tree:
-      this session's attempts did not compile, so `Codec/Decode.lean` is
-      UNCHANGED. Nothing is half-landed.
+- [ ] 6.1 **Bridge the fast decode, then move it onto a cursor** (R5.1 —
+      CRITICAL). Two halves; **6.1a is a hard gate on 6.1b and on 6.3/6.4.**
+
+- [ ] 6.1a **Prove `decodeFullFastRoot = decodeFull`** (the gate; ~9 MiB/s path
+      is currently verified by _measurement only_). Landed already: `b894536`,
+      `a4606e4` (`Codec.bdrop_bdrop`, `Codec.decodeFullFastRoot`, 9,047× at
+      n=65536, values identical, `[propext, Quot.sound]`-only). **Why this
+      blocks everything else:** every optimization below multiplies this
+      function. Adding a second unproven fast path on top of an unproven first
+      one produces a library whose fast lane nothing connects to its spec — and
+      if the bridge turns out false, all downstream ratios are in question at
+      once. Do it first. Route: an `relRepeat`-append lemma
+      (`relRepeat R (xs ++ [x]) (a+b) (splice … s₁ s₂)` from `relRepeat R xs … s₁`
+      and `R x … s₂`), then induction on the cursor via `decodeFullFast.induct`
+      using `decodeRepeat_spec`'s witness form. `decodeFull` stays unchanged as
+      the specification and keeps carrying `decodeFull_some` /
+      `decodeFull_ne_none` / `decodeFull_spec`.
+      **Do not attempt the two refuted diagnoses** — `WellFounded.fix`-as-the-
+      cause (a `termination_by` rewrite measures 0.5% apart) and "it is a
+      backtracking search, fix it with a single pass" (a tail-recursive rewrite
+      making the same calls was still 1.5 s at n=16384). The cost was the
+      **`bdrop` closure chain**; see `review.md` §"The refuted diagnosis" and
+      §"The root cause, found".
+
+- [ ] 6.1b **Move the fast decode onto an `Array UInt8` + `Nat` cursor**
+      (≈**6.5×**: 9 → 59 MiB/s measured). `decodeFullFastRoot` avoids the closure
+      _chain_ but still calls `decode p (Suffix.drop m s).bytes` every step,
+      allocating a `bdrop` closure and a `Suffix` record per byte. Target shape:
+      step over `Array UInt8` at a `Nat` cursor returning `Option (α × Nat)`,
+      driven by an `Id.run` accumulator loop — the measured 59 MiB/s floor.
+      Requirements: (a) prove it equal to `decodeFullFastRoot` so 6.1a's bridge
+      composes (`ArrayCursor = decodeFullFastRoot = decodeFull`), giving a
+      two-step but unbroken chain to the spec; (b) every existing theorem's
+      statement unchanged; (c) `[propext, Quot.sound]`-only, zero
+      `Classical.choice`, zero `sorry`, `#eval`-able. Re-measure and record.
+      **Note:** this subsumes the `decodeArray` per-step `List` problem — if the
+      cursor loop never builds a `List` per step, that defect stops mattering.
 
 - [ ] 6.2 **Re-baseline the documented performance claims** (R5.1). `README.md`
-      §"The honest ceiling" (`512-530`) and the `AGENTS.md` bullet (`171-176`)
-      claim a "~20–40×-off-C ceiling" and attribute it to boxed arithmetic.
-      Measured: decode ≈ 0.01 MiB/s (~10^5× off the `memcpy` floor), encode
-      ≈ 31 MiB/s (~43× off). Rewrite both to **measured** figures, name the
-      three distinct causes (recursion scheme / result shape / boxed
-      arithmetic) instead of one, and stop presenting a single number as "the"
-      ceiling. **Do this after 6.1**, so the numbers quoted are the fixed ones
-      and not a snapshot of the defect.
-      Note: this supersedes the _figures_ in 3.12's "mention the space leak"
-      item only in the sense that the ceiling discussion is rewritten wholesale;
-      **coordinate with 3.x so the two edits do not fight over the same
-      paragraphs.**
+      §"The honest ceiling" and the `AGENTS.md` bullet claim a "~20–40×-off-C
+      ceiling" and attribute it to boxed arithmetic; both are false as measured.
+      Rewrite to **measured** figures, name the distinct causes (lazily-composed
+      input / per-step `List` / boxed scalars), and stop presenting one number as
+      "the" ceiling. **Do this after 6.1b**, so the numbers quoted are the fixed
+      ones. Coordinate with 3.x so the two edits do not fight over the same
+      paragraphs.
+      **State the caveat honestly:** no measured path is within a single-digit
+      multiple of C. The best is `encodeArray` at 18×; decode's achievable floor
+      is 36×. Either the bar applies to bulk operations and per-element codecs
+      sit at a few tens of MiB/s, or the packed carrier must become primary
+      (6.6). Do not claim the bar is met.
 
-- [ ] 6.3 **Wire the fast path and retire the slow default** (R5.1, R2.4 —
-      design D8's deferred work). `decodeArray`'s `(α × Nat)` cursor shape is the
-      already-proved fast design (`decodeArray_eq`) and has **no library caller**.
-      Either (a) make the packed cursor path the one the docs point readers at as
-      the fast route, with `Bytes n`/`Suffix n` stated as the specification, or
-      (b) wire `commitRemainder`/`byteSlice` into it and prove the two transports
-      equal. Choose (a) if (b) balloons; **do not** leave the two module headers
-      disagreeing about whether the seam is live (that is 2.4, and this task must
-      not re-open it). Record the choice and its rationale here.
+- [ ] 6.3 **Wire the fast path and retire the slow default** (R5.1, R2.4).
+      **Target, measured:** a whole-input loop over the cursor step must not
+      allocate per step and must land near the 59 MiB/s floor. Prefer the packed
+      `Array` surface as what the docs point readers at for speed, with
+      `Bytes n`/`Suffix n` stated as the specification. Choose and record; do not
+      leave the two module headers disagreeing about whether a seam is live
+      (that is 2.4 — do not re-open it).
 
-- [ ] 6.4 **Make the bench defend the ratio** (R5.1, R2.2). The bench has no lane
-      that would fail if decode regressed 500×, because `benchDecodeFull` asserts
-      the _value_, not a bound. Add a lane that measures decode **against
-      `memcpy` measured in the same run** and fails when the ratio exceeds a
-      stated bar — the owner's requirement is a small single-digit multiple, so
-      assert `≤ 20×` the `memcpy` floor at a fixed `n` (threshold chosen from the
-      post-6.3 measurement with margin), **printing both numbers** so the ratio
-      is visible rather than inferred. A ratio, not an absolute MiB/s: an
-      absolute floor is machine-dependent and gets tuned down the first time CI
-      is slow, while a ratio to `memcpy` on the same machine is the property we
-      actually mean. Keep `benchSeamBoundaries` first in `main` (2.2(a)) — a bound
-      that runs after a slow lane is unreachable evidence.
+- [ ] 6.4 **Make the bench defend the ratio** (R5.1, R2.2). No lane fails if
+      decode regresses 200×, because `benchDecodeFull` asserts the _value_, not a
+      bound. Add a lane measuring decode **against `memcpy` in the same run** and
+      failing when the ratio exceeds a stated bar (**`≤ 20×`** at a fixed `n`,
+      threshold chosen from the post-6.3 measurement with margin), **printing
+      both numbers**. A ratio, not an absolute MiB/s: an absolute floor is
+      machine-dependent and gets tuned down the first time CI is slow; the ratio
+      to same-run `memcpy` is the property actually meant. Keep
+      `benchSeamBoundaries` first in `main` (2.2(a)) — a bound that runs after a
+      slow lane is unreachable evidence. **Set the threshold from 6.1b/6.3's
+      numbers, not today's**, which is why this is 6.4 and not 6.0.
+
+- [ ] 6.5 **Encode: adopt `encodeArray`'s shape in the public API** (R5.1 —
+      ≈**4–6×**: `encodeRepeat` 19 and `fastEncodeRepeat` 27 → `encodeArray`'s
+      measured **119 MiB/s**). The fast shape already exists and already measures
+      18× off C; the repetition API does not use it. This is mostly wiring and
+      proof: show the public encode route equals `encodeArray`-shaped output, keep
+      every law, re-measure. Ordered after 6.3 because encode is not on the read
+      path, and because 6.3 will have established the pattern for "wire the fast
+      shape behind a proved refinement".
+
+- [ ] 6.6 **Decide the carrier question the bar actually forces** (R5.1 — the
+      one item here that is a _decision_, not an optimization). If "small
+      single-digit multiple of C" is the real requirement, no pure-`Bytes n` path
+      meets it: the residual from 59 MiB/s to 2,136 is boxed scalars plus one
+      allocation per element, and no evidence says it closes. The choice:
+      (a) make the packed `ByteArray`/`Array` surface the primary runtime
+      carrier with `Bytes n` retained as the specification `Rel`/laws are stated
+      over; or (b) narrow the bar to **bulk** operations and record that
+      per-element codecs sit at tens of MiB/s. **Record the decision and its
+      rationale here**, then propagate to `README.md` and `AGENTS.md`. Do not
+      silently redefine the bar to whatever is achievable — that is the failure
+      mode this whole change exists to remove.
+
+- [ ] 6.7 **Wire the Layer-2 seam into whichever path wins** (R2.4, design D8's
+      deferred work). `byteSlice`/`commitRemainder` are at the `memcpy` floor but
+      **no library path calls them**. Only worth doing once 6.1b/6.3/6.5 create a
+      real consumer — doing it before would be optimizing a seam nothing calls,
+      which is exactly the state 2.4 records. Requires a proof of the two
+      transports' equality, so budget for it; if it balloons, leave the docs
+      honest (option (a) in 2.4) and record why.
+
+## The order, and why
+
+**Prologue (must precede everything in §6 that touches code):**
+
+1. **1.3** — make the `sorry` gate real. Cheap, and it makes every later claim
+   trustworthy.
+2. **6.1a** — the bridge proof. Gates all of §6: without it, every optimization
+   below multiplies an unproven function, and one false bridge invalidates all
+   their ratios at once.
+
+**Then, by measured headroom:**
+
+3. **6.1b** (≈6.5×) — biggest win, directly attacks the bar, subsumes
+   `decodeArray`'s per-step `List`.
+4. **6.5** (≈4–6×) — cheapest big win; the fast shape already exists and
+   measures 18×.
+5. **6.2** — re-baseline the docs against the _fixed_ numbers.
+6. **6.3**, then **6.7** — wire the fast path; wire the seam once there is a
+   consumer.
+7. **6.4** — assert the ratio, with the threshold taken from steps 3–6.
+8. **6.6** — the carrier decision, which only becomes urgent once the numbers
+   above make the residual explicit.
 
 ## Explicitly not doing
 
@@ -524,18 +557,14 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
   on reachable inputs, `Normalizer.idem` load-bearing, honest termination. They
   were tested; do not re-open.
 - **A general performance push beyond §6.** §6 owns decode/encode throughput and
-  is bounded by a stated acceptance bar: **within a small single-digit multiple
-  of C** (measured feasible at 8.5× — see §6's header). That is the owner's
-  requirement and it replaces the old "20–40× is accepted" posture, which was
-  false anyway. It is still **not** an invitation to micro-optimize arbitrary
-  pure-Lean code: `AGENTS.md`'s "do not re-attempt pure-Lean micro-optimization"
-  rule stands _below the bar_. Once decode/encode are within the bar, further
-  work on unrelated hot paths is a new measured finding for `review.md`, not
-  scope creep here.
-- **Rewiring `commitRemainder` into the packed path**, _unless_ 6.3 chooses
-  option (b). Default is (a): point the docs at the cursor path. Wiring it in
-  needs an equality law between two transports — a proof change of its own
-  weight — and task 2.4 only corrects the header's claim.
+  is the _only_ place performance work belongs in this change. It replaces the
+  old "20–40× is accepted" posture with the owner's bar (**a small single-digit
+  multiple of C**), but the bar is **not met** and 6.6 is where that gets
+  resolved — do not read §6 as licence to micro-optimize arbitrary pure-Lean
+  code. `AGENTS.md`'s "do not re-attempt pure-Lean micro-optimization" rule still
+  stands: the wins in §6 are **data-shape and wiring**, never scalar-type
+  tinkering. Anything else on an unrelated hot path is a new measured finding
+  for `review.md`, not scope creep here.
 - **Renumbering `[D#]`/`[S#]`.** They are cross-referenced by code and downstream
   repos; task 3.1 refiles `[D2]` while keeping its id.
 - **A repo-wide typo/grammar pass.** Only the cited findings.
