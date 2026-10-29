@@ -27,7 +27,7 @@ longer than the commit that wrote it.
 **The next session works `openspec/changes/codec-review-remediation/` and nothing
 else.** Run the live counts with `nix develop --command openspec list --json`
 (strip the dev-shell banner: `| sed -n '/^{/,$p'`); do not trust a snapshot here
-for longer than the commit that wrote it. Currently **2/45**.
+for longer than the commit that wrote it. Currently **2/50**.
 
 It is a codebase-wide audit. Four adversarial _reading_ lenses (74 findings, ids
 `R<lens>.<n>`) cover the docs, the proof surface, `AGENTS.md`, and the global
@@ -35,15 +35,24 @@ It is a codebase-wide audit. Four adversarial _reading_ lenses (74 findings, ids
 CRITICAL performance finding (id `R5.1`). `review.md` is the evidence base;
 `tasks.md` is the work.
 
-**Work order — do it in this sequence:**
+**Work order — do it in this sequence** (the full ordering, with the measured
+justification for each step, is at the end of `tasks.md` §6 — read it there; this
+is the summary):
 
 1. **§1** — tasks 1.2, **1.3**, 1.5. Small, and 1.3 is the one that matters: it
    makes the proof gate real for every task after it.
-2. **§6** — the `R5.1` performance defect (4 tasks). **This must run before §3
-   and §4**, because those rewrite the very paragraphs that currently quote the
-   defect's numbers; correcting prose against unfixed numbers would canonize the
-   defect.
-3. **§2** — the Layer-2 seam.
+2. **§6** — performance, in this internal order. **§6 must run before §3/§4**,
+   because those rewrite the very paragraphs that quote the defect's numbers.
+   - **6.1a — the bridge proof. This is a hard gate on all of §6.** Every
+     optimization multiplies `decodeFullFastRoot`; with the bridge unproved, one
+     false bridge invalidates every downstream ratio at once. **Nothing in §6 or
+     the fast-path wiring proceeds until it lands.**
+   - then **6.1b** (decode → `Array`+cursor, ≈6.5×) → **6.5** (encode →
+     `encodeArray`'s shape, ≈4–6×) → **6.2** (re-baseline the docs against the
+     _fixed_ numbers) → **6.3** (wire it) → **6.7** (wire the seam, once there
+     is a consumer) → **6.4** (assert the ratio; threshold from 6.1b/6.3) →
+     **6.6** (the carrier decision the bar forces).
+3. **§2** — the Layer-2 seam (non-performance items).
 4. **§3**, then **§4** — the doc rewrites, now against fixed numbers.
 5. **§5** — the global `lean` skill, last (outside this repo).
 
@@ -58,9 +67,10 @@ CRITICAL performance finding (id `R5.1`). `review.md` is the evidence base;
   at n=4096. `Codec.decodeFullFastRoot` re-roots at the original byte string with a
   consumed-count cursor: **93,531 → 188 µs (n=4096), 24,905,804 → 2,753 µs
   (n=65536)**, linear, ~22 MiB/s. **`decodeFullFastRoot` is verified by measurement,
-  NOT yet by proof** — the equality bridge to `decodeFull` is task 6.1's remaining
-  work, and nothing calls the fast path yet. Do not describe it as proven, and do not
-  wire it in until the bridge lands.
+  NOT yet by proof** — the equality bridge to `decodeFull` is task **6.1a**, and
+  nothing calls the fast path yet. Do not describe it as proven, and do not wire it
+  in — nor build any further optimization on it (6.1b/6.5/6.3 all multiply it) —
+  until 6.1a lands.
 - **Two earlier diagnoses of `R5.1` were REFUTED — do not re-measure them.** Both
   looked plausible and both were no-ops:
   1. _"`WellFounded.fix` on a `Sigma` doesn't compile to a loop."_ Re-expressing
@@ -83,10 +93,18 @@ CRITICAL performance finding (id `R5.1`). `review.md` is the evidence base;
   `#eval`-ability. Nothing else may change a declaration shape.
 - **None of its findings concern `basen`.** Do not extend an archived change with
   audit work.
-- Its 45 tasks are sequenced: §1 cross-lens defects (5), §2 Layer-2 seam (8), §3
+- Its 50 tasks are sequenced: §1 cross-lens defects (5), §2 Layer-2 seam (8), §3
   `README.md` derivations (12), §4 `AGENTS.md` process (6), §5 the global `lean`
-  skill (10), §6 the `R5.1` performance defect (4). Two are already done (1.1,
+  skill (10), §6 performance (9, incl. 6.1a/6.1b). Two are already done (1.1,
   1.4).
+- **§6's measured landscape** (one process, n=65536, `memcpy` = 2,136 MiB/s;
+  re-take with the 6.4 lane rather than trusting this): `memcpy` 1× ·
+  `encodeArray` 18× · `Id.run` cursor decode floor 36× · `decodeArray` 71× ·
+  `fastEncodeRepeat` 79× · `encodeRepeat` 112× · `decodeFullFastRoot` 237×.
+  **The fast shapes already exist and the public API does not use them** — most
+  of §6 is wiring plus proof, not invention. **No path is within a single-digit
+  multiple of C**, so the owner's bar is not met; 6.6 is where that is decided,
+  and it must be decided honestly rather than by redefining the bar.
 
 ### The other open change — `lean-basen` (18/25)
 
