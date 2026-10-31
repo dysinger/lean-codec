@@ -560,6 +560,23 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
       `congrArg` at `decodeFull h t0.remaining`) hits the same dependent-motive
       wall that `attach_pair_eq` hit — and the fix there (parameterize the list)
       may be the fix here too.
+      **Route (a) is CONFIRMED viable — verified, not just proposed.** Re-stating
+      the core lemma's conclusion as
+
+          decodeFullFast p h s m acc =
+            (decodeFull p h (Suffix.drop m s).remaining (Suffix.drop m s).bytes).map
+              (fun tail => acc.reverse ++ tail)
+
+      (i.e. the spec term's index written `(Suffix.drop m s).remaining`, which is
+      exactly what the recursor produces) **elaborates cleanly and removes the
+      index mismatch at the source** — the `induct` motive is well-formed and
+      `refine_1` closes outright. A scratch file at `/tmp/routeA.lean` reached
+      this state; the technique that made the spec side reachable was
+      `conv => rhs; rw [decodeFull_succ' p h ((Suffix.drop m s).remaining) j hk']`
+      — rewriting **only the RHS** avoids the dependent-motive wall that blocks
+      the same rewrite when it has to touch the fast side's `have hmem :=`.
+      What is left there is ordinary branch plumbing in `refine_2`/`refine_3`
+      (`.attach` of `[]`, then the pair unification), not new mathematics.
       **Next session, two candidate routes, in order:**
       (a) **State the core lemma at fixed `t`.** Generalize `t` to a *parameter*
       and let `IH` be instantiated at `Suffix (Suffix.drop m s).remaining`
