@@ -87,6 +87,13 @@ findings, ids `R<lens>.<n>`), and its edit licence is `proposal.md` / `design.md
 Apply it with `openspec instructions apply --change codec-review-remediation
 --json` rather than from memory of this file.
 
+**Direction lives in exactly two places: this file and `openspec/`.** If you are
+looking for "what do I do next" and you are not reading `AGENTS.md` or
+`openspec/changes/<name>/tasks.md`, you are reading something stale — say so and
+delete it rather than following it. A `sorry` obligation's own docstring may state
+_what is open and why_; it may not carry a task list (that belongs in `tasks.md`),
+and it may never point at a path outside the repo (no `/tmp`, no scratch file).
+
 Three facts about that change are worth stating here **only because a reader who
 skips the ledger would get them wrong**, and all three are also in `tasks.md`:
 
