@@ -98,31 +98,31 @@ Four facts about that change are worth stating here **only because a reader who
 skips the ledger would get them wrong**, and all four are also in `tasks.md`:
 
 - **The work order is §6 → §3/§4 → §5, and §2 is done.** §6 goes first because
-  §3/§4 rewrite the paragraphs that quote the numbers §6 fixes; correcting those
-  claims against today's numbers would canonize the defect. If `tasks.md`
-  disagrees with this line, `tasks.md` wins.
-- **6.1b's proof is closed; the next work is 6.4, then 6.2.** `lake build` is green,
-  there are **no `sorry`s anywhere in the tree**, and 6.1b's gate
-  (`Codec.decodeFullArrayRoot_eq`) holds: the packed `Array UInt8` + `Nat`-cursor
-  decoder is proved equal to `decodeFull`, `[propext, Quot.sound]`-only, with
-  `array_bridge` carrying the fast and search congruences over one strong induction.
-  `bench`'s `benchDecodeFullArray` asserts that bridge at run time but prints **no
-  number** on purpose. 6.1b stays `[~]` rather than `[x]` for that reason: its numeric
-  re-measurement became **6.4**, which the ledger now orders _before_ 6.2 —
-  6.2 has to quote a measured number for the packed path and only 6.4's lane can
-  produce one, so leaving 6.4 last would make 6.2 stale or invented. `tasks.md` 6.2's
-  "PLAN FOR NEXT SESSION" is the route; read it, and read 6.1b's "SESSION 9" block
+  §3/§4 rewrite the paragraphs that quote the performance numbers §6 fixes;
+  correcting those claims against today's numbers would canonize the defect. If
+  `tasks.md` disagrees with this line, `tasks.md` wins.
+- **6.4 has landed as a measuring lane; the next work is the code shape it
+  identified.** `lake build` is green, there are **no `sorry`s anywhere in the
+  tree**, and 6.1b's gate (`Codec.decodeFullArrayRoot_eq`) holds: the packed
+  `Array UInt8` + `Nat`-cursor decoder is proved equal to `decodeFull`,
+  `[propext, Quot.sound]`-only. `bench`'s new `benchDecodeShapes` lane now prints
+  the numbers (see the speed bullet below), so 6.1b's missing numeric
+  re-measurement is done and the packed path's figure is no longer invented. What
+  the lane showed is that the remaining cost is **`packedCands`'s per-step
+  `.attach`/`filterMap` rebuild** (52 ns/step against a 6 ns/step ideal loop), not
+  the carrier — so the next work is a code-shape change to the candidate list, and
+  `tasks.md` 6.6 records the decision. Read `tasks.md` 6.1b's "SESSION 9" block
   before touching `Codec/Packed.lean` (five plan corrections, including a
   `Classical.choice` leak that was already in the tree).
 - **Benchmark numbers from this repo are not trustworthy without the rules.** Every
-  in-repo measurement attempt during 6.1 made a wrong number that was briefly
+  in-repo measurement attempt before 6.4 made a wrong number that was briefly
   believed (dead-code elimination reporting `0 ns/op`, loop hoisting of a pure
   call, mean-over-short-batch swallowing a ~125 µs cold start, a contended
-  machine). `tasks.md` 6.1b carries five rules for this; follow them or the number
-  is fiction. The current honest baseline is `decodeFullFastRoot` at
-  **~1,200–1,290 ns/byte, ~0.8–2 MiB/s**, which is `AGENTS.md`'s own
-  "single-digit multiple of C" bar missed by ~2–3 orders of magnitude — the bar is
-  **not** met and must not be claimed.
+  machine). `tasks.md` 6.1b carries five rules; `bench`'s `medianOf`/`timeOne`/
+  `sinkOfList`/interleaved-`memcpy` lane implements all five. **There is no set
+  speed bar** — the owner asked for "as close to C as possible" with no threshold,
+  so 6.4's lane reports and 6.2's prose states the number; neither asserts a pass
+  or fail against a figure nobody chose.
 - **Only `R5.1` may change a declaration _shape_** (design D9), and it must keep
   every theorem's statement, prove the new definition equal to the old, and stay
   `[propext, Quot.sound]`-only / zero-`sorry` / `#eval`-able. Nothing else may.
@@ -237,25 +237,27 @@ in `../lean-basen`. Never "fix" it by editing the importing Lean file.
 - **All codecs are pure Lean.** C is only generic bulk byte movement
   (`memcpy`/`memchr` shapes). **No per-format C, no C that parses digits, numbers,
   fields, or format structure.** That is a hard design rule.
-- **Decode/encode must stay within a small single-digit multiple of C — a
-  requirement, not an aspiration — and it is currently NOT met by orders of
-  magnitude.** Re-measured 2026-11-02: `decodeFullFastRoot`, the best decode path
-  in the tree, runs at **~1,200–1,290 ns/byte (~0.8–2 MiB/s)**, i.e.
-  **3,700×–21,000×** off a same-run `memcpy`. An earlier "~8.5× floor (222 vs
-  1,891 MiB/s)" figure in this file was not reproducible from any bench lane and
-  is **withdrawn**; so is the "20–40×" claim before it. Do not restore either
-  without a lane that prints the number. Lean 4.34.1's C backend boxes
-  `Nat`/`UInt8`/`UInt64` arithmetic; `USize` is an unboxed `size_t` only as an
-  `@[extern]` argument and re-boxes once stored in a `Prod`/`Option`; threading a
-  `USize` cursor made a parser _slower_ — but that is a fact about **boxed
-  scalars**, not a licence for a 47× or 10^5× path. Those come from the **data you
-  hand the next step**: `decodeArray`'s per-step `List` costs 47×, and
-  `decodeFull`'s chained `bdrop` closures cost ~10^5× (`R5.1`). Fast shape:
-  `Array UInt8` + integer cursor + accumulating `Id.run` loop returning
-  `(value, consumed)`. Do not quote an absolute MiB/s target — assert the **ratio**
-  to a same-run `memcpy` (§6.4), and read `tasks.md` 6.1b's measurement rules
-  before timing anything in this repo: naive timing here reliably produces a wrong
-  number (dead-code elimination, loop hoisting, cold-start means).
+- **Speed: get as close to C as possible, with no set threshold — and attribute
+  the gap to named causes, never to "boxed scalars".** The owner has explicitly
+  set **no ratio to hit**; the requirement is to make the per-element loop as fast
+  as it can be and to say honestly where it stands. Measured 2026-11-03 with
+  `bench`'s `benchDecodeShapes` lane (task 6.4), `n` = 8 KiB, load average 4-5 on
+  10 cores, one process: `decodeFullArrayRoot` (packed `Array`+`Nat`) **63 ns/step**,
+  `decodeFullFastRoot` (`Bytes`/`Suffix`) **76**, `decodeArray`'s single step **15-22**,
+  **`packedCands` alone 52**, and an **ideal `Id.run` cursor loop 6 ns/step**
+  (`arr[k]!`, `Nat` cursor, `Array.push`) against a `memcpy` of 0.045 ns/byte. The
+  attribution is the point: the `Array` read is 4 ns, so the memory floor is not
+  the problem; the per-step `List` that `decodeArray` returns costs +16 ns, and
+  **`packedCands`'s `.attach`/`filterMap` rebuild, done on every step, costs +30 ns
+  on top of that** — it is the single largest term in the whole decode and the next
+  thing to remove (6.6). Withdrawn, because no lane ever produced them: the
+  "~1,200–1,290 ns/byte", "~8.5× floor", and "20–40× ceiling" figures that used to
+  sit here. **Do not quote a "× off C" ratio for a per-element codec measured
+  against `memcpy`** — `memcpy` moves a byte; a parser does per-element work, so the
+  comparison is a category error and the honest reference is a hand-written C
+  _parser_, which this repo does not yet measure. Before timing anything here read
+  `tasks.md` 6.1b's MEASUREMENT RULES: naive timing reliably produces a wrong number
+  (dead-code elimination reporting `0 ns/op`, loop hoisting, cold-start means).
 - **The packed cursor is `Nat`, not `USize`.** A `System.Platform.numBits = 64`
   premise would break the `[propext, Quot.sound]`-only gate. `commitRemainder` is
   `USize`-indexed (matching `byteSlice`) so there is no `Nat ↔ USize` roundtrip;
