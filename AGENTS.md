@@ -97,20 +97,18 @@ and it may never point at a path outside the repo (no `/tmp`, no scratch file).
 Three facts about that change are worth stating here **only because a reader who
 skips the ledger would get them wrong**, and all three are also in `tasks.md`:
 
-- **The work order is §6 → §2 → §3/§4 → §5**, and **6.1a is a hard gate** on the
-  rest of §6. §6 goes first because §3/§4 rewrite the paragraphs that quote the
-  numbers §6 fixes. If `tasks.md` disagrees with this line, `tasks.md` wins.
-- **The next step is 6.1a: finish `Codec.decodeFullFastRoot_eq`.** Two
-  `sorry`s remain in `Codec/Decode.lean` — `decodeFullFastRoot_eq` (the gate) and
-  `decodeFullFast_pairwise` (now _optional_, its docstring says why) — so
-  `lake build` fails there **by design**. The cursor re-rooting lemma it was
-  blocked on is **proved**; what is open is one step hypothesis at an advanced
-  cursor with a non-empty accumulator, and the obligation's own comment in the
-  source names the confirmed induction measure. **Read
-  `openspec/changes/codec-review-remediation/tasks.md` 6.1a before touching it** —
-  it is the single record of what is closed, the landed lemmas, the traps, and the
-  refuted routes. Do not restate any of that here. Prove this before anything else
-  in §6.
+- **The work order is §6 → §2 → §3/§4 → §5.** §6 goes first because §3/§4 rewrite
+  the paragraphs that quote the numbers §6 fixes. If `tasks.md` disagrees with
+  this line, `tasks.md` wins.
+- **6.1a — the gate — is CLOSED.** `Codec.decodeFullFastRoot_eq` is proved, so the
+  fast path is now verified rather than measured, `lake build` is green, and there
+  are **no `sorry`s anywhere in the tree**. Everything else in §6 is unblocked;
+  the open work is in `tasks.md` and nowhere else. The two decisions that closed
+  it (spell the specification side as `bdrop m s`, never the projection; carry
+  both congruences in one cursor-measured induction) are recorded in
+  `tasks.md` 6.1a — read them there before touching `Codec/Decode.lean`, because
+  every naive spelling of the general statement hits the dependent-`Bytes` motive
+  wall.
 - **Only `R5.1` may change a declaration _shape_** (design D9), and it must keep
   every theorem's statement, prove the new definition equal to the old, and stay
   `[propext, Quot.sound]`-only / zero-`sorry` / `#eval`-able. Nothing else may.
