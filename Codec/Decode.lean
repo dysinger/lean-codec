@@ -579,4 +579,29 @@ theorem decode_genuine_suffix {α : Type} (d : Codec α) :
   have hg := decode_genuine_suffix_pointwise d s x t hm i
   simpa [Suffix.consumed] using hg.symm
 
+/-- **A decoder step's bytes, re-rooted at the original input.** If `(x, t)` is a
+result suffix of `decode d (Suffix.drop m s).bytes` — the `Suffix.drop` form the
+cursor decoder produces — then reading `t.bytes` is reading `s` at a *flat* offset
+`i.val + m + (n - m - t.remaining)`.
+
+This is `decode_genuine_suffix_pointwise` composed with `bdrop_bdrop`, stated
+**pointwise** so that no `Bytes` length cast appears anywhere: that is what makes
+it usable to connect a re-rooted cursor (`bdrop m s`) to the chained suffix the
+specification's `decode` hands back. It is the missing link for the
+`decodeFullFastRoot = decodeFull` bridge (task 6.1a), where the fast path re-roots
+at `s` and the specification does not. `[propext, Quot.sound]`-only. -/
+theorem step_bytes_pointwise {α : Type} (d : Codec α)
+    {n : Nat} (s : Bytes n) (m : Nat) (x : α) (t : Suffix (Suffix.drop m s).remaining)
+    (hm : (x, t) ∈ decode d (Suffix.drop m s).bytes) (i : Fin t.remaining) :
+    t.bytes i = s ⟨i.val + m + (n - m - t.remaining), by
+      have h : t.remaining ≤ n - m := t.hle; omega⟩ := by
+  have hp := decode_genuine_suffix_pointwise d (bdrop m s) x t hm i
+  rw [hp]
+  simp only [Suffix.drop, bdrop, Suffix.consumed]
+  congr 1
+  apply Fin.ext
+  dsimp
+  have h : t.remaining ≤ n - m := t.hle
+  omega
+
 end Codec
