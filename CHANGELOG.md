@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Codec.ByteSlice.byteSlice_spec`: the `byteSlice` trust seam's Lean law
+  (`byteSlice a i = ByteArray.mk (a.data.extract i.toNat a.data.size)`, `rfl`).
+  `byteSlice` was the one Layer-2 seam with a body and prose but no theorem fixing
+  it, while `blitBytes`/`findByte` each had a `*_spec` — so the C's contract ("the
+  C matches the Lean body") had no machine-checkable referent for it.
+  `commitRemainder_spec` now derives from it rather than re-deriving the body.
+  Every seam law now states its own axiom footprint, which is **not** uniform:
+  `byteSlice_spec`/`blitBytes_spec`/`commitRemainder_spec` report no axioms,
+  `findByte_spec` reports `[propext]` (its `Array.findIdx?` goes through
+  `DecidableEq UInt8`).
+- `Codec.Sound.unambiguous_byte` / `functional_byte` and
+  `Codec.decodeArray_functional_byte` / `decodeArray_unambiguous_byte`:
+  `Unambiguous`/`Functional` established for a concrete codec, at both the `Rel`
+  and `decodeArray` levels. Both predicates had only ever been _hypotheses_, so a
+  typo in either definition could not surface; the instances are verified
+  load-bearing by mutating `Unambiguous` to quantify over two independent byte
+  strings, which makes the proposition refutable.
+
 - `Codec.Normal`: the information-free-variation layer. `Normal S norm` (the
   quotient of a concrete syntax by an information-free variation, reified as the
   fixed points of a total idempotent `norm`), `Normalizer S norm` (carrying
