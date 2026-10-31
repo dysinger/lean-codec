@@ -1070,6 +1070,69 @@ theorem decodeFull_reroot_cursor {α : Type} (p : Codec α) (h : ConsumesByte p)
       rw [decodeFull_succ p h (k + 1) k (by omega), decodeFull_succ p h (k + 1) k (by omega)]
       rw [reroot_bytes_eq (n := n) (m := m) (r := k + 1) (s := s) hr]
 
+/-- `decodeFullFast`'s recursion equation at a known-**successor** cursor: the
+body is `match _hm : n - m with …`, so the named equation blocks ι-reduction and
+`rw [decodeFullFast.eq_def]` alone leaves a stuck `match`. The `dsimp only` between
+the two rewrites is what removes the `match n, s, m, acc with` wrapper that the
+definition compiles to; without it `rw [hm]` fails to find `n - m` at all (this is
+the step four earlier sessions missed — see `tasks.md` 6.1a). -/
+theorem decodeFullFast_succ {α : Type} (p : Codec α) (h : ConsumesByte p)
+    {n : Nat} (s : Bytes n) (m : Nat) (acc : List α) (j : Nat) (hm : n - m = j + 1) :
+    decodeFullFast p h s m acc =
+      decodeFullFastSearch p h s m acc (decode p (Suffix.drop m s).bytes).attach := by
+  conv => lhs; rw [decodeFullFast.eq_def]
+  dsimp only
+  rw [hm]
+
+/-- `decodeFullFast`'s recursion equation at a known-**zero** cursor. -/
+theorem decodeFullFast_zero {α : Type} (p : Codec α) (h : ConsumesByte p)
+    {n : Nat} (s : Bytes n) (m : Nat) (acc : List α) (hm : n - m = 0) :
+    decodeFullFast p h s m acc = some acc.reverse := by
+  conv => lhs; rw [decodeFullFast.eq_def]
+  dsimp only
+  rw [hm]
+
+/-- **The root bridge**: the fast decoder from cursor `0` with an empty
+accumulator equals the specification.
+
+This is the statement the library needs. Proof: strong induction on `n`; at
+`n = k + 1` unfold the fast side with `decodeFullFast_succ` (cursor `0`, so the
+remaining length is `n`), step the specification with `decodeFull_succ`, and compare
+the two `decodeFullStep` calls — the search congruence `decodeFullFastSearch_eq`
+turns the fast side into exactly `decodeFullStep` at `s`, with the head's recursion
+supplied by the induction hypothesis at its strictly shorter suffix. -/
+theorem decodeFullFastRoot_eq {α : Type} (p : Codec α) (h : ConsumesByte p) :
+    ∀ (n : Nat) (s : Bytes n),
+      decodeFullFastRoot p h s = decodeFull p h n s := by
+  intro n
+  induction n using Nat.strongRecOn with
+  | ind n ih =>
+    intro s
+    unfold decodeFullFastRoot
+    cases n with
+    | zero =>
+      rw [decodeFullFast_zero p h (s := s) (m := 0) (acc := []) (by omega), decodeFull_zero]
+      rfl
+    | succ k =>
+      rw [decodeFullFast_succ p h (s := s) (m := 0) (acc := []) k (by omega)]
+      rw [decodeFull_succ p h (k + 1) k rfl s]
+      sorry
+
+/-- `Suffix.drop 0 s` is `s` itself: dropping nothing leaves the whole buffer, and
+`bdrop 0 s` is `s` pointwise. Used to align the root bridge's `Suffix.drop 0 s`
+with the specification's own `s`. -/
+theorem Suffix.drop_zero {n : Nat} (s : Bytes n) : Suffix.drop 0 s = Suffix.id n s := by
+  refine Suffix.ext (t₁ := Suffix.drop 0 s) (t₂ := Suffix.id n s) ?_ ?_
+  · dsimp only [Suffix.drop, Suffix.id]; omega
+  · show cast _ (bdrop 0 s) = s
+    apply Bytes.ext
+    intro i
+    rw [cast_bytes_val']
+    case e => omega
+    simp only [bdrop]
+    congr 1
+    exact Fin.ext (by simp)
+
 /-- **The two congruences** of the fast decoder (task 6.1a): the cursor is
 irrelevant to `decodeFullFast`, and the search is invariant under re-rooting the
 candidate list. Both are consumed by the root bridge below. -/
@@ -1096,21 +1159,6 @@ theorem decodeFullFast_pairwise {α : Type} (p : Codec α) (h : ConsumesByte p) 
   -- `rw [decodeFullFast.eq_def]` does not discharge the named `match` (`_hm`) —
   -- use the recorded recipe: `obtain` the equation, then `split` (tags `h_1`/`h_2`),
   -- or `cases` the subtraction; see `tasks.md` 6.1a's trap list.
-  sorry
-
-/-- The bridge at the root: the fast decoder from cursor `0` with an empty
-accumulator equals the specification. This is the statement the library needs
-(`decodeFullFastRoot = decodeFull`); the auxiliary lemmas above
-(`decodeFullFastSearch_eq`, `decodeFullStep_none_of_forall_none`,
-`reverse_cons_append`) are what make the search correspond to `decodeFullStep`.
-
-Proved by strong induction on `n`. The step splits on `decode p s`: no candidates
-means both sides are `none`, and a candidate head means the search and
-`decodeFullStep` both walk it — with the head's recursion supplied by the
-induction hypothesis at its (strictly shorter) suffix. -/
-theorem decodeFullFastRoot_eq {α : Type} (p : Codec α) (h : ConsumesByte p) :
-    ∀ (n : Nat) (s : Bytes n),
-      decodeFullFastRoot p h s = decodeFull p h n s := by
   sorry
 
 end Codec
