@@ -615,6 +615,33 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
       requirement ("the fast path is proved equal to the spec, not merely
       measured") is kept; it is the *candidate implementation* that was wrong.
 
+      **RE-DERIVED, per the owner's decision (2026-11-01): route rewritten, proof
+      still open.** `decodeFullFast`/`decodeFullFastSearch` now **search** (the
+      flat cursor is kept, the head-commit is gone), and both terminate — the
+      mutual block's measure is `Prod.Lex` on
+      `((Suffix.drop m s).remaining, cands.length)`, with the fast→search edge
+      going `right` (same length, `decode len+1 > decode len`) and the
+      search→fast edge going `left` (`ConsumesByte` gives the strict decrease).
+
+      **Landed and proved:** `decodeFullFastSearch_eq` — the search corresponds
+      to `decodeFullStep` exactly, by induction on the candidate list, using
+      `decodeFullStep_cons`, `reverse_cons_append`, and the step hypothesis for
+      each candidate. This is the substantive half of the bridge.
+
+      **Still open:** the top-level bridge `decodeFullFastRoot = decodeFull`
+      (`Codec/Decode.lean` has one `sorry`). The obstacle is *index alignment*, not
+      mathematics: the fast decoder's recursive call is at cursor
+      `m + ((n - m) - t.remaining)` over the **root** `s`, while the specification
+      lives over `t.bytes`; the two are related by `drop_trans_eq`'s pointwise
+      form, and `Suffix.drop (0 + ((n - 0) - t.remaining)) s`'s `.bytes` is not
+      definitionally `t.bytes`, so every attempt to `rw` the index hits the
+      recorded dependent-`Bytes` motive failure. The clean next step is a
+      **cursor re-rooting lemma** (`decodeFullFast p h s m acc =
+      decodeFullFast p h (Suffix.drop m s).bytes 0 acc`, by the same `Prod.Lex`
+      induction) so the bridge can induct on the suffix alone and the index
+      never has to be rewritten. That lemma is stated in `tasks.md`'s next-session
+      note, not yet in the tree.
+
 - [ ] 6.1b **Move the fast decode onto an `Array UInt8` + `Nat` cursor**
       (≈**6.5×**: 9 → 59 MiB/s measured). `decodeFullFastRoot` avoids the closure
       _chain_ but still calls `decode p (Suffix.drop m s).bytes` every step,
