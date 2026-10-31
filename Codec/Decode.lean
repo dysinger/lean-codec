@@ -1015,6 +1015,44 @@ theorem decode_congr_bdrop {α : Type} (d : Codec α) {n : Nat} (s : Bytes n)
         List (α × Suffix (n - a - (b - a)))) := by
   rw [bdrop_seg s hab]
 
+theorem reroot_bytes_eq {n m r : Nat} (s : Bytes n) (hr : r ≤ n - m) :
+    cast (congrArg Bytes (remaining_at_cursor (n := n) (m := m) (r := r) hr))
+        (bdrop (m + (n - m - r)) s)
+      = cast (congrArg Bytes (remaining_at_reroot (n := n) (m := m) (r := r) hr))
+          (bdrop (0 + (n - m - r)) (bdrop m s)) := by
+  funext i
+  rw [cast_bytes_val', cast_bytes_val_symm]
+  case e => exact (remaining_at_reroot (n := n) (m := m) (r := r) hr).symm
+  case e => exact remaining_at_cursor (n := n) (m := m) (r := r) hr
+  simp only [bdrop]
+  apply congrArg s
+  apply Fin.ext
+  simp only
+  have h : r ≤ n - m := hr
+  omega
+
+theorem decodeFull_reroot_cursor {α : Type} (p : Codec α) (h : ConsumesByte p) :
+    ∀ (r : Nat) (n m : Nat) (s : Bytes n) (hr : r ≤ n - m),
+      decodeFull p h r (cast (congrArg Bytes (remaining_at_cursor (n := n) (m := m) (r := r) hr))
+          (bdrop (m + (n - m - r)) s))
+        = decodeFull p h r (cast (congrArg Bytes (remaining_at_reroot (n := n) (m := m) (r := r) hr))
+            (bdrop (0 + (n - m - r)) (bdrop m s))) := by
+  intro r
+  induction r using Nat.strongRecOn with
+  | ind r ih =>
+    intro n m s hr
+    cases r with
+    | zero =>
+      -- both sides are `decodeFull … 0`, so both are `some []`
+      rw [decodeFull_zero, decodeFull_zero]
+    | succ k =>
+      rw [decodeFull_succ p h (k + 1) k (by omega), decodeFull_succ p h (k + 1) k (by omega)]
+      rw [reroot_bytes_eq (n := n) (m := m) (r := k + 1) (s := s) hr]
+
+/-- **The two cursors are the same input.** `bdrop (m + (n - m - r)) s` and
+`bdrop (0 + (n - m - r)) (bdrop m s)` are the same bytes, at the same length `r`.
+Stated as an equality of `Bytes r` values (both cast to `r`), which is what lets
+`decodeFullStep` be compared at the two roots. -/
 theorem decodeFullFast_pairwise {α : Type} (p : Codec α) (h : ConsumesByte p) :
     (∀ (n : Nat) (s : Bytes n) (m : Nat) (acc : List α),
         decodeFullFast p h s m acc = decodeFullFast p h (Suffix.drop m s).bytes 0 acc) ∧
