@@ -139,7 +139,7 @@ true`, `fail_if_success exact ⟨_, rfl⟩` **succeeds as a failure** (i.e. the
       `Codec/ByteSlice.lean` (above `blitBytes_spec`, so the seam laws sit
       together), `rfl`-proved, `lake build` green. (a) `commitRemainder_spec`
       (`Codec/Packed.lean`) now goes through it — `rw [commitRemainder,
-  byteSlice_spec]`, then `rfl` closes the `ByteArray.mk` eta — instead of
+byteSlice_spec]`, then `rfl` closes the `ByteArray.mk` eta — instead of
       re-deriving the body, and its docstring names the law it rests on. (b) The
       bench's `benchByteSlice` and `benchCommitRemainder` each now carry
       `let _seamLaw : … = spec := byteSlice_spec …` / `commitRemainder_spec …`,
@@ -196,13 +196,24 @@ true`, `fail_if_success exact ⟨_, rfl⟩` **succeeds as a failure** (i.e. the
       recorded here rather than silently dropped — it is a lane-label defect, not
       a seam defect, and does not gate this task.
 
-- [ ] 2.3 **State `findByte`'s arithmetic side condition** (R2.3).
+- [x] 2.3 **State `findByte`'s arithmetic side condition** (R2.3).
       The Lean body returns `some (off + i.toUSize)` (`USize` addition, i.e.
       mod 2^64); the C returns the absolute index as a raw `size_t`. These agree
       only under `off.toNat + i < USize.size`, which no theorem states. Add the
       condition to `findByte_spec`'s docstring and note the C relies on it — or
       spell the equivalence out. Do not leave "matches on every input" stronger
       than the Lean body's own arithmetic warrants.
+      **Done — stated rather than proved, and the reason is recorded.** The
+      condition is on `Codec.findByte`'s own docstring (where the body lives, so
+      it is read before the C is) and mirrored in the C's contract comment. The
+      load-bearing part is _why it cannot be a theorem here_: discharging it needs
+      `System.Platform.numBits = 64`, and a `USize`-width premise would leave the
+      `[propext, Quot.sound]`-only gate (the `AGENTS.md` rail). The honest bound
+      that also holds without the premise is written down — `i < a.data.size` and
+      `off ≤ a.data.size` give `off.toNat + i < 2 * a.data.size`, and no
+      `ByteArray` holds `2^63` bytes — so the seam agrees on every input Lean can
+      build, which is a weaker claim than "on every input the type admits" and is
+      stated as the weaker one. `lake build` and `lake build bench` green.
 
 - [ ] 2.4 **Reconcile the surface and transport descriptions** (R2.4, design D8).
       `Packed.lean`'s header says the memcpy "is deferred to a
