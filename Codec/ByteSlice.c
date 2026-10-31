@@ -32,7 +32,9 @@ LEAN_EXPORT lean_obj_res codec_byteSlice(lean_obj_arg a, size_t i) {
 // `Codec.blitBytes (dst : ByteArray) (dstOff : USize) (src : ByteArray)
 // (srcOff : USize) (len : USize) : ByteArray`.
 //
-// Contract — identical to the Lean body (`ByteSlice.lean`), clause by clause.
+// Contract — equal to the Lean body (`ByteSlice.lean`) **value-for-value**, not
+// term-for-term.
+//
 // The Lean body computes, in `Nat`, with `n := dst.data.size`, `slen :=
 // src.data.size`:
 //   dc := min dstOff.toNat n            (destination cursor, clamped to [0, n])
@@ -43,18 +45,31 @@ LEAN_EXPORT lean_obj_res codec_byteSlice(lean_obj_arg a, size_t i) {
 // `lc` is the single shared copied-length: the window replacement must agree on
 // `lc` across the middle and the trailing part.
 //
-// The code below reproduces exactly those three clamps:
-//   dc   = `dstOff > n  ? n     : dstOff`         (mirrors `min dstOff n`)
-//   copyLen = clamped first by `n - dc` (dst side), then by `slen - sc` (src side)
-//   sc   = `srcOff > slen ? slen : srcOff`        (mirrors `min srcOff slen`)
-//   copyLen = `min(len, n-dc, slen-sc)`            (= the body's `lc`)
-// and materializes `n` bytes = full `dst` with `[dc, dc+copyLen)` overwritten by
-// `src[sc, sc+copyLen)` (a single `memcpy` of the untouched prefix/suffix back to
-// back plus one window `memcpy`).
+// The code below does **not** write that expression out. It clamps in a
+// *different order* — destination cursor, then dest-side length, then source
+// cursor, then source-side length:
+//   dstOff := min dstOff n ; copyLen := min len (n - dstOff)
+//   srcOff := min srcOff slen ; copyLen := min copyLen (slen - srcOff)
+// and the two agree because `min` is associative and commutative: the body's
+// `min len (min (n - dc) (slen - sc))` and the C's `min (min len (n - dc))
+// (slen - sc)` are the same `Nat`. Worth stating because the clamps are *not*
+// textually the same, and a reader comparing line by line would "fix" a
+// mismatch that is not one. Verified exhaustively (`n, slen < 6`, offsets and
+// `len < 9`) rather than by eye.
+//
+// **Allocation-length invariant (implicit above, stated here).** `copyLen` is
+// clamped to `n - dstOff` *before* it is clamped to `slen - srcOff`, and
+// `dstOff ≤ n`, so `dstOff + copyLen ≤ n` always holds. The buffer is therefore
+// allocated and returned at the full `n` — total length `n`, never
+// `dstOff + copyLen` — and the trailing `memcpy` of the source window can never
+// write past it. That invariant is what makes the trailing part of the body's
+// `dst[dc+lc, n)` well defined in the C as "the rest of the `n` bytes".
 //
 // TRUSTED, NOT PROVEN (Layer 2, excluded from the `#print axioms` gate); must
-// match the Lean body byte-for-byte on every input, including every out-of-range
-// clamp above (empty source, `off` at/past either end, `len` past the end).
+// match the Lean body value-for-value on every input, including every
+// out-of-range clamp above (empty source, `off` at/past either end, `len` past the
+// end). Agreement is by `min`'s associativity and commutativity — see above — not
+// by the code being a transcription of the body.
 LEAN_EXPORT lean_obj_res codec_blitBytes(lean_obj_arg dst, size_t dstOff,
                                           lean_obj_arg src, size_t srcOff,
                                           size_t len) {
