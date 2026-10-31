@@ -1160,9 +1160,13 @@ theorem decodeFullFastRoot_eq {α : Type} (p : Codec α) (h : ConsumesByte p) :
       -- by well-founded induction on the *cursor measure*
       -- `((Suffix.drop m s).remaining, cands.length)` — the same `Prod.Lex` measure
       -- `decodeFullFast` itself uses — and get the root bridge as its `m = 0` case.
-      -- The `n - m = 0` case is closed in `/tmp` (uncommitted) as
-      -- `decodeFullFast_zero` + `decodeFull_at_zero` + `List.append_nil`, so only the
+      -- Its `n - m = 0` case reduces with the three declarations already in this file
+      -- (`decodeFullFast_zero`, `decodeFull_at_zero`, `List.append_nil`), so only the
       -- successor case's step hypothesis is genuinely open.
+      --
+      -- The full record — what is closed, what is refuted, and the measure — is
+      -- `openspec/changes/codec-review-remediation/tasks.md` 6.1a. Do not grow a
+      -- parallel task list here.
       sorry
 
 /-- **The two congruences** of the fast decoder (task 6.1a).
