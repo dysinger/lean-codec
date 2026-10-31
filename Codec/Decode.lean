@@ -1092,6 +1092,20 @@ theorem decodeFullFast_zero {α : Type} (p : Codec α) (h : ConsumesByte p)
   dsimp only
   rw [hm]
 
+/-- `Suffix.drop 0 s` is `s` itself: dropping nothing leaves the whole buffer, and
+`bdrop 0 s` is `s` pointwise. Used to align the root bridge's `Suffix.drop 0 s`
+with the specification's own `s`. -/
+theorem Suffix.drop_zero {n : Nat} (s : Bytes n) : Suffix.drop 0 s = Suffix.id n s := by
+  refine Suffix.ext (t₁ := Suffix.drop 0 s) (t₂ := Suffix.id n s) ?_ ?_
+  · dsimp only [Suffix.drop, Suffix.id]; omega
+  · show cast _ (bdrop 0 s) = s
+    apply Bytes.ext
+    intro i
+    rw [cast_bytes_val']
+    case e => omega
+    simp only [bdrop]
+    exact congrArg s (Fin.ext (by simp))
+
 /-- **The root bridge**: the fast decoder from cursor `0` with an empty
 accumulator equals the specification.
 
@@ -1116,26 +1130,53 @@ theorem decodeFullFastRoot_eq {α : Type} (p : Codec α) (h : ConsumesByte p) :
     | succ k =>
       rw [decodeFullFast_succ p h (s := s) (m := 0) (acc := []) k (by omega)]
       rw [decodeFull_succ p h (k + 1) k rfl s]
+      -- **OPEN.** The goal is now
+      -- `decodeFullFastSearch p h s 0 [] (decode p (Suffix.drop 0 s).bytes).attach
+      --    = decodeFullStep p h s (fun m s' _ => decodeFull p h m s') (decode p s).attach`,
+      -- and `decodeFullFastSearch_eq` applies to it directly (its own cands
+      -- argument is spelled `Suffix.drop m s`, and `m = 0` is the goal's spelling).
+      -- What remains, once applied, is its **step hypothesis**: for each candidate
+      -- `(x, t)`,
+      --
+      --     decodeFullFast p h s (m + (n - m - t.remaining)) (x :: acc) = …
+      --
+      -- i.e. the *same statement at an advanced cursor* with a **non-empty
+      -- accumulator**. Two attempts this session are recorded as refuted:
+      --
+      -- * `decodeFull_reroot_cursor` does **not** apply — it is stated for
+      --   `decodeFull`, not `decodeFullFast`, so it cannot relate the fast side at
+      --   the advanced cursor to `decodeFullFastRoot t.bytes`.
+      -- * `Nat.strongRecOn` on `n` does **not** reach it — the step hypothesis is at
+      --   the *same* `n` and the *same* `s`, so the induction hypothesis is not in
+      --   scope. This is precisely why 6.1a's ledger records that the statement
+      --   must be **pairwise / cursor-measured**, not `n`-measured.
+      --
+      -- **The confirmed next shape:** prove the general statement
+      --
+      --     decodeFullFast p h s m acc
+      --       = (decodeFull p h (Suffix.drop m s).remaining (Suffix.drop m s).bytes).map
+      --           (fun tail => acc.reverse ++ tail)
+      --
+      -- by well-founded induction on the *cursor measure*
+      -- `((Suffix.drop m s).remaining, cands.length)` — the same `Prod.Lex` measure
+      -- `decodeFullFast` itself uses — and get the root bridge as its `m = 0` case.
+      -- The `n - m = 0` case is closed in `/tmp` (uncommitted) as
+      -- `decodeFullFast_zero` + `decodeFull_at_zero` + `List.append_nil`, so only the
+      -- successor case's step hypothesis is genuinely open.
       sorry
 
-/-- `Suffix.drop 0 s` is `s` itself: dropping nothing leaves the whole buffer, and
-`bdrop 0 s` is `s` pointwise. Used to align the root bridge's `Suffix.drop 0 s`
-with the specification's own `s`. -/
-theorem Suffix.drop_zero {n : Nat} (s : Bytes n) : Suffix.drop 0 s = Suffix.id n s := by
-  refine Suffix.ext (t₁ := Suffix.drop 0 s) (t₂ := Suffix.id n s) ?_ ?_
-  · dsimp only [Suffix.drop, Suffix.id]; omega
-  · show cast _ (bdrop 0 s) = s
-    apply Bytes.ext
-    intro i
-    rw [cast_bytes_val']
-    case e => omega
-    simp only [bdrop]
-    congr 1
-    exact Fin.ext (by simp)
+/-- **The two congruences** of the fast decoder (task 6.1a).
 
-/-- **The two congruences** of the fast decoder (task 6.1a): the cursor is
-irrelevant to `decodeFullFast`, and the search is invariant under re-rooting the
-candidate list. Both are consumed by the root bridge below. -/
+> **Status: retained as documentation of the abandoned route.** The re-rooting
+> lemma it was written to serve is now **proved** (`decodeFull_reroot_cursor`),
+> and it did **not** need this pairwise statement at all — after `decodeFull_succ`,
+> both sides carry the *same* `fun m s' _ => decodeFull p h m s'`, so the step is
+> a `Bytes` equality (`reroot_bytes_eq`), not a congruence over the recursor's
+> `ih`. The open work in 6.1a is now `decodeFullFastRoot_eq`'s step hypothesis
+> (see its own comment), whose measure is the *fast decoder's*, not this pair's.
+> Do not spend time finishing this declaration before that one.
+
+-/
 theorem decodeFullFast_pairwise {α : Type} (p : Codec α) (h : ConsumesByte p) :
     (∀ (n : Nat) (s : Bytes n) (m : Nat) (acc : List α),
         decodeFullFast p h s m acc = decodeFullFast p h (Suffix.drop m s).bytes 0 acc) ∧
