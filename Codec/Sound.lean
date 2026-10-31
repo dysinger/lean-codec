@@ -688,6 +688,44 @@ theorem encode_ne_none {α : Type} (d : Codec α) (x : α) {n : Nat} (s : Bytes 
       subst h
       simp [hp]
 
+/-- `Unambiguous` is **satisfiable**, not decorative: `byte` relates every value to
+exactly one byte string (`Rel_byte`). This is a base instance the definition needs
+(a typo in it — quantifying over the wrong `s`, say — would otherwise go unnoticed,
+because nothing in-tree established it for any `d`). Axiom-free. -/
+theorem unambiguous_byte : Unambiguous Codec.byte := by
+  intro x y n s hx hy
+  rw [Rel_byte] at hx hy
+  obtain ⟨hx1, hx2⟩ := hx
+  obtain ⟨hy1, hy2⟩ := hy
+  subst hx1
+  have hp := congrFun hx2 ⟨0, by omega⟩
+  have hq := congrFun hy2 ⟨0, by omega⟩
+  simp only [single] at hp hq
+  rw [hp] at hq
+  exact hq
+
+/-- `Functional` is satisfiable for the same reason: one byte value determines one
+byte string, hence one `(length, bytes)` sigma. The companion of
+`unambiguous_byte`. Axiom-free. -/
+theorem functional_byte : Functional Codec.byte := by
+  intro x n₁ n₂ s₁ s₂ h₁ h₂
+  rw [Rel_byte] at h₁ h₂
+  obtain ⟨h11, h12⟩ := h₁
+  obtain ⟨h21, h22⟩ := h₂
+  subst h11
+  subst h21
+  have hss : s₁ = s₂ := by
+    have hp := congrFun h12 ⟨0, by omega⟩
+    have hq := congrFun h22 ⟨0, by omega⟩
+    simp only [single] at hp hq
+    funext i
+    have hi : i = ⟨0, by omega⟩ := by
+      apply Fin.ext
+      have := i.isLt
+      omega
+    rw [hi, hp, hq]
+  rw [hss]
+
 theorem encode_of_decode {α : Type} (d : Codec α) (hd : Functional d) (x : α)
     {n : Nat} {s : Bytes n} (hdcd : (x, Suffix.empty n) ∈ decode d s) : encode d x = some ⟨n, s⟩ := by
   have hne : encode d x ≠ none := encode_ne_none d x s ((bidir d x n s).2 hdcd)
