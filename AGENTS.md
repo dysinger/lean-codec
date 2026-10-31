@@ -93,16 +93,13 @@ skips the ledger would get them wrong**, and all three are also in `tasks.md`:
 - **The work order is §6 → §2 → §3/§4 → §5**, and **6.1a is a hard gate** on the
   rest of §6. §6 goes first because §3/§4 rewrite the paragraphs that quote the
   numbers §6 fixes. If `tasks.md` disagrees with this line, `tasks.md` wins.
-- **The next step is 6.1a: prove `Codec.decodeFullFast_pairwise`.** Currently
-  `sorry`-marked, so `lake build` fails there and at `decodeFullFastRoot_eq`
-  (deliberate; `Codec/Decode.lean` is the file). **Read
-  `openspec/changes/codec-review-remediation/tasks.md` 6.1a before touching it** —
-  it is the single record of what is closed, the landing lemmas, the traps, and
-  the refuted diagnoses. Two of those refutations matter most: the claimed
-  "`Prod.Lex` ranking" obstacle is **false** (the recursor's `motive1`/`motive2`
-  pair supplies what the fast case needs), and the real blocker is `Membership`
-  instance selection on the re-rooted candidate list. Do not restate any of that
-  here; the ledger owns it. Prove this before anything else in §6.
+- **The next step is 6.1a: finish `Codec.decodeFullFast_pairwise`.** Two
+  `sorry`s remain in `Codec/Decode.lean` — `decodeFullFast_pairwise` (the gate,
+  ~line 995) and `decodeFullFastRoot_eq` (which blocks on it) — so `lake build`
+  fails there **by design**. **Read `openspec/changes/codec-review-remediation/tasks.md`
+  6.1a before touching it**; it is the single record of what is closed, the four
+  landed lemmas, the traps, and the refuted diagnoses. Do not restate any of that
+  here — the ledger owns it. Prove this before anything else in §6.
 - **Only `R5.1` may change a declaration _shape_** (design D9), and it must keep
   every theorem's statement, prove the new definition equal to the old, and stay
   `[propext, Quot.sound]`-only / zero-`sorry` / `#eval`-able. Nothing else may.
