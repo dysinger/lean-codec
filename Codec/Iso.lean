@@ -196,7 +196,14 @@ def unit {α : Type u} : Iso α (α × Unit) where
 
 /-! ## Structural isomorphisms: predicates and singletons -/
 
-/-- `element x` is the partial iso between `Unit` and the singleton `{x}`. -/
+/-- `element x` is the partial iso between `Unit` and the singleton `{x}`.
+
+**Public API, no in-tree caller.** Nothing in this repository builds one — the
+base leaves a downstream author writes are `Codec.byte`/`Codec.satisfy` — but it is
+kept rather than deleted because `README.md`'s `[D8]` cites exactly this function
+and `Iso.subset` as the two places where the paper's free-form `Eq`/`Bool` checks
+became `[DecidableEq α]`/`[DecidablePred p]`. Deleting it would leave that entry
+citing nothing. -/
 def element {α : Type u} [DecidableEq α] (x : α) : Iso Unit α where
   apply _ := some x
   unapply b := if b = x then some () else none
@@ -215,7 +222,10 @@ def element {α : Type u} [DecidableEq α] (x : α) : Iso Unit α where
         rfl
       · simp [hbx] at h
 
-/-- `subset p` is the identity iso restricted to elements satisfying `p`. -/
+/-- `subset p` is the identity iso restricted to elements satisfying `p`.
+
+**Public API, no in-tree caller** — see `Iso.element`, which carries the same note
+and the same reason (`[D8]`'s decidable-witness argument is about these two). -/
 def subset {α : Type u} {p : α → Prop} [DecidablePred p] : Iso α α where
   apply x := if p x then some x else none
   unapply x := if p x then some x else none
