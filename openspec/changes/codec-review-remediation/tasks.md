@@ -486,27 +486,31 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
 >    does not stabilise wall-clock; every ratio here must come from an interleaved
 >    same-run reference, and even then is only trustworthy on an idle box.
 >
-> The measurement that survives all three: **isolated, varying-input, median-of-15,
-> same process, `n = 1024`** — `memcpy` 41 ns (23.8 GiB/s), `decodeFullFastRoot`
-> **1,563,708 ns (0.6 MiB/s), 1,527 ns/byte, ratio ~38,000x**. Median rather than
-> best-of-N, because with a coarse clock and a contended machine a best-of picks
-> up zero-length spans.
+> **RE-TAKEN on an idle machine (2026-11-02), and this is the number to quote.**
+> Method: one fresh timed call per sample (never a loop the optimiser can hoist),
+> median of 15-25 samples, `memcpy` = `copySlice` at the same `n` in the same
+> process. Load average 1.6-2.3 on 10 cores throughout (residual desktop work),
+> which is why the two runs below disagree by 2.6x:
 >
-> **This is the real finding, and it is worse than the finding this change
-> started from.** `decodeFullFastRoot` was supposed to be the _fast_ path — it is
-> ~87x faster than `decodeFull` (that comparison is same-run and robust), but
-> `decodeFull` is so slow that being 87x faster still leaves both of them at
-> sub-MiB/s. The `bdrop` closure chain is gone; what remains is one
-> `Suffix`/`bdrop` allocation per byte plus a `decode p (Suffix.drop m s)` call
-> per byte, and that is what 6.1b exists to remove. The measured per-byte cost of
-> `decode` at a cursor (`decode byte (bdrop i s)`, 635 ns/byte on an earlier,
-> equally contended run) is the same order as this, which corroborates it.
+> | run | `n`  | fast         | ns/byte | `memcpy` | ratio      |
+> | --- | ---- | ------------ | ------- | -------- | ---------- |
+> | A   | 1024 | 490,000 ns   | **478** | 125 ns   | **3,920x** |
+> | B   | 256  | 307,875 ns   | 1,202   | 83 ns    | 3,709x     |
+> | B   | 512  | 622,917 ns   | 1,216   | 83 ns    | 7,505x     |
+> | B   | 1024 | 1,289,208 ns | 1,258   | 125 ns   | 10,313x    |
+> | B   | 2048 | 2,644,333 ns | 1,291   | 125 ns   | 21,154x    |
 >
-> **Consequence for 6.4:** the `≤ 20×` bar is not merely unmet, it is unmet by
-> ~3 orders of magnitude on the only path that claims to be fast. No threshold can
-> be chosen here, and **no number in this block may reach `README.md`.** 6.1b is
-> not an optimization to be scheduled after the docs work — it is the difference
-> between the claim being off by 20x and off by 38,000x.
+> `ns/byte` is **flat in `n`** in both runs, so this is real per-byte work and not
+> a fixed overhead or a measurement artifact. Honest summary: **~0.8-2 MiB/s, i.e.
+> ~4,000-21,000x off `memcpy`**, the spread coming from the machine rather than the
+> code. The earlier 1,568 µs / 1,527 ns/byte reading was inflated ~3x by
+> contention and is superseded.
+>
+> **Consequence for 6.4:** the `≤ 20×` bar is unmet by roughly **two to three
+> orders of magnitude** on the only path that claims to be fast. No threshold can
+> be chosen until 6.1b lands, and **no number in this block may reach
+> `README.md`.** 6.1b is not an optimization to schedule after the docs work — it
+> is the difference between the claim being off by 20x and off by ~10,000x.
 >
 > What this does **not** change: `decodeFullFastRoot = decodeFull` is proved
 > (`[propext, Quot.sound]`-only), so the fast path's _correctness_ rests on the
