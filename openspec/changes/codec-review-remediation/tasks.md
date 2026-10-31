@@ -458,31 +458,60 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
 > (`encodeArray`, `decodeArray`, the cursor floor) and the public API does not use
 > them. Most of §6 is wiring plus proof, not invention.
 >
-> **CORRECTION (2026-11-02): the `decodeFullFastRoot` row above was not
-> reproducible, and the numbers have now drifted.** That lane did not exist in
-> `Bench.lean` at all — no bench ever timed this function, so every ratio quoted
-> for it (237× here, 9,047× in 6.1a) came from an ad-hoc probe under conditions
-> nothing in the repo reproduces. `Bench.lean` now has `benchDecodeFullFast`,
-> which value-checks, asserts `decodeFullFastRoot = decodeFull` at run time (the
-> proved bridge, so a mismatch means the binary disagrees with the theorem), and
-> prints the same-run `memcpy` ratio. First figures from that lane, `m = n = 1024`:
+> **CORRECTION (2026-11-02): the `decodeFullFastRoot` row above had no bench lane
+> behind it, and every absolute figure for it was taken badly. The real rate is
+> ~1.5 µs/BYTE, i.e. ~38,000x off `memcpy` — not 237x, not 1,328x.**
 >
-> | path                           | ns/op     | MiB/s   | vs same-run `memcpy` |
-> | ------------------------------ | --------- | ------- | -------------------- |
-> | `decodeFull` (spec)            | 5,802,652 | 0.17    | ~116,000×            |
-> | `decodeFullFastRoot`           | 66,435    | **14**  | **1,328×**           |
-> | `memcpy` (`copySlice`, 1024 B) | 50        | 20,000+ | 1×                   |
+> The lane did not exist in `Bench.lean` at all, so 237x (here) and 9,047x (6.1a)
+> came from ad-hoc probes under conditions nothing in the repo reproduces.
+> `benchDecodeFullFast` now exists and asserts the value, the proved bridge, and
+> the same-run `memcpy` ratio. **But three separate measurement errors were made
+> while getting there, and each one produced a wrong number that was briefly
+> believed.** They are recorded because the next reader will hit them:
 >
-> So the fast path is **~87× faster than the specification, not 9,047×**, and sits
-> at **~1,328× off `memcpy`**, not 237×. Both the absolute rate and the ratio move
-> with `m` (at `m = 2048` the ratio reads 1,791×) because the lane reuses the
-> quadratic `m` size — **the ratio is only meaningful at the linear size**, which
-> is what 6.4's lane must use. Do not quote any of these as "the" ceiling; 6.4
-> sets the threshold from post-6.1b/6.3 numbers.
+> 1. **Dead-code elimination.** Timing `(...).isSome`, or folding to a sum/length,
+>    lets the optimiser delete the decode: the lane reported a literal **0 ns/op**,
+>    and one probe an impossible 321 ns for a 1024-byte decode. `bytesOf` is all
+>    `0x01`, so any fold whose value is constant in the data gets folded away. The
+>    sink has to be data-dependent (`a * 31 + b`) _and_ the input has to vary per
+>    iteration, or the pure `decodeFullFastRoot p h s` call is hoisted out of the
+>    loop and the timed region collapses.
+> 2. **Mean over a short batch averages in the cold start.** The first `copySlice`
+>    calls in a fresh process cost ~125 µs; steady state is ~100 ns. A 20-rep mean
+>    made `memcpy` look 200x slower than it is — that alone inflated the reported
+>    ratio by two orders of magnitude in one direction, then the elision error
+>    inflated the code's apparent speed by more in the other.
+> 3. **The machine was contended.** Load average 2.5–3.15 on 10 cores from the
+>    owner's own concurrent work. `AGENTS.md` already records that this toolchain
+>    does not stabilise wall-clock; every ratio here must come from an interleaved
+>    same-run reference, and even then is only trustworthy on an idle box.
 >
-> What this does **not** change: `decodeFullFastRoot = decodeFull` is proved, so
-> the fast path's _correctness_ no longer rests on measurement at all. Only its
-> speed was ever undocumented, and now it is measured.
+> The measurement that survives all three: **isolated, varying-input, median-of-15,
+> same process, `n = 1024`** — `memcpy` 41 ns (23.8 GiB/s), `decodeFullFastRoot`
+> **1,563,708 ns (0.6 MiB/s), 1,527 ns/byte, ratio ~38,000x**. Median rather than
+> best-of-N, because with a coarse clock and a contended machine a best-of picks
+> up zero-length spans.
+>
+> **This is the real finding, and it is worse than the finding this change
+> started from.** `decodeFullFastRoot` was supposed to be the _fast_ path — it is
+> ~87x faster than `decodeFull` (that comparison is same-run and robust), but
+> `decodeFull` is so slow that being 87x faster still leaves both of them at
+> sub-MiB/s. The `bdrop` closure chain is gone; what remains is one
+> `Suffix`/`bdrop` allocation per byte plus a `decode p (Suffix.drop m s)` call
+> per byte, and that is what 6.1b exists to remove. The measured per-byte cost of
+> `decode` at a cursor (`decode byte (bdrop i s)`, 635 ns/byte on an earlier,
+> equally contended run) is the same order as this, which corroborates it.
+>
+> **Consequence for 6.4:** the `≤ 20×` bar is not merely unmet, it is unmet by
+> ~3 orders of magnitude on the only path that claims to be fast. No threshold can
+> be chosen here, and **no number in this block may reach `README.md`.** 6.1b is
+> not an optimization to be scheduled after the docs work — it is the difference
+> between the claim being off by 20x and off by 38,000x.
+>
+> What this does **not** change: `decodeFullFastRoot = decodeFull` is proved
+> (`[propext, Quot.sound]`-only), so the fast path's _correctness_ rests on the
+> theorem, not on measurement. Only its speed was ever undocumented, and the speed
+> is now documented and bad.
 
 - [ ] 6.1 **Bridge the fast decode, then move it onto a cursor** (R5.1 —
       CRITICAL). Two halves; **6.1a is a hard gate on 6.1b and on 6.3/6.4.**
