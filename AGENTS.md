@@ -37,7 +37,42 @@ belongs in `openspec/` (the task ledger) and `CHANGELOG.md`. Do not append
 "session status" sections here; that practice is what made this file 536 lines
 of mutually-contradicting snapshots. Keep it short and true.
 
-**Where a session leaves its handoff: the `## Current state
+**Where a session leaves its handoff: the `## Current state` block below, in
+place.** Rewrite that block; do not add to it, and do not create a new
+`HANDOFF.md`/`NOTES.md`/`STATUS.md` per session — a second handoff file is the
+same session-diary failure in a different filename, and it silently rots the
+moment `Current state` disagrees with it. The distinction that keeps this file
+honest: `Current state` states _what is true now and what is next_ (always
+rewritten, never appended), while _how it got there_ and _what was measured_ live
+in the change's `tasks.md` and in `CHANGELOG.md`.
+
+## Where the truth lives
+
+**One source of truth per concern.** When two files disagree, the left column wins:
+
+| Question                                        | Authoritative file                                |
+| ----------------------------------------------- | ------------------------------------------------- |
+| The `Bytes` type's definition                   | `Codec/Codec.lean:68`                             |
+| What is this library, why each design choice    | `README.md` (`[D#]`/`[S#]`), `PAPER.md`           |
+| **Which change to work next**                   | `openspec list --json` + `## Current state` below |
+| What work is open, and how done is done         | `openspec/changes/<name>/tasks.md`                |
+| The evidence behind a finding                   | `openspec/changes/<name>/review.md`               |
+| What a change is _allowed_ to change            | `openspec/changes/<name>/proposal.md`             |
+| The behavioural contract                        | `openspec/specs/**/spec.md`                       |
+| How this environment is set up and how to build | this file                                         |
+
+**Anything else is a summary.** If a summary and an `openspec/` artifact differ,
+the artifact is correct and the summary is stale — fix the summary.
+
+**`Bytes n` means `Fin n → UInt8`** (`Codec/Codec.lean:68`). That line is the
+definition; every other document is a _record_ of it. A `Bytes` spelled without
+its length index, or as `List UInt8`/`Array UInt8`/`ByteArray`, is a **defect**
+in whichever doc contains it (including a changelog entry — a corrected entry can
+drift again; a stated precedence cannot). The removed `List`-carrier's
+`Array.extract`/`toList` transport lemmas are the `Classical.choice` source
+`README.md`'s "Representations" section exists to keep out.
+
+## Current state
 
 **Do not record status here — point at it.** The live answer is one command:
 
@@ -67,8 +102,10 @@ skips the ledger would get them wrong**, and all three are also in `tasks.md`:
   search, and `Prod.Lex` has no reflexive case. Read the lemma's own docstring
   before touching it — it records the two closed cases, the ranking fix that fits
   (state two lemmas at the same key, or re-rank so the search carries the `+1`),
-  and the two traps that cost a session (state both sides' `match`es at the same
-  parameter; `decodeFullFastSearch.eq_def` does not fire until the list is `cases`d).
+  and the three traps that cost sessions (state both sides' `match`es at the same
+  parameter; `decodeFullFastSearch.eq_def` does not fire until the list is
+  `cases`d; state the search congruence over **one** list re-indexed, never two
+  independent ones — the empty case is then unprovable).
   `tasks.md` 6.1a has the refutation history, the landed lemmas, and the two
   refuted diagnoses. Prove this before anything else in §6.
 - **Only `R5.1` may change a declaration _shape_** (design D9), and it must keep
