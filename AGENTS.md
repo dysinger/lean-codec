@@ -91,18 +91,21 @@ Two facts about that change are worth stating here **only because a reader who
 skips the ledger would get them wrong**, and both are also in `tasks.md`:
 
 - **The work order is §6 → §2 → §3/§4 → §5**, and **6.1a is a hard gate** on the
-  rest of §6 (`decodeFullFastRoot = decodeFull` is still verified by _measurement
-  only_). §6 goes first because §3/§4 rewrite the paragraphs that quote the
+  rest of §6. §6 goes first because §3/§4 rewrite the paragraphs that quote the
   numbers §6 fixes. If `tasks.md` disagrees with this line, `tasks.md` wins.
-- **6.1a is mid-flight and the tree is deliberately red.** `lake build` fails at
-  `Codec/Decode.lean:763` (`decodeFullFast_eq_aux` uses `sorry`) — that is the
-  honest marker of the one open obligation, not a broken checkout. The base case
-  and decode-empty case are closed; what remains in the `cons` case is a
-  **`decodeFullStep`-all-fail lemma** (every candidate's recursion fails ⇒
-  `decodeFullStep` is `none`) plus the accumulator reassociation. Read `tasks.md`
-  6.1a before touching it — it records the two refuted diagnoses and the two
-  traps (`drop_trans_eq` pointwise-not-`Bytes`; apply `step_bytes_pointwise`
-  before any `dsimp`) so they are not rediscovered.
+- **6.1a's target theorem is REFUTED, and the tree is deliberately red because of
+  it.** `decodeFullFastRoot = decodeFull` is **false**: the fast decoder commits to
+  the head candidate while `decodeFullStep` backtracks to the next one, and a
+  description whose head consumes a different byte count than a sibling separates
+  them (witness and both outputs in `tasks.md` 6.1a and in
+  `decodeFullFast_eq_aux`'s docstring). `lake build` fails at
+  `Codec/Decode.lean:818` on that one `sorry` — the honest marker. **Do not try to
+  finish it as stated, and do not bridge anything to `decodeFullFastRoot`.** The
+  correct next step is a fast decoder that keeps the flat re-rooted cursor _and_
+  carries `decodeFullStep`'s sibling search, proved equal to `decodeFull` directly
+  (6.1b). Read `tasks.md` 6.1a before touching it — it records the refutation, the
+  two refuted diagnoses, and the two traps (`drop_trans_eq` pointwise-not-`Bytes`;
+  apply `step_bytes_pointwise` before any `dsimp`).
 - **Only `R5.1` may change a declaration _shape_** (design D9), and it must keep
   every theorem's statement, prove the new definition equal to the old, and stay
   `[propext, Quot.sound]`-only / zero-`sorry` / `#eval`-able. Nothing else may.
