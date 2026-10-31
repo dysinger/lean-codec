@@ -795,6 +795,42 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
         wrong `n`); `splice_add` called **without** naming `n` and `m` (its
         implicits bind to the first `Nat.sub` in sight).
 
+      * **SESSION 4 (2026-11-02) — landed in `Codec/Decode.lean`, gate still red at
+        two `sorry`s (by design).** Four lemmas are now **in the library**, each
+        proved (no `sorry`), and the docstring on `decodeFullFast_pairwise` has been
+        rewritten to carry the confirmed shape and drop the refuted ranking story:
+
+        | lemma | statement |
+        | --- | --- |
+        | `remaining_at_cursor` | `r ≤ n - m → n - (m + (n - m - r)) = r` |
+        | `remaining_at_reroot` | `r ≤ n - m → n - m - (0 + (n - m - r)) = r` |
+        | `search_nil_left` | the search over `[]` at a cursor is `none` |
+        | `search_nil_right` | the same at a re-rooted cursor-`0` root |
+
+        **Axiom check is NOT run** — `#print axioms` needs `Codec.Decode.olean`, which
+        the gate refuses to produce while the `sorry` remains. They are `omega`/`rfl`
+        derived, so expected `[propext, Quot.sound]`-only, but **that is unverified
+        until the gate goes green**; run it as the first step after 6.1a closes.
+
+      * **What is left in 6.1a, precisely.** `decodeFullFast_pairwise`'s body is a
+        single `sorry` in `Codec/Decode.lean`, with the recursor's five case arms
+        already sketched as `intro`-lines. Two of them (the `[]` halves) are now
+        discharged by the landed lemmas; the open work is **only** the two
+        `decodeFullFast`-unfolding arms:
+        - `n - m = 0`: both sides must reduce to `some acc.reverse`;
+        - `n - m = j + 1` with an empty candidate list: both sides must reach the
+          search at `[]`.
+        **The blocker is mechanical, not mathematical:** `rw [decodeFullFast.eq_def]`
+        leaves the body as a `match _hm : n - m with …` and neither `rfl` nor
+        `simp only [hk]` discharges it, because the named equation `_hm` blocks the
+        ι-reduction. `split` produces case tags that do not match (`h_1` alone, or a
+        `List α` binder named `heq`), and `cases n - m` renames the equation so the
+        hypothesis is no longer the one in context. **Next step: get one arm to
+        close by hand** — most likely by stating the unfolding as an explicit
+        `have … : decodeFullFast p h s m acc = (match _hm : n - m with …)` with
+        `rfl`/`congr 1` inside, then rewriting with it (the shape
+        `decodeFull_succ` already uses upstream in this file, and it works there).
+
 - [ ] 6.1b **Move the fast decode onto an `Array UInt8` + `Nat` cursor**
       (≈**6.5×**: 9 → 59 MiB/s measured). `decodeFullFastRoot` avoids the closure
       _chain_ but still calls `decode p (Suffix.drop m s).bytes` every step,
