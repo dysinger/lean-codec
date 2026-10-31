@@ -95,12 +95,22 @@ is the summary):
   consumed-count cursor: **93,531 → 188 µs (n=4096), 24,905,804 → 2,753 µs
   (n=65536)**, linear, ~22 MiB/s. **`decodeFullFastRoot` is still verified by
   measurement, NOT yet by proof.** The equality bridge is 6.1a:
-  `openspec/changes/codec-review-remediation/bridge-wip.lean` is a probe holding
-  **five** proven, axiom-clean lemmas plus `decodeFullFast.induct` cases 1–2
-  closed. Its single `sorry` needs one `bdrop`-composition lemma (re-root
-  `bdrop m' s` at `bdrop (n - t.remaining) s`, composed with the already-landed
-  `decode_genuine_suffix`) — `tasks.md` 6.1a has the full derivation. **Do not
-  wire the fast path in, and do not build 6.1b/6.5 on it, until 6.1a lands.**
+  **The mathematics is done; one type-indexing step remains.**
+  `Codec.step_bytes_pointwise` **landed in the library** (`Codec/Decode.lean`,
+  `[propext, Quot.sound]`-only, gated): it re-roots a decoder step's bytes at the
+  original input _pointwise_, so no `Bytes` length cast sits in the way. A
+  `Bytes`-level statement forces such a cast, and that cast is what blocked
+  every `rw` in this task — do not re-attempt the `Bytes`-level form.
+  `bridge-wip.lean` additionally holds five proven, axiom-clean lemmas;
+  `route-a-wip.lean` holds the **confirmed** route to the finish: state the
+  memo's conclusion with the spec index written `(Suffix.drop m s).remaining`
+  (the type the recursor produces), which removes the `Suffix`-index mismatch at
+  the source — that elaborates and closes `refine_1` outright. The remaining work
+  is branch plumbing in `refine_2`/`refine_3`, and the trick that makes the spec
+  side reachable is `conv => rhs; rw [decodeFull_succ' …]` (rewrite **only the
+  RHS**, so the fast side's dependent `have hmem :=` is never touched).
+  `tasks.md` 6.1a has the full derivation. **Do not wire the fast path in, and
+  do not build 6.1b/6.5 on it, until 6.1a lands.**
 - **§1 is complete (1.2, 1.3, 1.5 landed).** The proof gate is real:
   `lakefile.lean` sets `moreLeanArgs := #["-DwarningAsError=true"]` on the
   `codec` lib, so `sorry` **fails** `lake build` instead of warning (verified by
