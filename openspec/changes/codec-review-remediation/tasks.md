@@ -812,6 +812,58 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
         derived, so expected `[propext, Quot.sound]`-only, but **that is unverified
         until the gate goes green**; run it as the first step after 6.1a closes.
 
+      * **SESSION 7 (2026-11-02) — `Suffix.drop_zero` landed; the root bridge's
+        `zero` case closed; the successor case reduced to one well-identified
+        obligation, with two routes refuted.** Landed: `Suffix.drop_zero`
+        (`Suffix.drop 0 s = Suffix.id n s`), proved and in the library.
+        `decodeFullFastRoot_eq`'s `zero` case now closes
+        (`decodeFullFast_zero` + `decodeFull_zero` + `rfl`).
+
+        **The successor case is now exactly:**
+
+            decodeFullFastSearch p h s 0 [] (decode p (Suffix.drop 0 s).bytes).attach
+              = decodeFullStep p h s (fun m s' _ => decodeFull p h m s') (decode p s).attach
+
+        `decodeFullFastSearch_eq` applies to it **directly** (its cands argument is
+        spelled `Suffix.drop m s`, and `m = 0` is the goal's own spelling — so the
+        feared `Membership` trap does **not** fire here; the earlier note about it
+        applies to rewriting the head *afterwards*, which this route never does).
+        What is left after applying it is its **step hypothesis**: for each
+        candidate `(x, t)`,
+
+            decodeFullFast p h s (m + (n - m - t.remaining)) (x :: acc) = …
+
+        — the same statement at an advanced cursor with a **non-empty accumulator**.
+
+        **Two routes REFUTED this session (do not retry):**
+        1. **`decodeFull_reroot_cursor` does not apply.** It is stated for
+           `decodeFull`, not `decodeFullFast`, so it cannot relate the fast side at
+           the advanced cursor to `decodeFullFastRoot t.bytes`. (It remains the
+           right tool for the *specification* side, which is what it was proved for.)
+        2. **`Nat.strongRecOn` on `n` cannot reach the step hypothesis.** The step is
+           at the *same* `n` and the *same* `s`, so the induction hypothesis is not in
+           scope. This is the concrete reason the ledger has said all along that the
+           statement must be **cursor-measured, not `n`-measured** — now demonstrated
+           rather than asserted.
+
+        **The confirmed next shape** (written into the obligation's own comment in
+        `Codec/Decode.lean`): prove
+
+            decodeFullFast p h s m acc
+              = (decodeFull p h (Suffix.drop m s).remaining (Suffix.drop m s).bytes).map
+                  (fun tail => acc.reverse ++ tail)
+
+        by well-founded induction on the **fast decoder's own cursor measure**
+        `((Suffix.drop m s).remaining, cands.length)` — the same `Prod.Lex` its
+        `termination_by` uses — and take the root bridge as its `m = 0` case. The
+        `n - m = 0` case of that general statement is already worked out
+        (`decodeFullFast_zero` + `decodeFull_at_zero` + `List.append_nil`); only the
+        successor case's step is genuinely open.
+
+        **`decodeFullFast_pairwise` is now optional, not the route.** It was written
+        to serve the re-rooting lemma, which turned out not to need it (SESSION 6).
+        Its docstring records that, so nobody finishes it before the root bridge.
+
       * **SESSION 6 (2026-11-02) — the re-rooting lemma is PROVED, and the root
         bridge is reduced to one step hypothesis.** Landed in `Codec/Decode.lean`
         (all proved, no `sorry`):
