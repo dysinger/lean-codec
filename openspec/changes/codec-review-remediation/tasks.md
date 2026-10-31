@@ -541,7 +541,38 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
       What remains after that is ordinary branch plumbing in `refine_2` and
       `refine_3`: `.attach` of `[]` (dispatch via
       `have hatt : (…).attach = [] := by rw [hz]; exact List.attach_nil`), then
-      the pair unification via `attach_pair_eq`. **No new mathematics is left.**
+      the pair unification via `attach_pair_eq`.
+
+      **CORRECTION (2026-11-01): "No new mathematics is left" was FALSE.** The
+      work is now landed in `Codec/Decode.lean` (not in a scratch file), and two
+      things were genuinely missing:
+
+      1. **`drop_trans_eq` — a lemma the ledger never named.**
+          `Suffix.drop (m + ((n-m) - t.remaining)) s = Suffix.trans (Suffix.drop m s) t`.
+          Without it the fast side re-roots at `s` while the spec side is nested, so
+          the two `decodeFull` calls are *not* the same call and no rewrite can join
+          them. LANDED, `[propext, Quot.sound]`-only. It cost exactly the two
+          documented traps: state it **pointwise** (a `Bytes`-level form hits the
+          length cast and blocks every downstream `rw`), and apply
+          `step_bytes_pointwise` **before any `dsimp`** (`dsimp [Suffix.drop]` rewrites
+          the root to `n - m`, breaking `t`'s `Suffix (Suffix.drop m s).remaining`
+          index so the lemma no longer applies).
+      2. **`decodeFullStep_nil`** — the empty-`attach` companion of
+          `decodeFullStep_cons`, parameterized for the same reason. LANDED, axiom-free
+          in effect (`[propext, Quot.sound]`).
+
+      **What is actually still open (the single `sorry`, `Codec/Decode.lean:816`,
+      which fails `lake build` by design):** only the `cons` case's two branches in
+      `decodeFullFast_eq_aux`. The `some`/`none` split on the tail's recursion is not
+      an `.attach` question at all — it needs a **`decodeFullStep`-all-fail lemma**:
+      if every candidate in `lrest` has a failing recursion, then
+      `decodeFullStep … lrest = none`. That is a real induction on the remaining
+      list, not branch plumbing. The `some` branch additionally needs the
+      accumulator reassociation `acc.reverse ++ (x :: xs) = (x :: acc).reverse ++ xs`
+      (`List.reverse_cons` + `List.append_assoc` + `singleton_append`), already
+      worked out.
+
+      The base case (`n - m = 0`) and the decode-empty case are **closed**.
 
 - [ ] 6.1b **Move the fast decode onto an `Array UInt8` + `Nat` cursor**
       (≈**6.5×**: 9 → 59 MiB/s measured). `decodeFullFastRoot` avoids the closure
