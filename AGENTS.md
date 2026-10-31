@@ -2,11 +2,20 @@
 
 Guidance for AI coding agents working in this repository.
 
-**Two hard requirements, before anything else:**
+**Three hard requirements, before anything else:**
 
 1. **Play an audible alarm every time you pause** — see
    [Pause signal](#pause-signal-mandatory) below. It is a mandate, not a nicety.
-2. **Direction lives only here and in `openspec/`.** No `HANDOFF.md`, no
+2. **This file is a pointer to the active OpenSpec change, not a second copy of
+   it.** Direction for the next session is `openspec/changes/<name>/`, applied
+   through `openspec instructions apply`; `AGENTS.md` says _which_ change to work
+   and _how this environment works_, and nothing else. Do not restate task lists,
+   measured numbers, lemma tables, or status here — that is what `tasks.md` and
+   `review.md` are for, and a copy in this file is stale the moment the ledger
+   moves. When a fact already lives in `openspec/`, **link to it instead of
+   duplicating it**; if this file and an `openspec/` artifact disagree, the
+   artifact wins and this file gets fixed.
+3. **Direction lives only here and in `openspec/`.** No `HANDOFF.md`, no
    `NOTES.md`, no `*-wip.lean` scratch files, no second place a next session could
    look. If a scratch file earns its keep, land its content in the library or in
    the change's `tasks.md` and delete the file.
@@ -30,14 +39,16 @@ in the change's `tasks.md` and in `CHANGELOG.md`.
 
 **One source of truth per concern.** When two files disagree, the left column wins:
 
-| Question                                        | Authoritative file                      |
-| ----------------------------------------------- | --------------------------------------- |
-| The `Bytes` type's definition                   | `Codec/Codec.lean:68`                   |
-| What is this library, why each design choice    | `README.md` (`[D#]`/`[S#]`), `PAPER.md` |
-| What work is open, and how done is done         | `openspec/changes/<name>/tasks.md`      |
-| What a change is _allowed_ to change            | `openspec/changes/<name>/proposal.md`   |
-| The behavioural contract                        | `openspec/specs/**/spec.md`             |
-| How this environment is set up and how to build | this file                               |
+| Question                                        | Authoritative file                                |
+| ----------------------------------------------- | ------------------------------------------------- |
+| The `Bytes` type's definition                   | `Codec/Codec.lean:68`                             |
+| What is this library, why each design choice    | `README.md` (`[D#]`/`[S#]`), `PAPER.md`           |
+| **Which change to work next**                   | `openspec list --json` + `## Current state` below |
+| What work is open, and how done is done         | `openspec/changes/<name>/tasks.md`                |
+| The evidence behind a finding                   | `openspec/changes/<name>/review.md`               |
+| What a change is _allowed_ to change            | `openspec/changes/<name>/proposal.md`             |
+| The behavioural contract                        | `openspec/specs/**/spec.md`                       |
+| How this environment is set up and how to build | this file                                         |
 
 **Anything else is a summary.** If a summary and an `openspec/` artifact differ,
 the artifact is correct and the summary is stale — fix the summary.
@@ -52,163 +63,48 @@ drift again; a stated precedence cannot). The removed `List`-carrier's
 
 ## Current state
 
-Run `openspec list --json` for the live answer; do not trust a snapshot here for
-longer than the commit that wrote it.
+**Do not record status here — point at it.** The live answer is one command:
 
-### START HERE — `codec-review-remediation`
+```bash
+nix develop --command openspec list --json | sed -n '/^{/,$p'
+```
 
-**The next session works `openspec/changes/codec-review-remediation/` and nothing
-else.** Run the live counts with `nix develop --command openspec list --json`
-(strip the dev-shell banner: `| sed -n '/^{/,$p'`); do not trust a snapshot here
-for longer than the commit that wrote it. Currently **5/50**, and the next
-concrete step is **6.1a** — whose mathematics is already landed; only branch
-plumbing is left. The bullet below names the lemmas and the two traps.
+The active change is **`codec-review-remediation`**; work it and nothing else.
+Its ledger is `openspec/changes/codec-review-remediation/tasks.md` (open work and
+the definition of done), its evidence base is `review.md` (the adversarial
+findings, ids `R<lens>.<n>`), and its edit licence is `proposal.md` / `design.md`.
+Apply it with `openspec instructions apply --change codec-review-remediation
+--json` rather than from memory of this file.
 
-It is a codebase-wide audit. Four adversarial _reading_ lenses (74 findings, ids
-`R<lens>.<n>`) cover the docs, the proof surface, `AGENTS.md`, and the global
-`lean` skill; a fifth, **`R5`, added later because it _runs_ the binary**, is a
-CRITICAL performance finding (id `R5.1`). `review.md` is the evidence base;
-`tasks.md` is the work.
+Two facts about that change are worth stating here **only because a reader who
+skips the ledger would get them wrong**, and both are also in `tasks.md`:
 
-**Work order — do it in this sequence** (the full ordering, with the measured
-justification for each step, is at the end of `tasks.md` §6 — read it there; this
-is the summary):
+- **The work order is §6 → §2 → §3/§4 → §5**, and **6.1a is a hard gate** on the
+  rest of §6 (`decodeFullFastRoot = decodeFull` is currently verified by
+  _measurement only_). §6 goes first because §3/§4 rewrite the paragraphs that
+  quote the numbers §6 fixes. If `tasks.md` disagrees with this line, `tasks.md`
+  wins.
+- **Only `R5.1` may change a declaration _shape_** (design D9), and it must keep
+  every theorem's statement, prove the new definition equal to the old, and stay
+  `[propext, Quot.sound]`-only / zero-`sorry` / `#eval`-able. Nothing else may.
 
-1. **§6** — performance, in this internal order. **§6 must run before §3/§4**,
-   because those rewrite the very paragraphs that quote the defect's numbers.
-   **6.1a is where the next session starts** (see the bullet below).
-   - **6.1a — the bridge proof. This is a hard gate on all of §6.** Every
-     optimization multiplies `decodeFullFastRoot`; with the bridge unproved, one
-     false bridge invalidates every downstream ratio at once. **Nothing in §6 or
-     the fast-path wiring proceeds until it lands.**
-   - then **6.1b** (decode → `Array`+cursor, ≈6.5×) → **6.5** (encode →
-     `encodeArray`'s shape, ≈4–6×) → **6.2** (re-baseline the docs against the
-     _fixed_ numbers) → **6.3** (wire it) → **6.7** (wire the seam, once there
-     is a consumer) → **6.4** (assert the ratio; threshold from 6.1b/6.3) →
-     **6.6** (the carrier decision the bar forces).
-2. **§2** — the Layer-2 seam (non-performance items).
-3. **§3**, then **§4** — the doc rewrites, now against fixed numbers.
-4. **§5** — the global `lean` skill, last (outside this repo).
+`lean-basen` (18/25) is a separate change whose work happens in the sibling repo
+`../lean-basen`, in that repo's own `nix develop`; it does not touch this tree.
 
-- **The proof gate is real (1.3, done).** `lakefile.lean` sets
-  `moreLeanArgs := #["-DwarningAsError=true"]` on the `codec` library, so a `sorry`
-  fails `lake build` (and therefore `checks.lean`) instead of warning. Verified
-  load-bearing by stubbing `Codec.roundtrip` and observing a non-zero exit naming
-  the declaration. Every task after this one inherits it.
-- **`R5.1` — the defect is FOUND and a 9047× fix LANDED; the bridge proof is
-  ~90% done and its one open step is named.** Root cause (measured, after
-  refuting `WellFounded.fix`/`Sigma`/`.attach`/`List` as no-ops): `decode` returns
-  a `Suffix` whose `bytes` is a `bdrop` **closure over its input**, so feeding
-  `t.bytes` back **composes closures** — quadratic, 668× at n=4096.
-  `Codec.decodeFullFastRoot` re-roots at the original byte string with a
-  consumed-count cursor: **93,531 → 188 µs (n=4096), 24,905,804 → 2,753 µs
-  (n=65536)**, linear, ~22 MiB/s. **`decodeFullFastRoot` is still verified by
-  measurement, NOT yet by proof.** The equality bridge is 6.1a.
-  **All its mathematics is done and landed; only branch plumbing remains.**
-  `Codec/Decode.lean` §"Lemmas for the fast-path bridge" carries the six lemmas
-  (gated, `[propext, Quot.sound]`-only or axiom-free): `step_bytes_pointwise`,
-  `decodeFull_at_zero`, `decodeFull_succ`, `decodeFullStep_cons`,
-  `attach_eq_cons`, `attach_pair_eq`. Two traps there, both expensive:
-  (a) **never state a `Bytes`-level equation — state it pointwise**, because the
-  length cast blocks every downstream `rw`; (b) **parameterize the list rather
-  than rewriting under `.attach`**, which fails on the dependent motive.
-  The **confirmed route** to the finish is to write the core lemma's spec index
-  as `(Suffix.drop m s).remaining` (the type the recursor produces), which
-  removes the `Suffix`-index mismatch at the source and closes `refine_1`
-  outright; the spec side is then reachable with
-  `conv => rhs; rw [decodeFull_succ …]` — rewriting **only the RHS** so the fast
-  side's dependent `have hmem :=` is never touched. `tasks.md` 6.1a has the rest.
-  **Do not wire the fast path in, and do not build 6.1b/6.5 on it, until 6.1a
-  lands.**
-- **§1 is complete (1.2, 1.3, 1.5 landed).** The proof gate is real:
-  `lakefile.lean` sets `moreLeanArgs := #["-DwarningAsError=true"]` on the
-  `codec` lib, so `sorry` **fails** `lake build` instead of warning (verified by
-  stubbing `Codec.roundtrip`). A command-line `-D` does **not** work — args after
-  `lake build --` are targets, and `LEAN_OPTS`/`-K` never reach the compiler.
-- **Two earlier diagnoses of `R5.1` were REFUTED — do not re-measure them.** Both
-  looked plausible and both were no-ops:
-  1. _"`WellFounded.fix` on a `Sigma` doesn't compile to a loop."_ Re-expressing
-     structurally measured **0.5%** apart (93,691 vs 94,137 µs at n=4096) — Lean's
-     `termination_by` elaborates to the same well-founded recursion. See
-     `review.md` §"The refuted diagnosis".
-  2. _"`decodeFullStep` is a backtracking search."_ It does re-call `decode p s`
-     per level, but a tail-recursive rewrite with the same calls was **still**
-     1.5 s at n=16384; the search was never the cost. See
-     `review.md` §"The root cause, found".
-     What _is_ settled: the **`bdrop` closure chain** (bullet above), which was found
-     by A/B-ing chained `t.bytes` against flat `bdrop m root` over identical work.
-     `decodeRepeat`'s Θ(n²) is separate and inherent to its all-prefix return type;
-     it is **not** in scope for a speed fix.
-- **`R5.1` carries the change's one shape-changing carve-out** (design D9): §6 may
-  change `decodeFull`'s _algorithm_, but must keep every theorem's statement,
-  prove the new definition equal to the old (`decodeFull_some` +
-  `decodeFull_ne_none` are the bridge; `decodeFull_spec` then follows with `huniq`
-  unchanged), and preserve `[propext, Quot.sound]`-only / zero `sorry` /
-  `#eval`-ability. Nothing else may change a declaration shape.
-- **None of its findings concern `basen`.** Do not extend an archived change with
-  audit work.
-- Its 50 tasks are sequenced: §1 cross-lens defects (5), §2 Layer-2 seam (8), §3
-  `README.md` derivations (12), §4 `AGENTS.md` process (6), §5 the global `lean`
-  skill (10), §6 performance (9, incl. 6.1a/6.1b). **Five are done** (1.1–1.5).
-- **§6's measured landscape** (one process, n=65536, `memcpy` = 2,136 MiB/s;
-  re-take with the 6.4 lane rather than trusting this): `memcpy` 1× ·
-  `encodeArray` 18× · `Id.run` cursor decode floor 36× · `decodeArray` 71× ·
-  `fastEncodeRepeat` 79× · `encodeRepeat` 112× · `decodeFullFastRoot` 237×.
-  **The fast shapes already exist and the public API does not use them** — most
-  of §6 is wiring plus proof, not invention. **No path is within a single-digit
-  multiple of C**, so the owner's bar is not met; 6.6 is where that is decided,
-  and it must be decided honestly rather than by redefining the bar.
+**History is not direction.** What landed, when, and what was measured belongs in
+the change's `tasks.md` and in `CHANGELOG.md` — including for archived changes,
+whose own `tasks.md` under `openspec/changes/archive/` is the reference. Do not
+re-teach landed work here, and do not extend an archived change with new audit
+work.
 
-### The other open change — `lean-basen` (18/25)
-
-`openspec/changes/lean-basen/tasks.md` holds **seven mechanical polish items**
-(5.2, 5.3, 5.4, 5.8, 5.9, 5.12, 5.13) under "Still open — mechanical polish".
-Doc/tidy items, not proofs. Its work happens in `../lean-basen` (sibling repo —
-package `basen`, module `BaseN`; all seven bases landed and proven as `Codec`
-values), in that repo's own `nix develop`.
-
-**Archive hazard for `lean-basen` (the last one).** It MODIFIES the `basen`
-requirement "The `basen` bases are `Codec` values", and a MODIFIED block
-**replaces** the whole block on archive. Re-read `openspec/specs/basen/spec.md`
-immediately before archiving it, confirm the delta's text is a superset (it is
-today), then `openspec validate --all`.
-
-### Landed and archived (do not re-teach)
-
-- **`codec-normal-form-case-quotient`** (16/16) → `openspec/specs/codec/normal-form/`.
-  The information-free-variation layer (`Codec/Normal.lean`): `Normal S norm` (the
-  quotient `S/~` as the fixed points of a total idempotent `norm`), `Normalizer S
-norm` (idempotence carried by the _type_; `norm` is a parameter, not a field, so
-  `Normal S norm` is definitionally shared), `fill`, `fill_fixed` (`norm ∘ fill =
-id`, **no axioms**), `fill_surj`, `fill_inj`, and `decodeNormal` (`norm` composed
-  **outside** an ordinary `Iso`; not an `Iso`, no inverse) with
-  `decodeNormal_of_fixed` / `decodeNormal_encode`. **`Iso.law` untouched.** The
-  module is generic in `S : Type` — no `UInt8`/`Bytes`/hex/ASCII/text in the code,
-  so `[S3]` holds.
-- **`basen-rfc-conformance-theorems`** (31/31) → `openspec/specs/basen/`.
-  All seven bases state the in-image converse (`decodeFull_B{2,4,8,10,16}_char`
-  join `decodeFullB{64,32}_char`); `decodeFullB{64,32}_char_via_type` / `_spine` /
-  `b{64,32}BytesOf_tail1_eq` reverse the "unrepresentable" withdrawal; and
-  **RFC 4648 §8** Base16 case-insensitive decoding landed in
-  `../lean-basen/BaseN/Base16.lean`.
-
-  **Two verified findings from §8 — do not rediscover them:**
-  1. The planned commutation `hexBlockApply (foldList cs) = hexBlockApply cs` is
-     **false**: `['6','f']` is rejected yet folds to the accepted `['6','F']` —
-     that rejection-to-acceptance _is_ the §8 widening. The `Iso` law needs the
-     one-directional `hexBlockApply_foldList`; the refutation is
-     `hexBlockApply_foldList_ne`.
-  2. The old rationale "folding case breaks `Unambiguous`" was **false**:
-     `Unambiguous` constrains one input to at most one value, and folding is a
-     total function. The real constraint is the **canonicality of encode**, which
-     holds (`encodeHex` emits uppercase only).
-
-Severity-tagged evidence behind the archived §6 hardening tasks is in that
-change's own `tasks.md` under `openspec/changes/archive/` — history, not a to-do.
-(Its once-separate `REVIEW-basen-rfc-conformance.md` was deleted: nothing
-referenced it, and direction comes from this file plus `openspec/`.)
-
-## Downstream ecosystem
+**Archive hazards, recorded where the archive step will look for them.** A
+MODIFIED requirement **replaces** the whole block on archive, so: re-read
+`openspec/specs/<area>/spec.md` immediately before archiving, confirm the delta's
+text is a superset, and run `openspec validate --all` after **each** archive. Two
+changes modifying the same requirement must archive dependency-first, with the
+required order recorded in the later change's `tasks.md`. (`lean-basen` carries
+the last live instance of this: it MODIFIES "The `basen` bases are `Codec`
+values".)
 
 Each verified format/protocol is its own git repo, initialized from
 `lean-nix-flake-template`, prefix-dropped internally (`lean-basen` → `basen`/
