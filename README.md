@@ -69,7 +69,7 @@ is no separate `List` spec and no `ByteArray` run-model slab _for the specificat
 carrier_ (`decode`/`encode`/`Rel` and the laws). The packed (`Array UInt8`) and
 byte-slice (`ByteArray`) carriers in `Codec/Packed.lean`/`Codec/ByteSlice.lean` are
 proved-equal or trust-seam _implementations on top of_ that single spec — see
-[Performance](#performance-two-proof-layers-and-an-honest-ceiling).
+[Performance](#performance-two-proof-layers-and-where-the-speed-goes).
 
 **[D2] The nondeterministic list decoder.** The paper's decoder returns a _list_
 of `(value, remaining)` pairs — a relation (§4.1 `Parser (String → [(α, String)])`,
@@ -210,7 +210,7 @@ indexed load in the emitted IR. There is no second `List UInt8`/`Array`/`ByteArr
 `Buffer` carrier _for the spec_: every law is stated over `Bytes n`. (The packed
 `Array UInt8` and byte-slice `ByteArray` carriers exist only as proved-equal or
 trust-seam implementations on top of this spec — see
-[Performance](#performance-two-proof-layers-and-an-honest-ceiling).)
+[Performance](#performance-two-proof-layers-and-where-the-speed-goes).)
 
 |                    | **`Bytes n`** (`= Fin n → UInt8`)                                                             |
 | ------------------ | --------------------------------------------------------------------------------------------- |
@@ -462,22 +462,24 @@ description — no solver, no per-combinator gate, no prefix-disjointness condit
 - **`lean-text`** (downstream): `utf8` plus `text`/`identifier`/`whitespace` —
   the paper's §6 text domain, re-based on bytes.
 
-## Performance — two proof layers, and an honest ceiling
+## Performance — two proof layers, and where the speed goes
 
 The speed story has three parts: a packed result carrier (Layer 1), a generic
-bulk-byte trust seam (Layer 2), and a **hard ceiling on pure-Lean parsing** that
-the first two do not remove.
+bulk-byte trust seam (Layer 2), and the measured cost of the pure-Lean per-element
+loop itself — which is where the remaining headroom is, and which the first two do
+not touch (see "Where the speed actually goes" below).
 
 The packed result carrier (see `Codec/Packed.lean`) gives the interpreter a
 contiguous-buffer fast path, in **two layers with distinct proof status** that are
 never conflated:
 
 - **Layer 1 — proven, zero trusted C.** The packed decoder/encoder (`decodeArray` /
-  `decodeFullArray` / `encodeArray` / `encodeByteArrayBytes`) and their refinement
-  theorems (`decodeArray_eq`, `decodeFullArray_spec`, `encodeArray_eq`,
-  `encodeByteArrayBytes_eq`), each `[propext, Quot.sound]`-only, zero
-  `Classical.choice`, zero `sorry`. These are the **only** layer admitted to the
-  `#print axioms` gate.
+  `decodeFullArrayRoot` / `encodeArray` / `encodeByteArrayBytes`) and their
+  refinement theorems (`decodeArray_eq`, `decodeFullArrayRoot_eq`,
+  `encodeArray_eq`, `encodeByteArrayBytes_eq`), each `[propext, Quot.sound]`-only,
+  zero `Classical.choice`, zero `sorry`. These are the **only** layer admitted to
+  the `#print axioms` gate. (`decodeFullArray` is also proved — but proved equal
+  to `head?` of `decode`, which makes it the wrong decoder to use; see below.)
 - **Layer 2 — a named trust seam.** `byteSlice` / `blitBytes` / `findByte` /
   `commitRemainder` (in `Codec/ByteSlice.lean`) are `memcpy`/`memchr`-style byte
   operations. Each is `@[extern "…"]` with an **elaborating Lean body** that pins
@@ -517,33 +519,100 @@ out-of-range clamping — not yet reconciled clause-by-clause at the spec level 
 an open contract to tighten, not a proof gap to hide: see the engineering ledger
 for the reconciliation task.
 
-### The honest ceiling (what two layers do _not_ buy)
+**Do not use `decodeFullArray` for full consumption.** It commits to the head of
+its candidate list (`| (_, c) :: _ => some …`) rather than searching, so on an
+input where the first candidate consumes fewer bytes than needed it reports
+success having consumed less than the whole buffer. Its theorem
+`decodeFullArray_spec` is true — it honestly proves the function equal to the
+`head?` of `decode` — so this is a _decoder_ defect, not a proof defect. The
+backtracking full-consumption decoder is `decodeFullArrayRoot` (proved equal to
+`decodeFull` by `decodeFullArrayRoot_eq`); use that one.
 
-Measured this session, the **pure-Lean** interpreter — even the packed Layer-1
-carrier — bottoms out around **20–40× slower than hand-written C**, and this is a
-_compiler-backend_ limit, not a code-shape limit. `Nat`/`UInt8`/`UInt64` arithmetic
-all lower to boxed, heap-allocating operations (`lean_nat_mul`, `lean_uint8_to_nat`,
-`instAddUInt64`), and `USize` is an unboxed `size_t` **only as an `@[extern]`
-argument**, never once it is stored in a returned product/`Option`. There is no
-pure-Lean escape: rewriting a parser to thread a `USize` cursor made it _slower_.
-The concrete canary — an RFC 3339 date-time (`parse`/`print` over a `ByteArray`) —
-parses at a few hundred ns/op where the equivalent `clang -O2` C parser is ~10 ns/op.
+### Where the speed actually goes (measured, with its causes named)
 
-The consequence, recorded as a standing decision: **pure-Lean codecs are the spec
-and accepted at ~20–40× C speed**; the only C-speed regions are the generic
-`memcpy`/`memchr` seams above; anything whose hot loop is arithmetic (say, numeric
-parsing) is a downstream FFI concern, not a core codec. The packed carrier removes
-the _result_ allocation (nested `concat` closures per element) — a real,
-proved-equal win — but it does **not** move the per-element scalar arithmetic off
-the boxed heap, so it does not close the gap to C.
+This section replaces an earlier one that claimed a "~20–40× slower than
+hand-written C" ceiling and attributed it to the compiler boxing scalar
+arithmetic. **That claim had no bench lane behind it and is withdrawn.** The
+numbers below come from `bench`'s own `benchDecodeShapes` lane (task 6.4), which
+measures four proved-equivalent decode shapes against a same-run `memcpy` and
+prints both figures.
 
-Measured (current `bench`, `[measured]`, never hand-typed; all figures are the
-bench's own, and note the toolchain does not stabilize wall-clock well — see the
-engineering ledger on benchmark noise): the Layer-2 `byteSlice`/`blitBytes`/
-`findByte` seams run at the `memcpy`/`memchr` floor (tens of GiB/s moving bulk
-bytes), while the pure-Lean bulk `fastEncodeRepeat`/`encodeRepeat` and the RFC 3339
-`parse`/`print` sit in the tens-of-MiB/s / hundreds-of-ns range — around the
-boxed-scalar floor, as above.
+**First, a correction of yardstick.** `memcpy` is the wrong reference for a
+per-element codec, and quoting a "× off C" ratio against it is a category error:
+`memcpy` moves a byte for ~0.045 ns (a bulk copy, hardware-accelerated), while a
+parser does per-element _work_ — read, decide, advance, accumulate. The honest
+reference for a parser is a hand-written C parser over the same bytes, and this
+repo does not yet ship one. So the figures below are given **as ns/step and as a
+multiple of the measured pure-Lean floor**, not as a ratio to `memcpy`.
+
+Measured 2026-11-03 by `bench`'s `benchDecodeShapes` lane, `n` = 8 KiB, 15
+samples of 3 calls each, load average 4–5 on 10 cores — the _absolute_ values are
+inflated by contention, so treat the **ratios between rows in one run** as the
+usable information. The single-step figures come from a separate decomposition run
+at the same `n`; each is reproducible from a lane that prints it.
+
+| shape                                                 | ns/step | × floor | note                                       |
+| ----------------------------------------------------- | ------- | ------- | ------------------------------------------ |
+| `memcpy` (`copySlice`), for scale                     | ~0.03   | —       | ~250 ns / 8 KiB                            |
+| `Array` indexed read alone                            | 4       | 0.7×    | the memory floor                           |
+| **ideal `Id.run` cursor loop** (`arr[k]!` + `Nat`)    | **6**   | **1×**  | **the achievable pure-Lean floor**         |
+| `decodeArray` single step (`List (α × Nat)` result)   | 15–22   | 3–4×    | +9–16 ns for the per-step `List`           |
+| `packedCands` alone (`.attach` + `filterMap`)         | 52      | 8.7×    | +30 ns over the decode step it wraps       |
+| `decodeFullArrayRoot` (packed `Array` + `Nat` cursor) | **63**  | 10.5×   | = the search over `packedCands`            |
+| `decodeFullFastRoot` (`Bytes`/`Suffix` cursor)        | 76      | 12.7×   | +13 ns for the `Suffix`/`bdrop` plumbing   |
+| `decodeFull` (the `Bytes n` specification itself)     | ~64,000 | —       | super-linear: re-walks the suffix per step |
+
+**How to read the ratio column.** The `memcpy` reference is taken in the same
+sample, but a slow measured call evicts the source from cache before the
+reference runs, so a "× off `memcpy`" figure in this lane is biased **low** — in
+the direction that flatters the code. The `ns/step` column is the number to quote;
+the `memcpy` ratios are order-of-magnitude context only. Cross-checks: this lane's
+`decodeFull` figure agrees with the independent `benchDecodeFull` lane in the same
+process (409 ms for 8 KiB), and `decodeFullFastRoot`/`decodeFullArrayRoot` agree
+within noise with a standalone probe taken at `n` = 1 MiB (69 and 57 ns/byte).
+
+**What these numbers say — three things, all of which change decisions:**
+
+1. **The carrier is not the bottleneck.** The packed `Array`+`Nat` decoder is
+   only 1.2× faster than the `Bytes`/`Suffix` one (63 vs 76 ns/byte), so the
+   `Suffix`/`bdrop` plumbing costs ~13 ns/byte — not the order of magnitude the
+   earlier ledger attributed to it. `Bytes n` therefore stays the specification
+   **and** the runtime is already on contiguous memory, which is exactly the
+   two-layer arrangement this document describes elsewhere. No carrier change is
+   needed.
+2. **The largest single term is a rebuildable candidate list, not arithmetic.**
+   `packedCands` — a `filterMap` over `(decodeArray d a k).attach`, reconstructed
+   from scratch on **every step** — costs 52 ns/step, 2.4× the decode step it
+   wraps and 8.7× the ideal loop. For a productive leaf codec like `byte` that
+   list has exactly one element. It is an allocator cost with a known removal
+   (fold the single-candidate case, or carry the candidate forward instead of
+   re-deriving it), i.e. a _code-shape_ defect of the same class as the ones §6
+   of the remediation ledger targets — not a language limit.
+3. **The pure-Lean floor is 6 ns/step and it is reachable in the same types.** An
+   `Id.run` loop reading `arr[k]!`, advancing a `Nat` cursor and pushing into an
+   `Array` already runs there, with no `List`, no `.attach`, and no closure. So
+   the distance from today's 63 ns to the floor is **10× of ordinary allocation
+   and list overhead**, and closing it needs no new carrier, no `USize`, and no
+   C.
+
+**What is _not_ claimed.** No measured path is within a small single-digit
+multiple of a hand-written C parser, because no such reference is measured in
+this repo yet. What _is_ established is that the gap is now attributed to named
+allocations rather than to "boxed scalars", and that the floor is measured rather
+than assumed. **The bar is not met, and this document no longer says it nearly
+is.**
+
+The Layer-2 seams remain the only C-speed regions: `byteSlice`/`blitBytes`/
+`findByte` run at the `memcpy`/`memchr` floor (tens of GiB/s moving bulk bytes),
+as the bench reports.
+
+**How to reproduce / what is enforced.** `benchDecodeShapes` prints both numbers
+and the ratio with the five measurement rules the engineering ledger records
+(one fresh timed call per sample, a data-dependent sink so the optimiser cannot
+delete the work, median rather than mean, the `memcpy` reference interleaved in
+the same samples, and the load average noted next to the result). It is a
+**reporting** lane, not a failing one: the owner has set no threshold, and a bar
+invented by the tooling would be the same defect as the figure it replaced.
 
 ## Getting started
 
