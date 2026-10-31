@@ -520,10 +520,14 @@ the law needs to justify (the index is already `USize`, matching `byteSlice`'s o
 index), so **no** `System.Platform.numBits` premise enters. The `byteSlice`→C trust
 is a runtime contract invisible to Lean: `@[extern]` swaps only the emitted C, the
 Lean body still reduces, so `#print axioms Codec.commitRemainder_spec` reports
-`[propext, Quot.sound]` with no `byteSlice`-related axiom. `rfl`-clean. -/
+`[propext, Quot.sound]` with no `byteSlice`-related axiom. `rfl`-clean.
+
+This is `Codec.byteSlice_spec` at `ByteArray.mk a` — the seam law it rests on is
+that theorem, not a re-derivation of the body here (see `Codec/ByteSlice.lean`, where
+every Layer-2 seam carries its own `*_spec`). -/
 theorem commitRemainder_spec (a : Array UInt8) (c : USize) :
     commitRemainder a c = ByteArray.mk (a.extract c.toNat a.size) := by
-  rfl
+  rw [commitRemainder, byteSlice_spec]
 
 /-! ## Refinement: the packed encoder equals the spec `encode` -/
 
