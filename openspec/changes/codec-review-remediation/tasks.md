@@ -265,7 +265,7 @@ byteSlice_spec]`, then `rfl` closes the `ByteArray.mk` eta — instead of
   The `relUnambiguous`-derivation half does **not** close as stated, and the
   reason is a defect in the _task_, not in the attempt: **`Unambiguous p` does
   not imply `huniq`.** `Unambiguous p` is `∀ ⦃x y⦄ {n} (s : Bytes n), Rel p x s
-    → Rel p y s → x = y` — one value per byte string, at _fixed_ `n`. `huniq`
+  → Rel p y s → x = y` — one value per byte string, at _fixed_ `n`. `huniq`
   needs "one _list_ per fully consumed string", and the list length is not
   pinned by either predicate: a `Codec` that relates `a` to the empty string
   (i.e. `pure a`, which is `Rel (pure a₀) a emptyBytes` with `a = a₀`) makes
@@ -292,11 +292,25 @@ byteSlice_spec]`, then `rfl` closes the `ByteArray.mk` eta — instead of
       Reword the comment to state the AC argument and the window invariant —
       the seam's trust argument must be stated, not implied.
 
-- [ ] 2.8 **Discharge `Unambiguous`/`Functional` for a concrete codec** (R2.17).
+- [x] 2.8 **Discharge `Unambiguous`/`Functional` for a concrete codec** (R2.17).
       Both are defined and used as hypotheses but never established for any
       in-tree `d`. Add the trivial base instances (`Unambiguous Codec.byte`,
       `Functional Codec.byte`) as smoke tests, so a typo in the definition
       (e.g. quantifying over the wrong `s`) cannot go unnoticed.
+      **Done, at both levels.** `Rel`-level: `Codec.Sound.unambiguous_byte`,
+      `functional_byte`. `decodeArray`-level (what `decodeOne` actually gates on):
+      `Codec.decodeArray_functional_byte`, `decodeArray_unambiguous_byte` in
+      `Codec/DecodeOne.lean`, whose proofs mirror `decodeOne_mem`'s `byte` case so
+      the `if`-guard reaches the membership.
+      **Load-bearing, verified by mutation, not assumed.** Replacing
+      `Unambiguous`'s single `{n} (s : Bytes n)` with the plausible typo
+      `{n₁ n₂} (s₁ : Bytes n₁) (s₂ : Bytes n₂)` makes the proposition **false** —
+      `Rel byte x s₁ → Rel byte y s₂ → x = y` fails for `x ≠ y`, and the mutated
+      proof stalls on exactly that goal. So these instances do catch the class of
+      typo the finding named.
+      Axiom footprints measured: `decodeArray_*_byte` are `[propext]`; the
+      `Rel`-level pair is `[propext, Quot.sound]`. All inside the gate, zero
+      `Classical.choice`, zero `sorry`.
 
 ## 3. `README.md`: correct the derivations, keep the quotations
 
