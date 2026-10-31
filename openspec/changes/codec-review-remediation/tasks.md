@@ -1700,6 +1700,53 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
       cursor loop never builds a `List` per step, that defect stops mattering.
 
 - [ ] 6.2 **Re-baseline the documented performance claims** (R5.1). `README.md`
+
+      ---
+
+      **PLAN FOR NEXT SESSION (2026-11-02, written from the code and the ledger,
+      not from memory). 6.1b's *proof* is closed; this is the next work.**
+
+      **Do 6.4 before 6.2, and 6.2 before 6.3/6.5.** The stated order in "The
+      order, and why" put 6.4 last, "with the threshold taken from steps 3–6" —
+      that is now the wrong order for one concrete reason: **6.2 must quote
+      measured numbers, and there are none yet for the packed path.** Building
+      6.4's lane first (it is small: one lane, one ratio, one threshold) produces
+      the number 6.2 needs, and it is the only lane that can. Sequence:
+
+      1. **6.4** — the ratio lane. Measure `decodeFullArrayRoot` vs a same-run
+         `memcpy`, at a fixed `n`, printing **both** numbers and failing above a
+         stated bar. Ask the owner to leave the machine idle and record `uptime`
+         next to the result. Until this exists, no number in 6.2 can be honest.
+      2. **6.2** — rewrite README's "The honest ceiling" and AGENTS.md's
+         decode-speed bullet against **that** measurement, naming the distinct
+         causes (lazily-composed input / per-step `List` / boxed scalars) instead
+         of one "ceiling". Keep the caveat: no measured path is within a
+         single-digit multiple of C.
+      3. **6.3**, then **6.5**, then **6.7**, then **6.6** as the ledger
+         already orders them.
+
+      **What is already true and must not be re-derived:**
+
+      - `decodeFullArrayRoot_eq` (6.1b's gate) holds: the packed `Array UInt8` +
+        `Nat`-cursor decoder is **proved equal to `decodeFull`**,
+        `[propext, Quot.sound]`-only. So the packed path is available to wire in
+        6.3 with its correctness already paid for.
+      - `bench`'s `benchDecodeFullArray` **asserts that bridge at run time** and
+        prints no number, deliberately — 6.4 owns the number. Do not add a ratio
+        to it; extend it or add a sibling in 6.4.
+      - The 6.1b "SESSION 9" block above lists five plan corrections, including a
+        `Classical.choice` leak that was already in the tree. Read it before
+        touching `Codec/Packed.lean`.
+
+      **The measurement rules bind 6.4 hardest** — they are the whole reason 6.4
+      is a separate, first task rather than a line in another. Re-read
+      `tasks.md` 6.1b's MEASUREMENT RULES (one fresh timed call per sample;
+      data-dependent sink; median not mean; interleave `memcpy`; idle machine)
+      before writing a line of timing code. Every naive attempt here has produced
+      a wrong number, and 6.4's lane is the artifact that must not.
+
+      ---
+
       §"The honest ceiling" and the `AGENTS.md` bullet claim a "~20–40×-off-C
       ceiling" and attribute it to boxed arithmetic; both are false as measured.
       Rewrite to **measured** figures, name the distinct causes (lazily-composed
@@ -1773,18 +1820,27 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
    below multiplies an unproven function, and one false bridge invalidates all
    their ratios at once.
 
-**Then, by measured headroom:**
+**Then, by measured headroom — REORDERED on 2026-11-02, see below:**
 
 3. **6.1b** (≈6.5×) — biggest win, directly attacks the bar, subsumes
-   `decodeArray`'s per-step `List`.
-4. **6.5** (≈4–6×) — cheapest big win; the fast shape already exists and
-   measures 18×.
-5. **6.2** — re-baseline the docs against the _fixed_ numbers.
-6. **6.3**, then **6.7** — wire the fast path; wire the seam once there is a
-   consumer.
-7. **6.4** — assert the ratio, with the threshold taken from steps 3–6.
-8. **6.6** — the carrier decision, which only becomes urgent once the numbers
+   `decodeArray`'s per-step `List`. **Proof closed; `[~]` pending a number.**
+4. **6.4** — assert the ratio. **Moved up from position 7.** It was ordered last
+   "with the threshold taken from steps 3–6", but 6.2 has to quote a _measured_
+   number for the packed path and only 6.4's lane can produce one — so leaving it
+   last makes 6.2 either stale or invented. A ratio lane is also the cheapest
+   thing here: one lane, one threshold, both numbers printed.
+5. **6.2** — re-baseline the docs against 6.4's number.
+6. **6.3**, then **6.5**, then **6.7** — wire the fast path; adopt `encodeArray`'s
+   shape in the public API; wire the seam once there is a consumer.
+7. **6.6** — the carrier decision, which only becomes urgent once the numbers
    above make the residual explicit.
+
+**Why 6.4 before 6.2 and not after 6.3/6.5:** the docs must state what the code
+_measures_, and what the code measures is `decodeFullArrayRoot` as it now stands.
+6.3/6.5 will change which path is wired, so their own numbers must re-enter 6.2 —
+but 6.2 cannot wait for them without leaving the false "~20–40× ceiling" standing
+longer. Landing 6.4 first lets 6.2 state an honest number _now_ and update it again
+after 6.3/6.5; leaving 6.4 last means 6.2 is written against nothing.
 
 ## Explicitly not doing
 
