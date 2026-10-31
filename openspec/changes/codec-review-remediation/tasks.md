@@ -129,12 +129,29 @@ true`, `fail_if_success exact ⟨_, rfl⟩` **succeeds as a failure** (i.e. the
 
 ## 2. Layer-2 seam: make the assurance it claims actually exist
 
-- [ ] 2.1 **Add `byteSlice_spec`** (R2.1 — HIGH; design D4).
+- [x] 2.1 **Add `byteSlice_spec`** (R2.1 — HIGH; design D4).
       The headline seam has **no** Lean law while `blitBytes_spec` and
       `findByte_spec` do. Add:
       `theorem byteSlice_spec (a : ByteArray) (i : USize) : byteSlice a i = ByteArray.mk (a.data.extract i.toNat a.data.size) := rfl`
       (verified to compile by the reviewer). Have `commitRemainder_spec` cite it,
       and have the bench cite it instead of re-deriving the body inline.
+      **Done, all three clauses.** `Codec.byteSlice_spec` is in
+      `Codec/ByteSlice.lean` (above `blitBytes_spec`, so the seam laws sit
+      together), `rfl`-proved, `lake build` green. (a) `commitRemainder_spec`
+      (`Codec/Packed.lean`) now goes through it — `rw [commitRemainder,
+    byteSlice_spec]`, then `rfl` closes the `ByteArray.mk` eta — instead of
+      re-deriving the body, and its docstring names the law it rests on. (b) The
+      bench's `benchByteSlice` and `benchCommitRemainder` each now carry
+      `let _seamLaw : … = spec := byteSlice_spec …` / `commitRemainder_spec …`,
+      i.e. the value-check's `spec` term is _the law's own right-hand side_, so
+      the check is tied to the theorem by the elaborator rather than by a
+      comment. This required writing both `spec`s as `extract (idx.toNat)` /
+      `extract (c.toNat)` — the law's spelling — rather than the `Nat` locals
+      `half`/`third`; the elaborator then accepts the tie and the two values are
+      equal anyway. Axiom check run (the first time it could be, given 6.1a's
+      note): `byteSlice_spec` → **no axioms**, `commitRemainder_spec` → **no
+      axioms**, `blitBytes_spec` → **no axioms**, `findByte_spec` →
+      `[propext]`. `lake build bench` green (27 jobs).
 
 - [ ] 2.2 **Make the seam value-checks reachable** (R2.2 — HIGH; design D5).
       `benchSeamBoundaries` is the only runtime C↔Lean evidence and runs dead
@@ -166,10 +183,18 @@ true`, `fail_if_success exact ⟨_, rfl⟩` **succeeds as a failure** (i.e. the
       uses the axiom-clean transport. Two headers SHALL NOT disagree about
       whether a seam is wired in.
 
-- [ ] 2.5 **State per-law axiom footprints in `ByteSlice.lean`** (R2.6).
+- [x] 2.5 **State per-law axiom footprints in `ByteSlice.lean`** (R2.6).
       `findByte_spec` reports `[propext]` while its siblings report none,
       because `Array.findIdx?` goes through `DecidableEq UInt8`. Record that in
       the docstrings so it is not mistaken for drift.
+      **Done, and measured rather than assumed.** `#print axioms` on all four
+      seams: `byteSlice_spec`/`blitBytes_spec`/`commitRemainder_spec` report **no
+      axioms**; `findByte_spec` reports `[propext]`. The `findByte_spec` docstring
+      now says so explicitly (naming `Array.findIdx?`'s `DecidableEq UInt8` as the
+      source, and that `[propext]` is inside the gate), `byteSlice_spec`'s says
+      its own footprint is none and points at `findByte_spec` for the asymmetry,
+      and `README.md`'s Layer-2 paragraph states the same, so the fact is in the
+      code where it is consulted.
 
 - [ ] 2.6 **Record or retire the dead API and unproved premise** (R2.5, R2.7).
       (a) `Iso.element`/`Iso.subset` have zero callers. Either delete, or add a
