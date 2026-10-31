@@ -710,6 +710,123 @@ theorem consume_lt {α : Type} (d : Codec α) (h : ConsumesByte d) (a : Array UI
   have := h x (bdrop k (arrayToBytes a)) t hm
   omega
 
+/-! ## The candidate bijection (task 6.1b, step A)
+
+`packedCands` and the specification's `(decode d (bdrop k (arrayToBytes a))).attach`
+are **the same list**, element for element, with the packed element `⟨(x, c), …⟩`
+standing for the spec element `⟨(x, t), …⟩` at `c = consumedAbs a k t`. This is the
+new mathematics 6.1b was blocked on: the bridge's successor case hands its step
+hypothesis to the search congruence, and that hypothesis is stated over *spec*
+candidates while the fast decoder walks *packed* ones. -/
+
+/-- **`filterMap` with a total predicate is `map`.** The generic form of
+"`packedCands`' two `dif`s always take the `some` branch under `ConsumesByte`".
+Stated for a general list and a general `g` because the proof is pure list induction
+and has nothing to do with `Codec` — the caller supplies the pointwise `some` fact.
+`[propext, Quot.sound]`-only. -/
+theorem filterMap_eq_map_of_forall {β γ : Type} (l : List β) (f : β → Option γ)
+    (g : β → γ) (h : ∀ b ∈ l, f b = some (g b)) :
+    l.filterMap f = l.map g := by
+  induction l with
+  | nil => rfl
+  | cons hd tl ih =>
+    rw [List.filterMap_cons, h hd (List.mem_cons_self ..),
+        ih (fun b hb => h b (List.mem_cons_of_mem _ hb))]
+    rfl
+
+/-- **Membership readback**: a packed result `(x, c)` at cursor `k` is exactly a spec
+`decode` result `(x, t)` at the same cursor, with `c` the packed readback of `t`.
+This is `decodeArray_eq` read as a *membership* equivalence rather than a list
+equality, which is the form every candidate argument below wants — and the form that
+avoids rewriting under `.attach` (the dependent-motive trap).
+
+Needs no `ConsumesByte`: it is a fact about the two decoders agreeing, not about
+advance. `[propext, Quot.sound]`-only. -/
+theorem mem_decodeArray_iff {α : Type} (d : Codec α) (a : Array UInt8) (k : Nat) :
+    ∀ (x : α) (c : Nat),
+      (x, c) ∈ decodeArray d a k ↔
+        ∃ t : Suffix (a.size - k),
+          (x, t) ∈ decode d (bdrop k (arrayToBytes a)) ∧ c = consumedAbs a k t := by
+  intro x c
+  rw [decodeArray_eq]
+  simp only [List.mem_map]
+  constructor
+  · rintro ⟨⟨y, t⟩, hm, heq⟩
+    obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. ▸ heq
+    exact ⟨t, hm, rfl⟩
+  · rintro ⟨t, hm, rfl⟩
+    exact ⟨(x, t), hm, rfl⟩
+
+/-- **`packedCands` is the attach list, mapped.** Under `ConsumesByte` at a live
+cursor both `dif` guards in `packedCands` are always satisfied (`decodeArray_consumes`
+gives `k < pr.2`, `decodeArray_bounded_upper` gives `pr.2 ≤ a.size`), so the
+`filterMap` never drops an element and is a `List.map`. This is the lemma that turns
+`packedCands` into something `List.mem_map` can open — the earlier plan's
+"unfold-and-prove-the-`dif`s" step, and it is what makes the `attach`/`filterMap`
+`rw` the ledger warned against unnecessary. `[propext, Quot.sound]`-only. -/
+theorem packedCands_eq_attach {α : Type} (d : Codec α) (h : ConsumesByte d)
+    (a : Array UInt8) (k : Nat) (hk : k < a.size) :
+    packedCands d h a k =
+      (decodeArray d a k).attach.map
+        (fun p => (⟨p.val, p.property,
+          decodeArray_consumes d h a k p.val.1 p.val.2 p.property hk,
+          decodeArray_bounded_upper d a k p.val.2 p.val.1 (Nat.le_of_lt hk) p.property⟩ :
+          PackedCand d a k)) := by
+  unfold packedCands
+  refine filterMap_eq_map_of_forall _ _ _ ?_
+  intro p _
+  have hp : k < p.val.2 := decodeArray_consumes d h a k p.val.1 p.val.2 p.property hk
+  have hq : p.val.2 ≤ a.size :=
+    decodeArray_bounded_upper d a k p.val.2 p.val.1 (Nat.le_of_lt hk) p.property
+  simp only [hp, hq, ↓reduceDIte]
+
+/-- **The two candidate lists have the same length.** A corollary of
+`packedCands_eq_attach` and `decodeArray_eq`: nothing is dropped and nothing is
+invented, so the packed search walks exactly as many candidates as the spec
+backtracking step does. `[propext, Quot.sound]`-only. -/
+theorem packedCands_length_eq {α : Type} (d : Codec α) (h : ConsumesByte d)
+    (a : Array UInt8) (k : Nat) (hk : k < a.size) :
+    (packedCands d h a k).length = (decode d (bdrop k (arrayToBytes a))).length := by
+  rw [packedCands_eq_attach d h a k hk, List.length_map, List.length_attach,
+      decodeArray_eq]
+  simp
+
+/-- **The candidate correspondence, forward — Step A's target.** For every spec
+candidate `(x, t)` at cursor `k`, the packed candidate `(x, consumedAbs a k t)` — with
+all three cursor facts attached — is a member of `packedCands d h a k`.
+
+This is the direction the bridge's successor case needs: given a spec candidate to
+feed the search congruence's step hypothesis, produce the packed candidate the fast
+decoder actually walks, and know they name the **same** `(value, remainder)`.
+`[propext, Quot.sound]`-only. -/
+theorem packedCand_of_mem {α : Type} (d : Codec α) (h : ConsumesByte d)
+    (a : Array UInt8) (k : Nat) (hk : k < a.size) (x : α)
+    (t : Suffix (a.size - k)) (hm : (x, t) ∈ decode d (bdrop k (arrayToBytes a))) :
+    (⟨(x, consumedAbs a k t),
+        (mem_decodeArray_iff d a k x (consumedAbs a k t)).mpr ⟨t, hm, rfl⟩,
+        consume_lt d h a k hk x t hm,
+        by
+          have := t.hle
+          unfold consumedAbs
+          omega⟩ : PackedCand d a k) ∈ packedCands d h a k := by
+  rw [packedCands_eq_attach d h a k hk, List.mem_map]
+  exact ⟨⟨(x, consumedAbs a k t),
+    (mem_decodeArray_iff d a k x (consumedAbs a k t)).mpr ⟨t, hm, rfl⟩⟩,
+    List.mem_attach _ _, rfl⟩
+
+/-- **The packed `/` spec candidate bijection, as an equivalence.** Both directions
+at once: a `PackedCand` at cursor `k` is a spec candidate at the same cursor, and
+vice versa, with the `consumedAbs`/`Suffix` correspondence between them. The second
+direction is `packedCand_of_mem`; the first is `mem_decodeArray_iff` plus the
+`PackedCand` invariant. Used by the bridge to move its step hypothesis across.
+`[propext, Quot.sound]`-only. -/
+theorem packedCand_iff {α : Type} (d : Codec α) (_h : ConsumesByte d)
+    (a : Array UInt8) (k : Nat) (_hk : k < a.size) (c : PackedCand d a k) :
+    ∃ t : Suffix (a.size - k),
+      (c.val.1, t) ∈ decode d (bdrop k (arrayToBytes a)) ∧ c.val.2 = consumedAbs a k t := by
+  obtain ⟨⟨x, c'⟩, hmem, -, -⟩ := c
+  exact (mem_decodeArray_iff d a k x c').mp hmem
+
 /-- The packed full-consumption decoder, at the start of the buffer. -/
 def decodeFullArrayRoot {α : Type} (d : Codec α) (h : ConsumesByte d)
     (a : Array UInt8) : Option (List α) :=
