@@ -147,6 +147,23 @@ def findByte (a : ByteArray) (off : USize) (b : UInt8) : Option USize :=
   | some i => some (off + i.toUSize)
   | none => none
 
+/-- The `byteSlice` refinement is a definitional identity: `byteSlice a i` is the
+bytes of `a` at-or-after `i`, i.e. `a.data.extract i.toNat a.data.size` re-packed
+into a fresh `ByteArray`.
+
+This law is what makes the trust seam's contract *nameable*: the C's contract is
+"the C matches the Lean body", and without a theorem fixing that body the
+contract points at a definition rather than at a checkable statement. It is the
+sibling of `blitBytes_spec`/`findByte_spec` below, so every Layer-2 seam now has
+its own `*_spec`. `rfl`-clean, `[propext, Quot.sound]`-only (no `Classical.choice`,
+zero `sorry`), and no `byteSlice`-related axiom — the running C is invisible to
+Lean, as the module header records. **Axiom footprint: none** (`#print axioms
+Codec.byteSlice_spec` reports no axioms at all), the same as `blitBytes_spec` and
+unlike `findByte_spec`'s `[propext]`; see that law for why the set is not uniform. -/
+theorem byteSlice_spec (a : ByteArray) (i : USize) :
+    byteSlice a i = ByteArray.mk (a.data.extract i.toNat a.data.size) := by
+  rfl
+
 /-- The `blitBytes` refinement is a definitional identity: the result is `dst`
 with its `[dc, dc+lc)` slice (where `dc`/`lc` are the destination-destined cursor
 and the copied run, both clamped as `Array.extract` clamps its bounds) replaced by
@@ -167,7 +184,14 @@ theorem blitBytes_spec (dst : ByteArray) (dstOff : USize) (src : ByteArray) (src
 
 /-- The `findByte` refinement is a definitional identity: `findByte a off b` is
 exactly the `Array.findIdx?` scan of the suffix from `off`, re-offset by `off`.
-`rfl`-clean, `[propext, Quot.sound]`-only. -/
+`rfl`-clean.
+
+**Axiom footprint: `[propext]`** — deliberately *not* uniform with its
+`byteSlice_spec`/`blitBytes_spec` siblings, which report none. The scan goes
+through `Array.findIdx?`, whose `DecidableEq UInt8` instance is a propositional
+(not definitional) decision, so `propext` is pulled in. `[propext]` is inside the
+`[propext, Quot.sound]`-only gate; the asymmetry is recorded here so it is not
+mistaken for drift. No `Classical.choice`, zero `sorry`. -/
 theorem findByte_spec (a : ByteArray) (off : USize) (b : UInt8) :
     findByte a off b =
       match Array.findIdx? (fun x => x == b) (a.data.extract off.toNat a.data.size) with
