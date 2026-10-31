@@ -101,18 +101,19 @@ skips the ledger would get them wrong**, and all four are also in `tasks.md`:
   §3/§4 rewrite the paragraphs that quote the numbers §6 fixes; correcting those
   claims against today's numbers would canonize the defect. If `tasks.md`
   disagrees with this line, `tasks.md` wins.
-- **6.1b's proof is closed; 6.2/6.3/6.4 are the next work.** `lake build` is green,
+- **6.1b's proof is closed; the next work is 6.4, then 6.2.** `lake build` is green,
   there are **no `sorry`s anywhere in the tree**, and 6.1b's gate
   (`Codec.decodeFullArrayRoot_eq`) holds: the packed `Array UInt8` + `Nat`-cursor
   decoder is proved equal to `decodeFull`, `[propext, Quot.sound]`-only, with
   `array_bridge` carrying the fast and search congruences over one strong induction.
-  `bench`'s `benchDecodeFullArray` asserts that bridge at run time too. 6.1b is
-  marked `[~]`, not `[x]`: its _numeric_ re-measurement is **6.4's** job, which needs
-  an idle machine and an interleaved `memcpy` reference. Do not quote a ratio for the
-  packed path before 6.4 prints one. Read `tasks.md` 6.1b's "SESSION 9" note before
-  touching any of it — five plan corrections are recorded there, including a
-  `Classical.choice` leak that was already in the tree and that the ledger did not
-  know about (`(by omega)` inside a `match` arm, the disjunction trap).
+  `bench`'s `benchDecodeFullArray` asserts that bridge at run time but prints **no
+  number** on purpose. 6.1b stays `[~]` rather than `[x]` for that reason: its numeric
+  re-measurement became **6.4**, which the ledger now orders _before_ 6.2 —
+  6.2 has to quote a measured number for the packed path and only 6.4's lane can
+  produce one, so leaving 6.4 last would make 6.2 stale or invented. `tasks.md` 6.2's
+  "PLAN FOR NEXT SESSION" is the route; read it, and read 6.1b's "SESSION 9" block
+  before touching `Codec/Packed.lean` (five plan corrections, including a
+  `Classical.choice` leak that was already in the tree).
 - **Benchmark numbers from this repo are not trustworthy without the rules.** Every
   in-repo measurement attempt during 6.1 made a wrong number that was briefly
   believed (dead-code elimination reporting `0 ns/op`, loop hoisting of a pure
