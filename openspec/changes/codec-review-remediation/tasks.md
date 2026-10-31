@@ -1109,6 +1109,118 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
 
 - [ ] 6.1b **Move the fast decode onto an `Array UInt8` + `Nat` cursor**
 
+      **PLAN FOR NEXT SESSION (2026-11-02). Start here. Nothing below is
+      speculative — every fact is proved or measured, and the one open item is
+      named exactly.**
+
+      *State.* `decodeArray` (`Codec/Packed.lean:59`) is the reusable cursor
+      decoder: `List (α × Nat)`, no `Suffix`, no `bdrop`, proved equal to `decode`
+      by `decodeArray_eq` (`[propext, Quot.sound]`-only). `decodeFullArray` must
+      **not** be used — it commits to the head (see the FINDING above). The only
+      missing piece is the **backtracking search over `decodeArray`'s candidates**,
+      which is `decodeFullFastSearch` with `Suffix` replaced by a `Nat` cursor.
+      In probe form it already returns the right values (`some [9]` on the
+      backtracking witness, `some [1,2,3]`, `some []`); what does not compile is
+      its `decreasing_by`.
+
+      **Step 1 — `Codec.decodeArray_consumes`: DONE, in `Codec/Packed.lean`.**
+      Proved, `[propext, Quot.sound]`-only, `lake build` green. It sits **after**
+      `decodeArray_eq` (which it uses), so a later addition near the top of the
+      file will not see it. Statement and proof for reference:
+      The strict-decrease fact, without which the search is not well founded:
+
+          theorem decodeArray_consumes {α} (d : Codec α) (h : ConsumesByte d)
+              (a : Array UInt8) (k : Nat) :
+              ∀ (x : α) (c : Nat), (x, c) ∈ decodeArray d a k → k < a.size → k < c
+
+      Proof: `rw [decodeArray_eq]` at the membership, `simp only [List.mem_map]`,
+      `obtain ⟨⟨y, t⟩, hmem', heq⟩`, inject `heq`, then
+      `show k < consumedAbs a k t; unfold consumedAbs`, take
+      `hroot : t.remaining < a.size - k` from `h y (bdrop k (arrayToBytes a)) t hmem'`
+      and close with `hk' : k ≤ a.size` + `omega`. **Copy it from this
+      description — it is 10 lines and it is the whole mathematical content.**
+
+      **Step 2 — the mutual pair, MIRRORING `decodeFullFast`. Next action.** Do not invent a
+      variant. `Codec/Decode.lean:219-268` is the same construction (decoder ⇄
+      candidate search, `Prod.Lex` measure, cursor advanced by what a candidate
+      consumed) and it elaborates. Copy its shape exactly:
+
+      - equation-style bodies (`| k, acc, cands => …`), not named parameters;
+      - `termination_by` naming those **pattern variables**
+        (`termination_by a k _ cands => (a.size - k, cands.length)`);
+      - both functions' `termination_by` must have the **same type**
+        (`Prod.Lex` in both), or Lean errors "termination measures must have the
+        same return type";
+      - the two `decreasing_by` tails are then literally: `search → decoder` =
+        `Prod.Lex.left _ _ (by have hc := decodeArray_consumes … hk; omega)` and
+        `search → search` = `exact Prod.Lex.right _ (Nat.le_refl _)`.
+
+      **The one place the shapes genuinely differ — expect to think here.** The
+      wrapper branches on `k < a.size` where `decodeFullFast` branches on
+      `n - m = 0`. That guard is what supplies `hk` to `decodeArray_consumes`.
+      Thread it as an **explicit hypothesis parameter** on the search
+      (`(hk : k < a.size) → …`): the `if hk :` binder is not reliably in scope
+      inside `decreasing_by`, and **`rename_i` will not recover it** — 15 attempts
+      this session died on `rename_i`/`too many variable names provided`. With
+      `hk` explicit, the obligation is one `omega`.
+
+      **Do NOT** substitute the search by explicit `WellFounded.fix`. It avoids
+      `decreasing_by` but changes the reduction equation to `WellFounded.fix_eq`,
+      which is precisely the trap 6.1a lost seven sessions to; every downstream
+      proof would need `unfold; rw [WellFounded.fix_eq]` instead of
+      `rw [….eq_def]`.
+
+      **Step 3 — the bridge.** `cursor_bridge` (6.1a, in the tree) is the
+      template: measure on the remaining length, carry the search congruence
+      alongside the fast congruence in one conjunction, and state the
+      specification side at the root spelling. Target:
+
+          fullArrayRoot d h a = decodeFull d h a.size (arrayToBytes a)
+
+      `[propext, Quot.sound]`-only, zero `Classical.choice`, zero `sorry`.
+
+      **Step 4 — measure, then stop.** Add the timing lane only after the bridge
+      is proved. Read the measurement rules below first; they cost this session
+      most of a day.
+
+      **MEASUREMENT RULES — every one of these produced a wrong number this
+      session. Do not re-derive them.**
+      1. **Never time a pure call inside a loop.** `decodeFullFastRoot p h s` is
+         loop-invariant: it is hoisted and the timed region collapses to 0 ns
+         (reported literally `0 ns/op` twice, and 41 ns for a 1024-byte decode).
+         Varying one byte per iteration does **not** fix it — the closure is still
+         the same shape. One fresh timed call per sample, and the input must
+         differ per sample.
+      2. **Never fold the result to a `sum` or `length`.** `bytesOf` is all
+         `0x01`, so those are constant and the decode is deleted. Use a
+         data-dependent fold (`a * 31 + b`) **and** check the sink is non-zero.
+      3. **Neither the mean nor the best-of is right.** The mean averages in the
+         allocator's ~125 µs cold start (steady state ~100 ns) and made `memcpy`
+         look 200× slow. The best-of picks up zero-length spans from a coarse
+         clock. Use the **median** of interleaved samples.
+      4. **Interleave the `memcpy` reference in the same samples.** A load spike
+         on one side otherwise makes the ratio measure the machine.
+      5. **Wall-clock does not stabilise here** (`AGENTS.md`). Ask the owner to
+         leave the machine idle; check `uptime` first and record the load average
+         next to the number. The 2.6× spread between two idle-ish runs this
+         session is the machine, not the code.
+
+      **Baseline to beat, measured on an idle-ish machine (`ns/byte` flat in `n`
+      ⇒ real per-byte work, not overhead):**
+
+      | path | ns/byte | vs `memcpy` |
+      | --- | --- | --- |
+      | `decodeFullFastRoot` | 1,200–1,290 | 3,700×–21,000× |
+      | `decode` at a cursor, single step | ~42 (per step) | — |
+      | `decodeArray` single step | ~42 (per step) | — |
+
+      So a correct cursor loop that pays ~42 ns/step would land near **24 MiB/s**
+      — a 20–30× win over today — and would still be well short of the `≤ 20×`
+      bar. **The remaining gap after this task is the per-step `List` that
+      `decodeArray` allocates**, which is what 6.6's carrier decision is about.
+      Record the measured number; do not tune the bar to it.
+
+
       **FINDING (2026-11-02): `decodeFullArray` in `Codec/Packed.lean` has the
       SAME head-commit defect 6.1a found and fixed in `decodeFullFast`.** It is
       `| (_, c) :: _ => some (…)`, i.e. it commits to the head candidate, and
