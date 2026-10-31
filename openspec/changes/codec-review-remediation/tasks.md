@@ -639,8 +639,42 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
       **cursor re-rooting lemma** (`decodeFullFast p h s m acc =
       decodeFullFast p h (Suffix.drop m s).bytes 0 acc`, by the same `Prod.Lex`
       induction) so the bridge can induct on the suffix alone and the index
-      never has to be rewritten. That lemma is stated in `tasks.md`'s next-session
-      note, not yet in the tree.
+      never has to be rewritten.
+
+      **SESSION 2 RESULT (2026-11-01): the lemma is in the tree, base case closed,
+      open half diagnosed.** `Codec.decodeFullFast_reroot` is stated in
+      `Codec/Decode.lean` with its docstring carrying the full state; `lake build`
+      fails there (plus the bridge) by design.
+
+      * **Closed:** the `n - m = 0` case — unfold `decodeFullFast`, `cases` the
+        cursor length with the equation in context, and the re-rooted side's own
+        condition `(Suffix.drop m s).remaining - 0` is *definitionally* `n - m`, so
+        it reduces in the same step.
+      * **Open:** the `n - m = j + 1` case. **Structural induction on the candidate
+        list cannot close it** — the search's recursive step calls
+        `decodeFullFast` at the *advanced* cursor, so the goal becomes this very
+        theorem at a smaller measure. It needs a **mutual measure induction**
+        carrying the search congruence alongside it:
+        `decodeFullFastSearch p h s m acc cs = decodeFullFastSearch p h
+        (Suffix.drop m s).bytes 0 acc cs'` over the same list, ranked by the same
+        `Prod.Lex ((Suffix.drop m s).remaining, cands.length)`. State the two
+        together (a `mutual`-shaped `have` pair, or one lemma with the search as a
+        conjunct per measured state) — do not state them separately, because
+        either alone needs the other at a smaller measure.
+      * **Dead end 1 (do not re-attempt): the `Suffix`-typed form does not
+        elaborate in a goal.** `Suffix.drop 0 (Suffix.drop m s)` infers its first
+        argument from `(Suffix.drop m s).bytes`, and `(·).bytes`'s dot notation
+        binds to the `Suffix` **structure** — so the inferred index is the third
+        *component* of the `Suffix` value, not its first, and in a *goal* (where
+        the expected type fixes the index) elaboration fails with "expected
+        `Suffix n`, got `Bytes n`". It also defeats `Suffix.drop 0 (Suffix.drop m
+        s).bytes` **inside any function argument**, including under `decode` and
+        under `match` branches — reproduced with a minimal `let` probe. Write the
+        `.bytes` forms; an equality of the `Suffix`-typed term *is* accepted as a
+        hypothesis (which is why the dead end is invisible until the goal needs it).
+      * **Dead end 2:** length rewrites on the index (`Nat.sub_zero`,
+        `Nat.sub_sub_self`) fail on the dependent-`Bytes` motive, `rfl`-true or not;
+        `cases` on the length (equation in context) is the reduction that works.
 
 - [ ] 6.1b **Move the fast decode onto an `Array UInt8` + `Nat` cursor**
       (≈**6.5×**: 9 → 59 MiB/s measured). `decodeFullFastRoot` avoids the closure
