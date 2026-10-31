@@ -1070,15 +1070,9 @@ theorem decodeFull_reroot_cursor {α : Type} (p : Codec α) (h : ConsumesByte p)
       rw [decodeFull_succ p h (k + 1) k (by omega), decodeFull_succ p h (k + 1) k (by omega)]
       rw [reroot_bytes_eq (n := n) (m := m) (r := k + 1) (s := s) hr]
 
-/-- **The two cursors are the same input.** `bdrop (m + (n - m - r)) s` and
-`bdrop (0 + (n - m - r)) (bdrop m s)` are the same bytes, at the same length `r`.
-Stated as an equality of `Bytes r` values (both cast to `r`), which is what lets
-`decodeFullStep` be compared at the two roots. -/
-/-- **The two cursors are the same input.** `bdrop (m + (n - m - r)) s` and
-`bdrop (0 + (n - m - r)) (bdrop m s)` are the same bytes, at the same length `r`.
-Stated as an equality of `Bytes r` values (both cast to `r`), which is what lets
-`decodeFullStep` be compared at the two roots. Proved pointwise, because the two
-casts carry different (but equal) width proofs and no `rw` can abstract them. -/
+/-- **The two congruences** of the fast decoder (task 6.1a): the cursor is
+irrelevant to `decodeFullFast`, and the search is invariant under re-rooting the
+candidate list. Both are consumed by the root bridge below. -/
 theorem decodeFullFast_pairwise {α : Type} (p : Codec α) (h : ConsumesByte p) :
     (∀ (n : Nat) (s : Bytes n) (m : Nat) (acc : List α),
         decodeFullFast p h s m acc = decodeFullFast p h (Suffix.drop m s).bytes 0 acc) ∧
