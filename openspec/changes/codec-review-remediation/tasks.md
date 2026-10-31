@@ -688,20 +688,67 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
         candidate list, re-indexed between the two roots (`retypeCands`), not with
         two independent lists. With two, the `nil` branch is *false*: `cs = []` no
         longer constrains `cs'`. Recorded because it looks like a free choice.
-      * **The obstacle is the `termination_by` ranking.** Both congruences sit at
-        the same state, but `decodeFullFast` ranks `(·, cands.length + 1)` and
-        `decodeFullFastSearch` ranks `(·, cands.length)`, and `Prod.Lex` has **no
-        reflexive case** — so the fast congruence's live-cursor branch cannot reach
-        the search congruence at the same key. Two routes: (a) prove the two
-        lemmas at the same key in one `mutual`-shaped statement (the recursor then
-        gives each the other *at the same* key, which `Prod.Lex` cannot do for a
-        single-predicate induction); or (b) re-rank the *definition* so the search
-        congruence carries the `+1` tick and the fast one descends into it —
-        allowed only under the §6 shape carve-out (D9).
-      * **Third trap, new:** `rw [decodeFullFastSearch.eq_def]` does **not** fire
-        on an applied `decodeFullFastSearch` while its argument is still a
-        variable (`match`-in-`match` body). `cases` the candidate list first, or
-        state the unfolding as an explicit `have` and `rfl` it inside the branch.
+      * **REFUTED (2026-11-02): the obstacle is NOT the `termination_by`
+        ranking.** The previous session recorded "`Prod.Lex` has no reflexive
+        case, so the fast congruence cannot reach the search congruence at the
+        same key", and proposed a `mutual` statement or re-ranking the
+        definition (a D9 shape carve-out). **That diagnosis is false and neither
+        remedy is needed.** `@decodeFullFast.induct` was inspected directly: it
+        takes `motive1 : (n s m acc) → Prop` and `motive2 : (n s m acc cs) →
+        Prop`, one predicate per side, and its recursive hypotheses supply the
+        fast congruence (inside `motive2`'s two cons cases) and the search
+        congruence at a *shorter candidate list* (inside `motive2`'s `ihL`). The
+        search congruence therefore needs **no hypothesis at the same key** — its
+        cons case is `rw [hfast]; rw [reroot-unfold]`, then `ihL` for the `none`
+        branch and `rfl` for the `some` branch. Nothing touches `Prod.Lex`.
+        **Do not re-attempt the `mutual` restatement or re-rank the definition on
+        this theory.**
+
+      * **The actual obstacle: `Membership` instance selection on the re-rooted
+        list.** `candsRoot` spells the re-rooted list at
+        `decode p (Suffix.drop 0 (Suffix.drop m s).bytes).bytes`; the search's own
+        signature demands `decode p (Suffix.drop m s).bytes`. Those two are
+        `rfl`-equal (verified) but are **not the same syntactic head**, so
+        `List.instMembership` unifies against the wrong one and every
+        `rw [decodeFullFastSearch.eq_def]` in the re-rooted position fails with
+        `Application type mismatch: List.instMembership … expected Membership (α ×
+        Suffix (Suffix.drop m s).remaining)`. This is the *mechanism* behind the
+        already-recorded `Suffix.drop 0` dead end; the earlier note blamed dot
+        notation on `.bytes`, and the real trigger is the `Membership`
+        typeclass argument-fact, which does not look through a definitional
+        equality.
+        **The workaround that works:** name the re-rooted list type as an alias on
+        the **search's own return type** (a `Cands0 p r := List {pr : α × Suffix
+        (Suffix.drop 0 r).remaining // pr ∈ decode p (Suffix.drop 0 r).bytes}`),
+        and state the search congruence's re-rooted side at that alias. All four
+        re-rooted reduction lemmas (`[]` at both roots, cons at both roots) and the
+        whole search congruence then close.
+
+      * **Third trap (still true):** `rw [decodeFullFastSearch.eq_def]` does
+        **not** fire on an applied `decodeFullFastSearch` while its argument is
+        still a variable (`match`-in-`match` body). `cases` the candidate list
+        first, or state the unfolding as an explicit `have` and `rfl` it inside the
+        branch.
+      * **Fourth trap:** `obtain hk : n - m = j + 1 := hsucc` must precede
+        `split`/`cases` on a subtraction; and `split`'s case tags are `h_1`/`h_2`,
+        **not** the `_h` binder name. Bare `omega` cannot see the equation `split`
+        introduces on the *re-rooted* side (`(Suffix.drop m s).remaining - 0`), so
+        each branch needs its own `have : … - 0 = j + 1 := by dsimp only
+        [Suffix.drop]; omega` supplied first.
+
+      * **Progress (2026-11-02): cases 1–3 of the pairwise induction are closed**
+        and the whole search congruence is proved, in a throwaway probe. Nothing
+        has been folded into `Codec/Decode.lean` yet — it still carries both
+        `sorry`s. **Remaining:** one step, `step at the re-rooted cursor`, to
+        transport the recursor's fast congruence from the **home** advanced cursor
+        `m + ((n - m) - r)` to the **re-rooted** cursor
+        `0 + (((Suffix.drop m s).remaining - 0) - r)`; then the two cons cases
+        (4, 5) fall from it. `drop_trans_eq` does **not** apply directly, because
+        an `n`-indexed `Suffix` and a cursor-`0` `Suffix` differ in index — the
+        step has to be stated **pointwise on `.bytes`**, by the same
+        "read indices into the root" trick that made `step_bytes_pointwise` work
+        (and for the same reason: a `Suffix`-typed or `Bytes`-typed statement hits
+        the index mismatch).
 
 - [ ] 6.1b **Move the fast decode onto an `Array UInt8` + `Nat` cursor**
       (≈**6.5×**: 9 → 59 MiB/s measured). `decodeFullFastRoot` avoids the closure
