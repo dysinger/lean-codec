@@ -30,12 +30,26 @@ over the same types, calling the same `decode`/`bdrop` and returning the same
 `Option (List UInt8)`, with a bit-identical result. Any exception to the
 structural requirement SHALL carry a recorded measurement justifying it.
 
-**Decode and encode SHALL run within a small single-digit multiple of C.** The
-reference for "C" SHALL be a `memcpy`-class bulk byte operation measured in the
-same process and run, and the ratio SHALL be reported as a ratio to it, not as a
-machine-dependent absolute figure. This SHALL be verified by a bench lane that
-**fails** when the ratio exceeds a stated bar, so the property cannot regress
-silently.
+**Decode and encode SHALL be made as fast as possible in pure Lean, and their
+measured cost SHALL be attributed to named causes.** The requirement is
+**closeness to C, with no set threshold**: no ratio, MiB/s figure, or "× off C"
+multiple is to be asserted as a pass/fail bar, because a bar chosen by the tooling
+is tuned down to whatever is achievable rather than investigated. What SHALL be
+reported is the cost and its decomposition.
+
+A measured decode or encode cost SHALL name its dominant terms, at minimum
+distinguishing (a) the memory access, (b) per-element allocation (a `List` result,
+an `.attach`/`filterMap` candidate list), (c) the recursion/result shape, and
+(d) scalar arithmetic — and SHALL state the measured floor of a hand-written
+cursor loop over the same carrier, so the distance to what the language already
+achieves is explicit rather than attributed to the language.
+
+The reference for "C" SHALL be either a same-process `memcpy`-class bulk
+operation **when the operation is itself bulk byte movement**, or a hand-written
+C parser over the same bytes **when the operation is per-element**; the two SHALL
+NOT be conflated, and a per-element codec's ratio to `memcpy` SHALL NOT be
+presented as its distance from C, because `memcpy` copies bytes while a parser
+does per-element work.
 
 The literal-decoding result types SHALL NOT be the runtime carrier. A decode step
 SHALL return its value and a consumed count (a cursor), not a `List` of results
@@ -93,15 +107,23 @@ reflects.
   for its stated statement, and the axiom footprint is still
   `[propext, Quot.sound]`-only with zero `Classical.choice` and zero `sorry`.
 
-#### Scenario: Decode and encode are within a small multiple of C
+#### Scenario: Decode and encode are measured and attributed
 
-- **WHEN** a decode or encode path is measured against a `memcpy`-class bulk
-  operation in the same process and run
-- **THEN** the reported figure is a **ratio** to that reference, the ratio is
-  within a small single-digit multiple, and a bench lane asserts the bound and
-  fails when it is exceeded — so an order-of-magnitude regression cannot land
-  unnoticed. An absolute "MiB/s" floor SHALL NOT be used as the assertion, because
-  it is machine-dependent and is tuned down rather than investigated.
+- **WHEN** a decode or encode path is measured
+- **THEN** the reported figure comes from a lane that prints it, the figure is
+  decomposed into the named cost terms of the requirement above, the measured
+  floor of a hand-written cursor loop over the same carrier is stated alongside
+  it, and — for a per-element codec — no ratio to `memcpy` is presented as its
+  distance from C. An absolute "MiB/s" figure SHALL NOT be used as a threshold,
+  because it is machine-dependent and is tuned down rather than investigated.
+
+#### Scenario: A withdrawn figure does not reappear
+
+- **WHEN** a documented performance claim is found to have no bench lane behind
+  it that reproduces it
+- **THEN** the claim is withdrawn in place (naming it as unreproducible) rather
+  than quietly replaced, so a reader consulting the old number finds out why it
+  went away; and no new figure is stated until a lane prints it.
 
 #### Scenario: The decoder's result type is a cursor, not a list
 
@@ -113,11 +135,11 @@ reflects.
   the fast path runs on. Rationale is measured, not stylistic: the cursor shape
   runs ~8.5× the `memcpy` floor and the `List` per-step shape ~47×.
 
-#### Scenario: A performance regression fails the bench
+#### Scenario: A performance regression is visible
 
-- **WHEN** a decoder's throughput at the bench's fixed `n` falls below the
-  recorded floor
-- **THEN** the bench lane aborts with a named failure rather than only printing a
-  slower number, so the `R5.1` defect cannot silently return; and that lane SHALL
-  be ordered before any lane that can be slow or abort, so the assertion is
-  actually reached in a default run.
+- **WHEN** a decoder's measured throughput at the bench's fixed `n` regresses
+- **THEN** a lane reports the new figure alongside the `memcpy` reference taken
+  in the same run, so the regression is observable in a default run rather than
+  hidden behind a value-only assertion; and that lane SHALL be ordered so it is
+  actually reached — either before any lane that can abort, or with its own
+  failure named.
