@@ -2,7 +2,7 @@
 
 Guidance for AI coding agents working in this repository.
 
-**Three hard requirements, before anything else:**
+**Four hard requirements, before anything else:**
 
 1. **Play an audible alarm every time you pause** — see
    [Pause signal](#pause-signal-mandatory) below. It is a mandate, not a nicety.
@@ -19,6 +19,17 @@ Guidance for AI coding agents working in this repository.
    `NOTES.md`, no `*-wip.lean` scratch files, no second place a next session could
    look. If a scratch file earns its keep, land its content in the library or in
    the change's `tasks.md` and delete the file.
+4. **Work lands in the repo, and every session ends with a checkpoint commit.**
+   Do **not** develop proofs in `/tmp` (or any path outside the repo) and intend
+   to splice later. `AGENTS.md` permits `/tmp/probe.lean` for exactly one case —
+   the library does not build and you need to iterate against the built library —
+   and that file is deleted the moment the build is green again. New proofs, new
+   lemmas, and half-finished cases are **written into `Codec/*.lean`**, with the
+   unfinished obligation marked by a `sorry` that fails `lake build` (the gate is
+   the honest marker). This is not a style preference: work in `/tmp` is invisible
+   to `git`, to the build gate, and to the next session, and one reboot loses it.
+   End every session with a commit (individual files, per the git conventions) so
+   the tree is never the only copy of anything.
 
 **This file is forward-looking operating instructions, not a session diary.**
 History — what landed when, what was reverted, what a past session measured —
