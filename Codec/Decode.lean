@@ -873,6 +873,77 @@ theorem decodeFullFastSearch_eq {α : Type} (p : Codec α) (h : ConsumesByte p) 
           simp only [Option.map]
           exact congrArg some (reverse_cons_append acc x xs)
 
+/-- **The cursor re-rooting lemma.** `decodeFullFast` does not care which byte
+string it is rooted at, only which *suffix* the cursor `m` names: running from
+cursor `m` over the root `s` is running from cursor `0` over `(Suffix.drop m s)`'s
+bytes. Equivalently, the *state* `(remaining, candidate list)` is invariant under
+re-rooting — which is why the lemma is true at all, and why it is the thing the
+`decodeFullFastRoot = decodeFull` bridge (task 6.1a) should induct on: the bridge
+can then work on the suffix alone and never rewrite a `Bytes` index.
+
+**OPEN (task 6.1a).** Not yet proved; `lake build` fails here by design. What is
+established, in the order the effort went:
+
+* The reformulation is the whole point and it was right: the failing bridge is an
+  index-alignment problem, and the two measures are the same number.
+* Unfolding both sides works (`decodeFullFast`'s own equation, then `cases` on the
+  cursor length, then `split` on each `dite`); the *value* level reduces to
+  `decodeFullFastSearch` over the same candidate list from two cursors.
+* **The `n - m = 0` case is closed** (below): unfold, `cases` on the root's cursor,
+  and the re-rooted side's own condition is definitionally the same number.
+* **The `n - m = j + 1` case is the open half**, and it cannot be closed by
+  structural induction on the candidate list: the search's recursive step calls
+  `decodeFullFast` at the *advanced* cursor, so the goal turns into this very
+  theorem at a smaller measure. It needs a **mutual measure induction** with the
+  search congruence (`decodeFullFastSearch` at cursor `m` over `s` = the same at
+  cursor `0` over `Suffix.drop m s`'s bytes), ranked by the same `Prod.Lex` pair.
+
+**Two dead ends, recorded so they are not re-attempted** (both cost real time):
+
+1. **`Suffix`-typed forms do not elaborate.** `Suffix.drop 0 (Suffix.drop m s)`'s
+   first argument is *inferred* from `(Suffix.drop m s).bytes`, and in that form
+   the inferred `n` is the **third component** of the `Suffix` structure (which
+   `Suffix.drop` returns), not its first. So an equality about that term can
+   appear in a *hypothesis*, but in a *goal* the expected type forces `n` to be
+   `Suffix n`'s index and the elaboration fails with "expected `Suffix …`,
+   got `Bytes …`". Write `.bytes` variants instead.
+2. **`Nat.sub_zero`/`Nat.sub_sub_self` fail to rewrite the index here**, though
+   they are `rfl`-true: the index sits inside the *type* of a function argument
+   in the goal, and the motive is not type-correct. `cases` on the length (with
+   the equation in context) is the route that does reduce.
+
+`[propext, Quot.sound]`-only, once proved. -/
+theorem decodeFullFast_reroot {α : Type} (p : Codec α) (h : ConsumesByte p) :
+    ∀ (n : Nat) (s : Bytes n) (m : Nat) (acc : List α),
+      decodeFullFast p h s m acc = decodeFullFast p h (Suffix.drop m s).bytes 0 acc := by
+  intro n s m acc
+  -- Step both sides through `decodeFullFast`'s own equation. The RHS's condition
+  -- `(Suffix.drop m s).remaining - 0` is *definitionally* `n - m`, so one `cases`
+  -- on the root's cursor decides both.
+  have e1 : decodeFullFast p h s m acc =
+      (match n - m with
+       | 0 => some acc.reverse
+       | _j + 1 =>
+           decodeFullFastSearch p h s m acc (decode p (Suffix.drop m s).bytes).attach) := by
+    rw [decodeFullFast]
+    cases n - m <;> rfl
+  rw [e1]
+  clear e1
+  cases hc : n - m with
+  | zero =>
+      -- Cursor exhausted: both sides return the accumulator.
+      have hz : (Suffix.drop m s).remaining = 0 := by
+        show n - m = 0
+        exact hc
+      rw [decodeFullFast]
+      generalize hm0 : (Suffix.drop m s).remaining - 0 = r
+      rw [show r = 0 from by omega]
+  | succ j =>
+      -- Cursor live: both sides search the same candidate list, from cursors that
+      -- name the same remaining length. Closing this needs the mutual measure
+      -- induction described in this lemma's docstring.
+      sorry
+
 /-- The bridge at the root: the fast decoder from cursor `0` with an empty
 accumulator equals the specification. This is the statement the library needs
 (`decodeFullFastRoot = decodeFull`); the auxiliary lemmas above
