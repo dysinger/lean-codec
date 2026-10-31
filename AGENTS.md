@@ -93,19 +93,26 @@ skips the ledger would get them wrong**, and both are also in `tasks.md`:
 - **The work order is §6 → §2 → §3/§4 → §5**, and **6.1a is a hard gate** on the
   rest of §6. §6 goes first because §3/§4 rewrite the paragraphs that quote the
   numbers §6 fixes. If `tasks.md` disagrees with this line, `tasks.md` wins.
-- **6.1a's target theorem is REFUTED, and the tree is deliberately red because of
-  it.** `decodeFullFastRoot = decodeFull` is **false**: the fast decoder commits to
-  the head candidate while `decodeFullStep` backtracks to the next one, and a
-  description whose head consumes a different byte count than a sibling separates
-  them (witness and both outputs in `tasks.md` 6.1a and in
-  `decodeFullFast_eq_aux`'s docstring). `lake build` fails at
-  `Codec/Decode.lean:818` on that one `sorry` — the honest marker. **Do not try to
-  finish it as stated, and do not bridge anything to `decodeFullFastRoot`.** The
-  correct next step is a fast decoder that keeps the flat re-rooted cursor _and_
-  carries `decodeFullStep`'s sibling search, proved equal to `decodeFull` directly
-  (6.1b). Read `tasks.md` 6.1a before touching it — it records the refutation, the
-  two refuted diagnoses, and the two traps (`drop_trans_eq` pointwise-not-`Bytes`;
-  apply `step_bytes_pointwise` before any `dsimp`).
+- **The next step is proving `decodeFullFast_reroot`, and the tree is
+  deliberately red until the bridge lands.** History first, because it is easy to
+  re-derive wrongly: the original `decodeFullFast` **committed to the head
+  candidate**, which made `decodeFullFastRoot = decodeFull` _false_ (witness in
+  `tasks.md` 6.1a). The decoder has since been rewritten to **backtrack** —
+  `decodeFullFast` delegates to `decodeFullFastSearch`, which tries every
+  candidate in order while keeping the flat re-rooted cursor — and both terminate
+  in one `mutual` block ranked by `Prod.Lex` on
+  `((Suffix.drop m s).remaining, cands.length)`. The step correspondence
+  `decodeFullFastSearch_eq` is **proved**. What is left is the top-level bridge,
+  whose obstacle is **index alignment, not mathematics**: the fast recursion runs
+  at cursor `m + ((n-m) - t.remaining)` over the root `s`, the spec lives over
+  `t.bytes`, and those are not definitionally equal, so any `rw` of the index hits
+  the dependent-`Bytes` motive failure. **Prove the re-rooting lemma
+  `decodeFullFast p h s m acc = decodeFullFast p h (Suffix.drop m s).bytes 0 acc`
+  first** (same `Prod.Lex` induction), then the bridge inducts on the suffix alone
+  and never rewrites an index. Read `tasks.md` 6.1a before touching it: it has the
+  refutation, the landed lemmas, the two refuted diagnoses, and the two traps
+  (`drop_trans_eq` pointwise-not-`Bytes`; apply `step_bytes_pointwise` before any
+  `dsimp`). `lake build` fails at `Codec/Decode.lean:886` on that one `sorry`.
 - **Only `R5.1` may change a declaration _shape_** (design D9), and it must keep
   every theorem's statement, prove the new definition equal to the old, and stay
   `[propext, Quot.sound]`-only / zero-`sorry` / `#eval`-able. Nothing else may.
