@@ -470,6 +470,34 @@ theorem decodeArray_eq {α : Type} (d : Codec α) (a : Array UInt8) (i : Nat) :
       · have hn : (a.size - i) = 0 := Nat.sub_eq_zero_of_le (Nat.le_of_not_gt h)
         simp [h, hn]
 
+/-- **A `ConsumesByte` decoder's packed candidate advances strictly**: at cursor
+`k`, every `(x, c) ∈ decodeArray d a k` has `k < c`.
+
+This is the cursor form of `ConsumesByte`, and it is the **well-foundedness fact**
+a cursor-driven full-consumption search needs: the search recurses at the cursor a
+candidate consumed, so without `k < c` the measure would not decrease. The spec
+form of the same fact is the hypothesis of `decodeFullFast`'s `decreasing_by`;
+here it is obtained through `decodeArray_eq` from `(x, t) ∈ decode d (bdrop i …)`.
+
+`decodeArray` alone does **not** give it — `pure x` produces a candidate with
+`c = k` (`decodeArray (pure 5) a 1 = [(5, 1)]`), which is why the search must be
+run under `ConsumesByte` and not on a bare `Codec`.
+
+`[propext, Quot.sound]`-only. -/
+theorem decodeArray_consumes {α : Type} (d : Codec α) (h : ConsumesByte d)
+    (a : Array UInt8) (k : Nat) :
+    ∀ (x : α) (c : Nat), (x, c) ∈ decodeArray d a k → k < a.size → k < c := by
+  intro x c hmem hk
+  rw [decodeArray_eq] at hmem
+  simp only [List.mem_map] at hmem
+  obtain ⟨⟨y, t⟩, hmem', heq⟩ := hmem
+  obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. ▸ heq
+  show k < consumedAbs a k t
+  unfold consumedAbs
+  have hroot : t.remaining < a.size - k := h y (bdrop k (arrayToBytes a)) t hmem'
+  have hk' : k ≤ a.size := Nat.le_of_lt hk
+  omega
+
 /-- The packed full-consumption decoder equals the *first* spec `decode` result,
 with its suffix packed as a `ByteArray` and its consumed count read back. (The
 packed carrier takes the first match, exactly as the packed `head?`-projection of
