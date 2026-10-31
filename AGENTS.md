@@ -112,7 +112,17 @@ skips the ledger would get them wrong**, and both are also in `tasks.md`:
   and never rewrites an index. Read `tasks.md` 6.1a before touching it: it has the
   refutation, the landed lemmas, the two refuted diagnoses, and the two traps
   (`drop_trans_eq` pointwise-not-`Bytes`; apply `step_bytes_pointwise` before any
-  `dsimp`). `lake build` fails at `Codec/Decode.lean:886` on that one `sorry`.
+  `dsimp`). The lemma is now **in the tree with its base case closed**
+  (`decodeFullFast_reroot`, `Codec/Decode.lean`), and its docstring carries the
+  two dead ends that cost a session: the `Suffix`-typed form does **not**
+  elaborate in a goal (the index is inferred from the `Suffix` structure's _third_
+  component, so it reads `Bytes n` where `Suffix n` is wanted — write `.bytes`
+  variants), and `rfl`-true length rewrites on the index fail on the dependent
+  `Bytes` motive. **The open half is the `j + 1` case, and it needs a mutual
+  measure induction with the search congruence — structural induction on the
+  candidate list cannot close it**, because the search's recursive step calls
+  `decodeFullFast` at the advanced cursor, i.e. at this very theorem. `lake build`
+  is red on that one `sorry` plus the bridge's, by design.
 - **Only `R5.1` may change a declaration _shape_** (design D9), and it must keep
   every theorem's statement, prove the new definition equal to the old, and stay
   `[propext, Quot.sound]`-only / zero-`sorry` / `#eval`-able. Nothing else may.
