@@ -298,6 +298,24 @@ unsafe def benchSeamBoundaries : IO Unit := do
     if got != spec then
       throw (IO.userError s!"blitBytes boundary mismatch at dstOff={dstOff} srcOff={srcOff} len={len}")
   IO.println "seam boundaries OK (byteSlice/findByte/blitBytes out-of-range value-checks)"
+  -- blitBytes **aliasing**: the same buffer as both source and destination, with
+  -- overlapping windows. The Lean body is `extract ++ extract ++ extract` over the
+  -- *backing* `data`, so it reads the original bytes throughout; a C implementation
+  -- that blits in place must therefore either be equivalent on this input or be
+  -- caught here. This is the case where "matches the body" is not free.
+  for (off, len) in [(0, 3), (1, 3), (2, 5)] do
+    let dst := a5
+    let got := blitBytes dst (off.toUSize) dst (off.toUSize) (len.toUSize)
+    let n' := dst.data.size
+    let dc := min (off.toUSize).toNat n'
+    let sc := min (off.toUSize).toNat n'
+    let lc := min (len.toUSize).toNat (min (n' - dc) (n' - sc))
+    let spec : ByteArray :=
+      ByteArray.mk (dst.data.extract 0 dc ++ dst.data.extract sc (sc + lc)
+        ++ dst.data.extract (dc + lc) n')
+    if got != spec then
+      throw (IO.userError s!"blitBytes aliasing mismatch at off={off} len={len}")
+  IO.println "seam aliasing OK (blitBytes src = dst, overlapping windows)"
 
 /-- The scalar-index read lane: reading `s ⟨i, ·⟩` is a structural indexed load on
 the length-indexed carrier (the one read the single substrate exposes). -/
@@ -723,6 +741,10 @@ unsafe def main (args : List String) : IO Unit := do
   let m := (args.getD 1 "8192").toNat!
   let reps := 20
   IO.println s!"codec bench — linear n = {n} bytes, quadratic m = {m} bytes, reps = {reps}"
+  -- Layer-2 seam proof: the only runtime C↔Lean evidence, and it needs no scaling
+  -- parameter. It runs FIRST, before any lane whose cost or success depends on
+  -- `n`/`m`, so it is reached on every invocation — including a default run.
+  Codec.Bench.benchSeamBoundaries
   -- Machine calibration baseline (memset/memcpy at the same byte count), once at
   -- startup so every lane below is relative to this machine's raw memory speed.
   Codec.Bench.benchCalibration n reps
@@ -733,6 +755,16 @@ unsafe def main (args : List String) : IO Unit := do
     Codec.Bench.benchEncodeLength size reps
     -- Bulk fast path (proved `= encodeRepeat`, value-checked here at run time).
     Codec.Bench.benchFastEncodeRepeat size reps
+    if size = 1 then
+      -- `size = 1` is not evidence of anything: every lane below is one `Nat`
+      -- allocation away from a `0 ns/op` reading, and `benchDecodeByte`'s own
+      -- check (`t.remaining = n - 1`) is `0 - 1 = 0` at `n = 1`, so it cannot
+      -- distinguish a real decode from a wrong one. Previously the whole
+      -- ×1/×4 scale factor also reached `size = 0` at the default `n`, where a
+      -- `Bytes 0` read has no byte at all — the lane's value check then aborted
+      -- the process and silently killed every later lane (R2.2(b)), which is why
+      -- the seam checks above no longer run last.
+      continue
     -- Representation-isolation: same byte count, but concat/sigma/Fin-sum elided.
     Codec.Bench.benchEncodeRepeatIsolation size reps
     -- Layer-2 named trust seam: the `codec_byteSlice` memcpy suffix copy.
@@ -752,8 +784,6 @@ unsafe def main (args : List String) : IO Unit := do
   -- The fast full-consumption decoder: value- AND bridge-checked, ratio-printing.
   Codec.Bench.benchDecodeFullFast m
   Codec.Bench.benchDecodeFast n reps
-  -- Layer-2 seam boundary smoke test (out-of-range value-checks).
-  Codec.Bench.benchSeamBoundaries
   -- TEMPORARY: ISO 8601 timestamp (AST-shaped) speed test.
   Codec.Bench.benchIso8601Encode reps
   Codec.Bench.benchIso8601Decode reps
