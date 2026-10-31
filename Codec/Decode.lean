@@ -992,6 +992,29 @@ theorem search_nil_right {α : Type} (p : Codec α) (h : ConsumesByte p)
           pr ∈ decode p (Suffix.drop 0 r).bytes }) = none := by
   rw [decodeFullFastSearch.eq_def]
 
+/-- **The segmented `bdrop`**: dropping `a` then `b - a` is dropping `b`, stated so
+that the length matches *syntactically* (`n - b = n - a - (b - a)`), which is what
+makes the `Bytes` index agree without casting a `Fin` into an opaque length. -/
+theorem bdrop_seg {n : Nat} (s : Bytes n) {a b : Nat} (hab : a ≤ b) :
+    bdrop (b - a) (bdrop a s) = cast (congrArg Bytes (by omega : n - b = n - a - (b - a))) (bdrop b s) := by
+  funext i
+  rw [cast_bytes_val']
+  case e => omega
+  simp only [bdrop]
+  apply congrArg s
+  apply Fin.ext
+  simp only
+  omega
+
+/-- `decode` is invariant under `bdrop_seg`'s rewrite — the form the re-rooting
+lemma consumes at its step. Axiom-free. -/
+theorem decode_congr_bdrop {α : Type} (d : Codec α) {n : Nat} (s : Bytes n)
+    {a b : Nat} (hab : a ≤ b) :
+    decode d (bdrop (b - a) (bdrop a s)) =
+      (decode d (cast (congrArg Bytes (by omega : n - b = n - a - (b - a))) (bdrop b s)) :
+        List (α × Suffix (n - a - (b - a)))) := by
+  rw [bdrop_seg s hab]
+
 theorem decodeFullFast_pairwise {α : Type} (p : Codec α) (h : ConsumesByte p) :
     (∀ (n : Nat) (s : Bytes n) (m : Nat) (acc : List α),
         decodeFullFast p h s m acc = decodeFullFast p h (Suffix.drop m s).bytes 0 acc) ∧
