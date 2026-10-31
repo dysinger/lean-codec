@@ -94,21 +94,31 @@ delete it rather than following it. A `sorry` obligation's own docstring may sta
 _what is open and why_; it may not carry a task list (that belongs in `tasks.md`),
 and it may never point at a path outside the repo (no `/tmp`, no scratch file).
 
-Three facts about that change are worth stating here **only because a reader who
-skips the ledger would get them wrong**, and all three are also in `tasks.md`:
+Four facts about that change are worth stating here **only because a reader who
+skips the ledger would get them wrong**, and all four are also in `tasks.md`:
 
 - **The work order is §6 → §2 → §3/§4 → §5.** §6 goes first because §3/§4 rewrite
   the paragraphs that quote the numbers §6 fixes. If `tasks.md` disagrees with
   this line, `tasks.md` wins.
-- **6.1a — the gate — is CLOSED.** `Codec.decodeFullFastRoot_eq` is proved, so the
-  fast path is now verified rather than measured, `lake build` is green, and there
-  are **no `sorry`s anywhere in the tree**. Everything else in §6 is unblocked;
-  the open work is in `tasks.md` and nowhere else. The two decisions that closed
-  it (spell the specification side as `bdrop m s`, never the projection; carry
-  both congruences in one cursor-measured induction) are recorded in
-  `tasks.md` 6.1a — read them there before touching `Codec/Decode.lean`, because
-  every naive spelling of the general statement hits the dependent-`Bytes` motive
-  wall.
+- **The next step is 6.1b, and it has a written plan.** `Codec.decodeFullFastRoot_eq`
+  is proved (the 6.1a gate is closed), `lake build` is green, and there are **no
+  `sorry`s anywhere in the tree**. What remains is the **cursor** decoder:
+  `Codec.decodeArray_consumes` is proved but not yet in the tree, the mutual pair
+  must **mirror `decodeFullFast`** rather than be invented, and
+  **`decodeFullArray` must not be used** — it commits to the head, the same defect
+  6.1a fixed, and `decodeFullArray_spec` proves it equal to `head?` (true theorem,
+  wrong decoder). Read `tasks.md` 6.1b's "PLAN FOR NEXT SESSION" block before
+  touching code: it names the one place the shapes differ, the two `decreasing_by`
+  tails, and the refuted `WellFounded.fix` shortcut.
+- **Benchmark numbers from this repo are not trustworthy without the rules.** Every
+  in-repo measurement attempt during 6.1 made a wrong number that was briefly
+  believed (dead-code elimination reporting `0 ns/op`, loop hoisting of a pure
+  call, mean-over-short-batch swallowing a ~125 µs cold start, a contended
+  machine). `tasks.md` 6.1b carries five rules for this; follow them or the number
+  is fiction. The current honest baseline is `decodeFullFastRoot` at
+  **~1,200–1,290 ns/byte, ~0.8–2 MiB/s**, which is `AGENTS.md`'s own
+  "single-digit multiple of C" bar missed by ~2–3 orders of magnitude — the bar is
+  **not** met and must not be claimed.
 - **Only `R5.1` may change a declaration _shape_** (design D9), and it must keep
   every theorem's statement, prove the new definition equal to the old, and stay
   `[propext, Quot.sound]`-only / zero-`sorry` / `#eval`-able. Nothing else may.
@@ -224,19 +234,24 @@ in `../lean-basen`. Never "fix" it by editing the importing Lean file.
   (`memcpy`/`memchr` shapes). **No per-format C, no C that parses digits, numbers,
   fields, or format structure.** That is a hard design rule.
 - **Decode/encode must stay within a small single-digit multiple of C — a
-  requirement, not an aspiration.** Measured achievable floor: **~8.5×** a
-  `memcpy` floor (222 vs 1,891 MiB/s) with the cursor shape. Lean 4.34.1's C
-  backend boxes `Nat`/`UInt8`/`UInt64` arithmetic; `USize` is an unboxed `size_t`
-  only as an `@[extern]` argument and re-boxes once stored in a `Prod`/`Option`.
-  Rewriting a parser to thread a `USize` cursor made it _slower_ — but that is a
-  fact about **boxed scalars**, not a licence for a 47× or 10^5× path. Those come
-  from the **data you hand the next step**: `decodeArray`'s per-step `List` costs
-  47×, and `decodeFull`'s chained `bdrop` closures cost ~10^5× (`R5.1`). Fast shape:
+  requirement, not an aspiration — and it is currently NOT met by orders of
+  magnitude.** Re-measured 2026-11-02: `decodeFullFastRoot`, the best decode path
+  in the tree, runs at **~1,200–1,290 ns/byte (~0.8–2 MiB/s)**, i.e.
+  **3,700×–21,000×** off a same-run `memcpy`. An earlier "~8.5× floor (222 vs
+  1,891 MiB/s)" figure in this file was not reproducible from any bench lane and
+  is **withdrawn**; so is the "20–40×" claim before it. Do not restore either
+  without a lane that prints the number. Lean 4.34.1's C backend boxes
+  `Nat`/`UInt8`/`UInt64` arithmetic; `USize` is an unboxed `size_t` only as an
+  `@[extern]` argument and re-boxes once stored in a `Prod`/`Option`; threading a
+  `USize` cursor made a parser _slower_ — but that is a fact about **boxed
+  scalars**, not a licence for a 47× or 10^5× path. Those come from the **data you
+  hand the next step**: `decodeArray`'s per-step `List` costs 47×, and
+  `decodeFull`'s chained `bdrop` closures cost ~10^5× (`R5.1`). Fast shape:
   `Array UInt8` + integer cursor + accumulating `Id.run` loop returning
   `(value, consumed)`. Do not quote an absolute MiB/s target — assert the **ratio**
-  to a same-run `memcpy` (§6.4). Do not re-attempt pure-Lean micro-optimization
-  _below_ the bar; that rule is what the old "20–40×" claim was propping up, and
-  it was false.
+  to a same-run `memcpy` (§6.4), and read `tasks.md` 6.1b's measurement rules
+  before timing anything in this repo: naive timing here reliably produces a wrong
+  number (dead-code elimination, loop hoisting, cold-start means).
 - **The packed cursor is `Nat`, not `USize`.** A `System.Platform.numBits = 64`
   premise would break the `[propext, Quot.sound]`-only gate. `commitRemainder` is
   `USize`-indexed (matching `byteSlice`) so there is no `Nat ↔ USize` roundtrip;
