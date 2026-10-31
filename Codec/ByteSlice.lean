@@ -140,7 +140,24 @@ The Lean body below is the *specification* — `Array.findIdx?` over the
 `Array.extract` of the suffix from `off` (reducible, so `findByte_spec` closes by
 `rfl`). The `@[extern "codec_findByte"]` attribute makes the running C call the
 matching `codec_findByte` symbol (a single `memchr`); that C is trusted, not
-proven, and is excluded from the `#print axioms` gate. -/
+proven, and is excluded from the `#print axioms` gate.
+
+**Arithmetic side condition (the C relies on it).** The body returns
+`some (off + i.toUSize)` where `+` is `USize` addition, i.e. `Nat` addition
+**modulo `2^64`**, while `codec_findByte` returns the absolute index as a raw
+`size_t`. These agree only when the sum does not wrap:
+
+    off.toNat + i < USize.size
+
+which always holds here — `i < a.data.size` and `off ≤ a.data.size`, so
+`off.toNat + i < 2 * a.data.size`, and no `ByteArray` in a 64-bit address space
+holds `2^63` bytes — but that fact is **not** stated by any theorem, so "the C
+matches the Lean body" holds on every input Lean can actually build rather than
+on every input the type admits. Recorded rather than silently strengthened:
+discharging it in full needs a `System.Platform.numBits` premise, which
+`AGENTS.md` forbids because it would leave the `[propext, Quot.sound]`-only gate.
+A caller that could wrap is a caller whose `ByteArray` does not fit in the
+machine. -/
 @[extern "codec_findByte"]
 def findByte (a : ByteArray) (off : USize) (b : UInt8) : Option USize :=
   match Array.findIdx? (fun x => x == b) (a.data.extract off.toNat a.data.size) with

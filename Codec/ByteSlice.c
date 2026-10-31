@@ -93,6 +93,9 @@ LEAN_EXPORT lean_obj_res codec_blitBytes(lean_obj_arg dst, size_t dstOff,
 // or `lean_box(0)` (none) when there is no such index; a single `memchr` over
 // the suffix. TRUSTED, NOT PROVEN (Layer 2, excluded from the `#print axioms`
 // gate); must match the Lean body (the `Array.findIdx?` scan) on every input.
+// Side condition: the Lean body re-offsets with USize addition (mod 2^64) while
+// this returns a raw absolute `size_t`, so the two agree whenever
+// `off + idx` does not wrap — see the docstring on `Codec.findByte`.
 LEAN_EXPORT lean_obj_res codec_findByte(lean_obj_arg a, size_t off, uint8_t b) {
     size_t n = lean_sarray_size(a);
     if (off >= n) {
