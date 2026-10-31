@@ -533,7 +533,7 @@ discharge its own `hk : c < a.size` from a **named** field (`by omega` over
 inside the `match` arm — the spelling that keeps `decreasing_by` from needing
 `rename_i` (task 6.1b, plan item 1). -/
 abbrev PackedCand {α : Type} (d : Codec α) (a : Array UInt8) (k : Nat) :=
-  { pr : α × Nat // pr ∈ decodeArray d a k ∧ k < pr.2 ∧ pr.2 < a.size }
+  { pr : α × Nat // pr ∈ decodeArray d a k ∧ k < pr.2 ∧ pr.2 ≤ a.size }
 
 /-- The packed candidate list at cursor `k`, with the strict-advance fact attached.
 `filterMap` over `attach` — never a `List.map`, so the membership witness survives. -/
@@ -541,7 +541,7 @@ def packedCands {α : Type} (d : Codec α) (_h : ConsumesByte d)
     (a : Array UInt8) (k : Nat) : List (PackedCand d a k) :=
   (decodeArray d a k).attach.filterMap fun p =>
     if hp : k < p.val.2 then
-      if hq : p.val.2 < a.size then some ⟨p.val, p.property, hp, hq⟩ else none
+      if hq : p.val.2 ≤ a.size then some ⟨p.val, p.property, hp, hq⟩ else none
     else none
 
 /-- **`filterMap` never lengthens.** The measure-side fact the packed search's
@@ -625,6 +625,71 @@ theorem decodeFullArrayFast_zero {α : Type} (d : Codec α) (h : ConsumesByte d)
   split
   · rfl
   · omega
+
+/-- **Membership in `packedCands` is membership in `decodeArray`, plus the two
+cursor facts.** This is the bridge between the candidate list the search walks and
+the raw `decodeArray` results the specification-side lemmas talk about. -/
+theorem mem_packedCands {α : Type} (d : Codec α) (h : ConsumesByte d)
+    (a : Array UInt8) (k : Nat) (pr : α × Nat) (hpr : pr ∈ decodeArray d a k)
+    (hk : k < a.size) :
+    ∃ (hkc : k < pr.2) (hlt : pr.2 ≤ a.size),
+      ⟨pr, hpr, hkc, hlt⟩ ∈ packedCands d h a k := by
+  have hkc : k < pr.2 := decodeArray_consumes d h a k pr.1 pr.2 hpr hk
+  have hlt : pr.2 ≤ a.size :=
+    decodeArray_bounded_upper d a k pr.2 pr.1 (Nat.le_of_lt hk) hpr
+  refine ⟨hkc, hlt, ?_⟩
+  unfold packedCands
+  rw [List.mem_filterMap]
+  refine ⟨⟨pr, hpr⟩, List.mem_attach _ _, ?_⟩
+  simp only [hkc, hlt, ↓reduceDIte]
+
+/-- **Every packed candidate comes from `decodeArray`.** The search never invents a
+candidate: its membership witness is exactly a `decodeArray` membership. -/
+theorem packedCands_mem {α : Type} (d : Codec α) (_h : ConsumesByte d)
+    (a : Array UInt8) (k : Nat) (c : PackedCand d a k) : c.val ∈ decodeArray d a k :=
+  c.property.1
+
+/-- **The search never invents a candidate, part two**: every packed candidate's
+cursor strictly advanced and stayed in bounds. -/
+theorem packedCands_consumes {α : Type} (d : Codec α) (_h : ConsumesByte d)
+    (a : Array UInt8) (k : Nat) (c : PackedCand d a k) :
+    k < c.val.2 ∧ c.val.2 ≤ a.size :=
+  ⟨c.property.2.1, c.property.2.2⟩
+
+/-- **The search's step equation over a `cons`**: the search tries the candidate's
+re-rooted recursion at the advanced cursor and takes the first full consumption, or
+continues with the rest of the list. The packed mirror of `decodeFullStep_cons`.
+
+The proof is the recorded `match`-in-`match` recipe (`tasks.md` 6.1a trap 2): the
+unfold is a `conv` on the LHS, then `simp only` to force the inner `match`, then
+`split` for the outer one; `injection` on the discriminant equation re-aligns the
+`split`-generated binders with the stated ones, after which the two sides are
+syntactically equal and `rfl` closes it. -/
+theorem decodeFullArraySearch_cons {α : Type} (d : Codec α) (h : ConsumesByte d)
+    (a : Array UInt8) (k : Nat) (hk : k < a.size) (acc : List α)
+    (x : α) (c : Nat) (hmem : (x, c) ∈ decodeArray d a k ∧ k < c ∧ c ≤ a.size)
+    (rest : List (PackedCand d a k)) :
+    decodeFullArraySearch d h a k hk acc (⟨(x, c), hmem⟩ :: rest) =
+      (match decodeFullArrayFast d h a c (x :: acc) with
+       | none => decodeFullArraySearch d h a k hk acc rest
+       | some xs => some xs) := by
+  conv => lhs; rw [decodeFullArraySearch.eq_def]
+  simp only
+  split
+  · simp at *
+  · rename_i heq
+    injection heq with h1 h2
+    simp_all
+
+/-- **The search over the empty candidate list is `none`** — the packed mirror of
+`decodeFullStep_nil`. Note this case is *unreachable* at a live cursor under
+`ConsumesByte` (`decodeArray_consumes` guarantees every candidate advances), and it
+is reached only at the end of the buffer, where `decodeFullArrayFast`'s base case
+already answers `some acc.reverse`. Stated because the search congruence needs it. -/
+theorem decodeFullArraySearch_nil {α : Type} (d : Codec α) (h : ConsumesByte d)
+    (a : Array UInt8) (k : Nat) (hk : k < a.size) (acc : List α) :
+    decodeFullArraySearch d h a k hk acc ([] : List (PackedCand d a k)) = none := by
+  conv => lhs; rw [decodeFullArraySearch.eq_def]
 
 /-- The packed full-consumption decoder, at the start of the buffer. -/
 def decodeFullArrayRoot {α : Type} (d : Codec α) (h : ConsumesByte d)
