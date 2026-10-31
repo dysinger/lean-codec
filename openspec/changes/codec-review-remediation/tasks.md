@@ -750,40 +750,50 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
         (and for the same reason: a `Suffix`-typed or `Bytes`-typed statement hits
         the index mismatch).
 
-      * **READ THIS BEFORE RE-DERIVING THE ARITHMETIC (2026-11-02, cost a
-        session).** The remaining step's core numeric identity is
+      * **SOLVED (2026-11-02): the arithmetic is `r`, not `n - m - r`.** An
+        earlier entry in this ledger claimed the transport step needed
 
             n - (m + (n - m - r)) = n - m - r
 
-        **and it is FALSE without the extra premise `m ≤ n`.** Verified by
-        exhaustion: `n = 0, m = 2, r = 0` satisfies `r ≤ n - m` (`0 ≤ 0 - 2`,
-        which is `0 ≤ 0` under truncated subtraction) but `m ≤ n` fails, and the
-        identity then claims `0 - 2 = 0 - 2 - 0`, i.e. `0 = 0`, while the LHS
-        under the intended reading is not the same term. So the transport step
-        **SHALL carry `m ≤ n` explicitly** (it is available: `m ≤ n` follows from
-        `n - m < n` or from the `Suffix`/cursor invariant, but *not* from
-        `t.hle` alone — that is the trap).
+        and that it was "false without `m ≤ n`". **The identity was simply the
+        wrong one.** Verified by exhaustive `#eval` over `n, m, r < 8`:
 
-        With `m ≤ n` supplied, the proof is
+            (m ≤ n ∧ r ≤ n - m)  ->  n - (m + (n - m - r)) = r         -- TRUE
+            (m ≤ n ∧ r ≤ n - m)  ->  n - (m + (n - m - r)) = n - m - r -- FALSE
 
-            rw [show m + (n - m - r) = m + (n - m) - r from (Nat.add_sub_assoc h m).symm]
-            rw [show m + (n - m) = n from splice_add hm]
-            -- then close the last `Nat.sub` step
+        The remaining length after advancing the cursor by `r` **from** position
+        `m` is `r` itself — the cursor's target is that suffix's own length, which
+        is obvious in hindsight and cost two wrong attempts. **Both** true forms
+        are now proved:
 
-        and note `splice_add` (`Codec/Codec.lean:91`) **already exists** and takes
-        exactly that `m ≤ n` hypothesis — do not re-derive it. The library's
-        sibling `bdrop_bdrop` (`Codec/Codec.lean:594`) likewise carries its
-        arithmetic as an explicit hypothesis `e : n - (k + m) = n - k - m`, which
-        is independent confirmation that this shape is the intended one.
+            probe_rem_eq  : r ≤ n - m -> n - (m + (n - m - r)) = r
+            probe_rem_eq' : r ≤ n - m -> n - m - (0 + (n - m - r)) = r
 
-      * **Tactics that do NOT work on this arithmetic** (all tried, all recorded
-        so they are not retried): bare `omega` on any goal containing
-        `n - (m + …)` (it reports a counterexample because it cannot see the
-        `m ≤ n` implication, and it is right that it does not follow);
-        `Nat.sub_sub_self` (gives `r`, not `n - m - r`); `Nat.sub_add_cancel`
-        (its implicit arg order binds the wrong `n`); `nth_rewrite`/`conv_lhs =>
-        rw` on these subterms (rewrites the wrong occurrence). Obtain the `m ≤ n`
-        premise first, then `Nat.add_sub_assoc` + `splice_add`.
+        each by `rcases Nat.le_total m n` (the `m > n` branch forces `n - m = 0`
+        and hence `r = 0`), then `splice_add` + `Nat.add_sub_assoc` +
+        `Nat.sub_sub_self`. The pointwise transport (`probe_transport`) and the
+        `Suffix`-level `probe_suffix_eq` are proved too, so **the transport step is
+        closed**; what remains is only the two `cons` branches (cases 4, 5) of the
+        pairwise induction.
+
+      * **Methodology lesson (recorded because it burned two attempts).** Do not
+        state a `Nat`-subtraction identity from intuition and then fight `omega`.
+        `#eval` it exhaustively over small values first. When `omega` reported a
+        counterexample it was **correct every time** — the stated identity was
+        false, not the tactic inadequate. `omega` also cannot derive `m ≤ n` from
+        `n - m` under truncation (both `n ≤ m` and `m > n` collapse `n - m` to
+        `0`), so any identity mentioning `n - m` must be case-split on
+        `Nat.le_total m n` first.
+
+      * **Toolchain note:** this Lean has **no `conv_lhs`/`conv_rhs`** (`unknown
+        tactic`), and `conv => lhs; rw [...]` is not available. Use `calc`,
+        `nth_rewrite`, or a named `have` instead.
+
+      * **Tactics that do NOT work here** (all tried, recorded so they are not
+        retried): bare `omega` on a goal containing `n - (m + …)`; `Nat.sub_sub_self`
+        on the wrong pairing; `Nat.sub_add_cancel` (its implicit arg order binds the
+        wrong `n`); `splice_add` called **without** naming `n` and `m` (its
+        implicits bind to the first `Nat.sub` in sight).
 
 - [ ] 6.1b **Move the fast decode onto an `Array UInt8` + `Nat` cursor**
       (≈**6.5×**: 9 → 59 MiB/s measured). `decodeFullFastRoot` avoids the closure
