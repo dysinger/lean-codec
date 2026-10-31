@@ -604,4 +604,88 @@ theorem step_bytes_pointwise {α : Type} (d : Codec α)
   have h : t.remaining ≤ n - m := t.hle
   omega
 
+/-! ## Lemmas for the fast-path bridge (`decodeFullFastRoot = decodeFull`)
+
+These are the pieces of the `R5.1` equality bridge (task 6.1a). They are general
+factories about `decodeFull`/`decodeFullStep`/`List.attach` rather than
+bridge-specific hacks, and each is `[propext, Quot.sound]`-only or axiom-free, so
+they sit inside the gate. Recorded here because they were expensive to find:
+see `tasks.md` 6.1a for the traps that motivated each one. -/
+
+/-- `decodeFull` at a root whose length is `0` (however that shows up — e.g. as
+`n - n`) consumes nothing. Stated with the root abstract and the equality as a
+hypothesis, because rewriting `n - n` inside `decodeFull`'s index is blocked by
+the dependent `Bytes` argument; this lemma lets the caller supply the arithmetic
+instead. -/
+theorem decodeFull_at_zero {α : Type} (p : Codec α) (h : ConsumesByte p) :
+    ∀ (k : Nat) (t : Bytes k), k = 0 → decodeFull p h k t = some [] := by
+  intro k t hk
+  subst hk
+  exact decodeFull_zero p h t
+
+/-- `decodeFull`'s recursion equation at *any* root known to be a successor. The
+form the bridge needs, since its root is `n - m` rather than a literal
+`Nat.succ` application — the same dependent-index obstacle as
+`decodeFull_at_zero`.
+
+**`congr 2` is load-bearing**: the residual compares `WellFounded.fix`'s `ih`
+against `decodeFull` and *is* the fix point, so the goal does not close without
+it. -/
+theorem decodeFull_succ {α : Type} (p : Codec α) (h : ConsumesByte p)
+    (k j : Nat) (hk : k = j + 1) (s : Bytes k) :
+    decodeFull p h k s =
+      decodeFullStep p h s (fun m s' _hm => decodeFull p h m s') (decode p s).attach := by
+  subst hk
+  rw [decodeFull, WellFounded.fix_eq]
+  simp only [Nat.add_one]
+  congr 2
+
+/-- `decodeFullStep` over an attached `cons`, stated with the list as a
+**parameter** rather than derived from `.attach`. That is the whole trick: it
+lets the caller step a known head without ever rewriting under `.attach`, which
+fails on the dependent motive `_a.attach = …`. -/
+theorem decodeFullStep_cons {α : Type} (p : Codec α) (h : ConsumesByte p)
+    {n : Nat} (s : Bytes n)
+    (ih : (m : Nat) → (s' : Bytes m) → m < n → Option (List α))
+    (x : α) (t : Suffix n) (hm : (x,t) ∈ p.decode s)
+    (rest : List {pr : α × Suffix n // pr ∈ p.decode s}) :
+    decodeFullStep p h s ih (⟨(x,t), hm⟩ :: rest) =
+      (match ih t.remaining t.bytes (h x s t hm) with
+       | none => decodeFullStep p h s ih rest
+       | some xs => some (x :: xs)) := by
+  rw [decodeFullStep.eq_def]
+
+/-- `attach` of a list known to be a `cons` starts with that `cons`'s head. Must
+be stated **existentially** (producing the membership witness and the tail) and
+proved by `subst`, not `rw` — `rw` hits the dependent motive `_a.attach = …`.
+Axiom-free. -/
+theorem attach_eq_cons {α : Type} (n : Nat) :
+    ∀ (d : List (α × Suffix n)) (x : α) (t : Suffix n) (rest : List (α × Suffix n)),
+      d = (x, t) :: rest →
+      ∃ (hm : (x,t) ∈ d) (l : List {y // y ∈ d}), d.attach = ⟨(x,t), hm⟩ :: l := by
+  intro d x t rest hd
+  subst hd
+  exact ⟨List.mem_cons_self .., _, rfl⟩
+
+/-- The two heads of the same attached list are the same pair. This is the lemma
+that unblocks the bridge's step case: both the fast decoder's head and the
+specification's attached head come from `decode` of the *same* byte string, so
+they coincide.
+
+Note the shape — after `cases d` and `simp only [List.attach_cons,
+List.cons.injEq, Subtype.mk.injEq]`, both equalities are `… = hd`, so chain them
+(`e1.1.symm.trans e2.1`) and project. `[propext]`-only (a decidable-equality
+residue), still inside the gate. -/
+theorem attach_pair_eq {α : Type} (n : Nat) :
+    ∀ (d : List (α × Suffix n)) (x x' : α) (t t' : Suffix n)
+      (h1 : (x,t) ∈ d) (h2 : (x',t') ∈ d) (l l' : List {y // y ∈ d}),
+      d.attach = ⟨(x,t), h1⟩ :: l → d.attach = ⟨(x',t'), h2⟩ :: l' → x' = x ∧ t' = t := by
+  intro d x x' t t' h1 h2 l l' e1 e2
+  cases d with
+  | nil => simp at h1
+  | cons hd tl =>
+      simp only [List.attach_cons, List.cons.injEq, Subtype.mk.injEq] at e1 e2
+      have hpair : ((x,t) : α × Suffix n) = ((x',t') : α × Suffix n) := e1.1.symm.trans e2.1
+      exact ⟨congrArg Prod.fst hpair.symm, congrArg Prod.snd hpair.symm⟩
+
 end Codec
