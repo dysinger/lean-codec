@@ -691,6 +691,17 @@ theorem decodeFullArraySearch_nil {α : Type} (d : Codec α) (h : ConsumesByte d
     decodeFullArraySearch d h a k hk acc ([] : List (PackedCand d a k)) = none := by
   conv => lhs; rw [decodeFullArraySearch.eq_def]
 
+/-- **A `ConsumesByte` step strictly advances the packed cursor.** The array-cursor
+form of `ConsumesByte`, and the fact the bridge's strong induction needs at every
+step. The spec-side twin of `decodeArray_consumes` (which states it for
+`decodeArray`'s results); this states it for `decode`'s, at the array root. -/
+theorem consume_lt {α : Type} (d : Codec α) (h : ConsumesByte d) (a : Array UInt8)
+    (k : Nat) (hk : k < a.size) (x : α) (t : Suffix (a.size - k))
+    (hm : (x, t) ∈ decode d (bdrop k (arrayToBytes a))) : k < consumedAbs a k t := by
+  unfold consumedAbs
+  have := h x (bdrop k (arrayToBytes a)) t hm
+  omega
+
 /-- The packed full-consumption decoder, at the start of the buffer. -/
 def decodeFullArrayRoot {α : Type} (d : Codec α) (h : ConsumesByte d)
     (a : Array UInt8) : Option (List α) :=
