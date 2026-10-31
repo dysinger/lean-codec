@@ -873,77 +873,148 @@ theorem decodeFullFastSearch_eq {α : Type} (p : Codec α) (h : ConsumesByte p) 
           simp only [Option.map]
           exact congrArg some (reverse_cons_append acc x xs)
 
-/-- **The cursor re-rooting lemma.** `decodeFullFast` does not care which byte
-string it is rooted at, only which *suffix* the cursor `m` names: running from
-cursor `m` over the root `s` is running from cursor `0` over `(Suffix.drop m s)`'s
-bytes. Equivalently, the *state* `(remaining, candidate list)` is invariant under
-re-rooting — which is why the lemma is true at all, and why it is the thing the
-`decodeFullFastRoot = decodeFull` bridge (task 6.1a) should induct on: the bridge
-can then work on the suffix alone and never rewrite a `Bytes` index.
+/-- The candidate list at cursor `m`, re-rooted at `Suffix.drop m s`'s bytes.
+`List.cast` is definitionally the identity here; it exists only to name the type. -/
+abbrev candsAt {α : Type} (p : Codec α) {n : Nat} (s : Bytes n) (m : Nat) : Type :=
+  List { pr : α × Suffix (Suffix.drop m s).remaining //
+      pr ∈ decode p (Suffix.drop m s).bytes }
 
-**OPEN (task 6.1a).** Not yet proved; `lake build` fails here by design. What is
-established, in the order the effort went:
+/-- The re-rooted candidate list at the same cursor, seen from the root
+`(Suffix.drop m s).bytes` with no cursor at all. Same length, same head. -/
+abbrev candsRoot {α : Type} (p : Codec α) {n : Nat} (s : Bytes n) (m : Nat) : Type :=
+  List { pr : α × Suffix (Suffix.drop m s).remaining //
+      pr ∈ decode p (Suffix.drop 0 (Suffix.drop m s).bytes).bytes }
 
-* The reformulation is the whole point and it was right: the failing bridge is an
-  index-alignment problem, and the two measures are the same number.
-* Unfolding both sides works (`decodeFullFast`'s own equation, then `cases` on the
-  cursor length, then `split` on each `dite`); the *value* level reduces to
-  `decodeFullFastSearch` over the same candidate list from two cursors.
-* **The `n - m = 0` case is closed** (below): unfold, `cases` on the root's cursor,
-  and the re-rooted side's own condition is definitionally the same number.
-* **The `n - m = j + 1` case is the open half**, and it cannot be closed by
-  structural induction on the candidate list: the search's recursive step calls
-  `decodeFullFast` at the *advanced* cursor, so the goal turns into this very
-  theorem at a smaller measure. It needs a **mutual measure induction** with the
-  search congruence (`decodeFullFastSearch` at cursor `m` over `s` = the same at
-  cursor `0` over `Suffix.drop m s`'s bytes), ranked by the same `Prod.Lex` pair.
+/-- Re-index a candidate list from the cursor root to the bare root: the two
+`decode` calls are the *same* call (their arguments differ by `bdrop 0`, the
+identity), so this is `List.cast` along that definitional equality. -/
+abbrev retypeCands {α : Type} (p : Codec α) {n : Nat} (s : Bytes n) (m : Nat)
+    (cs : candsAt p s m) : candsRoot p s m :=
+  (cs : List { pr : α × Suffix (Suffix.drop m s).remaining //
+      pr ∈ decode p (Suffix.drop 0 (Suffix.drop m s).bytes).bytes })
 
-**Two dead ends, recorded so they are not re-attempted** (both cost real time):
+/-- **The fast decoder's two congruences** (task 6.1a) — **OPEN**, `sorry`-marked.
 
-1. **`Suffix`-typed forms do not elaborate.** `Suffix.drop 0 (Suffix.drop m s)`'s
-   first argument is *inferred* from `(Suffix.drop m s).bytes`, and in that form
-   the inferred `n` is the **third component** of the `Suffix` structure (which
-   `Suffix.drop` returns), not its first. So an equality about that term can
-   appear in a *hypothesis*, but in a *goal* the expected type forces `n` to be
-   `Suffix n`'s index and the elaboration fails with "expected `Suffix …`,
-   got `Bytes …`". Write `.bytes` variants instead.
-2. **`Nat.sub_zero`/`Nat.sub_sub_self` fail to rewrite the index here**, though
-   they are `rfl`-true: the index sits inside the *type* of a function argument
-   in the goal, and the motive is not type-correct. `cases` on the length (with
-   the equation in context) is the route that does reduce.
+Two facts, ranked by the *same* measured state
+`((Suffix.drop m s).remaining, (decode p (Suffix.drop m s).bytes).length + 1)`:
+
+* `decodeFullFast` — the cursor is irrelevant, only the suffix it names is:
+  `decodeFullFast p h s m acc = decodeFullFast p h (Suffix.drop m s).bytes 0 acc`.
+* `decodeFullFastSearch` — the same for the search. The two candidate lists are
+  **the same list** at the two roots (`decode p`'s argument differs only by
+  `bdrop 0`, the identity), so the statement couples them via `retypeCands`
+  rather than quantifying two independent lists. **Quantifying them independently
+  makes the `nil` case false-turned-unprovable** — `cs = []` no longer constrains
+  `cs'` — which is itself a recorded finding.
+
+**What works, landed in this proof:** the `n - m = 0` case of each (both sides
+return the accumulator), and the machinery for the live-cursor case (unfold both
+sides via `decodeFullFast`'s / `decodeFullFastSearch`'s own equations, `cases` the
+cursor length with the equation in context — a length *rewrite* fails on the
+dependent `Bytes` motive).
+
+**What blocks it — the ranking, not the mathematics.** The two congruences are at
+the same state, but the definition ranks the fast one **one tick above** the
+search (`(cands.length + 1` vs `cands.length)`), and `Prod.Lex` has **no reflexive
+case**. So the fast congruence's live-cursor branch needs the search congruence
+*at the same key*, which the induction hypothesis cannot supply. The route that
+fits the definition is to state **two lemmas at the same key** and derive the
+search one from the fast one's unfolding, or to re-rank the pair so the search
+congruence is the one ranked with the `+1` tick. Do not re-attempt: a single
+`Prod.Lex` induction over one pair with the fast congruence ranked above the
+search.
+
+**Two traps specific to this proof** (both reproduced, both saved real time):
+
+1. **State the two sides' `match`es at the *same* parameter.** `decodeFullFast`
+   produces a `match` on `n - m`; the re-rooted side produces one on
+   `(Suffix.drop m s).remaining`. Those are the same *number* (`rfl`) but not the
+   same *term*, and abstracting either one with `generalize` fails with "motive is
+   not type correct" because the `dite` proof mentions a dependent `Bytes` length.
+   Stating both equations at `n - m` and closing the residual with `rfl` per
+   branch is what works.
+2. **`decodeFullFastSearch` has a `match`-in-`match` body**, so
+   `rw [decodeFullFastSearch.eq_def]` does not fire on an applied occurrence; you
+   must `cases` the list first and then rewrite, or state the unfolding as an
+   explicit `have` and `rfl` it inside the branch.
 
 `[propext, Quot.sound]`-only, once proved. -/
-theorem decodeFullFast_reroot {α : Type} (p : Codec α) (h : ConsumesByte p) :
-    ∀ (n : Nat) (s : Bytes n) (m : Nat) (acc : List α),
-      decodeFullFast p h s m acc = decodeFullFast p h (Suffix.drop m s).bytes 0 acc := by
-  intro n s m acc
-  -- Step both sides through `decodeFullFast`'s own equation. The RHS's condition
-  -- `(Suffix.drop m s).remaining - 0` is *definitionally* `n - m`, so one `cases`
-  -- on the root's cursor decides both.
-  have e1 : decodeFullFast p h s m acc =
-      (match n - m with
-       | 0 => some acc.reverse
-       | _j + 1 =>
-           decodeFullFastSearch p h s m acc (decode p (Suffix.drop m s).bytes).attach) := by
-    rw [decodeFullFast]
-    cases n - m <;> rfl
-  rw [e1]
-  clear e1
-  cases hc : n - m with
-  | zero =>
-      -- Cursor exhausted: both sides return the accumulator.
-      have hz : (Suffix.drop m s).remaining = 0 := by
-        show n - m = 0
-        exact hc
-      rw [decodeFullFast]
-      generalize hm0 : (Suffix.drop m s).remaining - 0 = r
-      rw [show r = 0 from by omega]
-  | succ j =>
-      -- Cursor live: both sides search the same candidate list, from cursors that
-      -- name the same remaining length. Closing this needs the mutual measure
-      -- induction described in this lemma's docstring.
-      sorry
-
+theorem decodeFullFast_pairwise {α : Type} (p : Codec α) (h : ConsumesByte p) :
+    (∀ (n : Nat) (s : Bytes n) (m : Nat) (acc : List α),
+        decodeFullFast p h s m acc = decodeFullFast p h (Suffix.drop m s).bytes 0 acc) ∧
+    -- The search congruence. The two lists are *the same list* up to the two
+    -- roots, which is exactly the `cast` that `List.attach` of `decode` produces;
+    -- tying them this way (rather than quantifying two independent lists) is what
+    -- keeps the empty case true.
+    (∀ (n : Nat) (s : Bytes n) (m : Nat) (acc : List α) (cs : candsAt p s m),
+        decodeFullFastSearch p h s m acc cs =
+          decodeFullFastSearch p h (Suffix.drop m s).bytes 0 acc (retypeCands p s m cs)) := by
+  have hwf : WellFounded (Prod.Lex (α := Nat) (β := Nat) (· < ·) (· < ·)) :=
+    (inferInstance : WellFoundedRelation (Nat × Nat)).wf
+  let state : (n : Nat) → Bytes n → Nat → Nat × Nat :=
+    fun n s m => ((Suffix.drop m s).remaining, (decode p (Suffix.drop m s).bytes).length + 1)
+  have main : ∀ (key : Nat × Nat),
+      (∀ (n : Nat) (s : Bytes n) (m : Nat) (acc : List α),
+          state n s m = key →
+          decodeFullFast p h s m acc = decodeFullFast p h (Suffix.drop m s).bytes 0 acc) ∧
+      (∀ (n : Nat) (s : Bytes n) (m : Nat) (acc : List α) (cs : candsAt p s m),
+          state n s m = key →
+          decodeFullFastSearch p h s m acc cs
+            = decodeFullFastSearch p h (Suffix.drop m s).bytes 0 acc (retypeCands p s m cs)) := by
+    intro key
+    exact hwf.induction key (C := fun key =>
+      (∀ (n : Nat) (s : Bytes n) (m : Nat) (acc : List α),
+          state n s m = key →
+          decodeFullFast p h s m acc = decodeFullFast p h (Suffix.drop m s).bytes 0 acc) ∧
+      (∀ (n : Nat) (s : Bytes n) (m : Nat) (acc : List α) (cs : candsAt p s m),
+          state n s m = key →
+          decodeFullFastSearch p h s m acc cs
+            = decodeFullFastSearch p h (Suffix.drop m s).bytes 0 acc (retypeCands p s m cs)))
+      (fun key ih => by
+        constructor
+        · intro n s m acc hkey
+          have e1 : decodeFullFast p h s m acc =
+              (match n - m with
+               | 0 => some acc.reverse
+               | _j + 1 => decodeFullFastSearch p h s m acc
+                   (decode p (Suffix.drop m s).bytes).attach) := by
+            rw [decodeFullFast]
+            cases n - m <;> rfl
+          have e2 : decodeFullFast p h (Suffix.drop m s).bytes 0 acc =
+              (match n - m with
+               | 0 => some acc.reverse
+               | _j + 1 => decodeFullFastSearch p h (Suffix.drop m s).bytes 0 acc
+                   (decode p (Suffix.drop 0 (Suffix.drop m s).bytes).bytes).attach) := by
+            rw [decodeFullFast]
+            rw [show (Suffix.drop m s).remaining - 0 = n - m from rfl]
+            cases n - m <;> rfl
+          rw [e1, e2]
+          cases n - m with
+          | zero => rfl
+          | succ j =>
+              -- Cursor live: both sides are the search over the *full* candidate
+              -- list, at the same state — the second congruence, at the same key.
+              -- **Ranking obstacle, recorded.** The fast congruence is ranked
+              -- *one tick above* the search at the same state, so the search
+              -- congruence at the *same* state is not reachable from the fast
+              -- congruence's hypothesis; the `Prod.Lex` pair has no reflexive
+              -- case. Closing this needs the fast case to call the **search**
+              -- congruence directly (same state, same key) rather than through
+              -- `ih` — i.e. a three-way `mutual`: fast at key `k`, search at key
+              -- `k`, and fast→search only descending via the cursor.
+              sorry
+        · intro n s m acc cs hkey
+          -- Peel the search, on both sides at once.
+          rw [decodeFullFastSearch.eq_def]
+          cases cs with
+          | nil =>
+              -- The re-typed list is `[]` as well, so both sides are `none`.
+              sorry
+          | cons hd rest =>
+              obtain ⟨⟨x, t⟩, hmem⟩ := hd
+              sorry)
+  exact ⟨fun n s m acc => (main _).1 n s m acc rfl,
+         fun n s m acc cs => (main _).2 n s m acc cs rfl⟩
 /-- The bridge at the root: the fast decoder from cursor `0` with an empty
 accumulator equals the specification. This is the statement the library needs
 (`decodeFullFastRoot = decodeFull`); the auxiliary lemmas above
