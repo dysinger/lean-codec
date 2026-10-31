@@ -571,8 +571,7 @@ def decodeFullArrayFast {α : Type} (d : Codec α) (h : ConsumesByte d)
   match _ : a.size - k with
   | 0 => some acc.reverse
   | _ + 1 =>
-    have hk : k < a.size := by omega
-    decodeFullArraySearch d h a k hk acc (packedCands d h a k)
+    decodeFullArraySearch d h a k (by omega) acc (packedCands d h a k)
 termination_by (a.size - k, (packedCands d h a k).length + 1)
 
 /-- The sibling search driving `decodeFullArrayFast`: **every** candidate of
@@ -598,6 +597,34 @@ decreasing_by
     simp_wf
     exact Prod.Lex.right _ (Nat.le_refl _)
 end
+
+/-- `decodeFullArrayFast`'s recursion equation at a known-**successor** cursor: the
+body is `match _ : a.size - k with …`, so the named equation blocks ι-reduction and
+`rw [decodeFullArrayFast.eq_def]` alone leaves a stuck `match`. The `dsimp only`
+between the two rewrites removes the `match a, k, acc with` wrapper the definition
+compiles to; without it `rw [hj]` reports "did not find an occurrence of the pattern
+`a.size - k`" and looks like a type error. It is not — this is the recipe `tasks.md`
+6.1a found the hard way and 6.1b reuses verbatim. -/
+theorem decodeFullArrayFast_succ {α : Type} (d : Codec α) (h : ConsumesByte d)
+    (a : Array UInt8) (k : Nat) (acc : List α) (j : Nat) (hj : a.size - k = j + 1) :
+    decodeFullArrayFast d h a k acc =
+      decodeFullArraySearch d h a k (by omega) acc (packedCands d h a k) := by
+  rw [decodeFullArrayFast.eq_def]
+  split
+  · omega
+  · rfl
+
+/-- `decodeFullArrayFast`'s recursion equation at a known-**zero** cursor: the input
+is exhausted, so the accumulator is the answer. Note this base case is reached by
+`a.size - k = 0` (end of input), **not** by an empty candidate list — the packed
+mirror of `decodeFullFast_zero`. -/
+theorem decodeFullArrayFast_zero {α : Type} (d : Codec α) (h : ConsumesByte d)
+    (a : Array UInt8) (k : Nat) (acc : List α) (hk0 : a.size - k = 0) :
+    decodeFullArrayFast d h a k acc = some acc.reverse := by
+  rw [decodeFullArrayFast.eq_def]
+  split
+  · rfl
+  · omega
 
 /-- The packed full-consumption decoder, at the start of the buffer. -/
 def decodeFullArrayRoot {α : Type} (d : Codec α) (h : ConsumesByte d)
