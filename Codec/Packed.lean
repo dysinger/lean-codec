@@ -830,10 +830,414 @@ theorem packedCand_iff {α : Type} (d : Codec α) (_h : ConsumesByte d)
   obtain ⟨⟨x, c'⟩, hmem, -, -⟩ := c
   exact (mem_decodeArray_iff d a k x c').mp hmem
 
+/-! ## The bridge: the packed decoder equals the specification (`R5.1`, task 6.1b)
+
+`array_bridge` is the packed twin of `cursor_bridge` and closes 6.1b's gate: it proves
+`decodeFullArrayRoot = decodeFull`, so the packed cursor decoder is the
+specification's decoder rather than a second, faster-guessed one.
+
+The route is the one `tasks.md` 6.1b's plan lays out (Steps A–D), with one structural
+correction recorded at each step where the plan was wrong:
+
+* **Step A**, the candidate bijection, is `packedCands`/`decode` correspondence —
+  already landed above (`packedCand_of_mem`, `packedCands_eq_attach`, …), together
+  with the two `getElem?` lemmas below. The plan's *route* to it (rewrite under
+  `.attach`) does not work — the dependent motive blocks it — so the correspondence is
+  stated positionally instead, which is both provable and exactly what the step
+  hypothesis needs.
+* **Steps B–C** are `decodeFullStepPacked` + `stepPacked_eq_step` + `CandAligned`: the
+  packed search is a packed-candidate recursion, and under an alignment it agrees with
+  the spec `decodeFullStep`.
+* **Step D** is `decodeFullArrayRoot_eq`, `array_bridge` at `K := a.size`, `k := 0`.
+
+**The one place the plan's arithmetic was wrong.** 6.1b's plan said the strong
+induction's measure must be `a.size - k ≤ K`. It must be `a.size - k = K`: the IH is
+consumed at the *child* cursor, so it needs `a.size - c < K`, which `≤` does not give
+at `K = a.size - k`. With `=` the child's measure is `t.remaining`, strictly smaller,
+and `ih` applies directly — the same shape `cursor_bridge` uses.
+
+**The other correction: the child cursor can reach the end of the buffer.**
+`consumedAbs a k t` can equal `a.size` (a candidate consuming the last byte), where
+`array_bridge`'s own cursor premise `k < a.size` is false and no IH exists. That
+branch is not a gap: the guard `rcases Nat.lt_or_ge` splits it off and the fast
+decoder's base case (`decodeFullArrayFast_zero`) plus `decodeFull_at_zero` close it. -/
+
+/-- `getElem?_probe`-shaped: every result of the packed decoder at index `i` is the
+spec result there read back through `consumedAbs`. This is `decodeArray_eq` read
+positionally — the form the `attach` correspondence needs, since rewriting *under*
+`.attach` dies on the dependent motive. `[propext, Quot.sound]`-only. -/
+theorem decodeArray_getElem?_spec {α : Type} (d : Codec α) (a : Array UInt8) (k i : Nat)
+    (pr : α × Nat) (hpr : (decodeArray d a k)[i]? = some pr) :
+    ∃ t : Suffix (a.size - k),
+      (decode d (bdrop k (arrayToBytes a)))[i]? = some (pr.1, t) ∧ pr.2 = consumedAbs a k t := by
+  rw [decodeArray_eq, List.getElem?_map] at hpr
+  cases hd : (decode d (bdrop k (arrayToBytes a)))[i]? with
+  | none => rw [hd] at hpr; simp at hpr
+  | some q =>
+      rw [hd] at hpr
+      simp only [Option.map, Option.some.injEq] at hpr
+      subst hpr
+      exact ⟨q.2, rfl, rfl⟩
+
+/-- **The attach lists correspond element for element.** At index `i`, the packed
+candidate and the spec candidate name the same value, with the packed cursor the
+readback of the spec suffix — obtained by opening both `attach` lists through
+`List.getElem?_attach` and reading the underlying lists positionally. This is the
+positional form of the candidate bijection 6.1b's Step A asked for.
+`[propext, Quot.sound]`-only. -/
+theorem attach_getElem?_corr {α : Type} (d : Codec α) (a : Array UInt8) (k i : Nat) :
+    ∀ (c : { pr : α × Nat // pr ∈ decodeArray d a k })
+      (s : { pr : α × Suffix (a.size - k) // pr ∈ decode d (bdrop k (arrayToBytes a)) }),
+      (decodeArray d a k).attach[i]? = some c →
+      (decode d (bdrop k (arrayToBytes a))).attach[i]? = some s →
+      c.val.1 = s.val.1 ∧ c.val.2 = consumedAbs a k s.val.2 := by
+  intro c s hc hs
+  rw [List.getElem?_attach] at hc
+  rw [List.getElem?_attach] at hs
+  cases hd : (decodeArray d a k)[i]? with
+  | none =>
+      simp only [hd] at hc
+      exact absurd hc (by simp)
+  | some pr =>
+      simp only [hd] at hc
+      have hc' : c = ⟨pr, List.mem_of_getElem? hd⟩ := (Option.some.inj hc).symm
+      subst hc'
+      obtain ⟨t, ht, hce⟩ := decodeArray_getElem?_spec d a k i pr hd
+      cases hd2 : (decode d (bdrop k (arrayToBytes a)))[i]? with
+      | none => rw [ht] at hd2; exact absurd hd2 (by simp)
+      | some q =>
+          simp only [hd2] at hs
+          have hs' : s = ⟨q, List.mem_of_getElem? hd2⟩ := (Option.some.inj hs).symm
+          subst hs'
+          rw [ht] at hd2
+          have hq : q = (pr.1, t) := (Option.some.inj hd2).symm
+          subst hq
+          exact ⟨rfl, hce⟩
+
+variable {α : Type} (d : Codec α) (h : ConsumesByte d) (a : Array UInt8)
+
+/-- The packed mirror of `decodeFullStep`: try each packed candidate in order at its own
+cursor and take the first full consumption. This is the *specification* of the packed
+search, stated over `PackedCand`s so it typechecks against the search's own recursion;
+`stepPacked_eq_step` then relates it to the spec `decodeFullStep`. -/
+def decodeFullStepPacked (k : Nat) (acc : List α) : List (PackedCand d a k) → Option (List α)
+  | [] => none
+  | c :: rest =>
+      match decodeFullArrayFast d h a c.val.2 c.property.2.2 (c.val.1 :: acc) with
+      | none => decodeFullStepPacked k acc rest
+      | some xs => some xs
+
+/-- **The search is exactly its packed step function.** `decodeFullStepPacked` is the
+packed mirror of `decodeFullStep` stated over `PackedCand`s; the search's own body is
+already that recursion, so this is list induction. The two-step route exists because
+the bridge cannot relate the packed search to the *spec* step directly — the two walk
+differently typed candidate lists — and this makes the packed search a fixed object
+whose agreement with the spec step is then a separate, self-contained lemma
+(`stepPacked_eq_step`). `[propext, Quot.sound]`-only. -/
+theorem decodeFullArraySearch_eq_stepPacked (k : Nat) (hk : k ≤ a.size) (acc : List α) :
+    ∀ (cs : List (PackedCand d a k)),
+      decodeFullArraySearch d h a k hk acc cs = decodeFullStepPacked d h a k acc cs := by
+  intro cs
+  induction cs with
+  | nil => rw [decodeFullArraySearch.eq_def]; rfl
+  | cons hd tl ih =>
+      obtain ⟨⟨x, c⟩, hmem, hkc, hlt⟩ := hd
+      rw [decodeFullArraySearch_cons d h a k hk acc x c ⟨hmem, hkc, hlt⟩ tl,
+          decodeFullStepPacked]
+      cases decodeFullArrayFast d h a c hlt (x :: acc) with
+      | none => simp only; exact ih
+      | some xs => rfl
+
+/-- **Two candidate lists, aligned position by position.** Same length, and at every
+index the packed element and the spec element name the same value, with the packed
+cursor the packed readback of the spec suffix. This is the invariant that lets
+`decodeFullStepPacked` and `decodeFullStep` be compared: it is what
+`packedCands_aligned` discharges for the lists the decoder actually walks. -/
+def CandAligned (k : Nat)
+    (cs : List (PackedCand d a k))
+    (ss : List { pr : α × Suffix (a.size - k) // pr ∈ decode d (bdrop k (arrayToBytes a)) }) : Prop :=
+  cs.length = ss.length ∧
+  ∀ (i : Nat) (c : PackedCand d a k)
+    (s : { pr : α × Suffix (a.size - k) // pr ∈ decode d (bdrop k (arrayToBytes a)) }),
+    cs[i]? = some c → ss[i]? = some s →
+      c.val.1 = s.val.1 ∧ c.val.2 = consumedAbs a k s.val.2
+
+/-- The length component of an alignment. -/
+theorem CandAligned_fst {k : Nat} {cs : List (PackedCand d a k)}
+    {ss : List { pr : α × Suffix (a.size - k) // pr ∈ decode d (bdrop k (arrayToBytes a)) }}
+    (hal : CandAligned d a k cs ss) : cs.length = ss.length := hal.1
+
+/-- The pointwise component of an alignment, at an index. -/
+theorem CandAligned_at {k : Nat} {cs : List (PackedCand d a k)}
+    {ss : List { pr : α × Suffix (a.size - k) // pr ∈ decode d (bdrop k (arrayToBytes a)) }}
+    (hal : CandAligned d a k cs ss) (i : Nat) (c : PackedCand d a k)
+    (s : { pr : α × Suffix (a.size - k) // pr ∈ decode d (bdrop k (arrayToBytes a)) })
+    (hc : cs[i]? = some c) (hs : ss[i]? = some s) :
+    c.val.1 = s.val.1 ∧ c.val.2 = consumedAbs a k s.val.2 := hal.2 i c s hc hs
+
+/-- Alignment is preserved by taking both tails: the correspondence shifts by one. -/
+theorem CandAligned_tail {k : Nat} {cs : List (PackedCand d a k)}
+    {ss : List { pr : α × Suffix (a.size - k) // pr ∈ decode d (bdrop k (arrayToBytes a)) }}
+    (hal : CandAligned d a k cs ss) : CandAligned d a k cs.tail ss.tail := by
+  obtain ⟨hlen, hpt⟩ := hal
+  refine ⟨by simp [List.length_tail, hlen], ?_⟩
+  intro i c s hc hs
+  have hc' : cs[i + 1]? = some c := by rw [← List.getElem?_tail]; exact hc
+  have hs' : ss[i + 1]? = some s := by rw [← List.getElem?_tail]; exact hs
+  exact hpt (i + 1) c s hc' hs'
+
+
+/-- **The search/step agreement**: under an alignment, the packed step function over
+`cs` equals the spec `decodeFullStep` over `ss`, with the accumulator reversed on.
+
+This is the packed mirror of `decodeFullFastSearch_eq` and the reason 6.1b needed the
+candidate bijection: the step hypothesis is stated over **spec** candidates (that is
+what `decodeFullStep` consumes), while the recursion walks **packed** ones, and the
+alignment is what transports one into the other. Follows `decodeFullFastSearch_eq`'s
+shape — induction on the candidate list, `decodeFullStep_cons` on a `cons`,
+`reverse_cons_append` for the accumulator — with the alignment supplying the
+value/cursor identification at each head. `[propext, Quot.sound]`-only. -/
+theorem stepPacked_eq_step {k : Nat} (hk : k ≤ a.size) (acc : List α) :
+    ∀ (cs : List (PackedCand d a k))
+      (ss : List { pr : α × Suffix (a.size - k) // pr ∈ decode d (bdrop k (arrayToBytes a)) }),
+      CandAligned d a k cs ss →
+      (∀ (x : α) (t : Suffix (a.size - k))
+          (_hmem : (x, t) ∈ decode d (bdrop k (arrayToBytes a)))
+          (hbd : consumedAbs a k t ≤ a.size),
+          decodeFullArrayFast d h a (consumedAbs a k t) hbd (x :: acc) =
+            (decodeFull d h t.remaining t.bytes).map (fun tail => (x :: acc).reverse ++ tail)) →
+      decodeFullStepPacked d h a k acc cs =
+        (decodeFullStep d h (bdrop k (arrayToBytes a)) (fun m s' _ => decodeFull d h m s') ss).map
+          (fun tail => acc.reverse ++ tail) := by
+  intro cs
+  induction cs with
+  | nil =>
+      intro ss hal hstep
+      obtain ⟨hlen, _⟩ := hal
+      have hss : ss = [] := List.eq_nil_of_length_eq_zero (by simpa using hlen.symm)
+      subst hss
+      rw [decodeFullStepPacked, decodeFullStep.eq_def]
+      simp only [Option.map_none]
+  | cons hd tl ih =>
+      intro ss hal hstep
+      obtain ⟨hlen, hpt⟩ := hal
+      cases ss with
+      | nil => simp at hlen
+      | cons shd stl =>
+          obtain ⟨⟨y, t⟩, hmem'⟩ := shd
+          obtain ⟨⟨x, c⟩, hmem, hkc, hlt⟩ := hd
+          have e0 := hpt 0 ⟨(x, c), hmem, hkc, hlt⟩ ⟨(y, t), hmem'⟩
+            (List.getElem?_cons_zero) (List.getElem?_cons_zero)
+          obtain ⟨hxy, hct0⟩ := e0
+          have hct : c = consumedAbs a k t := hct0
+          subst hxy
+          -- `hct : c = consumedAbs a k t`, so the packed decoder's child call is
+          -- already at `consumedAbs a k t`; only the bound proof needs carrying.
+          have hcle : consumedAbs a k t ≤ a.size := by
+            have hh := t.hle
+            unfold consumedAbs
+            omega
+          have hfast : decodeFullArrayFast d h a c hlt (x :: acc)
+              = decodeFullArrayFast d h a (consumedAbs a k t) hcle (x :: acc) := by
+            cases hct
+            rfl
+          rw [decodeFullStepPacked]
+          simp only
+          rw [hfast]
+          rw [decodeFullStep_cons d h (bdrop k (arrayToBytes a))
+                (fun m s' _ => decodeFull d h m s') x t hmem' stl]
+          rw [hstep x t hmem' hcle]
+          have htail : CandAligned d a k tl stl := by
+            refine ⟨by simpa using hlen, ?_⟩
+            intro i2 c2 s2 hc2 hs2
+            have hc2' : (⟨(x, c), hmem, hkc, hlt⟩ :: tl)[i2 + 1]? = some c2 := by
+              rw [List.getElem?_cons_succ]; exact hc2
+            have hs2' : (⟨(x, t), hmem'⟩ :: stl)[i2 + 1]? = some s2 := by
+              rw [List.getElem?_cons_succ]; exact hs2
+            exact hpt (i2 + 1) c2 s2 hc2' hs2'
+          cases hd' : decodeFull d h t.remaining t.bytes with
+          | none =>
+              simp only [Option.map_none]
+              exact ih stl htail hstep
+          | some xs =>
+              simp only [Option.map, Option.some.injEq]
+              rw [reverse_cons_append]
+
+/-- **The real lists are aligned.** `packedCands` at a live cursor lines up with the
+spec `(decode …).attach` list: same length (`packedCands_length_eq`), and at each
+index the packed candidate is the spec candidate's readback. Proved through the
+`getElem?` correspondence, which is why no `attach` rewrite is needed.
+`[propext, Quot.sound]`-only. -/
+theorem packedCands_aligned {k : Nat} (hk : k < a.size) :
+    CandAligned d a k (packedCands d h a k)
+      (decode d (bdrop k (arrayToBytes a))).attach := by
+  refine ⟨by rw [List.length_attach, packedCands_length_eq d h a k hk], ?_⟩
+  intro i c s hc hs
+  rw [packedCands_eq_attach d h a k hk, List.getElem?_map] at hc
+  -- `hc` now reads `Option.map f (decodeArray…attach[i]?) = some c`; open the option.
+  cases hg : (decodeArray d a k).attach[i]? with
+  | none => rw [hg] at hc; simp at hc
+  | some c0 =>
+      rw [hg] at hc
+      simp only [Option.map, Option.some.injEq] at hc
+      subst hc
+      exact attach_getElem?_corr d a k i c0 s hg hs
+
+/-- `decodeFull` is invariant under a `Bytes` length cast. `rfl` after `subst`. -/
+theorem decodeFull_cast {α : Type} (d : Codec α) (h : ConsumesByte d) {n m : Nat}
+    (e : n = m) (s : Bytes n) :
+    decodeFull d h n s = decodeFull d h m (cast (congrArg Bytes e) s) := by
+  subst e; rfl
+
+/-- **The array bridge (task 6.1b's target).** At every live cursor `k`, the packed
+fast decoder equals the specification at `bdrop k (arrayToBytes a)`, accumulator
+reversed on — together with its search congruence, for the same reason
+`cursor_bridge` carries both: the search's step calls the decoder at an advanced
+cursor, so neither half is provable alone.
+
+Measure: `a.size - k ≤ K` (**not** `= K`) — the recursive calls sit at the child
+cursor, so the IH is consumed at a smaller remaining length. -/
+theorem array_bridge {α : Type} (d : Codec α) (h : ConsumesByte d) (a : Array UInt8) :
+    ∀ K (k : Nat) (hk : k < a.size), a.size - k = K →
+      (∀ (acc : List α),
+        decodeFullArrayFast d h a k (Nat.le_of_lt hk) acc
+          = (decodeFull d h (a.size - k) (bdrop k (arrayToBytes a))).map
+              (fun tail => acc.reverse ++ tail)) ∧
+      (∀ (acc : List α),
+        decodeFullArraySearch d h a k (Nat.le_of_lt hk) acc (packedCands d h a k)
+          = (decodeFullStep d h (bdrop k (arrayToBytes a))
+              (fun m s' _ => decodeFull d h m s')
+              (decode d (bdrop k (arrayToBytes a))).attach).map
+              (fun tail => acc.reverse ++ tail)) := by
+  intro K
+  induction K using Nat.strongRecOn with
+  | ind K ih =>
+  intro k hk hK
+  rcases Nat.eq_zero_or_pos (a.size - k) with hzero | hpos
+  · -- vacuous: `a.size - k = 0` means `a.size ≤ k`, contradicting `hk`
+    exact absurd hzero (by omega)
+  · obtain ⟨j, hj⟩ : ∃ j, a.size - k = j + 1 := ⟨a.size - k - 1, by omega⟩
+    have hrem : a.size - k = j + 1 := hj
+    constructor
+    · intro acc
+      rw [decodeFullArrayFast_succ d h a k (Nat.le_of_lt hk) acc j hj,
+          decodeFull_succ d h (a.size - k) j hj (bdrop k (arrayToBytes a))]
+      rw [decodeFullArraySearch_eq_stepPacked d h a k (Nat.le_of_lt hk) acc (packedCands d h a k)]
+      refine stepPacked_eq_step d h a (Nat.le_of_lt hk) acc (packedCands d h a k)
+        (decode d (bdrop k (arrayToBytes a))).attach (packedCands_aligned d h a hk) ?_
+      intro x t hmem
+      have hlt : k < consumedAbs a k t := consume_lt d h a k hk x t hmem
+      have hrem2 : a.size - consumedAbs a k t = t.remaining := consumedAbs_remaining a k t
+      have hremk : a.size - k = j + 1 := hrem
+      have hleT : t.remaining ≤ a.size - k := t.hle
+      have hcle : consumedAbs a k t ≤ a.size := by
+        have h := t.hle
+        unfold consumedAbs
+        omega
+      have hsmall : a.size - consumedAbs a k t < a.size - k :=
+        Nat.sub_lt_sub_left hk hlt
+      have hmeas : a.size - consumedAbs a k t < K := by omega
+      intro hbd
+      rcases Nat.lt_or_ge (consumedAbs a k t) a.size with hend | hend
+      · -- child cursor still inside the buffer: the IH applies
+        have hchild := (ih (a.size - consumedAbs a k t) hmeas (consumedAbs a k t)
+          (by omega) rfl).1 (x :: acc)
+        rw [hchild]
+        -- the child's root is exactly `t.bytes`
+        rw [bdrop_consumedAbs_eq d a k x t hmem]
+        show (Option.map (fun tail => (x :: acc).reverse ++ tail)
+              (decodeFull d h (a.size - consumedAbs a k t)
+                (cast (congrArg Bytes (consumedAbs_remaining a k t).symm) t.bytes))) = _
+        rw [decodeFull_cast d h (consumedAbs_remaining a k t).symm t.bytes]
+      · -- child cursor is the end of the buffer (`consumedAbs = a.size`): the fast
+        -- decoder answers from its base case and the spec from `decodeFull_at_zero`.
+        have heq : consumedAbs a k t = a.size := by omega
+        have hz : a.size - consumedAbs a k t = 0 := by omega
+        have hrz : t.remaining = 0 := by
+          rw [← hrem2]; exact hz
+        rw [decodeFullArrayFast_zero d h a (consumedAbs a k t) hbd (x :: acc) hz]
+        rw [decodeFull_at_zero d h t.remaining t.bytes hrz]
+        simp only [Option.map, List.append_nil]
+    · intro acc
+      rw [decodeFullArraySearch_eq_stepPacked d h a k (Nat.le_of_lt hk) acc (packedCands d h a k)]
+      refine stepPacked_eq_step d h a (Nat.le_of_lt hk) acc (packedCands d h a k)
+        (decode d (bdrop k (arrayToBytes a))).attach ?_ ?_
+      · -- alignment of the real lists
+        exact packedCands_aligned d h a hk
+      · -- the same step hypothesis as the fast half
+        intro x t hmem hbd
+        have hlt : k < consumedAbs a k t := consume_lt d h a k hk x t hmem
+        have hrem2 : a.size - consumedAbs a k t = t.remaining := consumedAbs_remaining a k t
+        have hremk : a.size - k = j + 1 := hrem
+        have hcle : consumedAbs a k t ≤ a.size := by
+          have h := t.hle
+          unfold consumedAbs
+          omega
+        have hsmall : a.size - consumedAbs a k t < a.size - k := Nat.sub_lt_sub_left hk hlt
+        have hmeas : a.size - consumedAbs a k t < K := by omega
+        rcases Nat.lt_or_ge (consumedAbs a k t) a.size with hend | hend
+        · have hchild := (ih (a.size - consumedAbs a k t) hmeas (consumedAbs a k t)
+            hend rfl).1 (x :: acc)
+          rw [hchild, bdrop_consumedAbs_eq d a k x t hmem]
+          show (Option.map (fun tail => (x :: acc).reverse ++ tail)
+                (decodeFull d h (a.size - consumedAbs a k t)
+                  (cast (congrArg Bytes (consumedAbs_remaining a k t).symm) t.bytes))) = _
+          rw [decodeFull_cast d h (consumedAbs_remaining a k t).symm t.bytes]
+        · have heq : consumedAbs a k t = a.size := by omega
+          have hz : a.size - consumedAbs a k t = 0 := by omega
+          have hrz : t.remaining = 0 := by rw [← hrem2]; exact hz
+          rw [decodeFullArrayFast_zero d h a (consumedAbs a k t) hbd (x :: acc) hz]
+          rw [decodeFull_at_zero d h t.remaining t.bytes hrz]
+          simp only [Option.map, List.append_nil]
+
+
 /-- The packed full-consumption decoder, at the start of the buffer. -/
 def decodeFullArrayRoot {α : Type} (d : Codec α) (h : ConsumesByte d)
     (a : Array UInt8) : Option (List α) :=
   decodeFullArrayFast d h a 0 (Nat.zero_le _) []
+
+/-- **The root bridge (task 6.1b's gate): the packed full-consumption decoder, from
+cursor `0`, equals the specification.**
+
+This is `array_bridge` at `K := a.size`, `k := 0`: `a.size - 0` is `a.size`, `bdrop 0`
+is the identity, and the accumulator's reverse is a no-op — all definitional, exactly
+as `decodeFullFastRoot_eq` takes `cursor_bridge`'s `m = 0` case. The empty buffer is
+split off first because `array_bridge`'s cursor premise `k < a.size` is then false,
+and both sides answer `some []` there anyway.
+
+Note the specification side is **`decodeFull` directly**, not `decodeFullFastRoot`:
+6.1a already proved those equal, so routing through it would add a second bridge for
+no gain. `[propext, Quot.sound]`-only, zero `sorry`, zero `Classical.choice`. -/
+theorem decodeFullArrayRoot_eq {α : Type} (d : Codec α) (h : ConsumesByte d)
+    (a : Array UInt8) :
+    decodeFullArrayRoot d h a = decodeFull d h a.size (arrayToBytes a) := by
+  unfold decodeFullArrayRoot
+  rcases Nat.eq_zero_or_pos a.size with hz | hp
+  · have h0 : a.size - 0 = 0 := by omega
+    rw [decodeFullArrayFast_zero d h a 0 (Nat.zero_le _) [] h0,
+        decodeFull_at_zero d h a.size (arrayToBytes a) hz]
+    rfl
+  · have hb := (array_bridge d h a a.size 0 hp (by omega)).1 []
+    have hbd : bdrop 0 (arrayToBytes a) = arrayToBytes a := by
+      funext i
+      exact congrArg (arrayToBytes a) (Fin.ext (by simp))
+    rw [hb]
+    -- `a.size - 0` and `bdrop 0` are definitionally `a.size` and the identity, but
+    -- `decodeFull`'s index blocks a `rw`; transport the *goal* instead.
+    have hmap : (Option.map (fun tail => ([] : List α).reverse ++ tail)
+        (decodeFull d h (a.size - 0) (bdrop 0 (arrayToBytes a))))
+        = (decodeFull d h a.size (bdrop 0 (arrayToBytes a))) := by
+      show ((decodeFull d h (a.size - 0) (bdrop 0 (arrayToBytes a))).map id)
+          = decodeFull d h a.size (bdrop 0 (arrayToBytes a))
+      -- `a.size - 0 = a.size`, so the two `decodeFull` calls are connected by
+      -- `decodeFull_cast` at that equation.
+      have hc := decodeFull_cast d h (n := a.size - 0) (m := a.size)
+        (Nat.sub_zero a.size) (bdrop 0 (arrayToBytes a))
+      -- `hc : decodeFull (a.size-0) (bdrop 0 …) = decodeFull a.size (cast … (bdrop 0 …))`
+      rw [hc]
+      exact congrFun Option.map_id _
+    rw [hmap, hbd]
+
 
 /-- The packed full-consumption decoder equals the *first* spec `decode` result,
 with its suffix packed as a `ByteArray` and its consumed count read back. (The
