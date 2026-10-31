@@ -750,6 +750,41 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
         (and for the same reason: a `Suffix`-typed or `Bytes`-typed statement hits
         the index mismatch).
 
+      * **READ THIS BEFORE RE-DERIVING THE ARITHMETIC (2026-11-02, cost a
+        session).** The remaining step's core numeric identity is
+
+            n - (m + (n - m - r)) = n - m - r
+
+        **and it is FALSE without the extra premise `m ≤ n`.** Verified by
+        exhaustion: `n = 0, m = 2, r = 0` satisfies `r ≤ n - m` (`0 ≤ 0 - 2`,
+        which is `0 ≤ 0` under truncated subtraction) but `m ≤ n` fails, and the
+        identity then claims `0 - 2 = 0 - 2 - 0`, i.e. `0 = 0`, while the LHS
+        under the intended reading is not the same term. So the transport step
+        **SHALL carry `m ≤ n` explicitly** (it is available: `m ≤ n` follows from
+        `n - m < n` or from the `Suffix`/cursor invariant, but *not* from
+        `t.hle` alone — that is the trap).
+
+        With `m ≤ n` supplied, the proof is
+
+            rw [show m + (n - m - r) = m + (n - m) - r from (Nat.add_sub_assoc h m).symm]
+            rw [show m + (n - m) = n from splice_add hm]
+            -- then close the last `Nat.sub` step
+
+        and note `splice_add` (`Codec/Codec.lean:91`) **already exists** and takes
+        exactly that `m ≤ n` hypothesis — do not re-derive it. The library's
+        sibling `bdrop_bdrop` (`Codec/Codec.lean:594`) likewise carries its
+        arithmetic as an explicit hypothesis `e : n - (k + m) = n - k - m`, which
+        is independent confirmation that this shape is the intended one.
+
+      * **Tactics that do NOT work on this arithmetic** (all tried, all recorded
+        so they are not retried): bare `omega` on any goal containing
+        `n - (m + …)` (it reports a counterexample because it cannot see the
+        `m ≤ n` implication, and it is right that it does not follow);
+        `Nat.sub_sub_self` (gives `r`, not `n - m - r`); `Nat.sub_add_cancel`
+        (its implicit arg order binds the wrong `n`); `nth_rewrite`/`conv_lhs =>
+        rw` on these subterms (rewrites the wrong occurrence). Obtain the `m ≤ n`
+        premise first, then `Nat.add_sub_assoc` + `splice_add`.
+
 - [ ] 6.1b **Move the fast decode onto an `Array UInt8` + `Nat` cursor**
       (≈**6.5×**: 9 → 59 MiB/s measured). `decodeFullFastRoot` avoids the closure
       _chain_ but still calls `decode p (Suffix.drop m s).bytes` every step,
