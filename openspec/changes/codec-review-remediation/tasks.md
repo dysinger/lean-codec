@@ -812,6 +812,72 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
         derived, so expected `[propext, Quot.sound]`-only, but **that is unverified
         until the gate goes green**; run it as the first step after 6.1a closes.
 
+      * **SESSION 6 (2026-11-02) — the re-rooting lemma is PROVED, and the root
+        bridge is reduced to one step hypothesis.** Landed in `Codec/Decode.lean`
+        (all proved, no `sorry`):
+
+        | lemma | statement |
+        | --- | --- |
+        | `decodeFullFast_succ` | the fast decoder's unfold **at a known successor cursor** |
+        | `decodeFullFast_zero` | the same at a known zero cursor |
+        | `Suffix.drop_zero` | `Suffix.drop 0 s = Suffix.id n s` |
+        | — (`reroot_bytes_eq`) | the two cursors read the same bytes at length `r` |
+        | — (`decodeFull_reroot_cursor`) | **the 6.1a blocker**: spec at cursor `m` over `s` = spec at the re-rooted cursor over `bdrop m s` |
+
+        **The unfold recipe is now a named lemma, not folklore.**
+        `decodeFullFast_succ` is
+        `conv => lhs; rw [decodeFullFast.eq_def]; dsimp only; rw [hm]`, and the
+        `dsimp only` is load-bearing: the definition compiles to
+        `match n, s, m, acc with`, so without it `rw [hm]` reports "did not find an
+        occurrence of the pattern `n - m`" and looks like a type error. It is not.
+        This closes the blocker four sessions could not name. **Do not re-derive it.**
+
+        **`decodeFull_reroot_cursor` needed no `ih` congruence — confirmed.** After
+        stepping both sides (`decodeFull_succ`), the two `decodeFullStep` calls differ
+        **only in their root**, and the step is discharged by `reroot_bytes_eq` in one
+        rewrite. The `0` case is `decodeFull_zero` on both sides. This settles the
+        question the SESSION 3 entry left open: `candsAt`/`candsRoot`/`retypeCands`
+        and every `Membership` workaround are **not needed** for the re-rooting
+        lemma, and the earlier "the search congruence must be stated over one
+        re-indexed list" framing was an artefact of the route now abandoned.
+
+        **The cast wall is real and `reroot_bytes_eq` is how to get around it.** The
+        lemma's two `decide`-style statements were provable only **pointwise**
+        (`funext` + `cast_bytes_val'`/`cast_bytes_val_symm`), because the two casts
+        carry equal-but-different width proofs and no `rw` can abstract them ("motive
+        is not type correct"). Stating the re-rooting lemma **at `r` on both sides,
+        with the two casts written out in the statement**, is what made it typecheck;
+        every simpler spelling fails in the thesis (`decodeFull p h r` demands
+        `Bytes r`).
+
+        **A false lemma was asserted and refuted this session, recorded so it is not
+        retried:** `n - (m + (n - m - 0)) = n - m` is **FALSE** (it is `0`). An
+        exhaustive `#eval` over `n, m < 10` refuted it after several failed `omega`
+        attempts; `omega` was right and the stated identity was wrong. The true
+        facts are `n - (m + (n - m - r)) = r` (`remaining_at_cursor`, already landed)
+        and the `r = 0` instance evaluates to `0`. This is the ledger's existing
+        "`#eval` the identity first" lesson biting again.
+
+        **What is left: `decodeFullFastRoot_eq`'s successor case only.** `zero`
+        closes (`decodeFullFast_zero` + `decodeFull_zero` + `rfl`). `succ` is
+        `decodeFullFast_succ` then `decodeFull_succ`, leaving
+
+            decodeFullFastSearch p h s 0 [] (decode p (Suffix.drop 0 s).bytes).attach
+              = decodeFullStep p h s (fun m s' _ => decodeFull p h m s') (decode p s).attach
+
+        which `decodeFullFastSearch_eq` was built for. **The one obstacle is the
+        `Membership` trap the ledger already records**: `Suffix.drop 0 s` is `rfl`-equal
+        to `s` but is not the same syntactic head, so rewriting it into the
+        `decodeFullFastSearch` cands argument fails with
+        `Application type mismatch: List.instMembership`. `Suffix.drop_zero` (landed)
+        makes the two heads **equal**, not identical, which is not enough for `rw`.
+        **The next move is to state the cands type at the search's own spelling
+        first** — i.e. prove the goal with `s` substituted for `Suffix.drop 0 s` in
+        the *statement* (`decodeFullFast_succ` can be restated at the `s`-rooted
+        cands type, since `Suffix.drop 0 s` and `s` are interchangeable there) rather
+        than trying to rewrite afterwards. Do not attempt `rw` into an applied
+        `decodeFullFastSearch`'s `attach` argument.
+
       * **SESSION 5 (2026-11-02) — two mechanical breakthroughs, and the cast is a
         real wall.** Landed in `Codec/Decode.lean` (both proved, no `sorry`):
 
