@@ -2,6 +2,15 @@
 
 Guidance for AI coding agents working in this repository.
 
+**Two hard requirements, before anything else:**
+
+1. **Play an audible alarm every time you pause** — see
+   [Pause signal](#pause-signal-mandatory) below. It is a mandate, not a nicety.
+2. **Direction lives only here and in `openspec/`.** No `HANDOFF.md`, no
+   `NOTES.md`, no `*-wip.lean` scratch files, no second place a next session could
+   look. If a scratch file earns its keep, land its content in the library or in
+   the change's `tasks.md` and delete the file.
+
 **This file is forward-looking operating instructions, not a session diary.**
 History — what landed when, what was reverted, what a past session measured —
 belongs in `openspec/` (the task ledger) and `CHANGELOG.md`. Do not append
@@ -370,6 +379,32 @@ standing instruction, not a per-session choice. Concretely:
   merely because the correct path is harder.
 - Record findings and refutations where the next reader will look (`tasks.md`,
   module docstrings), rather than silently diverging from the plan.
+
+## Pause signal (MANDATORY)
+
+**Always play an audible alarm when you pause.** Every time you stop and hand
+control back to the owner — end of session, blocked on a question, waiting for a
+decision, or presenting options — play an alarm first, then write the summary.
+This is a **mandate**, not a nicety: the owner steps away while a long task runs
+and relies on the sound, not on watching the terminal, to know when to come back.
+A pause with no alarm is a defect in the session — the owner may sit idle for
+minutes before noticing your output.
+
+Play one for ~5 seconds (macOS):
+
+```bash
+for i in 1 2 3 4 5 6 7 8; do afplay /System/Library/Sounds/Sosumi.aiff 2>/dev/null & sleep 0.35; done; wait
+```
+
+- **Play it first, then write prose.** The alarm must arrive _before_ the summary
+  it announces. Playing it after the last line defeats the purpose — by then the
+  reader has already been waiting.
+- **Do not skip it because the pause feels brief.** A one-line "which option?"
+  question is exactly the kind of pause this exists for.
+- **Do not skip it because it might be noisy.** That judgement belongs to the
+  owner, not the agent.
+- If `afplay` is unavailable, fall back to terminal bells (`printf '\a'`) in a
+  loop, and say which fallback was used.
 
 ## OpenSpec workflow
 
