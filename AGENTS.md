@@ -93,21 +93,16 @@ skips the ledger would get them wrong**, and all three are also in `tasks.md`:
 - **The work order is §6 → §2 → §3/§4 → §5**, and **6.1a is a hard gate** on the
   rest of §6. §6 goes first because §3/§4 rewrite the paragraphs that quote the
   numbers §6 fixes. If `tasks.md` disagrees with this line, `tasks.md` wins.
-- **The next step is 6.1a: prove `Codec.decodeFullFast_pairwise`.** Two lemmas
-  about `decodeFullFast`/`decodeFullFastSearch`, stated as a conjunction over one
-  measured state and currently carrying `sorry` (so `lake build` fails there and at
-  `decodeFullFastRoot_eq` — deliberate; `Codec/Decode.lean` is the file). **The
-  obstacle is the termination ranking, not the mathematics**: both congruences sit
-  at the same state, but the definition ranks the fast one one tick above the
-  search, and `Prod.Lex` has no reflexive case. Read the lemma's own docstring
-  before touching it — it records the two closed cases, the ranking fix that fits
-  (state two lemmas at the same key, or re-rank so the search carries the `+1`),
-  and the three traps that cost sessions (state both sides' `match`es at the same
-  parameter; `decodeFullFastSearch.eq_def` does not fire until the list is
-  `cases`d; state the search congruence over **one** list re-indexed, never two
-  independent ones — the empty case is then unprovable).
-  `tasks.md` 6.1a has the refutation history, the landed lemmas, and the two
-  refuted diagnoses. Prove this before anything else in §6.
+- **The next step is 6.1a: prove `Codec.decodeFullFast_pairwise`.** Currently
+  `sorry`-marked, so `lake build` fails there and at `decodeFullFastRoot_eq`
+  (deliberate; `Codec/Decode.lean` is the file). **Read
+  `openspec/changes/codec-review-remediation/tasks.md` 6.1a before touching it** —
+  it is the single record of what is closed, the landing lemmas, the traps, and
+  the refuted diagnoses. Two of those refutations matter most: the claimed
+  "`Prod.Lex` ranking" obstacle is **false** (the recursor's `motive1`/`motive2`
+  pair supplies what the fast case needs), and the real blocker is `Membership`
+  instance selection on the re-rooted candidate list. Do not restate any of that
+  here; the ledger owns it. Prove this before anything else in §6.
 - **Only `R5.1` may change a declaration _shape_** (design D9), and it must keep
   every theorem's statement, prove the new definition equal to the old, and stay
   `[propext, Quot.sound]`-only / zero-`sorry` / `#eval`-able. Nothing else may.
