@@ -97,19 +97,25 @@ and it may never point at a path outside the repo (no `/tmp`, no scratch file).
 Four facts about that change are worth stating here **only because a reader who
 skips the ledger would get them wrong**, and all four are also in `tasks.md`:
 
-- **The work order is §6 → §2 → §3/§4 → §5.** §6 goes first because §3/§4 rewrite
-  the paragraphs that quote the numbers §6 fixes. If `tasks.md` disagrees with
-  this line, `tasks.md` wins.
-- **The next step is 6.1b, and it has a written plan.** `Codec.decodeFullFastRoot_eq`
-  is proved (the 6.1a gate is closed), `lake build` is green, and there are **no
-  `sorry`s anywhere in the tree**. What remains is the **cursor** decoder:
-  `Codec.decodeArray_consumes` is proved but not yet in the tree, the mutual pair
-  must **mirror `decodeFullFast`** rather than be invented, and
+- **The work order is §6 → §3/§4 → §5, and §2 is done.** §6 goes first because
+  §3/§4 rewrite the paragraphs that quote the numbers §6 fixes; correcting those
+  claims against today's numbers would canonize the defect. If `tasks.md`
+  disagrees with this line, `tasks.md` wins.
+- **The next step is 6.1b, and it has a written plan built from the code.**
+  `Codec.decodeFullFastRoot_eq` is proved (6.1a's gate is closed), `lake build` is
+  green, and there are **no `sorry`s anywhere in the tree**. What remains is the
+  **cursor** decoder over `Array UInt8` + `Nat`. `Codec.decodeArray_consumes` **is
+  in the tree** (`Codec/Packed.lean:495`). The mutual pair must **mirror
+  `decodeFullFast`/`decodeFullFastSearch`** (`Codec/Decode.lean:221`–`:268`), and
   **`decodeFullArray` must not be used** — it commits to the head, the same defect
   6.1a fixed, and `decodeFullArray_spec` proves it equal to `head?` (true theorem,
-  wrong decoder). Read `tasks.md` 6.1b's "PLAN FOR NEXT SESSION" block before
-  touching code: it names the one place the shapes differ, the two `decreasing_by`
-  tails, and the refuted `WellFounded.fix` shortcut.
+  wrong decoder). Read `tasks.md` 6.1b's plan before touching code: it names the
+  four things that are not free (`hk` threaded as a parameter so `decreasing_by`
+  needs no `rename_i`; both measures `Prod.Lex`; the base case is end-of-input via
+  `a.size - k = 0`, _not_ an empty candidate list; no explicit `WellFounded.fix`),
+  the two unfolder lemmas' `dsimp only` recipe, and the one genuinely new
+  obligation — a `Suffix`-shaped re-rooting identity standing in for 6.1a's
+  `spec_at_advance`.
 - **Benchmark numbers from this repo are not trustworthy without the rules.** Every
   in-repo measurement attempt during 6.1 made a wrong number that was briefly
   believed (dead-code elimination reporting `0 ns/op`, loop hoisting of a pure
