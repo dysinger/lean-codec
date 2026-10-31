@@ -52,8 +52,8 @@ longer than the commit that wrote it.
 else.** Run the live counts with `nix develop --command openspec list --json`
 (strip the dev-shell banner: `| sed -n '/^{/,$p'`); do not trust a snapshot here
 for longer than the commit that wrote it. Currently **5/50**, and the next
-concrete step is **6.1a** — see the bullet below, which names the one missing
-lemma.
+concrete step is **6.1a** — whose mathematics is already landed; only branch
+plumbing is left. The bullet below names the lemmas and the two traps.
 
 It is a codebase-wide audit. Four adversarial _reading_ lenses (74 findings, ids
 `R<lens>.<n>`) cover the docs, the proof surface, `AGENTS.md`, and the global
@@ -94,23 +94,23 @@ is the summary):
   `Codec.decodeFullFastRoot` re-roots at the original byte string with a
   consumed-count cursor: **93,531 → 188 µs (n=4096), 24,905,804 → 2,753 µs
   (n=65536)**, linear, ~22 MiB/s. **`decodeFullFastRoot` is still verified by
-  measurement, NOT yet by proof.** The equality bridge is 6.1a:
-  **The mathematics is done; one type-indexing step remains.**
-  `Codec.step_bytes_pointwise` **landed in the library** (`Codec/Decode.lean`,
-  `[propext, Quot.sound]`-only, gated): it re-roots a decoder step's bytes at the
-  original input _pointwise_, so no `Bytes` length cast sits in the way. A
-  `Bytes`-level statement forces such a cast, and that cast is what blocked
-  every `rw` in this task — do not re-attempt the `Bytes`-level form.
-  `bridge-wip.lean` additionally holds five proven, axiom-clean lemmas;
-  `route-a-wip.lean` holds the **confirmed** route to the finish: state the
-  memo's conclusion with the spec index written `(Suffix.drop m s).remaining`
-  (the type the recursor produces), which removes the `Suffix`-index mismatch at
-  the source — that elaborates and closes `refine_1` outright. The remaining work
-  is branch plumbing in `refine_2`/`refine_3`, and the trick that makes the spec
-  side reachable is `conv => rhs; rw [decodeFull_succ' …]` (rewrite **only the
-  RHS**, so the fast side's dependent `have hmem :=` is never touched).
-  `tasks.md` 6.1a has the full derivation. **Do not wire the fast path in, and
-  do not build 6.1b/6.5 on it, until 6.1a lands.**
+  measurement, NOT yet by proof.** The equality bridge is 6.1a.
+  **All its mathematics is done and landed; only branch plumbing remains.**
+  `Codec/Decode.lean` §"Lemmas for the fast-path bridge" carries the six lemmas
+  (gated, `[propext, Quot.sound]`-only or axiom-free): `step_bytes_pointwise`,
+  `decodeFull_at_zero`, `decodeFull_succ`, `decodeFullStep_cons`,
+  `attach_eq_cons`, `attach_pair_eq`. Two traps there, both expensive:
+  (a) **never state a `Bytes`-level equation — state it pointwise**, because the
+  length cast blocks every downstream `rw`; (b) **parameterize the list rather
+  than rewriting under `.attach`**, which fails on the dependent motive.
+  The **confirmed route** to the finish is to write the core lemma's spec index
+  as `(Suffix.drop m s).remaining` (the type the recursor produces), which
+  removes the `Suffix`-index mismatch at the source and closes `refine_1`
+  outright; the spec side is then reachable with
+  `conv => rhs; rw [decodeFull_succ …]` — rewriting **only the RHS** so the fast
+  side's dependent `have hmem :=` is never touched. `tasks.md` 6.1a has the rest.
+  **Do not wire the fast path in, and do not build 6.1b/6.5 on it, until 6.1a
+  lands.**
 - **§1 is complete (1.2, 1.3, 1.5 landed).** The proof gate is real:
   `lakefile.lean` sets `moreLeanArgs := #["-DwarningAsError=true"]` on the
   `codec` lib, so `sorry` **fails** `lake build` instead of warning (verified by
