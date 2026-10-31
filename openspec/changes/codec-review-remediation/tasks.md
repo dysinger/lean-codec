@@ -676,6 +676,33 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
         `Nat.sub_sub_self`) fail on the dependent-`Bytes` motive, `rfl`-true or not;
         `cases` on the length (equation in context) is the reduction that works.
 
+      **SESSION 3 (2026-11-01): the re-rooting lemma alone is not enough — the
+      `j + 1` case needs the *search* congruence too, and the ranking blocks it.**
+      What is in the tree now is `Codec.decodeFullFast_pairwise` (with a `sorry`),
+      stated as the pair of congruences over one measured state, plus
+      `candsAt`/`candsRoot`/`retypeCands` naming the candidate list at the two
+      roots. **Both `n - m = 0` branches are closed, and both live-cursor branches
+      unfold correctly**; what fails is the hand-off.
+
+      * **The coupling matters.** The search congruence must be stated with **one**
+        candidate list, re-indexed between the two roots (`retypeCands`), not with
+        two independent lists. With two, the `nil` branch is *false*: `cs = []` no
+        longer constrains `cs'`. Recorded because it looks like a free choice.
+      * **The obstacle is the `termination_by` ranking.** Both congruences sit at
+        the same state, but `decodeFullFast` ranks `(·, cands.length + 1)` and
+        `decodeFullFastSearch` ranks `(·, cands.length)`, and `Prod.Lex` has **no
+        reflexive case** — so the fast congruence's live-cursor branch cannot reach
+        the search congruence at the same key. Two routes: (a) prove the two
+        lemmas at the same key in one `mutual`-shaped statement (the recursor then
+        gives each the other *at the same* key, which `Prod.Lex` cannot do for a
+        single-predicate induction); or (b) re-rank the *definition* so the search
+        congruence carries the `+1` tick and the fast one descends into it —
+        allowed only under the §6 shape carve-out (D9).
+      * **Third trap, new:** `rw [decodeFullFastSearch.eq_def]` does **not** fire
+        on an applied `decodeFullFastSearch` while its argument is still a
+        variable (`match`-in-`match` body). `cases` the candidate list first, or
+        state the unfolding as an explicit `have` and `rfl` it inside the branch.
+
 - [ ] 6.1b **Move the fast decode onto an `Array UInt8` + `Nat` cursor**
       (≈**6.5×**: 9 → 59 MiB/s measured). `decodeFullFastRoot` avoids the closure
       _chain_ but still calls `decode p (Suffix.drop m s).bytes` every step,
