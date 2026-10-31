@@ -1108,6 +1108,39 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
       backtracking is intact.
 
 - [ ] 6.1b **Move the fast decode onto an `Array UInt8` + `Nat` cursor**
+
+      **FINDING (2026-11-02): `decodeFullArray` in `Codec/Packed.lean` has the
+      SAME head-commit defect 6.1a found and fixed in `decodeFullFast`.** It is
+      `| (_, c) :: _ => some (…)`, i.e. it commits to the head candidate, and
+      `decodeFullArray_spec` honestly proves it equal to the `head?` of `decode` —
+      so the *theorem* is true and the *decoder* is wrong for full consumption.
+      Witness, measured (`d = alt A B`, `A` consumes 1 byte, `B` consumes 2 and
+      consumes the whole input `[0,1]`):
+
+      | expression | result |
+      | --- | --- |
+      | `decode d (arrayToBytes #[0,1])` | `[(0, 1), (9, 0)]` |
+      | `decodeArray d #[0,1] 0` | `[(0, 1), (9, 2)]` — correct |
+      | `decodeFullArray d #[0,1] 0` | `some ([1], 1)` — **commits to the head, consumed 1 of 2 bytes, reports success** |
+
+      So `decodeArray` (the raw cursor decoder, `decodeArray_eq` proved
+      `[propext, Quot.sound]`-only) is **sound and reusable**, and
+      `decodeFullArray` is **not** a full-consumption decoder at all — it
+      swallows a partial consumption as if it were `some`. Anything built on it
+      inherits the defect. Recorded rather than silently fixed because it is a
+      distinct declaration from 6.1b's target and changing it is a shape change
+      under D9; it belongs to whichever task wires the packed surface (6.3/6.5),
+      and it must be fixed (search the candidate list like `decodeFullStep`, not
+      `head?`) before the packed lane is presented as the fast path.
+
+      **Consequence for 6.1b's construction:** the reusable piece is
+      `decodeArray` (`List (α × Nat)`, no `Suffix`, no `bdrop`), and the missing
+      piece is the **backtracking search over its candidates**, which is exactly
+      `decodeFullFastSearch`'s shape with the `Suffix` plumbing replaced by a
+      `Nat` cursor. 6.1a's `cursor_bridge` is the proof template: measure on the
+      remaining length, carry the search congruence alongside the fast
+      congruence, and state the specification side at the root spelling.
+
       (≈**6.5×**: 9 → 59 MiB/s measured). `decodeFullFastRoot` avoids the closure
       _chain_ but still calls `decode p (Suffix.drop m s).bytes` every step,
       allocating a `bdrop` closure and a `Suffix` record per byte. Target shape:
