@@ -1473,6 +1473,77 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
 
       ---
 
+      **THE PLAN FOR NEXT SESSION (written from the code, 2026-11-02). Work only
+      the successor case of `array_bridge`. Nothing else in 6.1b is open.**
+
+      What exists and is proved (`Codec/Packed.lean` unless noted):
+      `decodeFullArrayFast`/`decodeFullArraySearch`, `decodeFullArrayFast_succ`/
+      `_zero`, `decodeFullArraySearch_cons`/`_nil`, `packedCands`,
+      `mem_packedCands`, `packedCands_mem`/`_consumes`, `length_packedCands_le`,
+      `consume_lt`, `decodeArray_eq`, `bdrop_consumedAbs_eq`,
+      `consumedAbs_remaining`, and (in `Codec/Decode.lean`) `decodeFullStep_cons`,
+      `decodeFullStep_nil`, `decodeFullStep_none_of_forall_none`,
+      `decodeFull_succ`, `decodeFull_at_zero`, `reverse_cons_append`.
+
+      **Step A — the candidate bijection (the only new mathematics).** Prove the
+      list-level correspondence between the two candidate lists at cursor `k`:
+
+          packedCands d h a k   ↔   (decode d (bdrop k (arrayToBytes a))).attach
+
+      with the element map `⟨(x, t), _⟩ ↦ ⟨(x, consumedAbs a k t), _⟩`. Two
+      directions, and **neither is an `attach`/`filterMap` `rw`** — the ledger
+      already records that rewriting under `.attach` fails on the dependent motive
+      (6.1a trap 2), so state both **with the list as an explicit parameter** and
+      prove by induction on it, exactly as `decodeFullStep_cons`/
+      `decodeFullStep_none_of_forall_none` do:
+
+      * `packedCands_eq_filterMap` — `packedCands d h a k` equals the `filterMap`
+        of `(decodeArray d a k).attach` by the `if hp / if hq` predicate, i.e. an
+        *unfold-and-prove-the-`dif`s* lemma (both conditions are decidable and,
+        under `ConsumesByte`, always `true` — `decodeArray_consumes` gives
+        `hp`, `decodeArray_bounded_upper` gives `hq`). This kills the `filterMap`
+        without any membership reasoning, and is the piece that makes the list
+        *equal* to `(decodeArray d a k).attach` element-for-element.
+      * `decodeArray_eq_attach` — `(decodeArray d a k).attach` corresponds to
+        `(decode d (bdrop k (arrayToBytes a))).attach` under the `consumedAbs` map,
+        by `decodeArray_eq` + `List.attach_map`-shaped reasoning. Do **not** try to
+        `rw` inside `.attach`; destructure both with `List.attach_eq_cons`-shaped
+        existential lemmas (the `Codec/Decode.lean` pattern) if the direct route
+        stalls.
+
+      **Step B — the fast congruence's step hypothesis.** With Step A in hand, for
+      each candidate `⟨(x, c), _⟩` of `packedCands d h a k`, the fast call
+      `decodeFullArrayFast d h a c (x :: acc)` must equal
+      `(decodeFull d h t.remaining t.bytes).map (fun tail => (x :: acc).reverse ++ tail)`
+      where `c = consumedAbs a k t`. Route: the IH at the child cursor
+      `(a.size - c) = t.remaining` (via `consumedAbs_remaining`), which is `< a.size - k`
+      by `consume_lt`, so it is in the strong induction's range; then
+      `bdrop_consumedAbs_eq` casts `bdrop c (arrayToBytes a)` to `t.bytes`.
+
+      **Step C — compose.** Fast half = `decodeFullArrayFast_succ` +
+      `decodeFull_succ` + `decodeFullArraySearch_eq`-shaped search congruence fed
+      Step B. Search half = `decodeFullArraySearch_cons` by `induction` on the
+      candidate list, calling the fast half at each head. This is the
+      `decodeFullFastSearch_eq`/`cursor_bridge` composition shape, which is already
+      proved for the `Suffix` version and transfers.
+
+      **Step D — the root bridge.** `array_bridge` at `K := a.size`, `k := 0`;
+      `bdrop 0`/`a.size - 0`/`[].reverse` are all definitional, exactly as
+      `decodeFullFastRoot_eq` takes `cursor_bridge`'s `m = 0` case.
+
+      **Three known traps, inherited and confirmed — do not re-derive:**
+      1. `Array.size` is not a `termination_by` binder; use the bare tuple.
+      2. The candidate bound is `≤ a.size` (from `decodeArray_bounded_upper`), never `<`.
+      3. `conv`/`dsimp only` does **not** unfold this `mutual` definition; use `split`
+         (and `injection` on the discriminant equation to realign `split`'s binders).
+
+      **If Step A stalls, do not force it** — record the refutation in this task
+      exactly as the earlier sessions did, and leave the build green. The
+      measurement step (step 4 of the plan above) stays blocked until `array_bridge`
+      is proved; that ordering is deliberate and must not be reversed.
+
+      ---
+
       **MEASUREMENT RULES — every one of these produced a wrong number this
       session. Do not re-derive them.**
       1. **Never time a pure call inside a loop.** `decodeFullFastRoot p h s` is
