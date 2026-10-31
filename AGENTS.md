@@ -101,19 +101,18 @@ skips the ledger would get them wrong**, and all four are also in `tasks.md`:
   §3/§4 rewrite the paragraphs that quote the numbers §6 fixes; correcting those
   claims against today's numbers would canonize the defect. If `tasks.md`
   disagrees with this line, `tasks.md` wins.
-- **The next step is 6.1b's successor case, and it has a written plan built from
-  the code.** `lake build` is green, there are **no `sorry`s anywhere in the
-  tree**, and 6.1a's gate (`Codec.decodeFullFastRoot_eq`) is closed. 6.1b's
-  steps 1–2 and its supporting lemmas are **already landed** in
-  `Codec/Packed.lean`: the mutual pair `decodeFullArrayFast`/`decodeFullArraySearch`,
-  their two unfolder lemmas, `packedCands` and its membership/step/nil lemmas, and
-  `consume_lt`. **What remains is one lemma** — the successor case of the bridge,
-  which turns on a `packedCands` ↔ `decode`-candidate bijection. `tasks.md` 6.1b's
-  "PLAN FOR NEXT SESSION" (Steps A–D) is the route; read it before touching code.
-  Two facts there save the most time: **`decodeFullArray` must not be used** (it
-  commits to the head, the defect 6.1a fixed; `decodeFullArray_spec` honestly
-  proves it equal to `head?` — true theorem, wrong decoder), and the packed
-  candidate's second bound is **`≤ a.size`, never `<`**.
+- **6.1b's proof is closed; 6.2/6.3/6.4 are the next work.** `lake build` is green,
+  there are **no `sorry`s anywhere in the tree**, and 6.1b's gate
+  (`Codec.decodeFullArrayRoot_eq`) holds: the packed `Array UInt8` + `Nat`-cursor
+  decoder is proved equal to `decodeFull`, `[propext, Quot.sound]`-only, with
+  `array_bridge` carrying the fast and search congruences over one strong induction.
+  `bench`'s `benchDecodeFullArray` asserts that bridge at run time too. 6.1b is
+  marked `[~]`, not `[x]`: its _numeric_ re-measurement is **6.4's** job, which needs
+  an idle machine and an interleaved `memcpy` reference. Do not quote a ratio for the
+  packed path before 6.4 prints one. Read `tasks.md` 6.1b's "SESSION 9" note before
+  touching any of it — five plan corrections are recorded there, including a
+  `Classical.choice` leak that was already in the tree and that the ledger did not
+  know about (`(by omega)` inside a `match` arm, the disjunction trap).
 - **Benchmark numbers from this repo are not trustworthy without the rules.** Every
   in-repo measurement attempt during 6.1 made a wrong number that was briefly
   believed (dead-code elimination reporting `0 ns/op`, loop hoisting of a pure
