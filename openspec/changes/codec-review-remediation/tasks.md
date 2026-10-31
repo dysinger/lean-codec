@@ -461,7 +461,7 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
 - [ ] 6.1 **Bridge the fast decode, then move it onto a cursor** (R5.1 —
       CRITICAL). Two halves; **6.1a is a hard gate on 6.1b and on 6.3/6.4.**
 
-- [ ] 6.1a **Prove `decodeFullFastRoot = decodeFull`** (the gate; ~9 MiB/s path
+- [x] 6.1a **Prove `decodeFullFastRoot = decodeFull`** (the gate; ~9 MiB/s path
       is currently verified by _measurement only_). Landed already: `b894536`,
       `a4606e4` (`Codec.bdrop_bdrop`, `Codec.decodeFullFastRoot`, 9,047× at
       n=65536, values identical, `[propext, Quot.sound]`-only). **Why this
@@ -1002,6 +1002,51 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
         `have … : decodeFullFast p h s m acc = (match _hm : n - m with …)` with
         `rfl`/`congr 1` inside, then rewriting with it (the shape
         `decodeFull_succ` already uses upstream in this file, and it works there).
+
+      **CLOSED (2026-11-02).** `decodeFullFastRoot_eq` is **proved** — zero `sorry`
+      in `Codec/Decode.lean`, `lake build` green (13 jobs), and `#print axioms`
+      reports `[propext, Quot.sound]`-only / zero `Classical.choice` on all four
+      new declarations. The gate is gone; 6.1b and 6.3/6.4 are unblocked.
+
+      **The two decisions that closed it** (after seven sessions and three
+      refuted routes — none of the refutations is re-litigated here, they stand):
+
+      1. **State the specification side at the root spelling `bdrop m s`, never at
+         the projection `(Suffix.drop m s).bytes`.** They are `rfl`-equal
+         (`Suffix.drop` *is* `{remaining := n - m, bytes := bdrop m s}`), but
+         `decodeFull` is `Fin`-indexed by its root's length, and a projection's
+         `bytes` field is not *syntactically* at the index the recursor's motive
+         wants — which is exactly why every earlier `generalize`/`rw` on that
+         length died on "motive is not type correct". The `bdrop` spelling makes
+         the index a literal `n - m`, so `decodeFull_succ`/`decodeFull_at_zero`
+         consume it directly. **This single spelling choice was the whole gate.**
+      2. **Induct on the cursor measure `(Suffix.drop m s).remaining` carrying
+         BOTH congruences as one conjunction.** Neither half is provable alone:
+         the search congruence's step calls the fast decoder at an *advanced*
+         cursor, so it needs the fast congruence at a strictly smaller measure.
+         This is the `cursor_bridge` statement, and `decodeFullFastRoot_eq` is
+         just its `m = 0` case (`bdrop 0 s`/`n - 0`/`[].reverse` are all
+         definitional). No `decodeFullFast.induct`, no `Membership` alias, no
+         re-ranking, no `mutual` — those were all real obstacles of *refuted
+         routes*, not of this one.
+
+      **Landed:** `cands_eq_nil_of_zero` (no candidate exists at a zero cursor —
+      the `[]` case of the search congruence, and the reason the search is well
+      founded rather than merely structural), `spec_at_advance` (re-roots the IH
+      onto the candidate's own bytes via `drop_trans_eq`, stated as a **`Suffix`
+      equality** so the dependent-`Bytes` motive accepts it where a length rewrite
+      does not), `cursor_bridge`, `decodeFullFastRoot_eq`.
+
+      **Deleted, not left as a second `sorry`:** `decodeFullFast_pairwise`. The
+      route it served is proved without it, and its own docstring said not to
+      finish it before the root bridge. Nothing in the tree references it.
+
+      **Runtime agreement re-checked** on the very witness that refuted the
+      previous head-committing `decodeFullFast`: `decode` returns
+      `[(0,1), (9,0)]` (head `A` consumes 1 byte, sibling `B` consumes 2);
+      `decodeFull` and `decodeFullFastRoot` both now return `some [9]`, where the
+      committed version returned `none`. So the theorem is not vacuous and the
+      backtracking is intact.
 
 - [ ] 6.1b **Move the fast decode onto an `Array UInt8` + `Nat` cursor**
       (≈**6.5×**: 9 → 59 MiB/s measured). `decodeFullFastRoot` avoids the closure
