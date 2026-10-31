@@ -470,6 +470,29 @@ unsafe def benchDecodeFullFast (n : Nat) : IO Unit := do
       IO.println s!"decodeFullFast root [{n}]: value + bridge OK (unbenchmarked, see 6.1b)"
   | none => throw (IO.userError "decodeFullFastRoot: expected some, got none")
 
+/-- The **packed cursor** decoder: `decodeFullArrayRoot` over an `Array UInt8`, with
+the `Nat` consumed-count cursor. This is task 6.1b's construction, and the lane's job
+is the same as `benchDecodeFullFast`'s: **assert correctness, not speed.**
+
+The value is checked byte for byte, and checked **against `decodeFull` through the
+proved bridge** `Codec.decodeFullArrayRoot_eq` — so a mismatch means the running code
+disagrees with the theorem, not that a number moved. No MiB/s or ratio is printed:
+6.4 owns the lane that defends the ratio, and it needs an idle machine with a
+`memcpy` reference interleaved in the same samples (see `tasks.md` 6.1b's MEASUREMENT
+RULES — every naive in-process timing here has produced a wrong number). -/
+unsafe def benchDecodeFullArray (n : Nat) : IO Unit := do
+  let s : Bytes n := bytesOf n
+  let a : Array UInt8 := Array.mk (List.ofFn s)
+  match decodeFullArrayRoot Codec.byte byteConsumesByte a with
+  | some xs =>
+      let expected : List UInt8 := List.replicate n (1 : UInt8)
+      if xs != expected then
+        throw (IO.userError s!"decodeFullArrayRoot: expected {expected.length}×0x01 bytes, got length {xs.length}")
+      if some xs != decodeFull Codec.byte byteConsumesByte n s then
+        throw (IO.userError "decodeFullArrayRoot ≠ decodeFull (the proved bridge disagrees at run time)")
+      IO.println s!"decodeFullArray root [{n}]: value + bridge OK (unbenchmarked, see 6.1b/6.4)"
+  | none => throw (IO.userError "decodeFullArrayRoot: expected some, got none")
+
 /-- The fused single-step decoder `decodeFast`: peels one `Codec.byte` in O(1),
 without re-traversing. Confirms `decodeFast` agrees with `decode` on the remainder
 length (the `Suffix` carries no decidable value-equality, so this lanes checks the
@@ -783,6 +806,7 @@ unsafe def main (args : List String) : IO Unit := do
   Codec.Bench.benchDecodeFull m reps
   -- The fast full-consumption decoder: value- AND bridge-checked, ratio-printing.
   Codec.Bench.benchDecodeFullFast m
+  Codec.Bench.benchDecodeFullArray m
   Codec.Bench.benchDecodeFast n reps
   -- TEMPORARY: ISO 8601 timestamp (AST-shaped) speed test.
   Codec.Bench.benchIso8601Encode reps
