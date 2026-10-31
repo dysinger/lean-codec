@@ -298,7 +298,7 @@ byteSlice_spec]`, then `rfl` closes the `ByteArray.mk` eta — instead of
       the point of R2.11: a line-by-line reader would "fix" a mismatch that is not
       one. Verified by exhaustive `#eval` over `n, slen < 6` and offsets/`len < 9`
       (2.3M tuples) that `(dc, sc, lc)` from the body equals `(dstOff, srcOff,
-    copyLen)` from the C's order; it does, and the reason is `min`'s AC.
+  copyLen)` from the C's order; it does, and the reason is `min`'s AC.
       The window invariant is now stated: `copyLen` is clamped to `n - dstOff`
       _before_ the source-side clamp and `dstOff ≤ n`, so `dstOff + copyLen ≤ n`,
       the buffer is allocated at the full `n`, and the trailing `memcpy` cannot
@@ -1240,79 +1240,139 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
 
 - [ ] 6.1b **Move the fast decode onto an `Array UInt8` + `Nat` cursor**
 
-      **PLAN FOR NEXT SESSION (2026-11-02). Start here. Nothing below is
-      speculative — every fact is proved or measured, and the one open item is
-      named exactly.**
+      **PLAN FOR NEXT SESSION (2026-11-02, written after reading the code — not
+      from the ledger's memory of it). This is the whole task; nothing in it is
+      speculative.**
 
-      *State.* `decodeArray` (`Codec/Packed.lean:59`) is the reusable cursor
-      decoder: `List (α × Nat)`, no `Suffix`, no `bdrop`, proved equal to `decode`
-      by `decodeArray_eq` (`[propext, Quot.sound]`-only). `decodeFullArray` must
-      **not** be used — it commits to the head (see the FINDING above). The only
-      missing piece is the **backtracking search over `decodeArray`'s candidates**,
-      which is `decodeFullFastSearch` with `Suffix` replaced by a `Nat` cursor.
-      In probe form it already returns the right values (`some [9]` on the
-      backtracking witness, `some [1,2,3]`, `some []`); what does not compile is
-      its `decreasing_by`.
+      *What exists.* Two things, both proved, `[propext, Quot.sound]`-only:
 
-      **Step 1 — `Codec.decodeArray_consumes`: DONE, in `Codec/Packed.lean`.**
-      Proved, `[propext, Quot.sound]`-only, `lake build` green. It sits **after**
-      `decodeArray_eq` (which it uses), so a later addition near the top of the
-      file will not see it. Statement and proof for reference:
-      The strict-decrease fact, without which the search is not well founded:
+      | in | name | what it gives |
+      |---|---|---|
+      | `Codec/Packed.lean:59` | `decodeArray d a i : List (α × Nat)` | the cursor decoder: `Array UInt8` + `Nat` consumed-count, no `Suffix`, no `bdrop` |
+      | `Codec/Packed.lean:397` | `decodeArray_eq` | `decodeArray d a i = (decode d (bdrop i (arrayToBytes a))).map (x,t) ↦ (x, consumedAbs a i t)` |
+      | `Codec/Packed.lean:495` | `decodeArray_consumes` | `(x,c) ∈ decodeArray d a k → k < a.size → k < c` — the strict-advance fact the search's well-foundedness needs |
+      | `Codec/Packed.lean:144` | `consumedAbs a i t = i + ((a.size - i) - t.remaining)` | the cursor advance, as a `Nat` |
 
-          theorem decodeArray_consumes {α} (d : Codec α) (h : ConsumesByte d)
-              (a : Array UInt8) (k : Nat) :
-              ∀ (x : α) (c : Nat), (x, c) ∈ decodeArray d a k → k < a.size → k < c
+      and, in `Codec/Decode.lean`, the *whole* 6.1a apparatus that 6.1b mirrors:
+      `decodeFullFast`/`decodeFullFastSearch` (the mutual pair, `:221`–`:268`),
+      `decodeFullStep` (`:180`), `decodeFullFastSearch_eq` (`:837`),
+      `decodeFullStep_none_of_forall_none` (`:793`), `reverse_cons_append`
+      (`:816`), `spec_at_advance` (`:1141`), `cands_eq_nil_of_zero` (`:1113`),
+      `decodeFull_at_zero`/`decodeFull_succ` (`:655`/`:669`), and `cursor_bridge`
+      (`:1180`).
 
-      Proof: `rw [decodeArray_eq]` at the membership, `simp only [List.mem_map]`,
-      `obtain ⟨⟨y, t⟩, hmem', heq⟩`, inject `heq`, then
-      `show k < consumedAbs a k t; unfold consumedAbs`, take
-      `hroot : t.remaining < a.size - k` from `h y (bdrop k (arrayToBytes a)) t hmem'`
-      and close with `hk' : k ≤ a.size` + `omega`. **Copy it from this
-      description — it is 10 lines and it is the whole mathematical content.**
+      **`decodeFullArray` must NOT be used.** It is `| (_, c) :: _ => some (…)` —
+      it commits to the head, and `decodeFullArray_spec` honestly proves it equal
+      to `head?` of `decode`. True theorem, wrong decoder. Anything built on it
+      inherits the defect 6.1a fixed in `decodeFullFast`.
 
-      **Step 2 — the mutual pair, MIRRORING `decodeFullFast`. Next action.** Do not invent a
-      variant. `Codec/Decode.lean:219-268` is the same construction (decoder ⇄
-      candidate search, `Prod.Lex` measure, cursor advanced by what a candidate
-      consumed) and it elaborates. Copy its shape exactly:
+      ---
 
-      - equation-style bodies (`| k, acc, cands => …`), not named parameters;
-      - `termination_by` naming those **pattern variables**
-        (`termination_by a k _ cands => (a.size - k, cands.length)`);
-      - both functions' `termination_by` must have the **same type**
-        (`Prod.Lex` in both), or Lean errors "termination measures must have the
-        same return type";
-      - the two `decreasing_by` tails are then literally: `search → decoder` =
-        `Prod.Lex.left _ _ (by have hc := decodeArray_consumes … hk; omega)` and
-        `search → search` = `exact Prod.Lex.right _ (Nat.le_refl _)`.
+      **Step 1 — the mutual pair, in `Codec/Packed.lean` (after
+      `decodeArray_consumes`, which it needs).** Mirror `decodeFullFast` +
+      `decodeFullFastSearch` with `Suffix` plumbing replaced by a `Nat` cursor.
+      Copy the *shape*, do not invent:
 
-      **The one place the shapes genuinely differ — expect to think here.** The
-      wrapper branches on `k < a.size` where `decodeFullFast` branches on
-      `n - m = 0`. That guard is what supplies `hk` to `decodeArray_consumes`.
-      Thread it as an **explicit hypothesis parameter** on the search
-      (`(hk : k < a.size) → …`): the `if hk :` binder is not reliably in scope
-      inside `decreasing_by`, and **`rename_i` will not recover it** — 15 attempts
-      this session died on `rename_i`/`too many variable names provided`. With
-      `hk` explicit, the obligation is one `omega`.
+          mutual
+          def fullArray {α} (d : Codec α) (h : ConsumesByte d) (a : Array UInt8)
+              (k : Nat) (hk : k < a.size) (acc : List α) : Option (List α) :=
+            match _ : a.size - k with
+            | 0 => some acc.reverse
+            | _ + 1 => fullArraySearch d h a k hk acc (decodeArray d a k).attach
+          termination_by a k _ acc => (a.size - k, (decodeArray d a k).length + 1)
 
-      **Do NOT** substitute the search by explicit `WellFounded.fix`. It avoids
-      `decreasing_by` but changes the reduction equation to `WellFounded.fix_eq`,
-      which is precisely the trap 6.1a lost seven sessions to; every downstream
-      proof would need `unfold; rw [WellFounded.fix_eq]` instead of
-      `rw [….eq_def]`.
+          def fullArraySearch {α} (d : Codec α) (h : ConsumesByte d) (a : Array UInt8)
+              (k : Nat) (hk : k < a.size) (acc : List α)
+              (cands : List { pr : α × Nat // pr ∈ decodeArray d a k }) : Option (List α) :=
+            match cands with
+            | [] => none
+            | ⟨(x, c), _⟩ :: rest =>
+                match fullArray d h a c (by have := decodeArray_consumes d h a k x c _ hk; omega) (x :: acc) with
+                | none => fullArraySearch d h a k hk acc rest
+                | some xs => some xs
+          termination_by a k _ _ cands => (a.size - k, cands.length)
+          decreasing_by
+            · exact Prod.Lex.left _ _ (by
+                have hc := decodeArray_consumes d h a k x c ‹_› hk
+                omega)
+            · exact Prod.Lex.right _ (Nat.le_refl _)
+          end
 
-      **Step 3 — the bridge.** `cursor_bridge` (6.1a, in the tree) is the
-      template: measure on the remaining length, carry the search congruence
-      alongside the fast congruence in one conjunction, and state the
-      specification side at the root spelling. Target:
+      Four things that are *not* free, each already proved to bite:
+
+      1. **Thread `hk : k < a.size` as an explicit parameter.** The `if hk :`
+         binder is not reliably in scope inside `decreasing_by`. This is also why
+         the recursive `fullArray` call can discharge its own `hk` at `c`
+         (`decodeArray_consumes` + `omega`) with no `rename_i` at all — the
+         `rename_i`/"too many variable names" trap (15 dead attempts in an earlier
+         session) disappears once the hypothesis is a parameter.
+      2. **Both `termination_by` measures must have the same type** (`Prod.Lex`
+         in both) or Lean errors "termination measures must have the same return
+         type".
+      3. **`k = a.size` terminates via `acc.reverse`, not via an empty candidate
+         list.** `a.size - k = 0 → k = a.size` from `hk`, so the base case is the
+         *end of input*; the candidate list is never consulted. This is the one
+         structural difference from `decodeFullFast`, which branches on `n - m`
+         with no `hk` side condition. Do not add a `cands = []` base case — it is
+         unreachable and would be a second, weaker exit.
+      4. **Do NOT substitute the search by an explicit `WellFounded.fix`.** It
+         avoids `decreasing_by` but changes the reduction equation to
+         `WellFounded.fix_eq` — precisely the trap 6.1a lost seven sessions to.
+         Every downstream proof would need `unfold; rw [WellFounded.fix_eq]`
+         instead of `rw [….eq_def]`.
+
+      **Step 2 — the two unfolder lemmas, mirroring `decodeFullFast_zero`/
+      `decodeFullFast_succ` (`:1088`/`:1079`).** The recipe is the recorded one and
+      the `dsimp only` is load-bearing (the definition compiles to
+      `match a, k, hk, acc with`, so without it `rw [hk']` reports "did not find an
+      occurrence of the pattern `a.size - k`" and looks like a type error):
+
+          conv => lhs; rw [fullArray.eq_def]; dsimp only; rw [hk']
+
+      State them at a *known* `a.size - k` (`= 0` and `= j + 1`), exactly as 6.1a
+      does.
+
+      **Step 3 — the bridge.** `cursor_bridge` (`Codec/Decode.lean:1180`) is the
+      template and its two decisions transfer verbatim:
+
+      - **Measure:** `Nat.strongRecOn` on `a.size - k`, carrying **both**
+        congruences as one conjunction (fast and search). Neither half is provable
+        alone: the search's step calls the decoder at an advanced cursor, so it
+        needs the decoder congruence at a strictly smaller measure.
+      - **Specification side spelling:** state it at the root
+        `bdrop k (arrayToBytes a)`, never through a projection, for the reason
+        `cursor_bridge`'s docstring records (a projection's `bytes` field is not
+        syntactically at the index the recursor's motive wants).
+
+      Target:
 
           fullArrayRoot d h a = decodeFull d h a.size (arrayToBytes a)
 
-      `[propext, Quot.sound]`-only, zero `Classical.choice`, zero `sorry`.
+      where `fullArrayRoot d h a := fullArray d h a 0 (by ...) []`. The
+      specification side is `decodeFull` — **not** `decodeFullFastRoot`, which
+      6.1a already proved equal to `decodeFull`; going through it would add a
+      second bridge for no gain.
 
-      **Step 4 — measure, then stop.** Add the timing lane only after the bridge
-      is proved. Read the measurement rules below first; they cost this session
-      most of a day.
+      **The bridge's step, and the one place it differs from 6.1a.** 6.1a's
+      `spec_at_advance` re-roots the IH from cursor `m + ((n-m) - t.remaining)`
+      onto `t.bytes` via `drop_trans_eq`. Here the *specification* never moves: it
+      lives on `bdrop k (arrayToBytes a)` throughout and the cursor advances by
+      `c = consumedAbs a k t`. So the analogue of `spec_at_advance` is the
+      pointwise identity
+
+          bdrop c (arrayToBytes a) = t.bytes            (c = consumedAbs a k t)
+
+      which is `decodeArray_eq`'s membership + the `Suffix`/`bdrop` correspondence
+      `decode p (bdrop k …)` already carries — state it as a **`Suffix` equality**
+      (`Suffix.drop k`-shaped), because a `Bytes`-level or length-level statement
+      hits the "motive is not type correct" wall that `spec_at_advance`'s docstring
+      and `AGENTS.md` both record. Budget a session's worth of fiddling here; it is
+      the only genuinely new mathematics in the task.
+
+      **Step 4 — measure, then stop.** Add the bench lane only after the bridge is
+      green. Read the MEASUREMENT RULES below first: they cost a full day.
+
+      ---
 
       **MEASUREMENT RULES — every one of these produced a wrong number this
       session. Do not re-derive them.**
