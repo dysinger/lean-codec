@@ -688,4 +688,135 @@ theorem attach_pair_eq {α : Type} (n : Nat) :
       have hpair : ((x,t) : α × Suffix n) = ((x',t') : α × Suffix n) := e1.1.symm.trans e2.1
       exact ⟨congrArg Prod.fst hpair.symm, congrArg Prod.snd hpair.symm⟩
 
+/-- **The cursor-arithmetic link between the fast path and the specification.**
+
+`Suffix.drop (m + ((n - m) - t.remaining)) s` — the fast decoder's flat, re-rooted
+cursor after consuming `t.remaining` more bytes — **is** `Suffix.trans (Suffix.drop
+m s) t`, the nested suffix the specification's `decode` hands back.
+
+This is the missing piece for the `decodeFullFastRoot = decodeFull` bridge (6.1a):
+without it the fast side re-roots at `s` while the spec side is nested, and the two
+`decodeFull` calls are not the same call. It is also where two documented traps
+bite, both worth recording:
+
+1. **It must be read pointwise.** Any `Bytes`-level statement of this equality hits
+   the length cast at the index and blocks every downstream `rw` with "motive is
+   not type correct"; going through `step_bytes_pointwise` leaves no cast at all.
+2. **Apply `step_bytes_pointwise` before any `dsimp`.** `dsimp [Suffix.drop]`
+   rewrites the root to `n - m`, which breaks `t`'s own index
+   (`Suffix (Suffix.drop m s).remaining`) and the lemma no longer applies. So the
+   pointwise fact is captured into `hpt` first, and the final `Fin` index is closed
+   by `congr 1` + `Fin.ext` + `omega` rather than by unfolding.
+
+`[propext, Quot.sound]`-only. -/
+theorem drop_trans_eq {α : Type} (p : Codec α) {n : Nat} (s : Bytes n) (m : Nat)
+    (x : α) (t : Suffix (Suffix.drop m s).remaining)
+    (hm : (x,t) ∈ p.decode (Suffix.drop m s).bytes) :
+    Suffix.drop (m + ((n - m) - t.remaining)) s = Suffix.trans (Suffix.drop m s) t := by
+  have hle : t.remaining ≤ n - m := t.hle
+  have hpt : ∀ (i : Fin t.remaining), t.bytes i
+      = s ⟨i.val + m + (n - m - t.remaining), by omega⟩ :=
+    fun i => step_bytes_pointwise p s m x t hm i
+  refine Suffix.ext (t₁ := Suffix.drop (m + ((n - m) - t.remaining)) s)
+    (t₂ := Suffix.trans (Suffix.drop m s) t) ?_ ?_
+  · dsimp only [Suffix.drop, Suffix.trans]; omega
+  · show cast _ (bdrop (m + (n - m - t.remaining)) s) = t.bytes
+    apply Bytes.ext
+    intro i
+    rw [cast_bytes_val' _ _ i]
+    show bdrop (m + (n - m - t.remaining)) s ⟨i.val, _⟩ = t.bytes i
+    unfold bdrop
+    rw [hpt i]
+    congr 1
+    · exact Fin.ext (by simp only; omega)
+    · omega
+
+/-- `decodeFullStep` over an **empty** attached list is `none` — the companion of
+`decodeFullStep_cons`, stated with the list as a **parameter** for the same reason:
+rewriting under `.attach` fails on the dependent motive. The caller supplies
+`l = []` (typically via `rw [hx]; exact List.attach_nil`). Axiom-free. -/
+theorem decodeFullStep_nil {α : Type} (p : Codec α) (h : ConsumesByte p)
+    {n : Nat} (s : Bytes n)
+    (ih : (m : Nat) → (s' : Bytes m) → m < n → Option (List α))
+    (l : List { pr : α × Suffix n // pr ∈ p.decode s }) (hl : l = []) :
+    decodeFullStep p h s ih l = none := by
+  subst hl
+  rw [decodeFullStep.eq_def]
+
+/-- **The 6.1a core lemma**: the fast decoder at any cursor equals the specification
+composed with the accumulator.
+
+The specification's length index is written `(Suffix.drop m s).remaining` — the
+form the `decodeFullFast` recursor actually produces — not `n - m`. Those two are
+numerically equal but **not definitionally equal in the `Suffix (·)` position**, so
+writing the recursor's form makes the `n - m = 0` base case close outright and
+removes the need to transport anything (see `tasks.md` 6.1a).
+
+Proved by `decodeFullFast.induct`, the recursor over the function itself: its three
+cases are exactly `n - m = 0`, decode-empty, and decode-cons.
+
+**OPEN (the one remaining obligation of 6.1a):** the `cons` case's two branches.
+The `some`/`none` split on the tail's recursion is not yet transported — see
+`tasks.md` 6.1a for the statement of the missing `decodeFullStep`-all-fail lemma.
+This `sorry` fails `lake build` by design (`-DwarningAsError=true`); it is the
+honest marker of the single open obligation, not a placeholder. -/
+theorem decodeFullFast_eq_aux {α : Type} (p : Codec α) (h : ConsumesByte p) :
+    ∀ (n : Nat) (s : Bytes n) (m : Nat) (acc : List α),
+      decodeFullFast p h s m acc =
+        (decodeFull p h (Suffix.drop m s).remaining (Suffix.drop m s).bytes).map
+          (fun tail => acc.reverse ++ tail) := by
+  apply decodeFullFast.induct p h
+    (motive := fun n s m acc =>
+      decodeFullFast p h s m acc =
+        (decodeFull p h (Suffix.drop m s).remaining (Suffix.drop m s).bytes).map
+          (fun tail => acc.reverse ++ tail))
+  · -- case 1: n - m = 0
+    intro n m acc hk s
+    rw [decodeFullFast, hk]
+    have hk0 : (Suffix.drop m s).remaining = 0 := hk
+    rw [decodeFull_at_zero p h _ _ hk0]
+    simp
+  · -- case 2: n - m = j+1, decode is []
+    intro n m acc j hk s hx
+    rw [decodeFullFast, hk]
+    have hatt : (p.decode (Suffix.drop m s).bytes).attach
+        = ([] : List { pr // pr ∈ p.decode (Suffix.drop m s).bytes }) := by
+      rw [hx]; exact List.attach_nil
+    conv => rhs; rw [decodeFull_succ p h ((Suffix.drop m s).remaining) j hk (Suffix.drop m s).bytes]
+    rw [decodeFullStep_nil p h _ _ _ hatt]
+    simp only [Option.map_none]
+    rw [hx]
+  · -- case 3: n - m = j+1, decode is a cons
+    intro n m acc j hk x s t rest hx hmem mlet
+    intro hIHh
+    have hfast : decodeFullFast p h s m acc
+        = decodeFullFast p h s (m + (j + 1 - t.remaining)) (x :: acc) := by
+      rw [decodeFullFast.eq_def]
+      simp only
+      rw [hk, hx]
+    have hcur : (m + (j + 1 - t.remaining)) = m + ((n - m) - t.remaining) := by
+      have : n - m = j + 1 := hk; omega
+    -- the IH, at the flat cursor, with the spec read at `t`
+    have hmlet : mlet = m + ((n - m) - t.remaining) := by
+      show m + (j + 1 - t.remaining) = _
+      omega
+    rw [hmlet] at hIHh
+    rw [drop_trans_eq p s m x t hmem] at hIHh
+    simp only [Suffix.trans] at hIHh
+    -- spec side, one step
+    conv => rhs; rw [decodeFull_succ p h ((Suffix.drop m s).remaining) j hk (Suffix.drop m s).bytes]
+    obtain ⟨hmem', lrest, hatt⟩ := attach_eq_cons _ _ x t rest hx
+    conv => rhs; rw [hatt, decodeFullStep_cons]
+    rw [hfast, hcur]
+    split
+    · rename_i hnone
+      rw [hnone] at hIHh
+      rw [hIHh]
+      trace_state
+      sorry
+    · rename_i xs hsome
+      rw [hsome] at hIHh
+      rw [hIHh]
+      sorry
+
 end Codec
