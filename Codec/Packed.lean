@@ -521,19 +521,21 @@ Mirrors `Codec.decodeFullFast`'s shape one-for-one — a cursor on the *remainin
 length, an accumulator, and a sibling search over `decodeArray`'s candidates —
 with `Suffix`/`bdrop` replaced by the `Nat` consumed count `k`.
 
-The recursion descends on `a.size - k`, so it compiles to a loop. Note there is
-**no `hk` parameter**: the search's own call site discharges `k < a.size` from that
-arithmetic (`a.size - k = j + 1`). The "thread `hk` as a parameter" advice in the
-earlier plan was superseded — what was actually needed was for the recursive call's
-`hk` to be readable off a **named field**, which is what `PackedCand` provides.
-`[propext, Quot.sound]`-only, zero `Classical.choice`, zero `sorry`. -/
+The recursion descends on `a.size - k`, so it compiles to a loop. The cursor bound
+`hk : k ≤ a.size` is an **ordinary parameter** and not derived inside a `match` arm:
+deriving it with `by omega` there was what made the unfolders leak
+`Classical.choice` (see `decodeFullArrayFast_succ`), and an earlier session's
+"thread `hk` as a parameter" advice was the right instinct recorded with the wrong
+reason. `PackedCand`'s own `≤` field is what the search passes through, so the bound
+never has to be invented. `[propext, Quot.sound]`-only, zero `Classical.choice`,
+zero `sorry`. -/
 /-- A packed candidate **carrying its own strict-advance fact**. `decodeArray_consumes`
 says a `ConsumesByte` decoder's candidate always advances the cursor, so the fact is
 there for every candidate; putting it *in the type* is what lets the recursive call
-discharge its own `hk : c < a.size` from a **named** field (`by omega` over
-`hkc : k < c` and `hk : k < a.size`) instead of from a `ConsumesByte` application
-inside the `match` arm — the spelling that keeps `decreasing_by` from needing
-`rename_i` (task 6.1b, plan item 1).
+read its cursor bound off a **named field** (`by omega` over `hkc : k < c` and
+`hk : k < a.size`) instead of deriving it from a `ConsumesByte` application inside
+the `match` arm, which is the spelling that keeps both `decreasing_by` and the
+unfolders `[propext, Quot.sound]`-only (task 6.1b, plan item 1).
 
 The third component is `≤` and not `<` because `pure x` yields a candidate with
 `c = i`: `decodeArray_bounded_upper`'s `≤` is the honest bound and `<` is false. -/
@@ -572,11 +574,11 @@ theorem length_packedCands_le {α : Type} (d : Codec α) (h : ConsumesByte d)
 
 mutual
 def decodeFullArrayFast {α : Type} (d : Codec α) (h : ConsumesByte d)
-    (a : Array UInt8) (k : Nat) (acc : List α) : Option (List α) :=
-  match _ : a.size - k with
+    (a : Array UInt8) (k : Nat) (hk : k ≤ a.size) (acc : List α) : Option (List α) :=
+  match _hm : a.size - k with
   | 0 => some acc.reverse
   | _ + 1 =>
-    decodeFullArraySearch d h a k (by omega) acc (packedCands d h a k)
+    decodeFullArraySearch d h a k hk acc (packedCands d h a k)
 termination_by (a.size - k, (packedCands d h a k).length + 1)
 
 /-- The sibling search driving `decodeFullArrayFast`: **every** candidate of
@@ -585,12 +587,12 @@ same search as `decodeFullStep` and as `decodeFullFastSearch`, which is what mak
 this decoder equal to the specification rather than to `head?`. Structural on the
 candidate list. -/
 def decodeFullArraySearch {α : Type} (d : Codec α) (h : ConsumesByte d)
-    (a : Array UInt8) (k : Nat) (hk : k < a.size) (acc : List α)
+    (a : Array UInt8) (k : Nat) (hk : k ≤ a.size) (acc : List α)
     (cands : List (PackedCand d a k)) : Option (List α) :=
   match cands with
   | [] => none
-  | ⟨(x, c), _hmem, _hkc, _hlt⟩ :: rest =>
-    match decodeFullArrayFast d h a c (x :: acc) with
+  | ⟨(x, c), _hmem, _hkc, hlt⟩ :: rest =>
+    match decodeFullArrayFast d h a c hlt (x :: acc) with
     | none => decodeFullArraySearch d h a k hk acc rest
     | some xs => some xs
 termination_by (a.size - k, cands.length)
@@ -604,35 +606,36 @@ decreasing_by
 end
 
 /-- `decodeFullArrayFast`'s recursion equation at a known-**successor** cursor: the
-body is `match _ : a.size - k with …`, so the named equation blocks ι-reduction and
-`rw [decodeFullArrayFast.eq_def]` alone leaves a stuck `match`.
+body is `match _hm : a.size - k with …`, so the named equation blocks ι-reduction and
+`rw [decodeFullArrayFast.eq_def]` alone leaves a stuck `match`; the `dsimp only`
+between the two rewrites is load-bearing, exactly as for `decodeFullFast_succ`.
 
-**This does NOT reuse 6.1a's `conv`/`dsimp only` recipe — that was tried and does not
-transfer.** Here the discriminant is generalized to a fresh binder through
-`.eq_def` (the body mentions `k` via `packedCands`), so `dsimp only` makes no
-progress and `rw [hj]` fails with "motive is not type correct". `split` closes both
-arms directly, and that is the spelling used. `tasks.md` 6.1b records the
-correction. -/
+**Correction to an earlier session's record (do not re-derive).** This used to be
+proved by `split`, and that spelling **leaked `Classical.choice`** — as did the
+`(by omega)` proof term the definition used to carry in its successor arm, because
+`omega` closed a goal in a context whose only witness was the `match`'s own equation.
+`#print axioms` on both unfolders reported `[propext, Classical.choice,
+Quot.sound]` while `tasks.md` claimed `[propext, Quot.sound]`. The leak is gone:
+`decodeFullArrayFast`/`decodeFullArraySearch` now take the cursor bound `hk : k ≤
+a.size` as an **ordinary parameter** (the candidate already carries its own `≤`
+field, so the search passes it straight through) instead of manufacturing it with
+`by omega` inside a `match` arm, and the unfolders use 6.1a's
+`conv`/`dsimp only`/`rw` recipe, which does transfer once the arm is proof-free. -/
 theorem decodeFullArrayFast_succ {α : Type} (d : Codec α) (h : ConsumesByte d)
-    (a : Array UInt8) (k : Nat) (acc : List α) (j : Nat) (hj : a.size - k = j + 1) :
-    decodeFullArrayFast d h a k acc =
-      decodeFullArraySearch d h a k (by omega) acc (packedCands d h a k) := by
-  rw [decodeFullArrayFast.eq_def]
-  split
-  · omega
-  · rfl
+    (a : Array UInt8) (k : Nat) (hk : k ≤ a.size) (acc : List α) (j : Nat)
+    (hj : a.size - k = j + 1) :
+    decodeFullArrayFast d h a k hk acc =
+      decodeFullArraySearch d h a k hk acc (packedCands d h a k) := by
+  conv => lhs; rw [decodeFullArrayFast.eq_def]; dsimp only; rw [hj]
 
 /-- `decodeFullArrayFast`'s recursion equation at a known-**zero** cursor: the input
 is exhausted, so the accumulator is the answer. Note this base case is reached by
 `a.size - k = 0` (end of input), **not** by an empty candidate list — the packed
 mirror of `decodeFullFast_zero`. -/
 theorem decodeFullArrayFast_zero {α : Type} (d : Codec α) (h : ConsumesByte d)
-    (a : Array UInt8) (k : Nat) (acc : List α) (hk0 : a.size - k = 0) :
-    decodeFullArrayFast d h a k acc = some acc.reverse := by
-  rw [decodeFullArrayFast.eq_def]
-  split
-  · rfl
-  · omega
+    (a : Array UInt8) (k : Nat) (hk : k ≤ a.size) (acc : List α) (hk0 : a.size - k = 0) :
+    decodeFullArrayFast d h a k hk acc = some acc.reverse := by
+  conv => lhs; rw [decodeFullArrayFast.eq_def]; dsimp only; rw [hk0]
 
 /-- **Membership in `packedCands` is membership in `decodeArray`, plus the two
 cursor facts.** This is the bridge between the candidate list the search walks and
@@ -674,11 +677,11 @@ unfold is a `conv` on the LHS, then `simp only` to force the inner `match`, then
 `split`-generated binders with the stated ones, after which the two sides are
 syntactically equal and `rfl` closes it. -/
 theorem decodeFullArraySearch_cons {α : Type} (d : Codec α) (h : ConsumesByte d)
-    (a : Array UInt8) (k : Nat) (hk : k < a.size) (acc : List α)
+    (a : Array UInt8) (k : Nat) (hk : k ≤ a.size) (acc : List α)
     (x : α) (c : Nat) (hmem : (x, c) ∈ decodeArray d a k ∧ k < c ∧ c ≤ a.size)
     (rest : List (PackedCand d a k)) :
     decodeFullArraySearch d h a k hk acc (⟨(x, c), hmem⟩ :: rest) =
-      (match decodeFullArrayFast d h a c (x :: acc) with
+      (match decodeFullArrayFast d h a c hmem.2.2 (x :: acc) with
        | none => decodeFullArraySearch d h a k hk acc rest
        | some xs => some xs) := by
   conv => lhs; rw [decodeFullArraySearch.eq_def]
@@ -695,7 +698,7 @@ theorem decodeFullArraySearch_cons {α : Type} (d : Codec α) (h : ConsumesByte 
 is reached only at the end of the buffer, where `decodeFullArrayFast`'s base case
 already answers `some acc.reverse`. Stated because the search congruence needs it. -/
 theorem decodeFullArraySearch_nil {α : Type} (d : Codec α) (h : ConsumesByte d)
-    (a : Array UInt8) (k : Nat) (hk : k < a.size) (acc : List α) :
+    (a : Array UInt8) (k : Nat) (hk : k ≤ a.size) (acc : List α) :
     decodeFullArraySearch d h a k hk acc ([] : List (PackedCand d a k)) = none := by
   conv => lhs; rw [decodeFullArraySearch.eq_def]
 
@@ -830,7 +833,7 @@ theorem packedCand_iff {α : Type} (d : Codec α) (_h : ConsumesByte d)
 /-- The packed full-consumption decoder, at the start of the buffer. -/
 def decodeFullArrayRoot {α : Type} (d : Codec α) (h : ConsumesByte d)
     (a : Array UInt8) : Option (List α) :=
-  decodeFullArrayFast d h a 0 []
+  decodeFullArrayFast d h a 0 (Nat.zero_le _) []
 
 /-- The packed full-consumption decoder equals the *first* spec `decode` result,
 with its suffix packed as a `ByteArray` and its consumed count read back. (The
