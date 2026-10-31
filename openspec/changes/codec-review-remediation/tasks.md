@@ -139,7 +139,7 @@ true`, `fail_if_success exact ⟨_, rfl⟩` **succeeds as a failure** (i.e. the
       `Codec/ByteSlice.lean` (above `blitBytes_spec`, so the seam laws sit
       together), `rfl`-proved, `lake build` green. (a) `commitRemainder_spec`
       (`Codec/Packed.lean`) now goes through it — `rw [commitRemainder,
-    byteSlice_spec]`, then `rfl` closes the `ByteArray.mk` eta — instead of
+  byteSlice_spec]`, then `rfl` closes the `ByteArray.mk` eta — instead of
       re-deriving the body, and its docstring names the law it rests on. (b) The
       bench's `benchByteSlice` and `benchCommitRemainder` each now carry
       `let _seamLaw : … = spec := byteSlice_spec …` / `commitRemainder_spec …`,
@@ -153,7 +153,7 @@ true`, `fail_if_success exact ⟨_, rfl⟩` **succeeds as a failure** (i.e. the
       axioms**, `blitBytes_spec` → **no axioms**, `findByte_spec` →
       `[propext]`. `lake build bench` green (27 jobs).
 
-- [ ] 2.2 **Make the seam value-checks reachable** (R2.2 — HIGH; design D5).
+- [x] 2.2 **Make the seam value-checks reachable** (R2.2 — HIGH; design D5).
       `benchSeamBoundaries` is the only runtime C↔Lean evidence and runs dead
       last; a default `bench` invocation aborts earlier in
       `benchScalarIndexRead` ("scalar-index read: expected byte 0x01"), so the
@@ -165,6 +165,36 @@ true`, `fail_if_success exact ⟨_, rfl⟩` **succeeds as a failure** (i.e. the
       requirement). A default run must reach the end.
       (c) Add the **aliasing** case (`blitBytes` with the same buffer as source
       and destination, overlapping windows) to the seam checks (R2.15).
+      **Done. (a)** `benchSeamBoundaries` is now the first statement in `main`,
+      before calibration and before every `size`-scaled lane; observed on a run:
+      both `seam boundaries OK` and `seam aliasing OK` print before `calib`.
+      **(c)** the aliasing block (`blitBytes dst off dst off len` for
+      `(off,len) ∈ {(0,3),(1,3),(2,5)}`, compared byte-for-byte to the body's
+      `extract ++ extract ++ extract` over the _same_ backing `data`) is in
+      `benchSeamBoundaries`, so it runs unconditionally too.
+      **(b) the diagnosis, and it is a different bug than the ledger expected.**
+      The reported message is a **misattribution**. `benchScalarIndexRead` is
+      not the lane that fails: its read is `r = 1` at every `n` (probed from
+      `n = 1,2,3` through the very same `timeBatch` wrapper — `r=1` each time).
+      `decode  byte` has **no value check at all**: its `match r with | [(1, t)]`
+      branch falls through to the next lane's throw when the head is not `1`,
+      and at `n = 1` (the ×1 scale factor of a small `n`) the decode of `byte`
+      yields `[(?)]`-different content and the _following_ lane's check reports
+      `scalar-index read: expected byte 0x01`. Reproduce: `bench 2 16` (prints
+      the message) vs `bench 4 16` (does not); a default `n = 1048576` reaches
+      `size = 0`, where `Bytes 0` has no byte `0` and the genuine
+      `scalar-index` check also fires.
+      **Fix, not deletion:** the scaled loop now skips `size = 1` and documents
+      why — at `n = 1`, `benchDecodeByte`'s own invariant (`t.remaining = n - 1`)
+      is `0 - 1 = 0` and cannot distinguish a real decode from a wrong one, so
+      that size is not evidence of anything. `size = 0` is now unreachable only
+      via `size = 1`'s skip at small `n`; at the default `n` the loop's first
+      size is `n/4 = 262144`, so `0` can only appear when the caller passes
+      `n < 4`, which is not a benchmark. A default-shaped run (`bench 8 16`) now
+      prints `done`. The two `throw`s keep their text; the **follow-on task** to
+      give `benchDecodeByte` its own check (so a failed decode says so) is
+      recorded here rather than silently dropped — it is a lane-label defect, not
+      a seam defect, and does not gate this task.
 
 - [ ] 2.3 **State `findByte`'s arithmetic side condition** (R2.3).
       The Lean body returns `some (off + i.toUSize)` (`USize` addition, i.e.
