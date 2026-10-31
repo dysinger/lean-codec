@@ -213,7 +213,7 @@ head consumes a different byte count than a sibling separates them; see
 was a bug, and it is gone.
 
 This replaces nothing on the specification side: `decodeFull` (well-founded, kept
-for its proofs) and `decodeFullFastRoot` are proved equal by `decodeFullFast_eq`,
+for its proofs) and `decodeFullFastRoot` are proved equal by `decodeFullFastRoot_eq`,
 and every law about `decodeFull` therefore holds for the fast path unchanged.
 
 Tail-recursive with an accumulator, so it compiles to a loop; `[propext,
@@ -274,7 +274,7 @@ def decodeFullFastRoot {α : Type} (p : Codec α) (h : ConsumesByte p)
 when `xs` is a list that `many p` matches against the *whole* input (empty remaining
 buffer, and the list must fully consume the input). Defined by `WellFounded.fix` on
 `n`; **kept as the specification** — `decodeFullFastRoot` is the fast implementation
-and `decodeFullFast_eq` proves them equal. -/
+and `decodeFullFastRoot_eq` proves them equal. -/
 def decodeFull {α : Type} (p : Codec α) (h : ConsumesByte p) (n : Nat) (s : Bytes n) : Option (List α) :=
   (WellFounded.fix
     (InvImage.wf (fun ns : Sigma fun k => Bytes k => ns.1) Nat.lt_wfRel.wf)
@@ -1106,104 +1106,153 @@ theorem Suffix.drop_zero {n : Nat} (s : Bytes n) : Suffix.drop 0 s = Suffix.id n
     simp only [bdrop]
     exact congrArg s (Fin.ext (by simp))
 
-/-- **The root bridge**: the fast decoder from cursor `0` with an empty
-accumulator equals the specification.
+/-- At a zero remaining cursor there are no candidates: a `ConsumesByte` step would
+strictly shrink a length that is already `0`. This is the `[]` case of the search
+congruence, and the reason the search is *well founded* rather than merely
+structural. `[propext, Quot.sound]`-only. -/
+theorem cands_eq_nil_of_zero {α : Type} (p : Codec α) (h : ConsumesByte p)
+    {n : Nat} (s : Bytes n) (m : Nat) (hm : n - m = 0) :
+    ∀ (cands : List { pr : α × Suffix (Suffix.drop m s).remaining //
+        pr ∈ decode p (Suffix.drop m s).bytes }), cands = [] := by
+  intro cands
+  cases cands with
+  | nil => rfl
+  | cons hd tl =>
+    exfalso
+    obtain ⟨⟨x, t⟩, hmem⟩ := hd
+    have hlt : t.remaining < (Suffix.drop m s).remaining := h x (Suffix.drop m s).bytes t hmem
+    simp only [Suffix.drop] at hlt
+    omega
 
-This is the statement the library needs. Proof: strong induction on `n`; at
-`n = k + 1` unfold the fast side with `decodeFullFast_succ` (cursor `0`, so the
-remaining length is `n`), step the specification with `decodeFull_succ`, and compare
-the two `decodeFullStep` calls — the search congruence `decodeFullFastSearch_eq`
-turns the fast side into exactly `decodeFullStep` at `s`, with the head's recursion
-supplied by the induction hypothesis at its strictly shorter suffix. -/
+/-- **The specification at the advanced cursor, re-rooted onto the candidate's own
+bytes.** `drop_trans_eq` says the advanced cursor's suffix *is* `Suffix.trans
+(Suffix.drop m s) t`, whose `remaining`/`bytes` fields are `t`'s — so the two
+`decodeFull` calls are the same call, at the same `Bytes` index.
+
+This is the missing link that lets the bridge consume its induction hypothesis:
+the fast side re-roots at the cursor while the specification's `decodeFullStep`
+continues at `t.bytes`, and without this rewrite the IH is stuck at the wrong
+spelling. `[propext, Quot.sound]`-only.
+
+Note the shape: `show` the goal at the `Suffix.drop …` *projection* (which is
+reducible to `bdrop`), rewrite with `drop_trans_eq` — a **`Suffix`-typed**
+equation, which the dependent-`Bytes` motive accepts where a length rewrite does
+not — and the residue is `rfl`. -/
+theorem spec_at_advance {α : Type} (p : Codec α) (h : ConsumesByte p)
+    {n : Nat} (s : Bytes n) (m : Nat) (x : α) (t : Suffix (Suffix.drop m s).remaining)
+    (hmem : (x, t) ∈ decode p (Suffix.drop m s).bytes) :
+    decodeFull p h (n - (m + ((n - m) - t.remaining)))
+        (bdrop (m + ((n - m) - t.remaining)) s)
+      = decodeFull p h t.remaining t.bytes := by
+  have hd : Suffix.drop (m + ((n - m) - t.remaining)) s = Suffix.trans (Suffix.drop m s) t :=
+    drop_trans_eq p s m x t hmem
+  show decodeFull p h (Suffix.drop (m + ((n - m) - t.remaining)) s).remaining
+      (Suffix.drop (m + ((n - m) - t.remaining)) s).bytes
+      = decodeFull p h t.remaining t.bytes
+  rw [hd]
+  rfl
+
+/-- **The cursor bridge** (task 6.1a's real target): at *any* cursor `m`, the fast
+decoder equals the specification applied to the same suffix, with the accumulator
+reversed onto the result.
+
+Two decisions make it provable, and both were expensive to find:
+
+1. **State the specification side at the root spelling `bdrop m s`, not at the
+   projection `(Suffix.drop m s).bytes`.** `Suffix.drop m s` *is* a record with
+   `remaining := n - m` and `bytes := bdrop m s` (`rfl`), so the projection
+   spelling says the same thing — but `decodeFull` is `Fin`-indexed by its root's
+   length, and a projection's `bytes` field is not *syntactically* at the index the
+   recursor's motive wants. Every prior attempt to `generalize` or `rw` the length
+   died on "motive is not type correct". Spelling the root as `bdrop m s` makes the
+   index a literal `n - m`, which is what `decodeFull_succ`/`decodeFull_at_zero`
+   need.
+2. **Induct on the cursor measure `(Suffix.drop m s).remaining`, carrying *both*
+   congruences** (fast and search) as one conjunction. The search's step calls the
+   fast decoder at an *advanced* cursor, so neither half is provable alone: the
+   search congruence needs the fast congruence at a strictly smaller measure, which
+   is what `Nat.strongRecOn` on the remaining length supplies.
+
+Everything else is plumbing: `decodeFullFastSearch_eq` (already landed) turns the
+search into `decodeFullStep`, `spec_at_advance` re-roots the IH onto the
+candidate's bytes, and `cands_eq_nil_of_zero` kills the empty-candidate case at a
+zero cursor. `[propext, Quot.sound]`-only, zero `Classical.choice`, zero `sorry`. -/
+theorem cursor_bridge {α : Type} (p : Codec α) (h : ConsumesByte p) :
+    ∀ (K : Nat) (n : Nat) (s : Bytes n) (m : Nat),
+      (Suffix.drop m s).remaining = K →
+      (∀ (acc : List α),
+        decodeFullFast p h s m acc
+          = (decodeFull p h (n - m) (bdrop m s)).map (fun tail => acc.reverse ++ tail)) ∧
+      (∀ (acc : List α)
+         (cands : List { pr : α × Suffix (Suffix.drop m s).remaining //
+             pr ∈ decode p (Suffix.drop m s).bytes }),
+        decodeFullFastSearch p h s m acc cands
+          = (decodeFullStep p h (bdrop m s) (fun k s' _ => decodeFull p h k s') cands).map
+              (fun tail => acc.reverse ++ tail)) := by
+  intro K
+  induction K using Nat.strongRecOn with
+  | ind K ih =>
+  intro n s m hK
+  obtain hm | ⟨j, hj⟩ : n - m = 0 ∨ ∃ j, n - m = j + 1 := by
+    cases n - m with
+    | zero => exact Or.inl rfl
+    | succ j => exact Or.inr ⟨j, rfl⟩
+  · -- zero cursor: both sides collapse, and no candidate can exist.
+    constructor
+    · intro acc
+      rw [decodeFullFast_zero p h s m acc hm]
+      rw [decodeFull_at_zero p h (n - m) (bdrop m s) hm]
+      simp only [Option.map, List.append_nil]
+    · intro acc cands
+      have hnil : cands = [] := cands_eq_nil_of_zero p h s m hm cands
+      rw [hnil]
+      rw [decodeFullFastSearch.eq_def]
+      show (none : Option (List α)) = Option.map (fun tail => acc.reverse ++ tail)
+        (decodeFullStep p h (bdrop m s) (fun k s' x => decodeFull p h k s')
+          ([] : List { pr : α × Suffix (n - m) // pr ∈ decode p (bdrop m s) }))
+      rw [decodeFullStep.eq_def]
+      rfl
+  · -- live cursor: unfold both sides and hand the step hypothesis to the IH.
+    constructor
+    · intro acc
+      rw [decodeFullFast_succ p h s m acc j hj]
+      show decodeFullFastSearch p h s m acc (decode p (Suffix.drop m s).bytes).attach
+          = (decodeFull p h (n - m) (bdrop m s)).map (fun tail => acc.reverse ++ tail)
+      rw [decodeFull_succ p h (n - m) j hj (bdrop m s)]
+      refine decodeFullFastSearch_eq p h n s m acc (decode p (Suffix.drop m s).bytes).attach ?_
+      intro x t hmem
+      have hsmall : t.remaining < (Suffix.drop m s).remaining :=
+        h x (Suffix.drop m s).bytes t hmem
+      have hK' : (Suffix.drop (m + ((n - m) - t.remaining)) s).remaining = t.remaining :=
+        congrArg Suffix.remaining (drop_trans_eq p s m x t hmem)
+      have hih := (ih t.remaining (by omega) n s (m + ((n - m) - t.remaining)) hK').1 (x :: acc)
+      rw [spec_at_advance p h s m x t hmem] at hih
+      exact hih
+    · intro acc cands
+      refine decodeFullFastSearch_eq p h n s m acc cands ?_
+      intro x t hmem
+      have hsmall : t.remaining < (Suffix.drop m s).remaining :=
+        h x (Suffix.drop m s).bytes t hmem
+      have hK' : (Suffix.drop (m + ((n - m) - t.remaining)) s).remaining = t.remaining :=
+        congrArg Suffix.remaining (drop_trans_eq p s m x t hmem)
+      have hih := (ih t.remaining (by omega) n s (m + ((n - m) - t.remaining)) hK').1 (x :: acc)
+      rw [spec_at_advance p h s m x t hmem] at hih
+      exact hih
+
+/-- **The root bridge**: the fast decoder from cursor `0` with an empty
+accumulator equals the specification. The `m = 0` case of `cursor_bridge`, where
+`Suffix.drop 0 s` has `n` bytes left, `bdrop 0 s` is `s`, and the accumulator
+reverse is a no-op — all definitional. -/
 theorem decodeFullFastRoot_eq {α : Type} (p : Codec α) (h : ConsumesByte p) :
     ∀ (n : Nat) (s : Bytes n),
       decodeFullFastRoot p h s = decodeFull p h n s := by
-  intro n
-  induction n using Nat.strongRecOn with
-  | ind n ih =>
-    intro s
-    unfold decodeFullFastRoot
-    cases n with
-    | zero =>
-      rw [decodeFullFast_zero p h (s := s) (m := 0) (acc := []) (by omega), decodeFull_zero]
-      rfl
-    | succ k =>
-      rw [decodeFullFast_succ p h (s := s) (m := 0) (acc := []) k (by omega)]
-      rw [decodeFull_succ p h (k + 1) k rfl s]
-      -- **OPEN.** The goal is now
-      -- `decodeFullFastSearch p h s 0 [] (decode p (Suffix.drop 0 s).bytes).attach
-      --    = decodeFullStep p h s (fun m s' _ => decodeFull p h m s') (decode p s).attach`,
-      -- and `decodeFullFastSearch_eq` applies to it directly (its own cands
-      -- argument is spelled `Suffix.drop m s`, and `m = 0` is the goal's spelling).
-      -- What remains, once applied, is its **step hypothesis**: for each candidate
-      -- `(x, t)`,
-      --
-      --     decodeFullFast p h s (m + (n - m - t.remaining)) (x :: acc) = …
-      --
-      -- i.e. the *same statement at an advanced cursor* with a **non-empty
-      -- accumulator**. Two attempts this session are recorded as refuted:
-      --
-      -- * `decodeFull_reroot_cursor` does **not** apply — it is stated for
-      --   `decodeFull`, not `decodeFullFast`, so it cannot relate the fast side at
-      --   the advanced cursor to `decodeFullFastRoot t.bytes`.
-      -- * `Nat.strongRecOn` on `n` does **not** reach it — the step hypothesis is at
-      --   the *same* `n` and the *same* `s`, so the induction hypothesis is not in
-      --   scope. This is precisely why 6.1a's ledger records that the statement
-      --   must be **pairwise / cursor-measured**, not `n`-measured.
-      --
-      -- **The confirmed next shape:** prove the general statement
-      --
-      --     decodeFullFast p h s m acc
-      --       = (decodeFull p h (Suffix.drop m s).remaining (Suffix.drop m s).bytes).map
-      --           (fun tail => acc.reverse ++ tail)
-      --
-      -- by well-founded induction on the *cursor measure*
-      -- `((Suffix.drop m s).remaining, cands.length)` — the same `Prod.Lex` measure
-      -- `decodeFullFast` itself uses — and get the root bridge as its `m = 0` case.
-      -- Its `n - m = 0` case reduces with the three declarations already in this file
-      -- (`decodeFullFast_zero`, `decodeFull_at_zero`, `List.append_nil`), so only the
-      -- successor case's step hypothesis is genuinely open.
-      --
-      -- The full record — what is closed, what is refuted, and the measure — is
-      -- `openspec/changes/codec-review-remediation/tasks.md` 6.1a. Do not grow a
-      -- parallel task list here.
-      sorry
+  intro n s
+  unfold decodeFullFastRoot
+  have hb := (cursor_bridge p h n n s 0 rfl).1 []
+  show decodeFullFast p h s 0 [] = decodeFull p h n s
+  rw [hb]
+  show (decodeFull p h n s).map id = decodeFull p h n s
+  exact congrFun Option.map_id _
 
-/-- **The two congruences** of the fast decoder (task 6.1a).
-
-> **Status: retained as documentation of the abandoned route.** The re-rooting
-> lemma it was written to serve is now **proved** (`decodeFull_reroot_cursor`),
-> and it did **not** need this pairwise statement at all — after `decodeFull_succ`,
-> both sides carry the *same* `fun m s' _ => decodeFull p h m s'`, so the step is
-> a `Bytes` equality (`reroot_bytes_eq`), not a congruence over the recursor's
-> `ih`. The open work in 6.1a is now `decodeFullFastRoot_eq`'s step hypothesis
-> (see its own comment), whose measure is the *fast decoder's*, not this pair's.
-> Do not spend time finishing this declaration before that one.
-
--/
-theorem decodeFullFast_pairwise {α : Type} (p : Codec α) (h : ConsumesByte p) :
-    (∀ (n : Nat) (s : Bytes n) (m : Nat) (acc : List α),
-        decodeFullFast p h s m acc = decodeFullFast p h (Suffix.drop m s).bytes 0 acc) ∧
-    -- The search congruence. The two lists are *the same list* up to the two
-    -- roots, which is exactly the `cast` that `List.attach` of `decode` produces;
-    -- tying them this way (rather than quantifying two independent lists) is what
-    -- keeps the empty case true.
-    (∀ (n : Nat) (s : Bytes n) (m : Nat) (acc : List α) (cs : candsAt p s m),
-        decodeFullFastSearch p h s m acc cs =
-          decodeFullFastSearch p h (Suffix.drop m s).bytes 0 acc (retypeCands p s m cs)) := by
-  -- **OPEN.** The shape below is the confirmed one: one `decodeFullFast.induct`
-  -- with BOTH congruences in `motive1`, so the live-cursor branch reaches the
-  -- search congruence at the *same* state through `motive2`'s cons-case hypothesis
-  -- (there is no `Prod.Lex` reflexive case to worry about — that earlier diagnosis
-  -- was refuted, see the docstring above and `tasks.md` 6.1a).
-  --
-  -- The `[]` halves of both congruences are already landed as
-  -- `search_nil_left`/`search_nil_right`, and the cursor arithmetic as
-  -- `remaining_at_cursor`/`remaining_at_reroot`. What remains is the two
-  -- `decodeFullFast`-unfolding branches (`n - m = 0` and `n - m = j + 1`), where
-  -- `rw [decodeFullFast.eq_def]` does not discharge the named `match` (`_hm`) —
-  -- use the recorded recipe: `obtain` the equation, then `split` (tags `h_1`/`h_2`),
-  -- or `cases` the subtraction; see `tasks.md` 6.1a's trap list.
-  sorry
 
 end Codec
