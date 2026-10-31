@@ -743,10 +743,47 @@ theorem decodeFullStep_nil {α : Type} (p : Codec α) (h : ConsumesByte p)
   subst hl
   rw [decodeFullStep.eq_def]
 
-/-- **The 6.1a core lemma**: the fast decoder at any cursor equals the specification
-composed with the accumulator.
+/-- **The `decodeFullStep`-all-fail lemma** (the one obligation `tasks.md` 6.1a
+named and nothing in the tree stated): if the tail recursion fails for *every*
+candidate in `l`, then `decodeFullStep` over `l` is `none`.
 
-The specification's length index is written `(Suffix.drop m s).remaining` — the
+Stated with the list as a **parameter** and `l` given as a general list (not
+`(decode p s).attach`), for the same reason as `decodeFullStep_cons`/`_nil`:
+attached-list forms stall on the dependent motive. Consumed by the `none` branch
+of `decodeFullFast_eq_aux`, where the fast side has already returned `none` and
+the specification side must be shown to do the same for the remaining
+candidates.
+
+Axiom-free in effect (`[propext, Quot.sound]`), by induction on the list. -/
+theorem decodeFullStep_none_of_forall_none {α : Type} (p : Codec α) (h : ConsumesByte p)
+    {n : Nat} (s : Bytes n)
+    (ih : (m : Nat) → (s' : Bytes m) → m < n → Option (List α)) :
+    ∀ (l : List { pr : α × Suffix n // pr ∈ p.decode s }),
+      (∀ (x : α) (t : Suffix n) (hm : (x,t) ∈ p.decode s),
+          ⟨(x,t), hm⟩ ∈ l → ih t.remaining t.bytes (h x s t hm) = none) →
+      decodeFullStep p h s ih l = none := by
+  intro l
+  induction l with
+  | nil => intro _; rw [decodeFullStep.eq_def]
+  | cons hd tl ihL =>
+      rcases hd with ⟨⟨x, t⟩, hm⟩
+      intro hall
+      rw [decodeFullStep_cons p h s ih x t hm tl]
+      rw [hall x t hm (List.mem_cons_self ..)]
+      exact ihL (fun x' t' hm' hmem => hall x' t' hm' (List.mem_cons_of_mem _ hmem))
+
+/-- **The accumulator reassociation**: prepending one element before reversing is
+the same as appending it after reversing — the arithmetic the `some` branch of
+`decodeFullFast_eq_aux` needs, because the fast side accumulates `x :: acc` while
+the specification side builds `x :: xs`.
+
+`[propext, Quot.sound]`-only. -/
+theorem reverse_cons_append {α : Type} (acc : List α) (x : α) (xs : List α) :
+    (x :: acc).reverse ++ xs = acc.reverse ++ (x :: xs) := by
+  rw [List.reverse_cons, List.append_assoc]
+  rfl
+
+/-- The specification's length index is written `(Suffix.drop m s).remaining` — the
 form the `decodeFullFast` recursor actually produces — not `n - m`. Those two are
 numerically equal but **not definitionally equal in the `Suffix (·)` position**, so
 writing the recursor's form makes the `n - m = 0` base case close outright and
@@ -755,11 +792,29 @@ removes the need to transport anything (see `tasks.md` 6.1a).
 Proved by `decodeFullFast.induct`, the recursor over the function itself: its three
 cases are exactly `n - m = 0`, decode-empty, and decode-cons.
 
-**OPEN (the one remaining obligation of 6.1a):** the `cons` case's two branches.
-The `some`/`none` split on the tail's recursion is not yet transported — see
-`tasks.md` 6.1a for the statement of the missing `decodeFullStep`-all-fail lemma.
-This `sorry` fails `lake build` by design (`-DwarningAsError=true`); it is the
-honest marker of the single open obligation, not a placeholder. -/
+**REFUTED as stated (2026-11-01, measured — see `tasks.md` 6.1a).** This equality
+is **false**, and the `sorry` below is the marker of that fact rather than of a
+missing transport. `decodeFullFast` **commits to the head** of
+`decode p (Suffix.drop m s)` (`| (x, t) :: _rest =>` — no sibling fallback), while
+`decodeFullStep` **backtracks** to the next candidate when the head's recursion is
+`none`. A description whose head consumes a different number of bytes than a
+sibling therefore separates them. Concrete witness (`d = alt A B` at
+`UInt8 × UInt8`, `A = iso diag (satisfy (· == 0))` consuming 1, `B = seq byte byte`
+consuming 2, input `[0,1]`):
+
+    decode d [0,1]              = [((0,0), 1), ((0,1), 2)]
+    decodeRepeat d hd 2 [0,1]   = [([],0), ([(0,0)],1), ([(0,1)],2)]
+    decodeFull d hd 2 [0,1]     = some [(0, 1)]   -- backtracks to the 2-byte sibling
+    decodeFullFastRoot d hd [0,1] = none          -- commits to the 1-byte head
+
+So 6.1b's "prove it equal to `decodeFullFastRoot`" inherits the same defect, and
+**a fast decoder that is equal to `decodeFull` must restore the sibling search**
+(try each candidate's recursion in turn, exactly as `decodeFullStep` does) — which
+is what `decodeFullStep` already is, its cost being the closure chain rather than
+the search. The fix is therefore *not* "prove the bridge" but "make the fast path
+backtrack while keeping the flat cursor". `decodeFullStep_none_of_forall_none`
+and `reverse_cons_append` (both above) remain correct and useful for that
+direction. -/
 theorem decodeFullFast_eq_aux {α : Type} (p : Codec α) (h : ConsumesByte p) :
     ∀ (n : Nat) (s : Bytes n) (m : Nat) (acc : List α),
       decodeFullFast p h s m acc =
@@ -808,15 +863,6 @@ theorem decodeFullFast_eq_aux {α : Type} (p : Codec α) (h : ConsumesByte p) :
     obtain ⟨hmem', lrest, hatt⟩ := attach_eq_cons _ _ x t rest hx
     conv => rhs; rw [hatt, decodeFullStep_cons]
     rw [hfast, hcur]
-    split
-    · rename_i hnone
-      rw [hnone] at hIHh
-      rw [hIHh]
-      trace_state
-      sorry
-    · rename_i xs hsome
-      rw [hsome] at hIHh
-      rw [hIHh]
-      sorry
+    sorry
 
 end Codec
