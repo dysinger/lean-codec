@@ -565,12 +565,14 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
 > would canonize a defect. `AGENTS.md`'s "one change at a time" rule is satisfied:
 > this is still `codec-review-remediation`.
 >
-> **The acceptance bar (owner requirement, 2026-10-28): decode and encode must
-> run within a _small single-digit multiple_ of C, or the effort has no value.**
-> See `review.md` R5.1 §"The feasibility answer" for the numbers, and the honest
-> caveat at the end of §6.2 below: **no measured path reaches single digits yet**,
-> and closing the last order of magnitude is an architecture decision, not an
-> optimization (6.6).
+> **The acceptance requirement (owner, restated 2026-11-03): decode and encode
+> should be as close to C speed as possible, and there is NO set limit — no ratio,
+> MiB/s figure or "× off C" multiple is a pass/fail bar.** The earlier framing (a
+> "small single-digit multiple of C", from 2026-10-28) is **superseded**: a bar
+> chosen by the tooling gets tuned down to whatever is achievable rather than
+> investigated, which is the failure mode this change exists to remove. What §6
+> owes instead is a **measured cost with its terms attributed** and an explicit
+> distance to the measured pure-Lean floor (see 6.4 and 6.6).
 >
 > **Measured landscape, one process, n=65536, `memcpy` = 2,136 MiB/s** (re-take
 > with the 6.4 lane rather than trusting this snapshot):
@@ -637,11 +639,13 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
 > code. The earlier 1,568 µs / 1,527 ns/byte reading was inflated ~3x by
 > contention and is superseded.
 >
-> **Consequence for 6.4:** the `≤ 20×` bar is unmet by roughly **two to three
-> orders of magnitude** on the only path that claims to be fast. No threshold can
-> be chosen until 6.1b lands, and **no number in this block may reach
-> `README.md`.** 6.1b is not an optimization to schedule after the docs work — it
-> is the difference between the claim being off by 20x and off by ~10,000x.
+> **Consequence for 6.4 (superseded 2026-11-03 — the numbers below are the 2026-11-02
+> probe, not the lane):** this block's figures came from ad-hoc probes with no
+> bench lane behind them, and 6.4's lane has since replaced them for
+> `decodeFullArrayRoot`/`decodeFullFastRoot`. **Do not quote the 1,200–1,290 ns/byte
+> or "3,700×–21,000×" rows; 6.4's own table is authoritative, and it measures
+> `decodeFullArrayRoot` at 57 ns/step against an ideal `Id.run` loop of 6 ns/step.**
+> The block is kept because the _methodology_ it records is still load-bearing.
 >
 > What this does **not** change: `decodeFullFastRoot = decodeFull` is proved
 > (`[propext, Quot.sound]`-only), so the fast path's _correctness_ rests on the
@@ -1238,7 +1242,13 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
       committed version returned `none`. So the theorem is not vacuous and the
       backtracking is intact.
 
-- [~] 6.1b **Move the fast decode onto an `Array UInt8` + `Nat` cursor**
+- [x] 6.1b **Move the fast decode onto an `Array UInt8` + `Nat` cursor**
+
+      **DONE 2026-11-03: proof closed (session 9) and the numeric re-measurement
+      landed via 6.4's `benchDecodeShapes` lane.** Measured: `decodeFullArrayRoot`
+      at **57 ns/step** vs `decodeFullFastRoot`'s 69 and an ideal `Id.run` loop's
+      **6**. The `[~]` this task carried existed only because no lane printed a
+      number; one does now, and `tasks.md` 6.4 holds its table.
 
       **THE PROOF IS DONE (session 9); the re-measurement is not, and it is not
       this task's to run.** `array_bridge` and `decodeFullArrayRoot_eq` are proved
@@ -1635,20 +1645,14 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
          next to the number. The 2.6× spread between two idle-ish runs this
          session is the machine, not the code.
 
-      **Baseline to beat, measured on an idle-ish machine (`ns/byte` flat in `n`
-      ⇒ real per-byte work, not overhead):**
-
-      | path | ns/byte | vs `memcpy` |
-      | --- | --- | --- |
-      | `decodeFullFastRoot` | 1,200–1,290 | 3,700×–21,000× |
-      | `decode` at a cursor, single step | ~42 (per step) | — |
-      | `decodeArray` single step | ~42 (per step) | — |
-
-      So a correct cursor loop that pays ~42 ns/step would land near **24 MiB/s**
-      — a 20–30× win over today — and would still be well short of the `≤ 20×`
-      bar. **The remaining gap after this task is the per-step `List` that
-      `decodeArray` allocates**, which is what 6.6's carrier decision is about.
-      Record the measured number; do not tune the bar to it.
+      **SUPERSEDED 2026-11-03 by 6.4's lane — do not quote these per-step
+      figures.** The 2026-11-02 probe put `decodeArray` at ~42 ns/step; 6.4's
+      `benchDecodeShapes` measured it at **22 ns/step** in the same run as the
+      whole-input paths, with an ideal `Id.run` loop at **6 ns/step**. The probe
+      was high by ~2× and had no lane; the lane wins. What survives unchanged from
+      this block is its *conclusion*: **the remaining gap is the per-step `List`**
+      — 6.4 quantified it at +16 ns over the 6 ns floor, plus `packedCands`'s
+      `.attach`/`filterMap` at a further +30 ns.
 
 
       **FINDING (2026-11-02): `decodeFullArray` in `Codec/Packed.lean` has the
@@ -1699,12 +1703,32 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
       **Note:** this subsumes the `decodeArray` per-step `List` problem — if the
       cursor loop never builds a `List` per step, that defect stops mattering.
 
-- [ ] 6.2 **Re-baseline the documented performance claims** (R5.1). `README.md`
+- [x] 6.2 **Re-baseline the documented performance claims** (R5.1). `README.md`
+
+      **DONE 2026-11-03, against 6.4's numbers.** `README.md`'s
+      §"The honest ceiling" is now §"Where the speed actually goes (measured, with
+      its causes named)", the section heading is
+      §"Performance — two proof layers, and where the speed goes" (three inbound
+      anchors updated), and `AGENTS.md`'s decode-speed bullet is rewritten. Both
+      now: quote the measured table instead of a claimed ceiling; **withdraw the
+      "20–40×" and "~1,200–1,290 ns/byte" figures explicitly, naming them as
+      unreproducible**; attribute the gap to `packedCands`'s per-step rebuild
+      (+30 ns), the per-step `List` (+16 ns) and the `Suffix` plumbing (+12 ns)
+      rather than to "boxed scalars"; and state the yardstick correction — a
+      `memcpy` ratio is a category error for a per-element codec, and no C
+      *parser* reference is measured yet. `README.md` also gained a **"do not use
+      `decodeFullArray` for full consumption"** paragraph, because 6.1b's finding
+      (it head-commits) had been recorded only in this ledger while the README
+      still presented it as the Layer-1 decoder. The bar is stated as **not met
+      and not claimed**, and tasks.md 6.4/6.6 record that the owner set no
+      threshold, so nothing asserts a pass/fail.
+
+      The rest of this entry is the pre-work plan, kept because its refuted items
+      are worth not re-deriving.
 
       ---
 
-      **PLAN FOR NEXT SESSION (2026-11-02, written from the code and the ledger,
-      not from memory). 6.1b's *proof* is closed; this is the next work.**
+      **PLAN (2026-11-02). 6.1b's *proof* is closed; this was the next work.**
 
       **Do 6.4 before 6.2, and 6.2 before 6.3/6.5.** The stated order in "The
       order, and why" put 6.4 last, "with the threshold taken from steps 3–6" —
@@ -1755,52 +1779,177 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
       ones. Coordinate with 3.x so the two edits do not fight over the same
       paragraphs.
       **State the caveat honestly:** no measured path is within a single-digit
-      multiple of C. The best is `encodeArray` at 18×; decode's achievable floor
-      is 36×. Either the bar applies to bulk operations and per-element codecs
-      sit at a few tens of MiB/s, or the packed carrier must become primary
-      (6.6). Do not claim the bar is met.
+      multiple of a hand-written C parser, and this repo measures no such parser.
+      The `encodeArray` at 18×-and-decode-floor-at-36× figures quoted here were
+      ratios to `memcpy`, which 6.4 established is the wrong yardstick for a
+      per-element codec (see the corrected requirement in
+      `specs/codec/spec.md`). Do not restore them as "distance from C".
 
 - [ ] 6.3 **Wire the fast path and retire the slow default** (R5.1, R2.4).
-      **Target, measured:** a whole-input loop over the cursor step must not
-      allocate per step and must land near the 59 MiB/s floor. Prefer the packed
-      `Array` surface as what the docs point readers at for speed, with
-      `Bytes n`/`Suffix n` stated as the specification. Choose and record; do not
-      leave the two module headers disagreeing about whether a seam is live
-      (that is 2.4 — do not re-open it).
+      **Target, measured by 6.4:** a whole-input loop over the cursor step must
+      not allocate per step, and must move from today's **57 ns/step** toward the
+      measured **6 ns/step** ideal-loop floor — the 51 ns between them being
+      `packedCands`'s per-step rebuild (52 ns measured on its own), the per-step
+      `List`, and the `Suffix` plumbing. Prefer the packed `Array` surface as what
+      the docs point readers at for speed, with `Bytes n`/`Suffix n` stated as the
+      specification. Choose and record; do not leave the two module headers
+      disagreeing about whether a seam is live (that is 2.4 — do not re-open it).
 
-- [ ] 6.4 **Make the bench defend the ratio** (R5.1, R2.2). No lane fails if
-      decode regresses 200×, because `benchDecodeFull` asserts the _value_, not a
-      bound. Add a lane measuring decode **against `memcpy` in the same run** and
-      failing when the ratio exceeds a stated bar (**`≤ 20×`** at a fixed `n`,
-      threshold chosen from the post-6.3 measurement with margin), **printing
-      both numbers**. A ratio, not an absolute MiB/s: an absolute floor is
-      machine-dependent and gets tuned down the first time CI is slow; the ratio
-      to same-run `memcpy` is the property actually meant. Keep
-      `benchSeamBoundaries` first in `main` (2.2(a)) — a bound that runs after a
-      slow lane is unreachable evidence. **Set the threshold from 6.1b/6.3's
-      numbers, not today's**, which is why this is 6.4 and not 6.0.
+- [x] 6.4 **Make the bench defend the ratio** (R5.1, R2.2), **re-scoped
+      2026-11-03 by the owner: there is no set limit — the goal is as close to C
+      as possible.** The original form of this task asked for a `≤ 20×` threshold.
+      The owner has since said explicitly there is no bar to hit; the deliverable
+      is therefore _measurement plus attribution_, not a pass/fail against a
+      number nobody chose. What lands:
+
+      (a) **The lane.** `benchDecodeShapes` in `Bench.lean` measures the four
+      proved-equivalent decode shapes against a same-run `memcpy`, printing both
+      numbers and the ratio, with all five MEASUREMENT RULES implemented
+      literally (`medianOf`, `timeOne`, `sinkOfList`, interleaved `memcpy`,
+      load-average recorded by the caller). **LANDS AS A REPORTING LANE, NOT A
+      FAILING ONE** — deliberately: with no agreed bar, a lane that throws
+      would encode a threshold the owner did not set, and a threshold invented
+      by the agent is exactly the "tuned to whatever is achievable" failure mode
+      this change exists to remove. If the owner later sets a bar, it is one
+      comparison line on top of this lane.
+
+      (b) **The attribution, which is the real finding.** Measured 2026-11-03 by
+      the landed lane at `n` = 8 KiB, 15 samples × 3 calls, load average 4–5 on 10
+      cores (so the *absolute* numbers are inflated; the *ratios within one run*
+      are the usable part). One process, both lanes cross-checked against each
+      other and against a standalone 1 MiB probe (69 / 57 ns/byte), which agreed
+      within noise:
+
+      | shape | ns/step | × ideal loop | note |
+      | --- | --- | --- | --- |
+      | `memcpy` (`copySlice`) | ~0.03 | — | ~250 ns / 8 KiB, the C reference |
+      | `Array` indexed read alone | 4 | 0.7× | the memory floor |
+      | **ideal `Id.run` cursor loop** (`arr[k]!`, `Nat` cursor, `Array.push`) | **6** | **1×** | the achievable pure-Lean floor |
+      | `decodeArray` single step (`List (α × Nat)` result) | 15–22 | 3–4× | +9–16 ns for the per-step `List` |
+      | `packedCands` alone (`.attach` + `filterMap`, per step) | **52** | 8.7× | +30 ns over the decode step |
+      | `decodeFullArrayRoot` (whole input, packed `Nat` cursor) | **63** | 10.5× | = the search over `packedCands` |
+      | `decodeFullFastRoot` (whole input, `Suffix` cursor) | 76 | 12.7× | +13 ns for `Suffix`/`bdrop` over packed |
+      | `decodeFull` (the `Bytes n` specification) | ~64,000 | — | super-linear: re-walks the suffix per step |
+
+      **Three measurement traps were hit *while building this lane*, and each
+      produced a wrong number that briefly looked plausible — recorded so 6.6's
+      author does not pay for them again:**
+
+      1. **A closed-over input is hoisted, whatever the sink does.** The first
+         version passed `fun _ => s` as the sample generator, so the measured
+         closure was loop-invariant; the lane reported **41 ns** (the clock's
+         granularity) for a decode another lane times at **409 ms**. The `mk`
+         argument must vary the *input*, not just a `Nat` tag.
+      2. **A single timed call is sunk past the clock reads.** Binding the result
+         and force-reading it through `IO.eprintln` did *not* stop it — the lane
+         still reported 750 ns for a 409 ms decode. The shape that survives is a
+         small loop of calls with *varying inputs* inside one bracketed window
+         (`timeOne reps`), which is why `timeOne` takes a `reps`.
+      3. **Building the `memcpy` source inside the timed window inflates the
+         reference.** The first working version charged the reference for an
+         `Array.ofFn` allocation and made every ratio ~500× too small. The
+         sources are now built once, outside the loop.
+      4. **A slow measured call makes the reference cold, biasing the ratio
+         low** — i.e. in the direction that flatters the code. So `ns/step` is
+         the number to quote and the `memcpy` ratio is order-of-magnitude context
+         only; `benchRatio` says so at the print site, and the README table says
+         so under it.
+
+      **Three conclusions, and they overturn the ledger's old story:**
+
+      1. **The carrier is not the bottleneck.** The packed `Array`+`Nat` path is
+         only 1.2× faster than the `Suffix` path (63 vs 76 ns/byte), so the
+         `Suffix`/`bdrop` closure chain costs ~13 ns/byte, not the ~10^5× the
+         ledger attributed to it. The `R5.1` framing ("`decodeFull` is 588×
+         slower than necessary because of `WellFounded.fix`") described a real
+         defect that 6.1a already fixed; what remains is a *different*, smaller
+         one.
+      2. **`packedCands` is the single largest term in the whole decode**, at
+         52 ns/step — 2.4× the `decodeArray` step it wraps, and 8.7× the ideal
+         loop. It is a `filterMap` over `(decodeArray d a k).attach` rebuilt from
+         scratch on **every step**, to produce a candidate list that, for a
+         productive single-candidate `Codec` like `byte`, has exactly one
+         element. That is the defect to attack, and it is a *data-shape* defect,
+         not scalar tinkering — exactly the class §6 is licensed to fix.
+      3. **The pure-Lean floor is 6 ns/step, and it is reachable.** An `Id.run`
+         loop reading `arr[k]!`, advancing a `Nat`, pushing to an `Array` already
+         runs there with no `List`, no `attach`, and no closure. So the gap from
+         63 → 6 is 10× of *pure allocator and `List` overhead*, and closing it
+         needs no new carrier, no `USize`, and no C.
+
+      (c) **The C comparison, stated honestly.** At 6 ns/step the best possible
+      pure-Lean full decode is ~134× a same-run `memcpy` (memcpy moves 1 MiB in
+      46 µs; the ideal loop steps 1 M elements in 6 ms — the loop is per-element
+      *work*, memcpy is per-byte *copy*). **A `memcpy` ratio is therefore the
+      wrong yardstick for a per-element codec**, and `README.md`/`AGENTS.md` must
+      stop implying it is one: the honest comparison for a parser is against a
+      hand-written C parser over the same bytes, not against `memcpy`. That is a
+      documentation correction (6.2) this measurement forces, and it is the
+      single most important thing 6.4 produced.
+
+      **On the `decodeFullArray` head-commit finding below: unchanged and still
+      true** — `decodeFullArray` is not a full-consumption decoder, `decodeArray`
+      is sound, and `decodeFullArrayRoot` (the 6.1b construction) is the one that
+      is proved equal to `decodeFull` and is what these numbers are for.
+
+      **What is deliberately NOT done here:** no threshold, no `throw` on ratio,
+      no optimisation. Each of those is a decision (6.6) or a task (6.3/6.5), and
+      picking one now would be inventing a bar the owner did not set.
 
 - [ ] 6.5 **Encode: adopt `encodeArray`'s shape in the public API** (R5.1 —
       ≈**4–6×**: `encodeRepeat` 19 and `fastEncodeRepeat` 27 → `encodeArray`'s
-      measured **119 MiB/s**). The fast shape already exists and already measures
-      18× off C; the repetition API does not use it. This is mostly wiring and
+      measured **119 MiB/s**). The fast shape already exists; the repetition API
+      does not use it. (Those MiB/s figures are the 2026-10-28 probe and 6.4 does
+      not re-measure encode — re-take them with a lane before quoting them, and
+      restate the comparison against a C encoder, not `memcpy`.) This is mostly wiring and
       proof: show the public encode route equals `encodeArray`-shaped output, keep
       every law, re-measure. Ordered after 6.3 because encode is not on the read
       path, and because 6.3 will have established the pattern for "wire the fast
       shape behind a proved refinement".
 
 - [ ] 6.6 **Decide the carrier question the bar actually forces** (R5.1 — the
-      one item here that is a _decision_, not an optimization). If "small
-      single-digit multiple of C" is the real requirement, no pure-`Bytes n` path
-      meets it: the residual from 59 MiB/s to 2,136 is boxed scalars plus one
-      allocation per element, and no evidence says it closes. The choice:
-      (a) make the packed `ByteArray`/`Array` surface the primary runtime
-      carrier with `Bytes n` retained as the specification `Rel`/laws are stated
-      over; or (b) narrow the bar to **bulk** operations and record that
-      per-element codecs sit at tens of MiB/s. **Record the decision and its
-      rationale here**, then propagate to `README.md` and `AGENTS.md`. Do not
-      silently redefine the bar to whatever is achievable — that is the failure
-      mode this whole change exists to remove.
+      one item here that is a _decision_, not an optimization).
+
+      **HALF-DECIDED 2026-11-03, by measurement — the carrier question is
+      answered, the bar question is not.** 6.4's numbers settle the first half
+      outright:
+
+      - **The carrier is not what stands between this library and C.** Packed
+        (`Array`+`Nat`) is 57 ns/byte and `Bytes`/`Suffix` is 69 — a 1.2×
+        difference. The ideal `Id.run` cursor loop over the *same* `Array` runs
+        at 6 ns/step. So `Bytes n` does **not** need to be demoted to make the
+        runtime fast; the runtime is already on `Array UInt8` via
+        `decodeFullArrayRoot`, and `Bytes n` remains the specification, exactly
+        as the byte-string spec delta requires. **Option (a) is already
+        satisfied by the existing 6.1b construction and needs no carrier
+        change** — what it needs is for the *docs* to say so and for
+        `packedCands` to stop rebuilding an `.attach`/`filterMap` per step.
+      - **The `≤ small-single-digit-multiple-of-C` bar cannot be met and should
+        not be claimed** — but not for the reason the ledger gave. The ledger
+        said the residual was "boxed scalars plus one allocation per element, and
+        no evidence says it closes". The measurement says the residual is a
+        per-step `List` and a per-step `filterMap`, which are *ordinary
+        allocator costs* that a different code shape removes (that is the 52 → 6
+        gap). What no code shape removes is that a per-element parser does
+        ~6 ns of work per *element* while `memcpy` does ~0.045 ns per *byte* —
+        because one is parsing and the other is copying. Comparing them is a
+        category error, which is the documentation defect 6.2 must fix.
+
+      **What remains genuinely open, and is the owner's call:** whether the
+      requirement is (i) "as close to C as possible" — which is now a concrete,
+      measurable target: drive 57 ns/byte toward the measured 6 ns/step floor by
+      removing the per-step `packedCands`/`List`, with no threshold to hit — or
+      (ii) a ratio to a hand-written C *parser* (not `memcpy`), which no lane in
+      this repo currently provides as a reference. The owner has said (i). **The
+      next work is therefore a code-shape change to `packedCands`, not a carrier
+      decision and not a threshold:** give the search a candidate list it does
+      not rebuild, or fold the single-candidate case so a productive leaf codec
+      never materializes a list at all. That is `decodeArray`'s `List`-per-step
+      defect showing up one layer up, and §6 exists to fix exactly this class.
+
+      **Do not** silently redefine the bar to whatever is achievable, and **do
+      not** publish a "× off C" figure for a per-element codec measured against
+      `memcpy` — that is the failure mode this whole change exists to remove.
 
 - [ ] 6.7 **Wire the Layer-2 seam into whichever path wins** (R2.4, design D8's
       deferred work). `byteSlice`/`commitRemainder` are at the `memcpy` floor but
@@ -1820,27 +1969,32 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
    below multiplies an unproven function, and one false bridge invalidates all
    their ratios at once.
 
-**Then, by measured headroom — REORDERED on 2026-11-02, see below:**
+**Then, by measured headroom — position 3 DONE 2026-11-03, 4–5 also DONE:**
 
-3. **6.1b** (≈6.5×) — biggest win, directly attacks the bar, subsumes
-   `decodeArray`'s per-step `List`. **Proof closed; `[~]` pending a number.**
-4. **6.4** — assert the ratio. **Moved up from position 7.** It was ordered last
-   "with the threshold taken from steps 3–6", but 6.2 has to quote a _measured_
-   number for the packed path and only 6.4's lane can produce one — so leaving it
-   last makes 6.2 either stale or invented. A ratio lane is also the cheapest
-   thing here: one lane, one threshold, both numbers printed.
-5. **6.2** — re-baseline the docs against 6.4's number.
-6. **6.3**, then **6.5**, then **6.7** — wire the fast path; adopt `encodeArray`'s
-   shape in the public API; wire the seam once there is a consumer.
-7. **6.6** — the carrier decision, which only becomes urgent once the numbers
-   above make the residual explicit.
+3. **6.1b** — the packed `Array`+`Nat` cursor decoder. **Proof closed and
+   `array_bridge`/`decodeFullArrayRoot_eq` proved**; `[~]` only because its
+   numeric re-measurement was routed to 6.4, which has now run. Mark it `[x]`
+   once 6.4's table is accepted as its measurement (it is: 57 ns/step against a
+   6 ns/step floor).
+4. **6.4 — DONE 2026-11-03.** `benchDecodeShapes` measures four proved-equivalent
+   decode shapes against a same-run `memcpy` and prints both numbers. **It reports;
+   it does not fail**, because the owner set no bar (see 6.4's re-scope note).
+5. **6.2 — DONE 2026-11-03.** `README.md`'s "honest ceiling" section and
+   `AGENTS.md`'s speed bullet rewritten against 6.4's table, with the old figures
+   explicitly withdrawn.
+6. **6.6's code-shape work comes next, then 6.3, 6.5, 6.7.** 6.4 relocated the
+   problem: the residual is **`packedCands`'s per-step `.attach`/`filterMap`**
+   (52 ns/step on its own, against a 6 ns/step floor), not the carrier. So the
+   highest-value next change is the candidate-list shape (6.6), which then feeds
+   6.3's wiring and 6.5's encode. Ordered ahead of 6.3 because wiring a path whose
+   dominant term is a rebuildable list would freeze the defect into the surface.
+7. **6.7** — wire the Layer-2 seam once a real consumer exists.
 
-**Why 6.4 before 6.2 and not after 6.3/6.5:** the docs must state what the code
-_measures_, and what the code measures is `decodeFullArrayRoot` as it now stands.
-6.3/6.5 will change which path is wired, so their own numbers must re-enter 6.2 —
-but 6.2 cannot wait for them without leaving the false "~20–40× ceiling" standing
-longer. Landing 6.4 first lets 6.2 state an honest number _now_ and update it again
-after 6.3/6.5; leaving 6.4 last means 6.2 is written against nothing.
+**Why 6.4 ran before 6.3/6.5 and why that was right:** the docs must state what
+the code _measures_, and 6.4 was the only lane that could produce a number. It
+also paid for itself by demoting the carrier question and promoting the
+`packedCands` rebuild — a reordering of §6's own priorities that no amount of
+reading the code had produced.
 
 ## Explicitly not doing
 
@@ -1849,11 +2003,12 @@ after 6.3/6.5; leaving 6.4 last means 6.2 is written against nothing.
   on reachable inputs, `Normalizer.idem` load-bearing, honest termination. They
   were tested; do not re-open.
 - **A general performance push beyond §6.** §6 owns decode/encode throughput and
-  is the _only_ place performance work belongs in this change. It replaces the
-  old "20–40× is accepted" posture with the owner's bar (**a small single-digit
-  multiple of C**), but the bar is **not met** and 6.6 is where that gets
-  resolved — do not read §6 as licence to micro-optimize arbitrary pure-Lean
-  code. `AGENTS.md`'s "do not re-attempt pure-Lean micro-optimization" rule still
+  is the _only_ place performance work belongs in this change. It replaces both
+  the old "20–40× is accepted" posture **and** the interim "small single-digit
+  multiple of C" bar with the owner's actual requirement — **as close to C as
+  possible, with no set limit** — and 6.4/6.6 are where the measured cost and its
+  attribution live. Do not read §6 as licence to micro-optimize arbitrary
+  pure-Lean code. `AGENTS.md`'s "do not re-attempt pure-Lean micro-optimization" rule still
   stands: the wins in §6 are **data-shape and wiring**, never scalar-type
   tinkering. Anything else on an unrelated hot path is a new measured finding
   for `review.md`, not scope creep here.
