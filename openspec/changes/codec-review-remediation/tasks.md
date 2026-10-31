@@ -242,16 +242,48 @@ byteSlice_spec]`, then `rfl` closes the `ByteArray.mk` eta — instead of
       and `README.md`'s Layer-2 paragraph states the same, so the fact is in the
       code where it is consulted.
 
-- [ ] 2.6 **Record or retire the dead API and unproved premise** (R2.5, R2.7).
-      (a) `Iso.element`/`Iso.subset` have zero callers. Either delete, or add a
-      one-line "public API, no in-tree caller" note — leaning retain, because
-      `[D8]`'s corrected decidable-witness argument is about exactly these
-      two (task 3.9).
-      (b) `decodeFull_spec` takes full-consumption uniqueness (`huniq`) as a
-      hypothesis and nothing in-repo supplies it. Either derive it from
-      `relUnambiguous` (which the repo already has) as
-      `decodeFull_spec_unambiguous`, or add one concrete instance so the
-      hypothesis is demonstrably satisfiable in-tree.
+- [~] 2.6 **Record or retire the dead API and unproved premise** (R2.5, R2.7).
+  (a) `Iso.element`/`Iso.subset` have zero callers. Either delete, or add a
+  one-line "public API, no in-tree caller" note — leaning retain, because
+  `[D8]`'s corrected decidable-witness argument is about exactly these
+  two (task 3.9).
+  (b) `decodeFull_spec` takes full-consumption uniqueness (`huniq`) as a
+  hypothesis and nothing in-repo supplies it. Either derive it from
+  `relUnambiguous` (which the repo already has) as
+  `decodeFull_spec_unambiguous`, or add one concrete instance so the
+  hypothesis is demonstrably satisfiable in-tree.
+  **(a) DONE — retained, with the note.** `Iso.element` and `Iso.subset` now
+  say "Public API, no in-tree caller" and name the reason they are kept: task
+  3.9's corrected `[D8]` cites exactly these two as the places where the
+  paper's `Eq`/`Bool` became `[DecidableEq α]`/`[DecidablePred p]`. Deleting
+  them would have left a README entry citing nothing. `lake build` green.
+  **(b) PARTLY DONE, and the task's stated route is REFUTED.** Landed:
+  `Codec.Sound.unambiguous_byte : Unambiguous Codec.byte` and
+  `functional_byte : Functional Codec.byte` — the "concrete instance" half,
+  and the first time either predicate is established for any `d`. Both are
+  `[propext, Quot.sound]`-only and `lake build` is green.
+  The `relUnambiguous`-derivation half does **not** close as stated, and the
+  reason is a defect in the _task_, not in the attempt: **`Unambiguous p` does
+  not imply `huniq`.** `Unambiguous p` is `∀ ⦃x y⦄ {n} (s : Bytes n), Rel p x s
+    → Rel p y s → x = y` — one value per byte string, at _fixed_ `n`. `huniq`
+  needs "one _list_ per fully consumed string", and the list length is not
+  pinned by either predicate: a `Codec` that relates `a` to the empty string
+  (i.e. `pure a`, which is `Rel (pure a₀) a emptyBytes` with `a = a₀`) makes
+  `relRepeat (Rel p) [a] 0 s` inhabited at `n = 0`, so `[a]` and `[]` are two
+  distinct fully-consuming lists of the same bytes. So the discharge needs a
+  **productivity** hypothesis as well (`∀ a s, Rel p a s → n ≠ 0`), which is
+  exactly `Codec.Productive`/`ConsumesByte` — and `ConsumesByte p` alone does
+  not give it, because `ConsumesByte` is a `decode`-level statement while
+  `Unambiguous` is a `Rel`-level one.
+  **Not silently narrowed:** the honest statement of what remains is
+  `fullConsumption_unique_of_relUnambiguous` taking `relUnambiguous (Rel p)`
+  **and** `∀ a {m} (s : Bytes m), Rel p a s → m ≠ 0`. That pair is
+  satisfiable (`byte`), but proving the induction needs `relRepeat`'s
+  least-fixpoint machinery threaded through `decodeRepeat_spec`'s split, which
+  is real work and did not land this session. Nothing was left in a
+  half-finished state in the tree — the failed attempts were removed, not
+  stubbed — so the build is green and the obligation is recorded here rather
+  than as a `sorry`.
 
 - [ ] 2.7 **Fix the C comments' overclaim** (R2.11, R2.12).
       `blitBytes`'s C agrees with the Lean body _value-for-value_ via `min`
