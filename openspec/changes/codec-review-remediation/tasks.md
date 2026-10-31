@@ -457,6 +457,32 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
 > Read the table before starting: **the fast shapes already exist**
 > (`encodeArray`, `decodeArray`, the cursor floor) and the public API does not use
 > them. Most of §6 is wiring plus proof, not invention.
+>
+> **CORRECTION (2026-11-02): the `decodeFullFastRoot` row above was not
+> reproducible, and the numbers have now drifted.** That lane did not exist in
+> `Bench.lean` at all — no bench ever timed this function, so every ratio quoted
+> for it (237× here, 9,047× in 6.1a) came from an ad-hoc probe under conditions
+> nothing in the repo reproduces. `Bench.lean` now has `benchDecodeFullFast`,
+> which value-checks, asserts `decodeFullFastRoot = decodeFull` at run time (the
+> proved bridge, so a mismatch means the binary disagrees with the theorem), and
+> prints the same-run `memcpy` ratio. First figures from that lane, `m = n = 1024`:
+>
+> | path                           | ns/op     | MiB/s   | vs same-run `memcpy` |
+> | ------------------------------ | --------- | ------- | -------------------- |
+> | `decodeFull` (spec)            | 5,802,652 | 0.17    | ~116,000×            |
+> | `decodeFullFastRoot`           | 66,435    | **14**  | **1,328×**           |
+> | `memcpy` (`copySlice`, 1024 B) | 50        | 20,000+ | 1×                   |
+>
+> So the fast path is **~87× faster than the specification, not 9,047×**, and sits
+> at **~1,328× off `memcpy`**, not 237×. Both the absolute rate and the ratio move
+> with `m` (at `m = 2048` the ratio reads 1,791×) because the lane reuses the
+> quadratic `m` size — **the ratio is only meaningful at the linear size**, which
+> is what 6.4's lane must use. Do not quote any of these as "the" ceiling; 6.4
+> sets the threshold from post-6.1b/6.3 numbers.
+>
+> What this does **not** change: `decodeFullFastRoot = decodeFull` is proved, so
+> the fast path's _correctness_ no longer rests on measurement at all. Only its
+> speed was ever undocumented, and now it is measured.
 
 - [ ] 6.1 **Bridge the fast decode, then move it onto a cursor** (R5.1 —
       CRITICAL). Two halves; **6.1a is a hard gate on 6.1b and on 6.3/6.4.**
