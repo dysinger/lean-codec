@@ -1238,7 +1238,16 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
       committed version returned `none`. So the theorem is not vacuous and the
       backtracking is intact.
 
-- [ ] 6.1b **Move the fast decode onto an `Array UInt8` + `Nat` cursor**
+- [~] 6.1b **Move the fast decode onto an `Array UInt8` + `Nat` cursor**
+
+      **THE PROOF IS DONE (session 9); the re-measurement is not, and it is not
+      this task's to run.** `array_bridge` and `decodeFullArrayRoot_eq` are proved
+      (`[propext, Quot.sound]`-only, zero `sorry`), a `bench` lane
+      (`benchDecodeFullArray`) asserts the bridge at run time, and the numeric
+      ratio belongs to **6.4** — it needs an idle machine and an interleaved
+      `memcpy` reference, which this session did not have (load average 2.4 on a
+      10-core machine). Do **not** quote a number for the packed path until 6.4's
+      lane prints one; see MEASUREMENT RULES below.
 
       **PLAN FOR NEXT SESSION (2026-11-02, written after reading the code — not
       from the ledger's memory of it). This is the whole task; nothing in it is
@@ -1541,6 +1550,66 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
       exactly as the earlier sessions did, and leave the build green. The
       measurement step (step 4 of the plan above) stays blocked until `array_bridge`
       is proved; that ordering is deliberate and must not be reversed.
+
+      ---
+
+      **SESSION 9 (2026-11-02) — `array_bridge` AND the root bridge LANDED. Steps A–D
+      are closed; `lake build` green (13 jobs), zero warnings, zero `sorry`.**
+
+      | commit | what |
+      | --- | --- |
+      | `2be566a` | **Step A** — `filterMap_eq_map_of_forall`, `mem_decodeArray_iff`, `packedCands_eq_attach`, `packedCands_length_eq`, `packedCand_of_mem`, `packedCand_iff` |
+      | `df67835` | **a leak fix** — `decodeFullArrayFast_succ`/`_zero` were `[propext, Classical.choice, Quot.sound]`; see below |
+      | `36dc508` | **Steps B–D** — `decodeArray_getElem?_spec`, `attach_getElem?_corr`, `decodeFullStepPacked`, `decodeFullArraySearch_eq_stepPacked`, `CandAligned`, `CandAligned_tail`, `stepPacked_eq_step`, `packedCands_aligned`, `array_bridge`, `decodeFullArrayRoot_eq` |
+
+      Everything is `[propext, Quot.sound]`-only, zero `Classical.choice`, zero
+      `sorry` (checked with `#print axioms` on each, not assumed).
+
+      **Five corrections to the plan — do not re-derive them.**
+
+      1. **A `Classical.choice` leak was already in the tree, and the ledger did not
+         know it.** `decodeFullArrayFast_succ` and `decodeFullArrayFast_zero` — landed
+         in the *previous* session and recorded here as `[propext, Quot.sound]`-only —
+         actually reported `[propext, Classical.choice, Quot.sound]`. Two causes, both
+         in the successor arm: (a) the definition derived its cursor bound with
+         `(by omega)` *inside* a `match` arm whose only witness is the match's own
+         named equation — `omega` closes such a goal by case analysis, the recorded
+         disjunction trap; (b) the unfolders used `split`, which inherits it. Fixed by
+         making `hk : k ≤ a.size` an **ordinary parameter** of both
+         `decodeFullArrayFast` and `decodeFullArraySearch` (the `PackedCand` already
+         carries its own `≤` field, so the search passes it straight through and never
+         invents it) and by using 6.1a's `conv`/`dsimp only`/`rw` recipe, which *does*
+         transfer once the arm is proof-free. This also retires the "`split` is the
+         recipe here" note in `decodeFullArrayFast_succ`'s docstring: it was the
+         workaround for the leak, not a fact.
+      2. **The measure must be `a.size - k = K`, not `≤ K`.** The plan (and the
+         earlier session's note) said `≤`. The IH is consumed at the *child* cursor,
+         so it needs `a.size - c < K`; with `≤`, `ih` is unusable when
+         `a.size - k = K`. With `=`, the child's remaining length is `t.remaining`,
+         strictly smaller, and `ih` applies directly — `cursor_bridge`'s own shape.
+      3. **The child cursor can reach the end of the buffer**, i.e.
+         `consumedAbs a k t = a.size` when a candidate consumes the last byte. There
+         `array_bridge`'s cursor premise `k < a.size` is **false** and no IH exists.
+         This is not a gap: `rcases Nat.lt_or_ge` splits it off and the branch closes
+         by the fast decoder's own base case (`decodeFullArrayFast_zero`) plus
+         `decodeFull_at_zero`. The plan did not anticipate this branch at all.
+      4. **Step A's route had to change, not its content.** The plan's
+         `packedCands_eq_filterMap`/`decodeArray_eq_attach` pair was to be proved by
+         rewriting under `.attach`; that dies on the dependent motive (the same trap
+         6.1a records). The correspondence is therefore stated **positionally** —
+         `decodeArray_getElem?_spec` and `attach_getElem?_corr` read both lists
+         through `List.getElem?_attach` — which is provable, choice-free, and exactly
+         the form the step hypothesis needs. Step A's *outcome* (the bijection) is
+         unchanged; only its spelling is.
+      5. **The search congruence is stated over `packedCands`, not a general `cs`.**
+         `packedCands_aligned` holds only for the real lists; a general `cs` would
+         have no alignment and the hypothesis unusable. `decodeFullArraySearch_eq_stepPacked`
+         is proved for a general list (it needs no alignment) and the bridge consumes
+         it at `packedCands`.
+
+      **What this unblocks.** Measurement (the plan's step 4 / this task's §6.1b
+      re-measure) is no longer blocked on the bridge. Read MEASUREMENT RULES below
+      before timing anything.
 
       ---
 
