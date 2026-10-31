@@ -78,13 +78,21 @@ def decodeArray {α : Type} (d : Codec α) (a : Array UInt8) (i : Nat) : List (�
 
 /-- The cursor-returning decoder, re-exposed under a name that states the
 partial-remainder contract: `decodeArrayFast := decodeArray`. It is **not** a new
-decoder — `decodeArray` already returns `(value, consumed count)` pairs with *no*
-materialization during decode (each `byteSlice`/`memcpy` is deferred to a
-`commitRemainder` at commitment time, so a decode yielding `k` backtracking
-results does **zero** suffix copies during decode, not `k`). The `Nat` cursor is a
-fixed binding decision (see the module header and task 3.1): it is the proof
-carrier, kept `[propext, Quot.sound]`-clean; the `Nat → USize` conversion happens
-once at the call site when the caller commits a chosen cursor. -/
+decoder — `decodeArray` already returns `(value, consumed count)` pairs and
+materializes **no** suffix during decode: a decode yielding `k` backtracking
+results does **zero** suffix copies, not `k`.
+
+What it does *not* do is call the Layer-2 `commitRemainder` seam. That seam is
+**available but unused** here — the proven path deliberately builds its suffix
+with the list-materializing `ByteArray.mk ((a.toList.drop c).toArray)` transport
+(below), so its refinement stays `Classical.choice`-free without a trusted
+`@[extern]`. `Codec/ByteSlice.lean` states the same thing from its side; the two
+headers agree, and neither calls `commitRemainder` "the deferred commit" of a path
+that never makes one.
+
+The `Nat` cursor is a fixed binding decision (see the module header): it is the
+proof carrier, kept `[propext, Quot.sound]`-clean; the `Nat → USize` conversion
+happens once at the call site, if the caller ever commits a cursor. -/
 def decodeArrayFast {α : Type} (d : Codec α) (a : Array UInt8) (i : Nat) : List (α × Nat) :=
   decodeArray d a i
 
