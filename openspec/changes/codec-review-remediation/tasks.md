@@ -482,113 +482,66 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
       **`bdrop` closure chain**; see `review.md` §"The refuted diagnosis" and
       §"The root cause, found".
 
-      **IN PROGRESS — the route above was WRONG, and the real one is ~90% done.**
+      **IN PROGRESS — the route above was WRONG; the real one is now on rails.**
       `decodeFullFast.induct` is the right induction (not an `relRepeat`-append
-      lemma). Work preserved verbatim in `bridge-wip.lean` beside this file; it
-      loads and its proven lemmas typecheck against the built library
-      (`nix develop --command lake env lean <path>`; the remaining errors are the
-      one `sorry`'s own sub-goals, not syntax).
+      lemma). **All the mathematics is done and landed in the library** — see
+      `Codec/Decode.lean` §"Lemmas for the fast-path bridge". Nothing about this
+      task lives outside the tree any more; there is no scratch file to find.
 
-      **Verified, `[propext, Quot.sound]`-clean. (7) is already in the library;
-      (1)–(6) are ready to copy into `Codec/Decode.lean` as-is:**
-      1. `decodeFull_at_zero : k = 0 → decodeFull p h k t = some []` — needed
-         because `decodeFull_zero` is stated at the literal root `0` and the
-         bridge's root is `n - n`; rewriting `n - n` inside `decodeFull`'s index
-         is **blocked by the dependent `Bytes` argument**, so the arithmetic has
-         to arrive as a hypothesis (`subst hk; exact decodeFull_zero`).
-      2. `decodeFull_succ' : k = j + 1 → decodeFull p h k s =
-         decodeFullStep … (decode p s).attach` — same reason. Proof:
-         `subst hk; rw [decodeFull, WellFounded.fix_eq];
-         simp only [Nat.add_one]; congr 2`. **`congr 2` is load-bearing** — the
-         residual compares `WellFounded.fix`'s `ih` against `decodeFull` and *is*
-         the fix point; without it the goal does not close.
-      3. `decodeFullStep_step` — `decodeFullStep` over an *attached cons*, stated
-         with the list as a parameter. Proof: `rw [decodeFullStep];
-         cases ih … <;> rfl`.
-      4. `attach_eq_cons` — `attach` of a list known to be a cons starts with that
-         head. **Must be stated existentially** (`∃ hm l, d.attach =
-         ⟨x,hm⟩ :: l`) and proved by `subst _h`, not `rw` — `rw` fails on the
-         dependent motive `_a.attach = …`.
-      5. `attach_pair_eq` — the two heads of the same attached list are the same
-         pair. **This was the case-3 blocker, and parameterizing the list instead
-         of deriving it from `.attach` is what unblocked it**: after
-         `cases d` + `simp only [List.attach_cons, List.cons.injEq,
-         Subtype.mk.injEq]`, both `e1.1`/`e2.1` are `… = hd`, so chain them
-         (`e1.1.symm.trans e2.1`) and project. This is the same shape
-         `decodeFullStep_some` already uses (it takes the attached list as a
-         *parameter* and `induction`s — never rewrites under `.attach`).
-      6. `decodeFullFast_eq_core`'s **statement**, which must keep the `m ≤ n`
-         hypothesis: `∀ n s m acc, m ≤ n → decodeFullFast p h s m acc =
-         (decodeFull p h (n - m) (bdrop m s)).map (acc.reverse ++ ·)`. The `m ≤ n`
-         premise is **not** decoration — `decodeFullFast` has no cursor bound and
-         at `m > n` still hits the `n - m = 0` branch, so a bridge without it is
-         *false*. The caller discharges it at `m = 0`.
-      `decodeFullFast.induct` **cases 1 and 2 are fully closed** in the probe.
+      **Landed (all inside the gate — `[propext, Quot.sound]`-only or
+      axiom-free, and the build enforces zero `sorry`):**
 
-      **7. `Codec.step_bytes_pointwise` — LANDED IN THE LIBRARY.**
-      `Codec/Decode.lean`, `[propext, Quot.sound]`-only, gated by the build.
-      It is the `bdrop`-re-rooting lemma the previous session's notes asked for,
-      and it is the *only* piece of the bridge that needed new mathematics:
+      | lemma | why it exists |
+      | --- | --- |
+      | `step_bytes_pointwise` | re-roots a decoder step's bytes at the root, **pointwise** |
+      | `decodeFull_at_zero` | `decodeFull` at a root numerically `0` |
+      | `decodeFull_succ` | `decodeFull`'s recursion equation at any succ root |
+      | `decodeFullStep_cons` | `decodeFullStep` over a **parameterized** attached cons |
+      | `attach_eq_cons` | `attach` of a cons starts with that head (existential form) |
+      | `attach_pair_eq` | two heads of the same attached list are the same pair |
 
-          step_bytes_pointwise : (x,t) ∈ decode d (Suffix.drop m s).bytes →
-            t.bytes i = s ⟨i.val + m + (n - m - t.remaining), _⟩
+      **The two traps that cost the most time — do not re-derive these:**
+      1. **Never state a `Bytes`-level equation here; state it pointwise.** The
+         obvious `Bytes` form of the re-rooting lemma needs a length cast
+         (`bdrop (m + (n-m-t.remaining)) s` is `Bytes (n - …)`, not
+         `Bytes t.remaining`). That cast then blocks *every* downstream `rw` with
+         `motive is not type correct`. `step_bytes_pointwise` reads indices into
+         the root instead and has no cast at all. This single decision is what
+         unblocked the task.
+      2. **Parameterize the list; never rewrite under `.attach`.** Rewriting
+         `p.decode s` inside a term whose type mentions `(x',t') ∈ p.decode s`
+         fails on the dependent motive. `decodeFullStep_cons` and
+         `attach_pair_eq` both take the list as a *parameter* and `cases` on it —
+         the same shape `decodeFullStep_some` already used.
+      Also worth knowing: `t.hle` must be restated as
+      `have h : t.remaining ≤ n - m := t.hle` before `omega` — the `Suffix.drop`
+      in `t.hle`'s own type does not reduce.
 
-      **Why it had to be pointwise.** The obvious `Bytes`-level statement needs a
-      length cast (`bdrop (m + (n-m-t.remaining)) s : Bytes (n - …)`, not
-      `Bytes t.remaining`), and that cast then blocks every downstream `rw` with
-      "motive is not type correct" — it was the cause of *every* dead end below.
-      Stating the reads as indices into the root `s` removes the cast entirely.
-      Proof: `decode_genuine_suffix_pointwise` + `simp only [Suffix.drop, bdrop,
-      Suffix.consumed]` + `Fin.ext` + `omega` (the last needs
-      `have h : t.remaining ≤ n - m := t.hle`, **not** `t.hle` directly — the
-      `Suffix.drop` in `t.hle`'s type does not reduce for `omega`).
-
-      **The one `sorry` left (case 3), and exactly where it now stops.** With
-      `step_bytes_pointwise` the mathematics is done; every remaining step is
-      transport. All of these are **proven** in `bridge-wip.lean`:
-      `hpair` (the two heads agree → `x0 = x'`, `t0.remaining = t'.remaining`),
-      `hbytes` (the flat drop *is* `t0.bytes`, by `Bytes.ext` +
-      `step_bytes_pointwise`), `hcur` (`ihrec` *is* `m + (j+1-t.remaining)`,
-      definitionally), and `hoff` (`n - (m + …) = t0.remaining`).
-      **It stops on a `Suffix` *index* mismatch:** `reflect_3`'s `t0` is typed
-      `Suffix (Suffix.drop m s).remaining` while the induction hypothesis `IH`
-      lives at `Suffix (n - m)`. These are numerically equal but **not
-      definitionally equal in the `Suffix (·)` position** (verified: a direct
-      `Suffix (Suffix.drop m s).remaining` vs `Suffix (n - m)` unification
-      fails), so the final `rw [IH …]` cannot fire. Every attempt to bridge it
-      (`rw [hoff]` under a dependent motive, `cases`/`subst` on the arithmetic,
-      `congrArg` at `decodeFull h t0.remaining`) hits the same dependent-motive
-      wall that `attach_pair_eq` hit — and the fix there (parameterize the list)
-      may be the fix here too.
-      **Route (a) is CONFIRMED viable — verified, not just proposed.** Re-stating
-      the core lemma's conclusion as
+      **The confirmed route to the finish (`decodeFullFast.induct` case 3).**
+      State the core lemma's conclusion with the specification's length index
+      written **`(Suffix.drop m s).remaining`** — the type the recursor actually
+      produces — rather than `n - m`:
 
           decodeFullFast p h s m acc =
             (decodeFull p h (Suffix.drop m s).remaining (Suffix.drop m s).bytes).map
               (fun tail => acc.reverse ++ tail)
 
-      (i.e. the spec term's index written `(Suffix.drop m s).remaining`, which is
-      exactly what the recursor produces) **elaborates cleanly and removes the
-      index mismatch at the source** — the `induct` motive is well-formed and
-      `refine_1` closes outright. A scratch file at `/tmp/routeA.lean` reached
-      this state; the technique that made the spec side reachable was
-      `conv => rhs; rw [decodeFull_succ' p h ((Suffix.drop m s).remaining) j hk']`
-      — rewriting **only the RHS** avoids the dependent-motive wall that blocks
-      the same rewrite when it has to touch the fast side's `have hmem :=`.
-      What is left there is ordinary branch plumbing in `refine_2`/`refine_3`
-      (`.attach` of `[]`, then the pair unification), not new mathematics.
-      **Next session, two candidate routes, in order:**
-      (a) **State the core lemma at fixed `t`.** Generalize `t` to a *parameter*
-      and let `IH` be instantiated at `Suffix (Suffix.drop m s).remaining`
-      instead of `Suffix (n - m)` — i.e. make the *motive*'s spec term use
-      `(Suffix.drop m s).remaining`, which is the type the recursor already
-      produces. The `decodeFull`/`bdrop` it mentions then match `IH`'s exactly
-      and the index mismatch disappears rather than being transported.
-      (b) If (a) re-elaborates cleanly, the `none`/`some` sub-cases close with
-      `cases hd : p.decodeFull h t0.remaining t0.bytes <;> simp …` exactly as
-      already written at the end of `bridge-wip.lean`.
-      **Do not re-derive `step_bytes_pointwise` or any of (1)–(6)** — they are
-      proven and (7) is in the library.
+      Verified to work: the motive elaborates and `refine_1` (the `n - m = 0`
+      case) **closes outright**. This removes the `Suffix`-index mismatch at the
+      source — `t0 : Suffix (Suffix.drop m s).remaining` and the induction
+      hypothesis then live at the same type. A direct attempt to keep the spec at
+      `Suffix (n - m)` fails because the two are numerically equal but *not*
+      definitionally equal in the `Suffix (·)` position (checked).
+
+      **The rewrite that makes the spec side reachable** — rewrite **only the
+      RHS**, so the fast side's dependent `have hmem :=` is never touched:
+
+          conv => rhs; rw [decodeFull_succ p h ((Suffix.drop m s).remaining) j hk']
+
+      What remains after that is ordinary branch plumbing in `refine_2` and
+      `refine_3`: `.attach` of `[]` (dispatch via
+      `have hatt : (…).attach = [] := by rw [hz]; exact List.attach_nil`), then
+      the pair unification via `attach_pair_eq`. **No new mathematics is left.**
 
 - [ ] 6.1b **Move the fast decode onto an `Array UInt8` + `Nat` cursor**
       (≈**6.5×**: 9 → 59 MiB/s measured). `decodeFullFastRoot` avoids the closure
