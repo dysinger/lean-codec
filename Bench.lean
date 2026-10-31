@@ -404,6 +404,53 @@ unsafe def benchDecodeFull (n : Nat) (reps : Nat) : IO Unit := do
   | none => throw (IO.userError "decodeFull: expected some, got none")
   IO.println s!"decodeFull byte [{n}]: {dt / reps} ns/op"
 
+/-- The **fast** full-consumption decoder: `decodeFullFastRoot`, the flat-cursor,
+backtracking implementation. This lane exists because the 237x / 9,047x ratio
+quoted for this function elsewhere had **no bench lane at all** — the number was
+not reproducible from the binary, which is the defect 6.4 exists to remove.
+
+Three things it asserts, in order of importance:
+
+1. **The value**, byte for byte, against `replicate n (1 : UInt8)` — the same
+   assertion `benchDecodeFull` makes, so the two lanes are comparable and a
+   regression in either is caught. That the fast path returns a full-consumption
+   result at all is `Codec.decodeFullFastRoot_eq` (proved, `[propext,
+   Quot.sound]`-only), not something this lane has to trust.
+2. **Agreement with the specification** at this `n`: `decodeFullFastRoot` must
+   equal `decodeFull`. The theorem makes that unconditional, so a mismatch here
+   means the running code disagrees with the proved statement — a real defect
+   worth failing on, not merely a value check.
+3. **The ratio to a same-run `memcpy`**, printed alongside the absolute figure.
+   An absolute MiB/s number is machine-dependent and gets tuned down the first
+   time CI is slow; the ratio to `copySlice` in the same process at the same byte
+   count is the property actually meant. This lane only *prints* the ratio —
+   6.4 owns the threshold, and it must be set from 6.1b/6.3's post-fix numbers,
+   not from this pre-fix baseline.
+
+`memcpy` here is the same `ByteArray.copySlice` call `benchCalibration` uses, so
+the denominator is the machine's raw memory-move floor at the same size. -/
+unsafe def benchDecodeFullFast (n : Nat) (reps : Nat) : IO Unit := do
+  let s : Bytes n := bytesOf n
+  let (r, dt) ← timeBatch reps fun _ => decodeFullFastRoot Codec.byte byteConsumesByte s
+  match r with
+  | some xs =>
+      let expected : List UInt8 := List.replicate n (1 : UInt8)
+      if xs != expected then
+        throw (IO.userError s!"decodeFullFastRoot: expected {expected.length}×0x01 bytes, got length {xs.length}")
+      if some xs != decodeFull Codec.byte byteConsumesByte n s then
+        throw (IO.userError "decodeFullFastRoot ≠ decodeFull (the proved bridge disagrees at run time)")
+  | none => throw (IO.userError "decodeFullFastRoot: expected some, got none")
+  let nsPerOp := dt / reps
+  -- Same-run memcpy floor at the same byte count.
+  let src : ByteArray := ByteArray.mk (Array.ofFn fun (_ : Fin n) => (1 : UInt8))
+  let (copied, dtMem) ← timeBatch reps fun _ => src.copySlice 0 ByteArray.empty 0 n
+  if (copied.size : Nat) != n then
+    throw (IO.userError "decodeFullFastRoot: memcpy reference size mismatch")
+  let memPerOp := dtMem / reps
+  let ratioTxt :=
+    if memPerOp = 0 then "n/a" else s!"{nsPerOp / memPerOp}x"
+  IO.println s!"decodeFullFast root [{n}]: {nsPerOp} ns/op  ({mebibytesPerSec n nsPerOp} MiB/s)  | memcpy {memPerOp} ns  | ratio {ratioTxt}"
+
 /-- The fused single-step decoder `decodeFast`: peels one `Codec.byte` in O(1),
 without re-traversing. Confirms `decodeFast` agrees with `decode` on the remainder
 length (the `Suffix` carries no decidable value-equality, so this lanes checks the
@@ -701,6 +748,8 @@ unsafe def main (args : List String) : IO Unit := do
   Codec.Bench.benchDecodeRepeat m
   -- Full-consumption repetition decoder + fused single-step decoder.
   Codec.Bench.benchDecodeFull m reps
+  -- The fast full-consumption decoder: value- AND bridge-checked, ratio-printing.
+  Codec.Bench.benchDecodeFullFast m reps
   Codec.Bench.benchDecodeFast n reps
   -- Layer-2 seam boundary smoke test (out-of-range value-checks).
   Codec.Bench.benchSeamBoundaries
