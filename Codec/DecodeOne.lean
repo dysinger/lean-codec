@@ -165,6 +165,41 @@ theorem decodeOne_mem {α : Type} (d : Codec α) (a : Array UInt8) (i c : Nat) (
         · simp [hp] at h
       · simp [hlt] at h
 
+/-- **`Functional` and `Unambiguous` are establishable for a concrete `d`.** Both
+were used only as hypotheses, and nothing in the tree established either for any
+description, so a typo in either definition — quantifying over the wrong `s`,
+say — could not surface. These two base instances (`Codec.byte`, the leaf every
+downstream format starts from) are the smoke test; `Codec.Sound.unambiguous_byte`
+and `functional_byte` give the `Rel`-level proof and these the `decodeArray`-level
+one the committed decoder actually gates on.
+
+Proof shape: mirror `decodeOne_mem`'s `byte` case, so the `if`-guard reaches the
+`decodeArray` membership. Axiom-free. -/
+theorem decodeArray_functional_byte (a : Array UInt8) (i : Nat) :
+    ∀ {x₁ x₂ : UInt8} {c₁ c₂ : Nat},
+      (x₁, c₁) ∈ decodeArray Codec.byte a i →
+      (x₂, c₂) ∈ decodeArray Codec.byte a i → x₁ = x₂ → c₁ = c₂ := by
+  intro x₁ x₂ c₁ c₂ h₁ h₂ hx
+  subst hx
+  simp only [decodeArray] at h₁ h₂
+  by_cases hlt : i < a.size
+  · simp [hlt] at h₁ h₂
+    rw [h₁.2, h₂.2]
+  · simp [hlt] at h₁
+
+/-- Under `Unambiguous`, two same-count `decodeArray` results agree — established
+for `Codec.byte`, the companion of `decodeArray_functional_byte`. Axiom-free. -/
+theorem decodeArray_unambiguous_byte (a : Array UInt8) (i : Nat) :
+    ∀ {x₁ x₂ : UInt8} {c : Nat},
+      (x₁, c) ∈ decodeArray Codec.byte a i →
+      (x₂, c) ∈ decodeArray Codec.byte a i → x₁ = x₂ := by
+  intro x₁ x₂ c h₁ h₂
+  simp only [decodeArray] at h₁ h₂
+  by_cases hlt : i < a.size
+  · simp [hlt] at h₁ h₂
+    rw [h₁.1, h₂.1]
+  · simp [hlt] at h₁
+
 /-- Under `Functional d`, one value determines one consumed count: two
 `decodeArray` results for the *same* value must consume the same count. Together
 with `decodeArray_unambiguous_value` (same count ⇒ same value, under
