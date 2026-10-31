@@ -1015,6 +1015,11 @@ theorem decode_congr_bdrop {α : Type} (d : Codec α) {n : Nat} (s : Bytes n)
         List (α × Suffix (n - a - (b - a)))) := by
   rw [bdrop_seg s hab]
 
+/-- **The two cursors are the same input.** `bdrop (m + (n - m - r)) s` and
+`bdrop (0 + (n - m - r)) (bdrop m s)` are the same bytes, at the same length `r`.
+Stated as an equality of `Bytes r` values (both cast to `r`), which is what lets
+`decodeFullStep` be compared at the two roots. Proved pointwise, because the two
+casts carry different (but equal) width proofs and no `rw` can abstract them. -/
 theorem reroot_bytes_eq {n m r : Nat} (s : Bytes n) (hr : r ≤ n - m) :
     cast (congrArg Bytes (remaining_at_cursor (n := n) (m := m) (r := r) hr))
         (bdrop (m + (n - m - r)) s)
@@ -1031,6 +1036,22 @@ theorem reroot_bytes_eq {n m r : Nat} (s : Bytes n) (hr : r ≤ n - m) :
   have h : r ≤ n - m := hr
   omega
 
+/-- **The cursor re-rooting lemma** (task 6.1a's named blocker): the specification
+at the flat cursor `m` over the root `s` equals the specification at the re-rooted
+cursor over `bdrop m s`, at every remaining length `r`.
+
+Both sides are cast to `r` explicitly (`remaining_at_cursor` for the flat cursor,
+`remaining_at_reroot` for the re-rooted one), because `decodeFull` is `Fin`-indexed
+by its root's length and neither cursor's length is *syntactically* `r`.
+
+The proof is the shape the ledger predicted: strong induction on `r`; the `0` case
+is `decodeFull_zero` on both sides, and the successor case steps both sides with
+`decodeFull_succ`, after which the two `decodeFullStep` calls differ **only in
+their root** — so `reroot_bytes_eq` closes it in one rewrite. No congruence over
+the recursor's `ih` is needed, because `decodeFull_succ` applies `decodeFullStep`
+to the *same* `fun m s' _ => decodeFull p h m s'` on both sides.
+
+`[propext, Quot.sound]`-only. -/
 theorem decodeFull_reroot_cursor {α : Type} (p : Codec α) (h : ConsumesByte p) :
     ∀ (r : Nat) (n m : Nat) (s : Bytes n) (hr : r ≤ n - m),
       decodeFull p h r (cast (congrArg Bytes (remaining_at_cursor (n := n) (m := m) (r := r) hr))
@@ -1053,6 +1074,11 @@ theorem decodeFull_reroot_cursor {α : Type} (p : Codec α) (h : ConsumesByte p)
 `bdrop (0 + (n - m - r)) (bdrop m s)` are the same bytes, at the same length `r`.
 Stated as an equality of `Bytes r` values (both cast to `r`), which is what lets
 `decodeFullStep` be compared at the two roots. -/
+/-- **The two cursors are the same input.** `bdrop (m + (n - m - r)) s` and
+`bdrop (0 + (n - m - r)) (bdrop m s)` are the same bytes, at the same length `r`.
+Stated as an equality of `Bytes r` values (both cast to `r`), which is what lets
+`decodeFullStep` be compared at the two roots. Proved pointwise, because the two
+casts carry different (but equal) width proofs and no `rw` can abstract them. -/
 theorem decodeFullFast_pairwise {α : Type} (p : Codec α) (h : ConsumesByte p) :
     (∀ (n : Nat) (s : Bytes n) (m : Nat) (acc : List α),
         decodeFullFast p h s m acc = decodeFullFast p h (Suffix.drop m s).bytes 0 acc) ∧
