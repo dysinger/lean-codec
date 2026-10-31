@@ -812,6 +812,60 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
         derived, so expected `[propext, Quot.sound]`-only, but **that is unverified
         until the gate goes green**; run it as the first step after 6.1a closes.
 
+      * **SESSION 5 (2026-11-02) — two mechanical breakthroughs, and the cast is a
+        real wall.** Landed in `Codec/Decode.lean` (both proved, no `sorry`):
+
+        | lemma | why it exists |
+        | --- | --- |
+        | `bdrop_seg` | `bdrop (b - a) (bdrop a s) = cast _ (bdrop b s)` for `a ≤ b`, with the cast proved by `omega` in the `Bytes` index |
+        | `decode_congr_bdrop` | `decode` invariant under it — the step's rewrite |
+
+        **Breakthrough 1: the unfold recipe is `conv => lhs; rw [decodeFullFast.eq_def]`,
+        then `dsimp only`, then `rw [hk]`.** The `dsimp only` was the step every
+        previous session was missing: without it `rw [hj]` fails with "did not find
+        an occurrence of the pattern `n - m`" because the body is still wrapped in
+        `match n, s, m, acc with`. With it, both `decodeFullFast` unfoldings
+        (`n - m = 0` → `some acc.reverse`, `n - m = j + 1` → the search) close
+        outright. Reproduced, then removed as probes. **This removes the "get one
+        arm to close by hand" blocker the last entry left open — it is closed.**
+
+        **Breakthrough 2 (the structural one): `decodeFull`'s recursor step does NOT
+        need a congruence over the WellFounded `ih`.** The previous route assumed
+        `decodeFull_reroot_cursor` must compare two `decodeFullStep` calls and hence
+        transport `ih` across roots. It does not: `decodeFull_succ` rewrites the
+        successor side into `decodeFullStep … (decode p s).attach`, and that
+        recursor is applied to `fun m s' _ => decodeFull p h m s'` — **the same
+        lambda on both sides**. So the step needs only statements about `bdrop`
+        (which is what `bdrop_seg` is for), never about the recursor's hypothesis.
+        Stating the re-rooting lemma as an **`ih`-carrying strong induction on the
+        remaining length** is now the confirmed shape; the `decodeFullStep_none`
+        machinery stays for 6.1b, not for this lemma.
+
+      * **The wall (do not re-litigate, but do design around): a `Bytes` term whose
+        length is only *knowably* equal cannot be passed to `decodeFull`.**
+        `bdrop (m + (n - m - r)) s : Bytes (n - (m + (n - m - r)))`, and
+        `decodeFull p h r` demands `Bytes r`. Bridging those needs
+        `cast (congrArg Bytes (remaining_at_cursor hr))`, and that cast **cannot be
+        elaborated** where `r` is a free variable: the cast's own length argument
+        is `r` but the target is the opaque expression `n - (m + (n - m - r))`, so
+        `cast` rejects the argument ("has type `Bytes (n - …)` but is expected to
+        have type `Bytes r`") *before* `omega` is ever consulted. Verified in both
+        directions and with the equality supplied as a hypothesis; also verified
+        that `remaining_at_cursor` itself is true on all `n, m, r < 12` (`#eval`).
+        **The working spelling is `bdrop_seg`'s: keep every cursor length
+        syntactically identical between the two sides**, i.e. state the recursive
+        hypothesis at `bdrop (a + (n - a - r))` and only ever translate
+        `(b - a)`-shaped differences. That is why `decode_congr_bdrop` takes
+        `a`/`b` and no `r`.
+
+      * **This is also a direct answer to the ledger's old "index alignment"
+        framing:** the obstacle was never that the fast side re-roots at `s` while
+        the spec nests — `drop_trans_eq` already handles that, and (see above) the
+        spec does not nest once `decodeFull_succ` is used. It is purely that a
+        `Bytes` value at a merely-equal length may not cross into a
+        length-indexed redex. `remaining_at_cursor`/`remaining_at_reroot` are
+        therefore **not** on the critical path for 6.1a; `bdrop_seg` is.
+
       * **What is left in 6.1a, precisely.** `decodeFullFast_pairwise`'s body is a
         single `sorry` in `Codec/Decode.lean`, with the recursor's five case arms
         already sketched as `intro`-lines. Two of them (the `[]` halves) are now
