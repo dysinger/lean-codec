@@ -516,14 +516,16 @@ cursor-driven search needs; `decodeFullArrayFast`/`decodeFullArraySearch` are th
 search, defined exactly as the proved `decodeFullFast`/`decodeFullFastSearch` pair,
 with the `Suffix` plumbing replaced by the packed cursor. -/
 
-/- **The packed cursor search, index-name**: the packed full-consumption decoder.
-Mirrors `Codec.decodeFullFast`\'s shape one-for-one — a cursor on the *remaining*
-length, an accumulator, and a sibling search over `decodeArray`\'s candidates —
+/- **The packed cursor search**: the packed full-consumption decoder.
+Mirrors `Codec.decodeFullFast`'s shape one-for-one — a cursor on the *remaining*
+length, an accumulator, and a sibling search over `decodeArray`'s candidates —
 with `Suffix`/`bdrop` replaced by the `Nat` consumed count `k`.
 
-The recursion is **structural in `a.size - k`**, not `WellFounded.fix`, so it
-compiles to a loop; `hk : k < a.size` is threaded as a *parameter* (not an `if`
-binder) so `decreasing_by` sees it and the recursive call is well typed at `c`.
+The recursion descends on `a.size - k`, so it compiles to a loop. Note there is
+**no `hk` parameter**: the search's own call site discharges `k < a.size` from that
+arithmetic (`a.size - k = j + 1`). The "thread `hk` as a parameter" advice in the
+earlier plan was superseded — what was actually needed was for the recursive call's
+`hk` to be readable off a **named field**, which is what `PackedCand` provides.
 `[propext, Quot.sound]`-only, zero `Classical.choice`, zero `sorry`. -/
 /-- A packed candidate **carrying its own strict-advance fact**. `decodeArray_consumes`
 says a `ConsumesByte` decoder's candidate always advances the cursor, so the fact is
@@ -531,7 +533,10 @@ there for every candidate; putting it *in the type* is what lets the recursive c
 discharge its own `hk : c < a.size` from a **named** field (`by omega` over
 `hkc : k < c` and `hk : k < a.size`) instead of from a `ConsumesByte` application
 inside the `match` arm — the spelling that keeps `decreasing_by` from needing
-`rename_i` (task 6.1b, plan item 1). -/
+`rename_i` (task 6.1b, plan item 1).
+
+The third component is `≤` and not `<` because `pure x` yields a candidate with
+`c = i`: `decodeArray_bounded_upper`'s `≤` is the honest bound and `<` is false. -/
 abbrev PackedCand {α : Type} (d : Codec α) (a : Array UInt8) (k : Nat) :=
   { pr : α × Nat // pr ∈ decodeArray d a k ∧ k < pr.2 ∧ pr.2 ≤ a.size }
 
@@ -600,11 +605,14 @@ end
 
 /-- `decodeFullArrayFast`'s recursion equation at a known-**successor** cursor: the
 body is `match _ : a.size - k with …`, so the named equation blocks ι-reduction and
-`rw [decodeFullArrayFast.eq_def]` alone leaves a stuck `match`. The `dsimp only`
-between the two rewrites removes the `match a, k, acc with` wrapper the definition
-compiles to; without it `rw [hj]` reports "did not find an occurrence of the pattern
-`a.size - k`" and looks like a type error. It is not — this is the recipe `tasks.md`
-6.1a found the hard way and 6.1b reuses verbatim. -/
+`rw [decodeFullArrayFast.eq_def]` alone leaves a stuck `match`.
+
+**This does NOT reuse 6.1a's `conv`/`dsimp only` recipe — that was tried and does not
+transfer.** Here the discriminant is generalized to a fresh binder through
+`.eq_def` (the body mentions `k` via `packedCands`), so `dsimp only` makes no
+progress and `rw [hj]` fails with "motive is not type correct". `split` closes both
+arms directly, and that is the spelling used. `tasks.md` 6.1b records the
+correction. -/
 theorem decodeFullArrayFast_succ {α : Type} (d : Codec α) (h : ConsumesByte d)
     (a : Array UInt8) (k : Nat) (acc : List α) (j : Nat) (hj : a.size - k = j + 1) :
     decodeFullArrayFast d h a k acc =
