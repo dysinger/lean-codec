@@ -494,6 +494,14 @@ never conflated:
   that is re-checked empirically (byte-for-byte value checks in the bench), never
   proved. "No axiom" is **never** "no trust."
 
+  Every seam nevertheless carries its **own** Lean law pinning that body —
+  `byteSlice_spec`, `blitBytes_spec`, `findByte_spec`, `commitRemainder_spec` — so
+  the C's contract names a theorem rather than "read the definition". Any consumer
+  or bench cites the law instead of re-deriving the body. The laws are not uniformly
+  axiom-free: `findByte_spec` reports `[propext]` (its `Array.findIdx?` scan goes
+  through `DecidableEq UInt8`), and the other three report none. That difference is
+  recorded at each law, not treated as drift — `[propext]` is inside the gate.
+
   The seams are **generic** bulk byte movement, not semantic parsers: `byteSlice`
   (suffix `memcpy`), `blitBytes` (buffer-to-buffer `memcpy`), `findByte` (`memchr`),
   and `commitRemainder` (a `USize`-indexed `byteSlice` wrapper). There is **no C
