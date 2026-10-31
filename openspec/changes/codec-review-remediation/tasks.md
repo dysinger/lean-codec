@@ -215,7 +215,7 @@ byteSlice_spec]`, then `rfl` closes the `ByteArray.mk` eta — instead of
       build, which is a weaker claim than "on every input the type admits" and is
       stated as the weaker one. `lake build` and `lake build bench` green.
 
-- [ ] 2.4 **Reconcile the surface and transport descriptions** (R2.4, design D8).
+- [x] 2.4 **Reconcile the surface and transport descriptions** (R2.4, design D8).
       `Packed.lean`'s header says the memcpy "is deferred to a
       `commitRemainder` at commitment time"; the proven `decodeFullArray` builds
       its suffix with `ByteArray.mk ((a.toList.drop c).toArray)` and **no**
@@ -223,6 +223,11 @@ byteSlice_spec]`, then `rfl` closes the `ByteArray.mk` eta — instead of
       honest phrasing: the seam is _available_, and the proven path deliberately
       uses the axiom-clean transport. Two headers SHALL NOT disagree about
       whether a seam is wired in.
+      **Done.** `decodeArrayFast`'s docstring (the one that carried the false
+      claim) now says the seam is **available but unused**, names the transport
+      the proven path actually uses, and points at `ByteSlice.lean`'s statement of
+      the same fact — so the two headers agree and neither describes a call no
+      path makes. `lake build` green.
 
 - [x] 2.5 **State per-law axiom footprints in `ByteSlice.lean`** (R2.6).
       `findByte_spec` reports `[propext]` while its siblings report none,
