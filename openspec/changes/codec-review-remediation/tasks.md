@@ -265,7 +265,7 @@ byteSlice_spec]`, then `rfl` closes the `ByteArray.mk` eta — instead of
   The `relUnambiguous`-derivation half does **not** close as stated, and the
   reason is a defect in the _task_, not in the attempt: **`Unambiguous p` does
   not imply `huniq`.** `Unambiguous p` is `∀ ⦃x y⦄ {n} (s : Bytes n), Rel p x s
-  → Rel p y s → x = y` — one value per byte string, at _fixed_ `n`. `huniq`
+→ Rel p y s → x = y` — one value per byte string, at _fixed_ `n`. `huniq`
   needs "one _list_ per fully consumed string", and the list length is not
   pinned by either predicate: a `Codec` that relates `a` to the empty string
   (i.e. `pure a`, which is `Rel (pure a₀) a emptyBytes` with `a = a₀`) makes
@@ -285,12 +285,26 @@ byteSlice_spec]`, then `rfl` closes the `ByteArray.mk` eta — instead of
   stubbed — so the build is green and the obligation is recorded here rather
   than as a `sorry`.
 
-- [ ] 2.7 **Fix the C comments' overclaim** (R2.11, R2.12).
+- [x] 2.7 **Fix the C comments' overclaim** (R2.11, R2.12).
       `blitBytes`'s C agrees with the Lean body _value-for-value_ via `min`
       associativity/commutativity, not "term-for-term"; and the allocation-length
       invariant (`dstOff + copyLen ≤ n`, hence total length `n`) is implicit.
       Reword the comment to state the AC argument and the window invariant —
       the seam's trust argument must be stated, not implied.
+      **Done, and the AC claim was checked rather than asserted.** The comment now
+      spells out the clamp order the C _actually_ uses (dest cursor → dest-side
+      length → source cursor → source-side length) and says plainly that it is
+      **not** the body's `min len (min (n-dc) (slen-sc))` written out — which is
+      the point of R2.11: a line-by-line reader would "fix" a mismatch that is not
+      one. Verified by exhaustive `#eval` over `n, slen < 6` and offsets/`len < 9`
+      (2.3M tuples) that `(dc, sc, lc)` from the body equals `(dstOff, srcOff,
+    copyLen)` from the C's order; it does, and the reason is `min`'s AC.
+      The window invariant is now stated: `copyLen` is clamped to `n - dstOff`
+      _before_ the source-side clamp and `dstOff ≤ n`, so `dstOff + copyLen ≤ n`,
+      the buffer is allocated at the full `n`, and the trailing `memcpy` cannot
+      overrun. `ByteSlice.lean`'s `blitBytes` docstring was corrected in the same
+      breath (it also said "term-for-term"). `lake build`, `lake build bench` and a
+      bench run are all green; the seam checks still pass.
 
 - [x] 2.8 **Discharge `Unambiguous`/`Functional` for a concrete codec** (R2.17).
       Both are defined and used as hypotheses but never established for any
