@@ -298,7 +298,7 @@ byteSlice_spec]`, then `rfl` closes the `ByteArray.mk` eta — instead of
       the point of R2.11: a line-by-line reader would "fix" a mismatch that is not
       one. Verified by exhaustive `#eval` over `n, slen < 6` and offsets/`len < 9`
       (2.3M tuples) that `(dc, sc, lc)` from the body equals `(dstOff, srcOff,
-  copyLen)` from the C's order; it does, and the reason is `min`'s AC.
+copyLen)` from the C's order; it does, and the reason is `min`'s AC.
       The window invariant is now stated: `copyLen` is clamped to `n - dstOff`
       _before_ the source-side clamp and `dstOff ≤ n`, so `dstOff + copyLen ≤ n`,
       the buffer is allocated at the full `n`, and the trailing `memcpy` cannot
@@ -1371,6 +1371,105 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
 
       **Step 4 — measure, then stop.** Add the bench lane only after the bridge is
       green. Read the MEASUREMENT RULES below first: they cost a full day.
+
+      ---
+
+      **SESSION 8 (2026-11-02) — steps 1 and 2 LANDED, step 3 is half done, and four
+      plan corrections. `lake build` green (13 jobs), zero warnings, zero `sorry`.**
+
+      Landed in `Codec/Packed.lean`, each proved, `[propext, Quot.sound]`-only:
+
+      | commit | what |
+      | --- | --- |
+      | `b468f28` | `decodeFullArrayFast` / `decodeFullArraySearch` — **step 1**, the mutual pair |
+      | `f3bc5f4` | `decodeFullArrayFast_succ` / `_zero` — **step 2**, the unfolder lemmas |
+      | `d033799` | `packedCands`, `length_packedCands_le`, `mem_packedCands`, `packedCands_mem`/`_consumes`, `decodeFullArraySearch_cons`/`_nil` |
+      | (this one) | `consume_lt` — a `ConsumesByte` step strictly advances the packed cursor |
+
+      **Four things the plan got wrong — do not re-derive them:**
+
+      1. **`termination_by` takes no binders here.** The plan's
+         `termination_by a k _ acc => (…)` is a parse error: `Array.size` is not a
+         bound variable, so `a.size` is unknown in the binder list. Use the bare
+         tuple `termination_by (a.size - k, (packedCands d h a k).length + 1)`.
+         (6.1a's `Bytes`-indexed version *does* need binders because the measure
+         mentions `s`, which is a bound variable there.)
+
+      2. **`hk` must be dischargeable from a NAMED field, so the candidate type
+         carries it.** The plan says "thread `hk : k < a.size` as a parameter so
+         `decreasing_by` needs no `rename_i`". That is necessary but not
+         sufficient: discharging the recursive call's `hk` from a `ConsumesByte`
+         *application* inside a `match` arm **fails**, because the arm's hypotheses
+         are not in scope for the argument's `by` block (`omega` then sees `k < c`
+         nowhere). The fix is `PackedCand`: a candidate subtype holding
+         `pr ∈ decodeArray d a k ∧ k < pr.2 ∧ pr.2 ≤ a.size`, built by
+         `packedCands` with a **`filterMap` over `attach`** (never a `List.map`, so
+         the membership witness survives). The recursive call then reads `hk` off a
+         field.
+
+      3. **The candidate bound is `≤ a.size`, NOT `< a.size`.** `pure x` yields
+         `c = i`, so `decodeArray_bounded_upper`'s `≤` is the honest fact and `<`
+         is simply false. That is why `PackedCand`'s third component is `≤`.
+
+      4. **The 6.1a `conv`/`dsimp only` unfold recipe does NOT transfer.** For this
+         `mutual`-defined search, `dsimp only` makes no progress ("`dsimp` made no
+         progress") and `split` generates fresh binders (`x✝`, `c✝`, `rest✝`) that
+         do not align with the stated ones. The working recipe for
+         `decodeFullArraySearch_cons` is
+         `conv => lhs; rw [decodeFullArraySearch.eq_def]; simp only; split;
+         · simp at *; · rename_i heq; injection heq with h1 h2; simp_all`
+         (`injection` is what re-aligns `split`'s binders).
+
+      **Step 3, the bridge — the statement is fixed and the base case is CLOSED.**
+      The target is the pair congruence, `Nat.strongRecOn` on `a.size - k`:
+
+          array_bridge : ∀ K a k hk, a.size - k ≤ K →
+            (∀ acc, decodeFullArrayFast d h a k acc
+               = (decodeFull d h (a.size - k) (bdrop k (arrayToBytes a))).map
+                   (fun tail => acc.reverse ++ tail)) ∧
+            (∀ acc cs, decodeFullArraySearch d h a k hk acc cs
+               = (decodeFullStep d h (bdrop k (arrayToBytes a))
+                    (fun m s' _ => decodeFull d h m s')
+                    ((decode d (bdrop k (arrayToBytes a))).attach)).map
+                   (fun tail => acc.reverse ++ tail))
+
+      Two decisions that are **load-bearing and verified**:
+
+      * **The measure must be `a.size - k ≤ K`, not `= K`.** The recursive calls sit
+        at the *child* cursor, so the IH is consumed at a smaller remaining length;
+        with `=` the IH is unusable (`a.size - k < a.size - k`). The child's
+        remaining length is `t.remaining` exactly, by `consumedAbs_remaining`.
+      * **The spec side is spelled at the root `bdrop k (arrayToBytes a)`**, never
+        through a projection — the same reason `cursor_bridge` records. It makes the
+        index the recursor's motive wants.
+
+      **The base case (`a.size - k = 0`) is fully closed in a probe** and its two
+      halves are: `decodeFullArrayFast_zero` + `decodeFull_at_zero` + `List.append_nil`
+      for the fast half; and, for the search half, `cs = []` (no candidate exists —
+      `PackedCand`'s `k < pr.2` contradicts `a.size - k = 0`) followed by
+      `decode d (bdrop k …) = []` (same contradiction against `ConsumesByte`),
+      `List.attach_nil`, `decodeFullStep.eq_def`, `rfl`.
+
+      **The ONE open obligation (the successor case, and only this).** What is left
+      is the two congruences at `a.size - k = j + 1`:
+
+      * **fast half**: `decodeFullArrayFast_succ` + `decodeFull_succ`, then hand the
+        search congruence its **step hypothesis** — for each `PackedCand` `⟨(x,c),…⟩`,
+        `decodeFullArrayFast d h a c (x :: acc) = (decodeFull d h t.remaining t.bytes).map (…)`
+        where `(x, t)` is the *same* candidate seen by `decode`. This needs the
+        candidate-list correspondence: `packedCands` is a `filterMap` of
+        `(decodeArray d a k).attach`, and `decodeArray_eq` maps that list onto
+        `decode d (bdrop k …)`'s results. **That `PackedCand` ↔ `Suffix`
+        bijection is the genuinely new mathematics** — a `filterMap`/`attach`
+        correspondence lemma, plus re-rooting the IH at `consumedAbs a k t` via
+        `bdrop_consumedAbs_eq` + `consumedAbs_remaining`.
+      * **search half**: `decodeFullArraySearch_cons` case-by-case over the
+        candidate list, using the fast half at each candidate (this composes once the
+        fast half exists — the shape `decodeFullFastSearch_eq` uses).
+
+      The probe lived in `/tmp` and is deleted to the analysis above; nothing
+      partially-proved was left in the tree, so the build is green. **Next session
+      starts here**, at the `packedCands` ↔ `decode`-candidate bijection.
 
       ---
 
