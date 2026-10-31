@@ -107,7 +107,11 @@ the suffix/`memchr` peers with the *same* `[0, size]` start-clamp (documented on
 each below).  `blitBytes` is the one seam with a **named `lc`** shared between
 its middle and trailing parts, because a window replacement (unlike `byteSlice`
 `'s bare suffix) must agree on the *copied length* across both the middle and the
-suffix; this is what makes the C's single `memcpy` match the body term-for-term.
+suffix; this is what makes the C's single `memcpy` agree with the body **value for
+value** — by `min`'s associativity and commutativity over the same three clamped
+quantities, not by the C being a term-for-term transcription. See the contract
+comment in `Codec/ByteSlice.c` for the clamp order the C actually uses and why the
+two orders coincide.
 
 The Lean body below is the *specification* — an `Array.extract`+`append`
 composition over the backing `data` (reducible, so its `blitBytes_spec` law closes
