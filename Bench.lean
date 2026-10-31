@@ -166,11 +166,15 @@ unsafe def benchByteSlice (n : Nat) (reps : Nat) : IO Unit := do
   let src := ByteArray.mk (Array.ofFn fun (_ : Fin n) => (1 : UInt8))
   let half : Nat := n / 2
   let idx : USize := half.toUSize
-  -- spec: the Lean body `byteSlice` reduces to (`extract` on `.data`).
-  let spec : ByteArray := ByteArray.mk (src.data.extract half src.data.size)
+  -- spec: `byteSlice_spec` (the seam's own law) read as the `Nat`-indexed form
+  -- the bench can compare against — not a re-derivation of the body.
+  let spec : ByteArray := ByteArray.mk (src.data.extract (idx.toNat) src.data.size)
   let (r, dt) ← timeBatch reps fun _ => byteSlice src idx
   if r != spec then
     throw (IO.userError "byteSlice ≠ extract (value mismatch)")
+  -- The value-check above is `byteSlice_spec` at `i = idx`: the byte-for-byte
+  -- event that makes the C's trust contract checkable, not merely asserted.
+  let _seamLaw : byteSlice src idx = spec := byteSlice_spec src idx
   printLane "byteSlice L2  " n (dt / reps) (n - half)
 
 /-- The partial-remainder commit lane: `commitRemainder src c` (the single
@@ -185,10 +189,12 @@ unsafe def benchCommitRemainder (n : Nat) (reps : Nat) : IO Unit := do
   let third : Nat := n / 3
   let c : USize := third.toUSize
   -- spec: the definitional law `commitRemainder_spec` body (`extract` on `a`).
-  let spec : ByteArray := ByteArray.mk (src.extract third src.size)
+  let spec : ByteArray := ByteArray.mk (src.extract (c.toNat) src.size)
   let (r, dt) ← timeBatch reps fun _ => commitRemainder src c
   if r != spec then
     throw (IO.userError "commitRemainder ≠ extract (value mismatch)")
+  -- The value-check is `commitRemainder_spec` itself, restated at this input.
+  let _seamLaw : commitRemainder src c = spec := commitRemainder_spec src c
   printLane "commitRemainder L2" n (dt / reps) (n - third)
 
 /-- The Layer-2 bulk-copy seam lane: `blitBytes dst dstOff src srcOff len` (the
