@@ -574,16 +574,60 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
 
       The base case (`n - m = 0`) and the decode-empty case are **closed**.
 
+      **REFUTED (2026-11-01): the theorem 6.1a targets is FALSE.**
+      `decodeFullFastRoot = decodeFull` does not hold, and no amount of transport
+      closes it — the two functions search differently. Measured, reproducible:
+
+      * `decodeFullFast` **commits to the head** of `decode p (Suffix.drop m s)`
+        (`| (x, t) :: _rest => …`, recursing on `t` and never looking at `_rest`).
+        If that recursion returns `none`, the *whole* call is `none`.
+      * `decodeFullStep` (the specification) **backtracks**: `| none =>
+        decodeFullStep p h s ih rest`. It tries the next candidate.
+
+      They separate whenever the head consumes a different number of bytes than a
+      later candidate. Witness (`Codec/Decode.lean`'s `decodeFullFast_eq_aux`
+      docstring records it in full): `d = alt A B` at `UInt8 × UInt8` with
+      `A = iso diag (satisfy (· == 0))` (consumes 1) and `B = seq byte byte`
+      (consumes 2), input `[0,1]` (`[0]` then `[1]`):
+
+      | expression | result |
+      | --- | --- |
+      | `decode d [0,1]` | `[((0,0), 1), ((0,1), 2)]` |
+      | `decodeRepeat d hd 2 [0,1]` | `[([],0), ([(0,0)],1), ([(0,1)],2)]` |
+      | `decodeFull d hd 2 [0,1]` | **`some [(0, 1)]`** — backtracks to B |
+      | `decodeFullFastRoot d hd [0,1]` | **`none`** — commits to A, dead-ends |
+
+      `decodeFull` is right per `decodeRepeat`; `decodeFullFastRoot` is wrong.
+
+      **What this changes downstream.** (a) 6.1b's requirement "(a) prove it equal
+      to `decodeFullFastRoot` so 6.1a's bridge composes" **inherits the defect**
+      and must not be attempted as written. (b) The correct target is a fast
+      decoder that **backtracks over the candidates while keeping the flat
+      re-rooted cursor** — i.e. `decodeFullStep`'s search with `decodeFullFast`'s
+      input discipline. The measured 6.1a win (9,047× at n=65536) was the *flat
+      cursor*, not the head-commit, so that win survives; only the commit must go.
+      (c) Two lemmas landed this session and stay, because the corrected
+      direction needs exactly them: `decodeFullStep_none_of_forall_none` (the
+      all-fail lemma this task named, now in the library) and
+      `reverse_cons_append` (the accumulator reassociation).
+
+      This is a findings-recorded-in-place refutation, not a narrowing: the
+      requirement ("the fast path is proved equal to the spec, not merely
+      measured") is kept; it is the *candidate implementation* that was wrong.
+
 - [ ] 6.1b **Move the fast decode onto an `Array UInt8` + `Nat` cursor**
       (≈**6.5×**: 9 → 59 MiB/s measured). `decodeFullFastRoot` avoids the closure
       _chain_ but still calls `decode p (Suffix.drop m s).bytes` every step,
       allocating a `bdrop` closure and a `Suffix` record per byte. Target shape:
       step over `Array UInt8` at a `Nat` cursor returning `Option (α × Nat)`,
       driven by an `Id.run` accumulator loop — the measured 59 MiB/s floor.
-      Requirements: (a) prove it equal to `decodeFullFastRoot` so 6.1a's bridge
-      composes (`ArrayCursor = decodeFullFastRoot = decodeFull`), giving a
-      two-step but unbroken chain to the spec; (b) every existing theorem's
-      statement unchanged; (c) `[propext, Quot.sound]`-only, zero
+      Requirements: (a) prove it equal to **`decodeFull`** directly — **not** to
+      `decodeFullFastRoot`, which 6.1a refuted as unequal to the spec (it commits
+      to the head instead of backtracking; see 6.1a's table). The cursor loop must
+      therefore **carry the sibling search**: try each candidate in turn, exactly
+      as `decodeFullStep` does, while stepping over `Array UInt8` at a `Nat` cursor.
+      Do not attempt a one-step bridge to `decodeFullFastRoot`; (b) every existing
+      theorem's statement unchanged; (c) `[propext, Quot.sound]`-only, zero
       `Classical.choice`, zero `sorry`, `#eval`-able. Re-measure and record.
       **Note:** this subsumes the `decodeArray` per-step `List` problem — if the
       cursor loop never builds a `List` per step, that defect stops mattering.
