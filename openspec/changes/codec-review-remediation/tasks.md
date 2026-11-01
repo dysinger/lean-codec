@@ -242,7 +242,7 @@ byteSlice_spec]`, then `rfl` closes the `ByteArray.mk` eta — instead of
       and `README.md`'s Layer-2 paragraph states the same, so the fact is in the
       code where it is consulted.
 
-- [x] 2.6 **Record or retire the dead API and unproved premise** (R2.5, R2.7).
+- [ ] 2.6 **Record or retire the dead API and unproved premise** (R2.5, R2.7).
       (a) `Iso.element`/`Iso.subset` have zero callers. Either delete, or add a
       one-line "public API, no in-tree caller" note — leaning retain, because
       `[D8]`'s corrected decidable-witness argument is about exactly these
@@ -253,59 +253,86 @@ byteSlice_spec]`, then `rfl` closes the `ByteArray.mk` eta — instead of
       `decodeFull_spec_unambiguous`, or add one concrete instance so the
       hypothesis is demonstrably satisfiable in-tree.
 
-  **(a) DONE — retained, with the note.** `Iso.element` and `Iso.subset` say
-  "Public API, no in-tree caller" and name the reason they are kept: 3.9's corrected
-  `[D8]` cites exactly these two as the places where the paper's `Eq`/`Bool` became
-  `[DecidableEq α]`/`[DecidablePred p]`. Deleting them would have left a README entry
-  citing nothing.
+  **(a) DONE and stays done.** `Iso.element` and `Iso.subset` say "Public API, no
+  in-tree caller" and name the reason they are kept (3.9's `[D8]` cites exactly
+  these two). Nothing to redo.
 
-  **(b) DONE — and the task's stated route is REFUTED, in the library, not in prose.**
-  The optional "or add one concrete instance" half landed earlier
-  (`unambiguous_byte`, `functional_byte`). The derivation half was **attempted in
-  full this session and its premise is false**, so it was replaced by the true
-  theorem. In `Codec/Sound.lean`, §"Full-consumption uniqueness":
+  **(b) REOPENED 2026-11-01 after an adversarial review of this session's work. The
+  previous "DONE" was wrong, and the reason is recorded here rather than deleted.**
 
-  - **`huniq_not_derivable`** — a machine-checked proof that
-    `relUnambiguous` + productivity does **not** give `huniq`. The witness
-    `uniqCounterexampleRel` relates one value to every 2-byte string and another to
-    every 1-byte string; it is unambiguous (`uniqCounterexample_unambiguous`) and
-    productive (`uniqCounterexample_productive`), yet at `n = 2` both `[a]` and
-    `[b, b]` inhabit `relRepeat` — two distinct fully-consuming lists of one string.
-    So the ledger's own proposed repair ("`relUnambiguous` **plus** productivity")
-    was **also wrong**: both are satisfied by the counterexample.
-  - **`relRepeat_unique_same_length`** — the true law, **proved**:
-    `LengthDet R` (each value relates only at one length) + `RelAligned R`
-    (values identified by their shared prefix, i.e. unambiguity extended across
-    lengths) + productivity ⟹ at most one consuming list **of a given length**.
-    The length index is exactly what excludes the counterexample's two lists.
-  - Supporting lemmas, all proved: `relRepeat_prefix_inj`, `relRepeat_suffix_inj`,
-    `splice_prefix_agree`, `relRepeat_cons_eq` (the oriented induction core, with the
-    IH as a _parameter_ so its footprint is checkable standalone).
-  - Both hypotheses are **discharged for `byte`** — `lengthDet_byte`,
-    `relAligned_byte` — so the pair is satisfiable in-tree, which is what makes the
-    theorem non-vacuous rather than a restatement.
+  What landed and is genuinely true (`Codec/Sound.lean`, §"Full-consumption
+  uniqueness"): `LengthDet`, `RelAligned`, `relRepeat_prefix_inj`,
+  `relRepeat_suffix_inj`, `splice_prefix_agree`, `relRepeat_cons_eq`,
+  `relRepeat_unique_same_length`, `lengthDet_byte`, `relAligned_byte`,
+  `uniqCounterexampleRel` + its four lemmas, `huniq_not_derivable`. All
+  `[propext, Quot.sound]`-only, all true, and the _un-indexed_ uniqueness statement
+  is genuinely false for an arbitrary relation — that refutation stands.
 
-  **Axioms (measured, not assumed):** every one of the eight new declarations is
-  `[propext, Quot.sound]`-only with zero `Classical.choice` and zero `sorry`
-  (`lengthDet_byte` and the two counterexample predicates are `[propext]` alone).
-  `lake build` green (13 jobs, zero warnings) and `lake build bench` green (27 jobs).
+  **What was overclaimed, precisely.** `relRepeat_unique_same_length` concludes
+  `… → xs.length = ys.length → xs = ys`. `huniq` has **no length hypothesis**.
+  `LengthDet` pins _one value's_ step length; it does not pin _how many steps_ a
+  consuming list has, and two consuming lists begin with _different values_. So the
+  indexed theorem does **not** yield `huniq`, and `grep huniq Codec/*.lean` still
+  finds only the binder (`Decode.lean:452`) and its use (`:465`) — **no producer**.
+  The docstring at `Sound.lean:789` ("the form `huniq` can honestly be replaced by")
+  and the note at `:824` ("exactly the hypothesis `huniq` needs") are therefore
+  false, and `Sound.lean:768`'s claim that "`LengthDet` rules out the counterexample"
+  is false too: `uniqCounterexampleRel` **is** `LengthDet` (verified by compiling
+  `LengthDet uniqCounterexampleRel`); what excludes it is the length _index_.
 
-  **The `Classical.choice` trap fired three times while proving this**, which is worth
-  recording because each has a different fix and all three are catalogue shapes:
-  1. `omega` on `n - m < n` from `m ≠ 0` + `m ≤ n` **leaks** (subtraction
-     trichotomy). Fix: `Nat.sub_lt` with `Nat.pos_of_ne_zero`, which is axiom-free.
-  2. `cases xs <;> cases ys <;> simp_all` on the two value lists **leaks** — the
-     list-splitting `simp_all` is the source, not the `cases`. Fix: state the
-     length facts with `simp only [List.length_nil, List.length_cons] at hlen`
-     plus `omega` (both axiom-free).
-  3. The `subst`-chain itself is clean, and `Nat.strongRecOn` over a
-     `Bytes`-dependent motive is clean; the leak was _only_ in (1) and (2). This was
-     established by extracting the induction's core as `relRepeat_cons_eq` and
-     checking its footprint separately — the bisection recipe that actually worked.
+  **The gap IS closable, and the route is proved (this session, in a probe).** A
+  step relation whose every value fixes the length to a _constant_ `c` pins the
+  consuming list's length — that is the missing bridge, and it is two short lemmas:
 
-  **Nothing is left open and nothing was narrowed:** the requirement ("the hypothesis
-  is supplied or shown satisfiable in-tree") is met twice over, and the refuted
-  derivation is recorded as a theorem rather than as a comment.
+      LengthConst R c   := ∀ ⦃a⦄ {m} (t : Bytes m), R a t → m = c
+      lengthConst_byte  : LengthConst (Rel Codec.byte) 1
+
+      relRepeat_length_of_const (hc : LengthConst R c) (hc0 : c ≠ 0) :
+        relRepeat R xs n s → xs.length * c = n
+      lengths_eq_of_const … : xs.length = ys.length        -- Nat.eq_of_mul_eq_mul_right
+
+  Both verified `[propext, Quot.sound]`-only. With them, `huniq` for `byte` follows:
+  `lengths_eq_of_const` supplies the index `relRepeat_unique_same_length` demands,
+  so `byte`'s two consuming lists are equal. **That is the closing of R2.7.**
+
+  **Work for next session, in order.**
+  1. Add `LengthConst`, `lengthConst_byte`, `relRepeat_length_of_const`,
+     `lengths_eq_of_const` to `Codec/Sound.lean` (bodies are in this note; they
+     compile as written). Check `#print axioms` on each.
+  2. Add `relUnambiguous_of_relAligned : RelAligned R → relUnambiguous R` — the
+     implication the `RelAligned` docstring asserts in prose but no lemma proves.
+     Also prove `RelAligned` is _strict_ (a witness relation with `relUnambiguous`
+     but not `RelAligned`), so the docstring's "extended across lengths" is
+     anchored to a theorem. **Decide and record** whether to keep `RelAligned` at
+     all once `LengthConst` exists — it may become redundant, which would be the
+     better outcome (fewer hypotheses, and `relUnambiguous` back as the only one).
+  3. Add `Productive Codec.byte` (two rewrites from `productive_iff_consumesByte` +
+     `byteConsumesByte`), so all three hypotheses of
+     `relRepeat_unique_same_length` are discharged for `byte` — today the
+     "neither is vacuous" note covers two of three.
+  4. Add the actual consumer: `decodeFull_spec_byte`, i.e. `decodeFull_spec`
+     instantiated at `Codec.byte` with `huniq` supplied. This is the deliverable
+     that closes the finding, and it gives the new lemma family a call site
+     (it currently has **zero**).
+  5. **Fix every overclaim found by the review** (each is a one-line edit):
+     `Sound.lean:768` (wrong causal attribution), `:789` ("can honestly be
+     replaced by"), `:824` ("exactly the hypothesis `huniq` needs"), `:909`
+     (`relAligned_byte`'s docstring cites `relUnambiguous`, which appears nowhere
+     in it), and `Packed.lean:1321-1323` + `AGENTS.md:143`
+     ("`decodeFull_spec` applies to the wired surface unchanged" — it applies
+     _carrying its hypothesis_).
+  6. **`docs/lean-notes.md:40` still asserts the refuted claim** ("what the
+     derivation actually needs is a productivity hypothesis … alongside
+     unambiguity"). It was moved verbatim 24 minutes before `huniq_not_derivable`
+     landed and never amended. Amend it to point at the theorem. (That file is
+     being moved under `openspec/`; amend it there.)
+  7. Re-run `openspec validate --all` and `lake build`, then mark 2.6 `[x]` for
+     real.
+
+  **Do not re-derive the three `Classical.choice` traps recorded below** — they are
+  why this task took three attempts: `omega` on `n - m < n` from `m ≠ 0` leaks (use
+  `Nat.sub_lt`), and `cases xs <;> cases ys <;> simp_all` over the value lists leaks
+  (state lengths with `simp only [List.length_nil, List.length_cons]` + `omega`).
 
 - [x] 2.7 **Fix the C comments' overclaim** (R2.11, R2.12).
       `blitBytes`'s C agrees with the Lean body _value-for-value_ via `min`
@@ -638,7 +665,7 @@ cited (`:99`) no longer exists in the rewritten file, and `grep`finds no
       stricter axiom gate, (2) the official skill's LSP/search/proof-engineering
       guidance, (3) this file's performance/layout notes.
       **DONE.** The header now carries an explicit **`## Precedence (read this
-  before the rest)`** section with the three-level order the task asks for:
+before the rest)`** section with the three-level order the task asks for:
       (1) this file's stricter axiom gate wins over everything, and it states
       plainly that the official `lean4` Quality Gate _permits_ `Classical.choice`
       while this project does not, so the old clause is what silently overridable
@@ -693,7 +720,7 @@ cited (`:99`) no longer exists in the rewritten file, and `grep`finds no
       Keep the measured lesson (a `USize` cursor was _slower_), delete the wrong
       generalisation.
       **DONE, verified from the emitted C.** Compiled `def sum64 (n : UInt64) : UInt64
-  := n + 1` and read the IR output: the prototype is
+:= n + 1` and read the IR output: the prototype is
       `LEAN_EXPORT uint64_t l_sum64(uint64_t);`, the body is
       `v___x_3_ = lean_uint64_add(v_n_1_, v___x_2_);`, and a **separate**
       `l_sum64___boxed(lean_object*)` exists for the polymorphic boundary. So
@@ -2425,3 +2452,53 @@ reading the code had produced.
 - **A repo-wide typo/grammar pass.** Only the cited findings.
 - **Gating the global skill from this repo's build.** It is outside the tree; the
   task is recorded so it is not forgotten, not so the gate can claim it.
+
+## 7. Post-review corrections (added 2026-11-01)
+
+> An adversarial review of §4/§5/2.6's work (two independent reviewer passes plus a
+> third verification pass) found defects in what those sections claimed. Everything
+> here is evidence-backed and cited by file:line. **§7 must be done before archive.**
+> The review confirmed the good news too, recorded so it is not re-litigated: every
+> declaration added in §2.6 is _true_, all are `[propext, Quot.sound]`-only, and
+> `git diff` over the range shows **zero deletions** in `Codec/*.lean` — D9's
+> shape discipline held (no declaration statement changed).
+
+- [ ] 7.1 **Fix the unmeasured performance figures in `AGENTS.md` / `README.md`** (review finding, both passes).
+      `README.md:696` says the bench table's figures are "each … reproducible from a
+      lane that prints it". **They are not.** `grep 'benchRatio "' Bench.lean` finds
+      six labels: `encodeWhole`, `decodeFull spec`, `decodeFullFast`,
+      `decodeFullArray`, `decodeWhole`, `decodeArray step`. There is **no** lane for
+      `packedCands` (quoted as 32), the "ideal `Id.run` cursor loop" (quoted as
+      **6 ns/step — and it is the denominator of the entire "× floor" column**), the
+      "`Array` indexed read" (3 ns), or `decodeFull`'s ~30,000 ns/byte. Two options,
+      pick one and record it: **(a)** add the missing lanes (preferred — the floor
+      column is load-bearing for the whole §6.4 narrative), or **(b)** delete the
+      unsourced rows and stop presenting a ratio to an unmeasured denominator.
+- [ ] 7.2 **De-mix the measurement vintages in `AGENTS.md:247-255`.**
+      One bullet contains `packedCands` **91** (pre-6.6 `filterMap`), **32**
+      (post-6.6 `attach.map`) _and_ implicitly **52** (the 6.4 lane's own figure,
+      `tasks.md:2104`) as though they were one attribution; and `decodeArray`'s step
+      is **12** in `AGENTS.md:249`/`README.md:704` but **15–22** in `tasks.md:2102`
+      and **22** in `tasks.md:1887`. State the vintage of each number, or quote only
+      one run's table. This is the exact defect §6.2 was written to remove.
+- [ ] 7.3 **Fix task 5.10's record.** It is `[x]` with **no completion note**, unlike
+      every neighbouring §5 task, so its seven sub-items rest on a commit message.
+      Write the note (the review verified by hand that the nav table, the dropped
+      Changelog, the narrowed `omega`-modulo wording, the scope disclaimer and the
+      `git-stash` dedup all landed; the bold-lead-in cap did **not** and is recorded
+      as deferred).
+- [ ] 7.4 **Fix the `docs/lean-notes.md` split's accounting and duplication.**
+      `tasks.md` 5.1's note says 119 entries moved and `:606` says all 176 moved; the
+      repo file holds **176** and the skill holds **57**, and **all 57 skill entries
+      are byte-for-byte duplicated** in the repo file (the review checked 57/57; an
+      earlier count of 28 was an artefact of title-matching and is superseded).
+      Either (i) make the repo file the single home and reduce the skill to a
+      pointer, or (ii) keep the duplication and _say so_ in both files' headers.
+      `AGENTS.md`'s "one source of truth per concern" rule makes (i) correct.
+- [ ] 7.5 **`design.md` says "74 findings across four lenses"**; `review.md:20-27`
+      totals **75 across five**. `design.md:5` was never updated when R5 was added.
+      Fix to 75/five.
+- [ ] 7.6 **Re-read `AGENTS.md:143`** ("the packed decoder and every wired surface
+      are proved equal to the specification") against 2.6(b): true _as equality_,
+      but the equal-to-`decodeFull` surface still **carries `huniq`**. After 2.6 is
+      really closed, add `decodeFull_spec_byte` as the named witness and say so.
