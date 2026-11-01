@@ -96,11 +96,11 @@ It does not touch this tree. Its ledger is
 (it MODIFIES "The `basen` bases are `Codec` values"), so read `openspec/specs/basen/spec.md`
 immediately before archiving it and re-validate after.
 
-**One deferral from the archived change is still unowned:** the `lean` skill's
-~70-char bold-lead-in tidy (archived `tasks.md` 5.10 — six of seven items landed,
-the seventh would rewrite most headings in a file outside this repo; 42 of 59
-entries are over the cap). It is cosmetic and outside the repo, which is why it did
-not block the archive. Pick it up deliberately or leave it.
+**No deferral remains.** The one item 5.10 left open — the `lean` skill's
+~70-char bold-lead-in cap — was closed on 2026-11-02: all 60 entries now comply,
+by shortening the title and moving the original wording into the entry body, so
+nothing a reader would quote was lost (verified: line and bullet counts unchanged,
+zero titles dropped). 5.10's deferred item is therefore done, not dropped.
 
 **Not a deferral, and not to be "finished" later:** `huniq` is supplied for
 `Codec.byte` only (`decodeFull_spec_byte`). Task 2.6 asked for exactly one concrete

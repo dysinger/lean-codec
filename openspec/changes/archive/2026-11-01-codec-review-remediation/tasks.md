@@ -925,12 +925,13 @@ before the rest)`** section with the three-level order the task asks for:
       to the _existential / modulo-hypothesis_ form (line 184 states both the
       refusal and that the equational form **is** in `omega`'s fragment); the
       `git stash` rule appears **once** (`grep -c` = 1, was three); the
-      stdlib-only / toolchain-pinned scope disclaimer is in the header. * **NOT landed, and recorded as deferred:** the ~70-char cap on bold
-      lead-ins. Measured on the current file — **42 of 59** dated entries exceed
-      70 characters (e.g. 174, 232 ticks). It is a cosmetic greppability tidy that
-      would touch most of the file's headings, so it is deferred deliberately, not
-      forgotten; the counts above are the measurement to re-run if it is ever
-      picked up.
+      stdlib-only / toolchain-pinned scope disclaimer is in the header. * **The ~70-char bold-lead-in cap did not land with 5.10, and was closed
+      separately on 2026-11-02.** It was deferred at archive time (measured then:
+      42 of 59 dated entries over the cap) because truncating the lead-in would
+      have lost "the sentence a reader quotes". The resolution avoided that trade:
+      shorten the _title_ and move the original long phrasing into the entry's first
+      sentence. All **60** entries now comply — verified with lead-ins over 70 =
+      0, line count and bullet count unchanged, zero original titles dropped.
 
 ## 6. `R5` — decode/encode performance (CRITICAL, added after the four lenses)
 
@@ -2660,9 +2661,11 @@ reading the code had produced.
       claim narrowed to the existential/hypothesis form (the equational form **is**
       in `omega`'s fragment, stated as such); `grep -c 'git stash'` = **1** (was
       three); stdlib-only / toolchain-pinned scope disclaimer in the header. The
-      ~70-char bold-lead-in cap **did not land** — measured at **42 of 59** dated
-      entries over the limit — and is recorded as deferred rather than quietly
-      dropped.
+      ~70-char bold-lead-in cap **did not land with 5.10** — measured at the time as
+      **42 of 59** dated entries over the limit — and was **closed separately on
+      2026-11-02**: all 60 entries now comply (lead-ins over 70 = 0, line and bullet
+      counts unchanged, zero original titles dropped), by shortening the title and
+      moving the original phrasing into the entry body rather than truncating it.
 
 - [x] 7.4 **Fix the `docs/lean-notes.md` split's accounting and duplication.**
       `tasks.md` 5.1's note says 119 entries moved and `:606` says all 176 moved; the
