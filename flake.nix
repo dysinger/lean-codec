@@ -54,7 +54,8 @@
         # The default target builds the native library (`lake build` → `.olean`).
         packages.default = _pkg.native;
         packages.native = _pkg.native;
-        # The §10.5 extraction + benchmark executable.
+        # The benchmark executable (a plain `lean_exe` that also links the
+        # Layer-2 C seam object — not a C-extraction step).
         packages.bench = _pkg.bench;
 
         # Lean proof validation: the same `lake build`, no `sorry` (the gate).
