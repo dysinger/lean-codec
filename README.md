@@ -773,12 +773,48 @@ decoder is ~49 ns/step, because it is then paying to stream the buffer. Both are
 honest; they answer different questions, and a document that quoted one as the other
 is what this section used to do.
 
-**One thing these numbers do _not_ cover, stated because it is easy to over-read
-them.** `Codec.byte` has **exactly one candidate per cursor position**, so
-`decodeFullArraySearch` never iterates on this workload: the figures above measure
-the degenerate `k = 1` case of a backtracking search. The per-candidate cost of the
-search itself is therefore **unpriced**, and the next session's task (`AGENTS.md`) is
-to build a `k > 1` lane and price it before anything is rewritten.
+**One thing the table above does _not_ cover — now measured.** `Codec.byte` has
+**exactly one candidate per cursor position**, so `decodeFullArraySearch` never
+iterates on that workload: the ~10–11× is the degenerate `k = 1` case of a
+backtracking search. The `k > 1` lane prices the difference. Its codec is
+`satisfy (fun _ => true) | satisfy (fun _ => true)` — **two candidates at every
+position**, each consuming one byte and each able to complete the buffer — and the
+lane **asserts its premise** (`packedCands` length is 1 at `k = 1` and 2 at `k = 2`)
+before timing, so a run that silently degenerates fails instead of reporting a
+number.
+
+Measured in one session, two consecutive `bench 4096 4096` runs at load ~2.9 on 10
+cores, burst medians, 512 steps per burst:
+
+| lane                         | run 1 (min / median / max) | run 2 (min / median / max) | ns/step         |
+| ---------------------------- | -------------------------- | -------------------------- | --------------- |
+| `idealCursor`                | 10136 / 10253 / 10446      | 10573 / 10709 / 10828      | 2.50 / 2.61     |
+| `decodeFullArray` (`k = 1`)  | 14467 / 14615 / 14695      | 13965 / 14087 / 14346      | **28.5 / 27.5** |
+| `decodeFullArray k=2`        | 27695 / 28105 / 28210      | 25767 / 26173 / 26546      | **54.9 / 51.1** |
+| `packedCands k=1` (per call) | 74 / 75 / 77               | 73 / 75 / 76               | 75 / 75         |
+| `packedCands k=2` (per call) | 94 / 94 / 95               | 92 / 95 / 96               | **94 / 95**     |
+
+**What that says — the search is linear in `k`, and its cost is not all in
+`packedCands`.**
+
+- The second candidate costs **23.6–26.3 ns/step**: roughly one whole extra decode
+  step, i.e. the backtracking search runs at **~1.9×** the `k = 1` decode (measured
+  ratios 1.92 and 1.86). The ~10–11× headline is therefore a **lower bound** for a
+  real backtracking codec: at `k = 2` the gap to the floor is **19.6–21.9×**.
+- `packedCands` moves only **75 → 94–95 ns/call** for the extra candidate: **~19–20
+  ns** of the ~24–26 ns per-candidate cost. So **~4–7 ns/step is _not_
+  `packedCands`** — it is the `decodeArray` re-list plus the singleton `PackedCand`
+  allocation in `decodeFullArraySearch`. That residue is what a rewrite would have
+  to attack, and it is now a measured number rather than a guess.
+- `packedCands` at **75 ns hot** also qualifies the older "3 ns/call hot" figure in
+  `AGENTS.md`: that one was taken on `Codec.byte`, whose `decodeArray` result is a
+  one-element list, so the two are different codecs and not comparable. Both are
+  honest; the 3 is left in `AGENTS.md` with that qualification rather than silently
+  replaced.
+
+**Nothing was optimised as a result.** The task was to price the term _before_
+rewriting it, and the numbers say the rewrite is worth ~4–7 ns/step of a ~55 ns/step
+decode — real, but neither the dominant term nor a change to make on a guess.
 
 **What is _not_ claimed.** No measured path is within a small single-digit
 multiple of a hand-written C parser, because no such reference is measured in
