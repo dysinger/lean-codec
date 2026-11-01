@@ -274,12 +274,24 @@ in `../lean-basen`. Never "fix" it by editing the importing Lean file.
   **not** the problem — that part of the attribution has survived every
   re-measurement. What did not survive:
 
-  - `packedCands` was first attributed **91**, then **32**, and is really **~430 ns
-    per call**. The 32 came from a lane that built the candidate list once over the
-    whole array and let the harness divide by `n`.
-  - The "ideal floor" was quoted as **6 ns/step** and is **~15**. The lane was
-    `Array.push`-ing every element, so it measured the floor plus an output array.
+  - `packedCands` was first attributed **91**, then **32**, then **~430 ns/call**,
+    and is **3 ns/call hot / ~1,860 ns/call across 8 cold buffers**. The 430 was a
+    _memory_ figure wearing a compute label: `packedCands` on `byte` builds a
+    one-element list, so what it was timing was first-touching a 4 KiB array.
+  - The "ideal floor" was quoted as **6 ns/step**, then **16**, and is **~2.4 warm /
+    ~16 cold**. The 6 came from a lane that `Array.push`-ed every element (floor
+    plus n elements of growth); the 16 is a real number but _cold_, because
+    `benchRatio` interleaves a `memcpy` per sample and evicts the input.
   - The `Array` read was quoted as **3** and is **~12**.
+
+  **Warm and cold are two different questions and the bench now prints both.**
+  `benchRatio` interleaves a same-size `memcpy` (right for a ratio to `memcpy`, but
+  it evicts the input, so the figure is _cold_); `benchBurst` runs back-to-back
+  calls in one window (the input stays hot, and the span clears the ~41 ns clock
+  granularity). A **floor** is a compute claim, so quote it from a burst; a
+  **throughput** figure comes from the interleaved lane. Never present one as the
+  other — that conflation is what made a 2.4 ns/step floor read as 16 and turned an
+  ~11× gap into a claimed ~3×.
 
   So: **a number is sourced because the lane, run, prints it — not because a lane
   exists.** Three rows were labelled with a lane and still did not match it. When
