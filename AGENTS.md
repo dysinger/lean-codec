@@ -97,39 +97,32 @@ and it may never point at a path outside the repo (no `/tmp`, no scratch file).
 Four facts about that change are worth stating here **only because a reader who
 skips the ledger would get them wrong**, and all four are also in `tasks.md`:
 
-- **The work order is §6 → §3/§4 → §5, and §2 is done.** §6 goes first because
-  §3/§4 rewrite the paragraphs that quote the performance numbers §6 fixes;
-  correcting those claims against today's numbers would canonize the defect. If
-  `tasks.md` disagrees with this line, `tasks.md` wins.
-- **§6 is complete: 6.1a/6.1b/6.2/6.3/6.4/6.5/6.6/6.7 all closed. The next work is §3 (README derivations).** `lake build` is green, there are **no `sorry`s anywhere in the
-  tree**, and 6.1b's gate (`Codec.decodeFullArrayRoot_eq`) holds: the packed
-  `Array UInt8` + `Nat`-cursor decoder is proved equal to `decodeFull`,
-  `[propext, Quot.sound]`-only. `bench`'s new `benchDecodeShapes` lane now prints
-  the numbers (see the speed bullet below), so 6.1b's missing numeric
-  re-measurement is done and the packed path's figure is no longer invented. What
-  the lane showed is that the remaining cost is **`packedCands`'s per-step
-  `.attach`/`filterMap` rebuild** (52 ns/step against a 6 ns/step ideal loop), not
-  the carrier. 6.6 fixed it (`packedCands` is an `attach.map`, 91 -> 32 ns/step),
-  and 6.3 wired the result into named surfaces: **`decodeWhole`** (packed carrier)
-  and **`decodeWholeBytes`** (`Bytes n`), each proved equal to `decodeFull`. Run
-  those, not `decodeFull`, which stays the specification. The encode side has the
-  same surfaces — **`encodeWhole`** / **`encodeWholeRepeat`** / **`encodeWholeBytes`**
-  — and needed them more: `fastEncodeRepeat`, the _existing_ fast path, still pays a
-  per-element `Bytes` intermediate and measured only 1.2x better than `encodeRepeat`
-  (20 vs 17 MiB/s); the wired surface is **32 MiB/s** at the same `n`. Read `tasks.md` 6.1b's
-  "SESSION 9" block before touching `Codec/Packed.lean` (five plan corrections,
-  including a `Classical.choice` leak that was already in the tree) — and note that
-  6.3 hit the same trap again in `bytesToArray_size`, so check `#print axioms` on any
-  new transport lemma rather than assuming.
-- **Benchmark numbers from this repo are not trustworthy without the rules.** Every
-  in-repo measurement attempt before 6.4 made a wrong number that was briefly
-  believed (dead-code elimination reporting `0 ns/op`, loop hoisting of a pure
-  call, mean-over-short-batch swallowing a ~125 µs cold start, a contended
-  machine). `tasks.md` 6.1b carries five rules; `bench`'s `medianOf`/`timeOne`/
-  `sinkOfList`/interleaved-`memcpy` lane implements all five. **There is no set
-  speed bar** — the owner asked for "as close to C as possible" with no threshold,
-  so 6.4's lane reports and 6.2's prose states the number; neither asserts a pass
-  or fail against a figure nobody chose.
+- **Work order: §1 done, §2 done (2.6b's remainder torn down and recorded),
+  §6 done, §3 done. The next work is §4, then §5.** `tasks.md` wins if it
+  disagrees.
+- **§6 is complete** (6.1a/6.1b/6.2/6.3/6.4/6.5/6.6/6.7), and the code half of this
+  change is finished. `lake build` is green with **no `sorry` anywhere**, and the
+  gates that matter still hold: `Codec.decodeFullArrayRoot_eq` (the packed decoder
+  is `decodeFull`) and the wired surfaces below are all proved equal to the
+  specification, `[propext, Quot.sound]`-only.
+- **Run the wired surfaces, not the specification.** `decodeWhole` /
+  `decodeWholeBytes` and `encodeWhole` / `encodeWholeRepeat` / `encodeWholeBytes`
+  are the named entry points, each tied to `decodeFull` / `encode` /
+  `encodeRepeat` by a law. `decodeFull` and `encodeRepeat` stay the specification.
+  Read `tasks.md` 6.1b's "SESSION 9" block before touching `Codec/Packed.lean`
+  (five plan corrections), and check `#print axioms` on **any** new transport lemma
+  rather than assuming — 6.3 hit the `Classical.choice` trap in `bytesToArray_size`
+  and 6.7 hit it again in an `Array.extract` readback.
+- **The Layer-2 `memcpy` seam is deliberately NOT wired, for an axiom reason.**
+  `commitRemainder` is ~50–75× faster than the `List` transport (measured live by
+  `benchRemainderTransports`), but the connecting lemma needs `Array.toList_extract`,
+  which carries `Classical.choice` in this toolchain. Speed is not the obstacle;
+  the gate is. Do not "fix" this by weakening to a classical proof.
+- **Speed: no threshold, attribute the gap.** The owner asked for "as close to C as
+  possible" with **no set bar**, so `bench`'s lanes report and the docs state the
+  measured numbers; nothing asserts pass/fail against a figure nobody chose. Current
+  honest figures and their decomposition are in the speed bullet below and in
+  `tasks.md` 6.4/6.6.
 - **Only `R5.1` may change a declaration _shape_** (design D9), and it must keep
   every theorem's statement, prove the new definition equal to the old, and stay
   `[propext, Quot.sound]`-only / zero-`sorry` / `#eval`-able. Nothing else may.
