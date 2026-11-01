@@ -850,7 +850,17 @@ strings that agree on the shorter one are equal. This is `relUnambiguous` *exten
 across lengths*: at equal lengths it is exactly unambiguity, and the extra content is
 that a value cannot be distinguished by bytes beyond its own step length. It is what
 lets the uniqueness induction compare the two decompositions' first steps when their
-lengths may differ. Satisfied by `byte` (`relUnambiguous` at `Bytes 1`). -/
+lengths may differ. Satisfied by `byte` (`relUnambiguous` at `Bytes 1`).
+
+**Strength ordering, stated as theorems rather than prose.** `RelAligned R →
+relUnambiguous R` (proved as `relUnambiguous_of_relAligned`); the converse is what
+"at equal lengths it is exactly unambiguity" says, so `RelAligned` is *not
+strictly* stronger than `relUnambiguous` — there is no relation that is unambiguous
+and not aligned, and no such witness is worth hunting for. It is however strictly
+stronger than `LengthDet` in the useful direction: `LengthDet R → RelAligned R`
+needs a `DecidableEq α`, i.e. a classical axiom, and is therefore **deliberately
+not** proved in this tree. The usable chain is `LengthConst → LengthDet`, proved as
+`lengthDet_of_lengthConst` (`codec-review-remediation` 2.6). -/
 def RelAligned {α : Type} (R : α → {m : Nat} → Bytes m → Prop) : Prop :=
   ∀ ⦃a b : α⦄ {m₁ m₂ : Nat} (t₁ : Bytes m₁) (t₂ : Bytes m₂) (hle : m₁ ≤ m₂),
     R a t₁ → R b t₂ →
