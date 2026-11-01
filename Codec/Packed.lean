@@ -1534,4 +1534,210 @@ theorem encodeByteArrayBytes_eq (xs : List UInt8) :
   rw [foldl_push_append (#[] : Array UInt8) xs]
   rw [Array.empty_append]
 
+/-! ## The wired fast encode surface (task 6.5)
+
+The encode side had the same shape of defect 6.3 found on the decode side, and one
+more: the fast encoder **existed and was proved** (`encodeArray`, `encodeArray_eq`)
+but the repetition API did not use it. `encodeRepeat` builds a nested `concat`
+closure per element — a `Bytes n := Fin n → UInt8` is a scalar-*read* substrate but a
+nested-closure *bulk-write* substrate — and `fastEncodeRepeat`, which was supposed to
+be the fast path, still calls `encode p x` per element and re-reads the resulting
+`Bytes` through `pushBytes`. Measured, the two are within 1.3× of each other
+(16 vs 20 MiB/s at 16 KiB), i.e. **the "fast" repetition encoder is not fast**: it
+re-stages the accumulator but still pays the per-element `Bytes` intermediate.
+
+`encodeArray`'s shape avoids that intermediate entirely — it accumulates directly
+into `Array UInt8` with `++` and never materializes a `Bytes n`. These functions put
+that shape behind a named surface, proved equal to the specification:
+
+* **`encodeWhole`** — one value, packed carrier (`Array UInt8`), delegating to
+  `encodeArray`;
+* **`encodeWholeRepeat`** — a value list, accumulating through `encodeArray` with no
+  per-element `Bytes` intermediate;
+* **`encodeWholeBytes`** — the specification-carrier entry point (`Bytes n` out).
+
+All three are tied to the existing specification (`encode`, `encodeRepeat`) by a law,
+so every theorem about them reads off with no second set of proofs. -/
+
+/-- **The wired encode surface, one value.** Delegates to `encodeArray`, whose shape
+accumulates into `Array UInt8` with no per-element `Bytes` intermediate. -/
+def encodeWhole {α : Type} (d : Codec α) (x : α) : Option (Array UInt8) :=
+  encodeArray d x
+
+/-- **`encodeWhole` is the specification, read back.** The `Array.toList` of the wired
+surface's output is the spec `encode`'s byte list — literally `encodeArray_eq`, named
+at the surface a caller reaches for, so the refinement cannot drift from the entry
+point. `[propext, Quot.sound]`-only. -/
+theorem encodeWhole_eq {α : Type} (d : Codec α) (x : α) :
+    (encodeWhole d x).map (fun a : Array UInt8 => a.toList) =
+      (encode d x).map (fun e => List.ofFn e.2) :=
+  encodeArray_eq d x
+
+/-- The `Array`-accumulating repetition encoder: fold `encodeArray` over the value
+list, appending into one contiguous buffer.
+
+This is the shape `fastEncodeRepeat` *intended* and did not achieve: it calls
+`encode p x` per element (producing a `Bytes n` closure) and then re-reads that
+closure byte-by-byte through `pushBytes`, so it pays a per-element intermediate.
+Folding `encodeArray` removes the intermediate — the per-element write goes straight
+into the accumulator. -/
+def encodeWholeRepeatAcc {α : Type} (d : Codec α) :
+    List α → Array UInt8 → Option (Array UInt8)
+  | [], acc => some acc
+  | x :: xs, acc =>
+      (encodeArray d x).bind fun a => encodeWholeRepeatAcc d xs (acc ++ a)
+
+/-- **The `Array`-accumulating repetition encoder, from an empty buffer.** -/
+def encodeWholeRepeat {α : Type} (d : Codec α) (xs : List α) : Option (Array UInt8) :=
+  encodeWholeRepeatAcc d xs #[]
+
+/-- **A fold of `encodeArray` over a list, appended flat.** This is the pure `Array`
+side of the accumulator: no `Bytes`, no `Sigma`, just the fold. -/
+def encodeArrayFold {α : Type} (d : Codec α) : List α → Array UInt8 → Option (Array UInt8)
+  | [], acc => some acc
+  | x :: xs, acc => (encodeArray d x).bind fun a => encodeArrayFold d xs (acc ++ a)
+
+/-- `encodeWholeRepeatAcc` *is* that fold — definitionally the same recursion. -/
+theorem encodeWholeRepeatAcc_eq_fold {α : Type} (d : Codec α) (xs : List α)
+    (acc : Array UInt8) :
+    encodeWholeRepeatAcc d xs acc = encodeArrayFold d xs acc := by
+  induction xs generalizing acc with
+  | nil => rfl
+  | cons x rest ih =>
+      simp only [encodeWholeRepeatAcc, encodeArrayFold]
+      cases encodeArray d x <;> simp only [Option.bind] <;> exact ih _
+
+/-- **The `Array` fold reads back as the flat append of `encode`'s bytes.** This is
+`encodeArray_eq` lifted over the fold, and it is the *only* place the refinement is
+used on the multi-value path: at each element the packed `Array` and the spec `Bytes`
+are the same byte sequence, so folding one and appending equals folding the other.
+
+Stated on the `List` readback (no `Bytes`-level cast, no `Fin n → UInt8` closure in the
+statement), which is what keeps it `[propext, Quot.sound]`-only. -/
+theorem encodeArrayFold_toList {α : Type} (d : Codec α) (xs : List α)
+    (acc : Array UInt8) :
+    (encodeArrayFold d xs acc).map (fun a : Array UInt8 => a.toList) =
+      (encodeRepeat d xs).map (fun e : Sigma fun n => Bytes n =>
+        acc.toList ++ List.ofFn e.2) := by
+  -- A helper: the spec `encode` and the packed `encodeArray` agree on *failure* and,
+  -- on success, on the byte list. Both directions are `encodeArray_eq`.
+  have key : ∀ (x : α) (b : Array UInt8),
+      encodeArray d x = some b →
+      ∃ e : Sigma fun n => Bytes n, encode d x = some e ∧ b.toList = List.ofFn e.2 := by
+    intro x b hb
+    have hx := encodeArray_eq d x
+    rw [hb] at hx
+    cases he : encode d x with
+    | none =>
+        rw [he] at hx
+        exact absurd hx (by simp)
+    | some e =>
+        rw [he] at hx
+        simp only [Option.map, Option.some.injEq] at hx
+        exact ⟨e, rfl, hx⟩
+  have keyNone : ∀ (x : α), encodeArray d x = none → encode d x = none := by
+    intro x hb
+    have hx := encodeArray_eq d x
+    rw [hb] at hx
+    cases he : encode d x with
+    | none => rfl
+    | some e =>
+        rw [he] at hx
+        simp only [Option.map] at hx
+        exact absurd hx (by simp)
+  induction xs generalizing acc with
+  | nil =>
+      simp only [encodeArrayFold, encodeRepeat, Option.map]
+      rw [show List.ofFn (emptyBytes : Bytes 0) = [] from
+        List.eq_nil_of_length_eq_zero (by simp)]
+      simp
+  | cons x rest ih =>
+      -- Unfold one step of each fold, keeping `Option.map` unexpanded so the
+      -- induction hypothesis applies in its stated shape.
+      simp only [encodeArrayFold, encodeRepeat]
+      cases ha : encodeArray d x with
+      | none =>
+          have hspec : encode d x = none := keyNone x ha
+          simp only [hspec, Option.map]
+          simp
+      | some a =>
+          obtain ⟨e, he, hlist⟩ := key x a ha
+          simp only [he, Option.bind]
+          -- recurse on the tail; `ih` is stated on the `Option.map` form, so it is
+          -- applied *before* `Option.map` is unfolded.
+          rw [ih (acc ++ a)]
+          simp only [Option.map]
+          -- `a.toList` is `List.ofFn e.2`, so the packed side's append is the spec
+          -- side's `concat` flattened (`ofFn_concat`). The two sides are both
+          -- `Option.map` over `encodeRepeat rest`, so case on it to compare the
+          -- payloads directly.
+          cases hrp : encodeRepeat d rest with
+          | none => simp
+          | some rp =>
+              simp only [Array.toList_append, hlist, ofFn_concat, List.append_assoc]
+
+/-- **The accumulator equals the flat append of the per-element encodings.** Combines
+the fold identity with the refinement above. `[propext, Quot.sound]`-only. -/
+theorem encodeWholeRepeatAcc_toList {α : Type} (d : Codec α) (xs : List α)
+    (acc : Array UInt8) :
+    (encodeWholeRepeatAcc d xs acc).map (fun a : Array UInt8 => a.toList) =
+      (encodeRepeat d xs).map (fun e : Sigma fun n => Bytes n =>
+        acc.toList ++ List.ofFn e.2) := by
+  rw [encodeWholeRepeatAcc_eq_fold]
+  exact encodeArrayFold_toList d xs acc
+
+/-- **The wired repetition encoder is the specification.** The `List` readback of
+`encodeWholeRepeat` is exactly what `encodeRepeat` produces, so the fast route and the
+spec produce the same bytes in the same order. `[propext, Quot.sound]`-only. -/
+theorem encodeWholeRepeat_eq {α : Type} (d : Codec α) (xs : List α) :
+    (encodeWholeRepeat d xs).map (fun a : Array UInt8 => a.toList) =
+      (encodeRepeat d xs).map (fun e : Sigma fun n => Bytes n => List.ofFn e.2) := by
+  have := encodeWholeRepeatAcc_toList d xs #[]
+  simpa only [encodeWholeRepeat, Array.toList_empty, List.nil_append] using this
+
+/-- **The specification-carrier encode entry point.** Returns a `Bytes n` directly, so
+a caller that speaks `Bytes n` is not left to materialize the packing by hand. -/
+def encodeWholeBytes {α : Type} (d : Codec α) (x : α) : Option (Sigma fun n => Bytes n) :=
+  (encodeWhole d x).map fun a => ⟨a.size, fun i : Fin a.size => a[i]⟩
+
+/-- **`encodeWholeBytes` encodes exactly the specification.** Its byte list is
+`encodeWhole`'s, so reading the round trip through `encodeWhole_eq` gives the spec
+`encode`'s bytes. `[propext, Quot.sound]`-only. -/
+theorem encodeWholeBytes_toList {α : Type} (d : Codec α) (x : α) :
+    (encodeWholeBytes d x).map (fun e : Sigma fun n => Bytes n => List.ofFn e.2) =
+      (encode d x).map (fun e : Sigma fun n => Bytes n => List.ofFn e.2) := by
+  simp only [encodeWholeBytes, Option.map]
+  cases ha : encodeWhole d x with
+  | none =>
+      -- `encodeWhole` is `none`, so the spec is too (`encodeWhole_eq`).
+      have hx := encodeWhole_eq d x
+      simp only [ha, Option.map_none] at hx
+      cases he : encode d x with
+      | none => simp
+      | some e =>
+          rw [he] at hx
+          simp at hx
+  | some a =>
+      have hx := encodeWhole_eq d x
+      simp only [ha, Option.map_some] at hx
+      cases he : encode d x with
+      | none =>
+          rw [he] at hx
+          simp at hx
+      | some e =>
+          -- Reduce both sides of `hx` to the inner byte lists.
+          rw [he, Option.map_some] at hx
+          simp only [Option.some.injEq] at hx
+          -- Reduce the nested `Option`s to the byte lists on both sides.
+          simp only [Option.some.injEq]
+          -- `List.ofFn (fun i => a[i])` is `a.toList` (the `Array` readback).
+          have hread : List.ofFn (fun i : Fin a.size => a[i]) = a.toList := by
+            apply List.ext_getElem
+            · simp
+            · intro n h1 h2
+              simp only [List.getElem_ofFn, Array.getElem_toList]
+              exact congrArg (fun i => a[i]) (Fin.ext rfl)
+          rw [hread]
+          exact hx
+
 end Codec
