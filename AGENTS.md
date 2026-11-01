@@ -393,7 +393,12 @@ the required order in the later change's `tasks.md`.
 - Global Lean theorem-proving skill: `lean4` (official).
 - Our supplement (project layout, proving-over-primitives, `partial`/coinduction
   lessons, the `Classical.choice` and `omega`-modulo traps above): global skill
-  `lean`. Keep it generic — no project-specific details.
+  `lean`. It holds **only the generic half** — keep it that way.
+- **`docs/lean-notes.md` is this project's half of that skill.** It is the
+  domain-specific record (`Codec`, `Bytes n`, `relRepeat`, `Suffix`, the Layer-2
+  seams) that used to live in the skill's Append; the skill points here. Read it
+  when a proof involves this library's own primitives, and add to it — not to the
+  global skill — when the lesson only makes sense knowing this library.
 - Lean PR/convention/proof/MWE skills: `lean-pr`, `lean-bisect`, `lean-proof`,
   `lean-mwe`, `mathlib-build`, `mathlib-pr`, `mathlib-review`, `nightly-testing`,
   `lean4-setup` (all under the `leanprover` skill family).
