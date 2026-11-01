@@ -655,6 +655,48 @@ unsafe def benchRatio (label : String) (bytes : Nat) (samples : Nat)
   -- independent lane (this file's `benchDecodeFull` times `decodeFull` directly).
   IO.println s!"{label} [{bytes}]: {medM} ns ({nsPerByte} ns/byte) vs memcpy {medC} ns = {ratio10 / 10}.{ratio10 % 10}x"
 
+/-- **Task 6.7: the Layer-2 seam against the `List` transport, measured side by side.**
+
+This lane exists because the decision in `Codec/Packed.lean` §"Task 6.7" is a
+*measured* one — the seam is ~50–75× faster than the `List` transport and is still not
+wired, because the equality proof needs an `Array.extract` readback that carries
+`Classical.choice`. Keeping the comparison live means the trade-off stays checkable:
+if a future toolchain makes the transport axiom-clean, this lane already shows what
+wiring would buy, and if the seam regresses it shows that too.
+
+Both sides are value-checked against each other, so a divergence fails the lane rather
+than silently changing what "the same bytes" means. -/
+unsafe def benchRemainderTransports (n : Nat) (samples : Nat) : IO Unit := do
+  -- A pool of distinct buffers: the transport is a pure function of its input, so a
+  -- single reused buffer lets the optimiser CSE the whole computation and reports a
+  -- ratio about the optimiser rather than about the transport. Each sample takes a
+  -- different buffer.
+  let pool : List (Array UInt8) := (List.range 8).map fun j =>
+    Array.ofFn fun (i : Fin n) =>
+      if i.val = 0 then UInt8.ofNat (j % 7 + 1) else (1 : UInt8)
+  let c := n / 2
+  -- Value agreement first: a divergence makes every number below meaningless.
+  let a0 := pool.head!
+  if ByteArray.mk ((a0.toList.drop c).toArray) != commitRemainder a0 c.toUSize then
+    throw (IO.userError "commitRemainder ≠ List transport (the two spellings disagree)")
+  let mut lists : List Nat := []
+  let mut seams : List Nat := []
+  let mut sink : Nat := 0
+  for i in [0:samples] do
+    let a := pool.getD (i % 8) a0
+    -- One fresh, separately-bracketed call each, interleaved (measurement rules 1/4).
+    let (r1, t1) ← timeOne 1 (fun _ => (ByteArray.mk ((a.toList.drop c).toArray)).size) i
+    sink := sink + r1
+    let (r2, t2) ← timeOne 1 (fun _ => (commitRemainder a c.toUSize).size) i
+    sink := sink + r2
+    lists := t1 :: lists
+    seams := t2 :: seams
+  if sink == 0 then
+    throw (IO.userError "transport lane: sink is zero — the work was elided")
+  let medL := medianOf lists
+  let medS := medianOf seams
+  IO.println s!"transport List vs seam [{n}]: {medL} ns vs {medS} ns (seam {medL / (max medS 1)}x faster, values equal)"
+
 /-- **The wired encode surface (task 6.5)**: `encodeWholeRepeat` accumulates through
 `encodeArray` with no per-element `Bytes` intermediate, where `fastEncodeRepeat` still
 calls `encode p x` per element and re-reads the result through `pushBytes`.
@@ -1082,6 +1124,10 @@ unsafe def main (args : List String) : IO Unit := do
   -- The wired encode surface (6.5): correct, round-trips, and measured.
   Codec.Bench.benchEncodeWhole mCapped reps
   Codec.Bench.benchEncodeWholeRatio mCapped 15
+  -- Task 6.7: the seam-vs-List-transport comparison behind the "not wired" decision.
+  -- its own size: the `List` transport's cost is dominated by re-materializing the
+  -- *whole* backing list, so the comparison is only meaningful on a large buffer.
+  Codec.Bench.benchRemainderTransports (max mCapped 65536) 9
   Codec.Bench.benchDecodeFast nCapped reps
   -- Task 6.4: the ratio lanes. Run LAST, so a slow or aborting lane above cannot
   -- silently hide them, and read their output next to `uptime` (rule 5).
