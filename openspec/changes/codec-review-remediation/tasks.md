@@ -339,30 +339,37 @@ Nat.sub_add_cancel hm` (note: `Nat.sub_add_cancel`, **not** `omega` — `omega`
   `relRepeat_unique_same_length`. **Do not delete it** (that theorem still takes
   it), but stop presenting it as the closing route — `LengthConst` is.
 
-  **BLOCKER — `Suffix.empty`'s `prepend` identity, and three failed attack modes
-  (2026-11-02).** Step 4 (`decodeFull_spec_byte`) needs exactly one `Codec/Codec.lean`
-  lemma that does not exist:
+  **BLOCKER — `Suffix.empty`'s `prepend` identity, with one refuted guess and the
+  confirmed cause (2026-11-02).** Step 4 (`decodeFull_spec_byte`) needs exactly one
+  `Codec/Codec.lean` lemma that does not exist:
 
       (Suffix.empty n).prepend s = s      -- s : Bytes (n - (Suffix.empty n).remaining) = Bytes n
 
   `Codec.lean` has the sibling for `Suffix.id` (`prepend_id`) and for `Suffix.drop`
-  (`drop_zero_eq_id`) but not this one. **Verified failure modes — do not repeat
-  them:**
+  (`drop_zero_eq_id`) but not this one. **Verified facts and refuted guesses —
+  read both before trying:**
 
-  - `(Suffix.empty n).remaining` is **not definitionally `0` at the `Suffix`
-    level** (`hle : 0 ≤ n` is a field), so `rw [h]`, `subst`, and `cases` on
-    `(Suffix.empty n).remaining = 0` are **all rejected** (`subst`/`cases` want a
-    bare variable; `rw` finds nothing inside the `dite` scrutinee's _type_).
-  - `prepend_apply` builds its `splice_add` `Fin`-cast from
-    `(Suffix.empty n).remaining` _before_ any reduction, so `cast_fin_symm_val`
-    cannot fire on the resulting `cast (congrArg Fin …) i` — it is no longer
-    syntactically a `cast_fin_symm_val` instance.
-  - `simp only [concat, Suffix.empty]` rewrites `n - (Suffix.empty n).remaining`
-    to `n - 0` **inside the `dite` scrutinee's type**, after which the `Fin` index
-    of the _other_ branch no longer matches and `dite_eq_left`'s goal becomes
-    unprovable. **Note this is not `dite_eq_left`'s fault** — the deprecation
-    message on `dif_pos` ("use `dite_eq_left` instead") is a red herring; nothing
-    broke here.
+  - **REFUTED: "`subst`/`cases` reject a structure-field projection."** False, and
+    refuted in two lines: `example (n : Nat) : (Suffix.empty n).remaining = 0 :=
+rfl` (the fact is definitional) and
+    `(h : (Suffix.empty n).remaining = 0) (s : Bytes (n - (Suffix.empty n).remaining))
+: True := by cases h; trivial` (the dependent case closes). Only **`subst`** is
+    refused, because the LHS is not a local. Do not build a theory of the failure
+    on this.
+  - **CONFIRMED and probably the real cause:** `simp only [concat, Suffix.empty]`
+    rewrites `n - (Suffix.empty n).remaining` to `n - 0` **inside the `dite`
+    scrutinee's _type_**, leaving the other branch's `Fin` index at the old type.
+    A helper stated at the `remaining`-spelling
+    (`cast_fin_symm_val (splice_add (Nat.sub_le n (Suffix.empty n).remaining))`)
+    then still has the right _term_ but `rw` reports "did not find the pattern",
+    because the printed goal no longer matches. Minimal reproducer recorded in
+    `openspec/lean-notes.md` (2026-11-02, `simp only` in a `dite` scrutinee).
+    **So: do not `simp only` a definition that appears in a scrutinee's type** —
+    use `unfold` + targeted `rw`, or `conv`.
+  - **`prepend_apply` builds its `splice_add` `Fin`-cast from
+    `(Suffix.empty n).remaining` _before_ any reduction**, so a `cast_fin_symm_val`
+    instantiated at a _different_ spelling of the length does not apply. Match the
+    spelling, or eliminate the length first.
 
   **ALSO CORRECTED — `Suffix.prepend`'s argument order.** `Suffix.prepend t s₀`
   takes `s₀` as the **prefix** and `t.bytes` as the **tail**
@@ -371,12 +378,14 @@ Nat.sub_add_cancel hm` (note: `Nat.sub_add_cancel`, **not** `omega` — `omega`
   (`concat s emptyBytes`) — **not** the nothing-consumed case. Half of one session
   was spent with this backwards.
 
-  **The route to try first (not yet executed):** `change`/`show` the goal into the
-  raw `splice` form so the length is a **variable** `Bytes k` before touching
-  `Suffix.empty` at all, then close with `splice_apply` + `cast_bytes_val'` +
-  `dite_eq_left` at the variable length, and transport back. `cast_bytes_val'`
-  (already in `Codec.lean`) is the tool for the nested-cast form and it was never
-  made to fire.
+  **The route to try first (not yet executed, and now informed by the confirmed
+  cause):** do **not** `simp only [concat, Suffix.empty]` — that is what re-spells
+  the scrutinee. Instead `rw [prepend_apply]`, then `unfold concat` **without**
+  `simp`, so the `dite`'s scrutinee keeps the `remaining` spelling that
+  `cast_fin_symm_val` is instantiated at; discharge the two branches with
+  `dite_eq_left` and `rfl`-level casts. If that still resists, state the helper at
+  a **variable length** (`∀ k, …` with `k := n - t.remaining`) so no definition
+  sits inside a scrutinee's type at all.
 
   **Work for next session, in order.**
   1. Add the seven rank-1 lemmas above to `Codec/Sound.lean` (bodies given; they
