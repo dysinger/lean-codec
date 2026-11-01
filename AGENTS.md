@@ -88,22 +88,20 @@ ledger is `openspec/changes/codec-review-remediation/tasks.md` (open work and th
 definition of done), its evidence base is `review.md` (the adversarial findings,
 ids `R<lens>.<n>`), and its edit licence is `proposal.md` / `design.md`.
 
-**It is 51/56, NOT complete.** 2.6 and 7.6 have closed (see their completion notes);
-what remains is **§7's five other post-review corrections**. Do not archive.
-`tasks.md` wins if this line disagrees with it — run `openspec list --json` for the
-live count rather than trusting this number.
+**It is 56/56 — all tasks complete, and the change is ready to archive.** Verify
+with `openspec list --json` rather than trusting this number, and read the archive
+hazards above before running `openspec archive`: the MODIFIED requirements in
+`specs/codec/` **replace** their blocks wholesale, and `lean-basen` (a separate
+change, separate repo) still MODIFIES "The `basen` bases are `Codec` values", so the
+required order is recorded in `tasks.md`.
 
-**Next steps, in one place: `tasks.md` §7.** Read 7.1 onward before doing anything
-else; 7.1/7.2 need decisions (add the missing bench lanes, or delete the unsourced
-rows) rather than proofs, and each carries its own evidence. In brief, so you
-recognise the terrain:
-
-- **7.1 / 7.2 are the load-bearing ones** — unsourced performance figures and mixed
-  measurement vintages. 7.1 offers (a) add lanes (preferred) or (b) delete the rows;
-  pick one and record it.
-- **7.3–7.5 are bookkeeping** (a missing completion note, the `lean-notes` split's
-  accounting, a stale "74 findings" count in `design.md`).
-- **7.6 is done** — `decodeFull_spec_byte` is the named witness it asked for.
+**Next steps: archive this change, then start the next one — there is no open task
+left in `codec-review-remediation`.** The two pieces of unfinished business that a
+fresh session should _know about but not silently absorb_ are recorded in `tasks.md`
+as explicit deferrals: the `lean` skill's ~70-char bold-lead-in tidy (5.10's note,
+42 of 59 entries over) and `huniq`'s general derivation for codecs other than
+`Codec.byte` (2.6's completion note). Neither is a task; both are stated so they are
+chosen rather than forgotten.
 
 `lean-basen` (18/25) is a separate change whose work happens in the sibling repo
 `../lean-basen`, in that repo's own `nix develop`; it does not touch this tree. No
@@ -263,18 +261,26 @@ in `../lean-basen`. Never "fix" it by editing the importing Lean file.
 - **Speed: get as close to C as possible, with no set threshold — and attribute
   the gap to named causes, never to "boxed scalars".** The owner has explicitly
   set **no ratio to hit**; the requirement is to make the per-element loop as fast
-  as it can be and to say honestly where it stands. Measured 2026-11-03 with
-  `bench`'s `benchDecodeShapes` lane (task 6.4), `n` = 4-8 KiB, load average ~1.5-2
-  on 10 cores, one process: `decodeFullArrayRoot` (packed `Array`+`Nat`) **48
-  ns/step**, `decodeFullFastRoot` (`Bytes`/`Suffix`) **75**, `decodeArray`'s single
-  step **12**, `packedCands` **32**, and an **ideal `Id.run` cursor loop 6 ns/step**
-  (`arr[k]!`, `Nat` cursor, `Array.push`). The attribution is the point, and it
-  moved once: the `Array` read is 3 ns, so the memory floor is not the problem; the
-  per-step `List` that `decodeArray` returns costs +6 ns; and `packedCands` — a
-  `filterMap` of two `dif`s rebuilt on every step, measured at 91 ns/step — was the
-  largest single term until 6.6 replaced it with an `attach.map` (**32 ns**), taking
-  the whole packed decode from 63 to 48 ns/byte. What is left is the `List` plus the
-  accumulator, against a 6 ns/step floor. Withdrawn, because no lane ever produced them: the
+  as it can be and to say honestly where it stands. **These figures are ONE run,
+  vintage-stamped `benchDecodeShapes`, 2026-11-03, `n` = 4-8 KiB, load average
+  ~1.5-2 on 10 cores, one process** — do not mix a number from here with one from a
+  different run, and do not restate them without the stamp. In that run,
+  `decodeFullArrayRoot` (packed `Array`+`Nat`) was **48 ns/step**,
+  `decodeFullFastRoot` (`Bytes`/`Suffix`) **75**, `decodeArray`'s single step **12**,
+  `packedCands` **32**, the `Array` indexed read **3**, and an **ideal `Id.run` cursor
+  loop 6 ns/step** (`arr[k]!`, `Nat` cursor, `Array.push`).
+
+  The attribution is the point, and it has a **history** that must be read as
+  history: `packedCands` was **91 ns/step when it was a `filterMap` of two `dif`s
+  rebuilt on every step** (measured pre-6.6), and **32 after 6.6 replaced it with an
+  `attach.map`** — two different code shapes, not two measurements of one. That
+  change took the whole packed decode from 63 to 48 ns/byte. The `Array` read at
+  3 ns says the memory floor is not the problem; the per-step `List` that
+  `decodeArray` returns costs +6 ns; what is left is that `List` plus the
+  accumulator, against a 6 ns/step floor. **Machine load is a 2–3× factor on the
+  absolute column** (the same lane has read `decodeArray step` at both 12 and 34
+  ns/step), so only ratios within one run are meaningful — which is why the
+  vintage stamp is mandatory rather than decorative. Withdrawn, because no lane ever produced them: the
   "~1,200–1,290 ns/byte", "~8.5× floor", and "20–40× ceiling" figures that used to
   sit here. **Do not quote a "× off C" ratio for a per-element codec measured
   against `memcpy`** — `memcpy` moves a byte; a parser does per-element work, so the
@@ -282,6 +288,7 @@ in `../lean-basen`. Never "fix" it by editing the importing Lean file.
   _parser_, which this repo does not yet measure. Before timing anything here read
   `tasks.md` 6.1b's MEASUREMENT RULES: naive timing reliably produces a wrong number
   (dead-code elimination reporting `0 ns/op`, loop hoisting, cold-start means).
+
 - **The packed cursor is `Nat`, not `USize`.** A `System.Platform.numBits = 64`
   premise would break the `[propext, Quot.sound]`-only gate. `commitRemainder` is
   `USize`-indexed (matching `byteSlice`) so there is no `Nat ↔ USize` roundtrip;
