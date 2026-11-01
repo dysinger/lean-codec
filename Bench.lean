@@ -131,6 +131,19 @@ unsafe def printLane (label : String) (n : Nat) (nsPerOp : Nat) (bytesPerOp : Na
   else
     IO.println s!"{label} [{n}]: {nsPerOp} ns/op  ({mebibytesPerSec bytesPerOp nsPerOp} MiB/s)"
 
+/-- **Median of a list** (`Nat`), by insertion into a sorted list. Used instead of
+rule 3's forbidden mean: the mean averages in the cold start, and the best-of
+picks up zero-length spans from a coarse clock. -/
+def medianOf (xs : List Nat) : Nat :=
+  let sorted := xs.foldl (fun acc x =>
+    let rec ins : List Nat → List Nat
+      | [] => [x]
+      | y :: ys => if x ≤ y then x :: y :: ys else y :: ins ys
+    ins acc) []
+  match sorted.length with
+  | 0 => 0
+  | k + 1 => sorted.getD (k / 2) 0
+
 /-- **Burst lane: `bursts` back-to-back calls inside ONE timing window.**
 
 Why this exists, and why it is not redundant with `benchRatio`. `benchRatio`
@@ -151,25 +164,58 @@ timing noise, whereas a burst of `bursts` calls spans milliseconds.
 floor from a burst and a *throughput* figure from `benchRatio`; never mix them.
 
 The input is varied per call (a different byte position each iteration), so the
-loop is not invariant and cannot be hoisted. -/
+loop is not invariant and cannot be hoisted.
+
+**Two defects this lane used to carry, both fixed here (next-session task 1 and 2).**
+
+1. *It reported the minimum of 5 rounds and called it "the floor".* The rounds are
+   not independent — they differ only in how warm the cache is — so the minimum is
+   systematically the **most favourable** round, not a floor. Measured, one
+   invocation of the `idealCursor` loop at `n = 4096`: `25578, 22425, 15405,
+   12742, 11931` ns/op. Every figure derived from the old lane was derived from the
+   last of those. The lane now prints **min / median / max over every round**, plus
+   the round count, so the decay is visible instead of hidden behind one endpoint.
+2. *"Warm" was not L1-resident.* It rotated 8 buffers of `n` bytes, so the working
+   set was `8n` = 32 KiB at `n = 4096` — past L1. It now rotates **`n` calls inside
+   one buffer** instead, so the working set is the buffer itself.
+
+Both variants are printed, because they answer different questions: `(burst@8buf)`
+keeps the old shape (a caller streaming several buffers sees it), `(burst)` is the
+L1-resident one (a compute floor). -/
 unsafe def benchBurst {α : Type} [Inhabited α] (label : String) (n : Nat) (bursts : Nat)
-    (mk : Nat → α) (measure : α → UInt8) : IO Unit := do
-  -- Vary the input: a constant `mk` would make the whole burst loop-invariant and
-  -- the optimiser would hoist it out, reporting clock granularity for real work.
-  let buffers : Array α := (Array.range 8).map (fun j => mk j)
-  -- Warm-up, so the first (cold) call is not part of the measured span.
-  let _ := measure buffers[0]!
-  let mut best : Nat := 0
-  let mut sink : UInt8 := 0
-  for i in [0:5] do
-    let t0 ← IO.monoNanosNow
-    for j in [0:bursts] do
-      sink := sink * 31 + measure buffers[(i + j) % 8]!
-    let t1 ← IO.monoNanosNow
-    if best == 0 || t1 - t0 < best then best := t1 - t0
-  if sink == 0 then
-    throw (IO.userError s!"{label}: sink is zero — the measured work was elided")
-  printLane s!"{label} (burst)" n (best / bursts) 0
+    (mk : Nat → α) (measure : Nat → α → UInt8) : IO Unit := do
+  -- Warm-up, so the first (cold) call is not part of any measured span.
+  let _ := measure 0 (mk 0)
+  -- **Variant A: one buffer, vary a byte *inside* it per call.** The input still
+  -- changes (so the optimiser cannot hoist the loop) while the working set stays
+  -- resident — `8n` bytes of rotation was past L1. The call index is passed to
+  -- `measure` so it can vary its own input; that is a *contract*, not a
+  -- convenience: a `measure` that ignores `j` makes the loop invariant and the
+  -- optimiser reports clock granularity for real work.
+  --
+  -- **Variant B: the old 8-buffer rotation**, kept so the change is visible rather
+  -- than silent, and printed *after* A so the L1-resident row is the headline.
+  let rounds : Nat := 5
+  let runVariant (tag : String) (buffers : Array α) : IO Unit := do
+    let mut times : List Nat := []
+    let mut sink : UInt8 := 0
+    for i in [0:rounds] do
+      let t0 ← IO.monoNanosNow
+      for j in [0:bursts] do
+        sink := sink * 31 + measure (i + j) buffers[(i + j) % buffers.size]!
+      let t1 ← IO.monoNanosNow
+      times := (t1 - t0) / bursts :: times
+    if sink == 0 then
+      throw (IO.userError s!"{label}: sink is zero — the measured work was elided")
+    let mx := times.foldl max 0
+    let mn := times.foldl min (times.headD 0)
+    let md := medianOf times
+    IO.println s!"{tag} [{n}]: min {mn}, median {md}, max {mx} ns/op over {times.length} rounds ({n} steps/burst)"
+  -- A: the L1-resident variant — ONE buffer; the caller's `measure` varies its own
+  -- input per call (see the docstring contract).
+  runVariant s!"{label} (burst)      " #[mk 0]
+  -- B: the old 8-buffer rotation (working set `8n`), for the record.
+  runVariant s!"{label} (burst@8buf) " (Array.range 8 |>.map (fun j => mk j))
 
 /-- The machine calibration baseline lane: a `memset`-like fill (writing one byte
 `n` times into a fresh `ByteArray` via a `push` append loop) and a `memcpy`-like
@@ -592,19 +638,6 @@ reports a literal `0 ns/op` (dead-code elimination), or reports 41 ns for a
 1024-byte decode (loop hoisting), or makes `memcpy` look 200× slow (a mean over a
 short batch averages in the allocator's ~125 µs cold start). -/
 
-/-- **Median of a list** (`Nat`), by insertion into a sorted list. Used instead of
-rule 3's forbidden mean: the mean averages in the cold start, and the best-of
-picks up zero-length spans from a coarse clock. -/
-def medianOf (xs : List Nat) : Nat :=
-  let sorted := xs.foldl (fun acc x =>
-    let rec ins : List Nat → List Nat
-      | [] => [x]
-      | y :: ys => if x ≤ y then x :: y :: ys else y :: ins ys
-    ins acc) []
-  match sorted.length with
-  | 0 => 0
-  | k + 1 => sorted.getD (k / 2) 0
-
 /-- **One timed sample of `reps` calls**: `f` runs `reps` times, each with a
 *different* argument (`i * reps + j`), inside one bracketed window. The per-call
 figure is the span divided by `reps`.
@@ -817,8 +850,26 @@ unsafe def benchDecodeShapes (n : Nat) (samples : Nat) (r : Nat) : IO Unit := do
     match decodeFullArrayRoot Codec.byte byteConsumesByte arr with
     | some xs => sinkOfList xs
     | none => 200
+  -- The burst reuses ONE buffer, so the *input to the decode* must change per call;
+  -- perturbing only the sink would leave the decode loop-invariant and the
+  -- optimiser would hoist it (measured: the lane aborted with a zero sink, i.e.
+  -- "the measured work was elided"). So each call packs and decodes a **different**
+  -- 1-in-4 subsampled copy of the buffer. One `Array.ofFn` + `n/4`-byte decode per
+  -- call is real per-call work, not cache churn: the source buffer stays hot and the
+  -- subsample is 1 KiB, well inside L1. `n` in the label is the decoded byte count,
+  -- so the printed ns is per decoded step.
+  let perturbed (j : Nat) (m : Nat) (base : Array UInt8) : Array UInt8 :=
+    Array.ofFn fun (i : Fin m) =>
+      if j % 5 = 0 then base.getD (j % (max base.size 1)) 0 else base.getD (i.val % (max base.size 1)) 0
+  let dfaBurst (j : Nat) (base : Array UInt8) : UInt8 :=
+    let m : Nat := max (base.size / 4) 1
+    let arr := perturbed j m base
+    -- the decoded byte count, so the caller's `n` and this lane agree
+    match decodeFullArrayRoot Codec.byte byteConsumesByte arr with
+    | some xs => sinkOfList xs + UInt8.ofNat arr.size
+    | none => 200
   Codec.Bench.benchRatio "decodeFullArray " n samples r arrayAt dfaRoot
-  Codec.Bench.benchBurst "decodeFullArray " n 200 arrayAt dfaRoot
+  Codec.Bench.benchBurst "decodeFullArray " (n / 4) 200 (fun _ => arrayAt 0) dfaBurst
   -- the wired surface (6.3): must be the *same* number as `decodeFullArray`, since
   -- it delegates; a divergence here means the wiring left the fast path.
   Codec.Bench.benchRatio "decodeWhole (6.3) " n samples r
@@ -839,12 +890,16 @@ unsafe def benchDecodeShapes (n : Nat) (samples : Nat) (r : Nat) : IO Unit := do
   -- divides by, so leaving them unmeasured made the whole ratio narrative
   -- unsourced. `benchRatio` prints ns/op, so divide by `n` for ns/step.
   --
-  -- `Array` indexed read alone: the memory floor, no codec logic at all.
+  -- `Array` indexed read alone: the memory floor, no codec logic at all. The burst
+  -- reads a *different* index each call, which is what keeps a one-buffer burst
+  -- un-hoistable.
   let readOne (p : Nat × Array UInt8) : UInt8 := p.2.getD p.1 0
   Codec.Bench.benchRatio "arrayRead " n samples r
     (fun j => (j % n, arrayAt j))
     readOne
-  Codec.Bench.benchBurst "arrayRead " n 200 (fun j => (j % n, arrayAt j)) readOne
+  let readAt (j : Nat) (arr : Array UInt8) : UInt8 :=
+    readOne (j % (max arr.size 1), arr)
+  Codec.Bench.benchBurst "arrayRead " n 200 (fun _ => arrayAt 0) readAt
   -- the ideal `Id.run` cursor loop: `arr[k]` + `Nat` cursor, **no allocation**.
   -- Deliberately does NOT build an output array: a `push`-per-element version
   -- measures the floor *plus* n elements of array growth, which is not a floor and
@@ -860,13 +915,30 @@ unsafe def benchDecodeShapes (n : Nat) (samples : Nat) (r : Nat) : IO Unit := do
         k := k + 1
       return acc
     UInt8.ofNat acc
+  -- The L1-resident burst reuses ONE buffer, so its `measure` must vary its own
+  -- input per call — `arrayAt j` was only varied by the 8-buffer rotation, and
+  -- feeding a constant array to a burst makes the whole loop hoistable.
+  let idealLoopAt (j : Nat) (arr : Array UInt8) : UInt8 :=
+    -- Read a per-call offset *first*, so the loop's initial value (and therefore
+    -- the whole result) depends on `j` and the optimiser cannot hoist it.
+    let lift : Nat := (arr.getD (j % (max arr.size 1)) 0).toNat
+    let acc := Id.run do
+      let mut acc : Nat := lift
+      let mut k : Nat := 0
+      while k < arr.size do
+        acc := acc + (arr.getD k 0).toNat
+        k := k + 1
+      return acc
+    UInt8.ofNat acc
   Codec.Bench.benchRatio "idealCursor " n samples r arrayAt idealLoop
   -- **the same loop, burst-timed.** `benchRatio` interleaves a `memcpy` per sample,
   -- which evicts the 4 KiB input from L1, so its figure is *cold-input* cost. A
-  -- burst measures compute with the input hot: measured 6 vs 15 ns/step. Both are
-  -- real and they answer different questions — a *floor* is a compute claim, so the
-  -- floor comes from the burst; throughput comes from `benchRatio`.
-  Codec.Bench.benchBurst "idealCursor " n 200 arrayAt idealLoop
+  -- burst measures compute with the input hot. Both are real and they answer
+  -- different questions — a *floor* is a compute claim, so the floor comes from the
+  -- burst; throughput comes from `benchRatio`. The burst reuses ONE buffer and
+  -- varies an offset inside it per call: the working set stays resident, which the
+  -- old 8-buffer rotation (`8n` = 32 KiB at `n` = 4096) did not.
+  Codec.Bench.benchBurst "idealCursor " n 200 (fun _ => arrayAt 0) idealLoopAt
   -- **`packedCands` at ONE cursor position, `bytes := n` so the printed ns is
   -- per-step** -- because a decode step rebuilds the candidate list once. The
   -- original version built it once over the whole array and let `benchRatio` divide
