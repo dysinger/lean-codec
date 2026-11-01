@@ -86,8 +86,9 @@ nix develop --command openspec instructions apply \
 The active change is **`codec-review-remediation`**; work it and nothing else. Its
 ledger is `openspec/changes/codec-review-remediation/tasks.md` (open work and the
 definition of done), its evidence base is `review.md` (the adversarial findings,
-ids `R<lens>.<n>`), and its edit licence is `proposal.md` / `design.md`. **Work
-order: §4, then §5** — `tasks.md` wins if this line disagrees with it.
+ids `R<lens>.<n>`), and its edit licence is `proposal.md` / `design.md`. It is
+**50/50 complete**: every section is done and the next step is archive, not
+implementation. `tasks.md` wins if this line disagrees with it.
 
 `lean-basen` (18/25) is a separate change whose work happens in the sibling repo
 `../lean-basen`, in that repo's own `nix develop`; it does not touch this tree. No
