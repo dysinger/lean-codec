@@ -10,10 +10,14 @@ Guidance for AI coding agents working in this repository.
 > **Why this and nothing else.** A three-reviewer audit of the project against
 > `PAPER.md`/`README.md` established that the core is pure and proved but that
 > "ready to use" was false for three reasons — no `Iso` helper, no `ConsumesByte`
-> for `seq`/`iso`, no single-value decode — and **all three are now fixed**
-> (`Iso.ofTotal`, `Codec.seqConsumesByte`/`isoConsumesByte`, `decodeWholeOne`,
-> plus `Codec/Examples.lean` with `u16le`/`u16be`). What is left is the fourth,
-> and it is a theorem, not an ergonomics gap:
+> for `seq`/`iso`, no single-value decode — and **all three are now fixed with
+> format-agnostic primitives only** (`Iso.ofTotal`,
+> `Codec.seqConsumesByte`/`isoConsumesByte`, `decodeWholeOne`).
+> **No concrete format was added to this package**, and none should be: `[S3]`
+> stands, and the formats (base2/4/8/10/16/32/64) live in `../lean-basen`. A first
+> attempt did add a `Codec/Examples.lean` with `u8`/`u16le`/`u16be`; it was removed
+> as bleed-in from the downstream repo's territory. What is left is the fourth
+> finding, and it is a theorem, not an ergonomics gap:
 >
 > `decodeFull_spec` takes `huniq` (at most one value list fully consumes a string).
 > It is discharged **only** at `Codec.byte`, through a chain that needs
@@ -347,10 +351,12 @@ in `../lean-basen`. Never "fix" it by editing the importing Lean file.
   It found the core pure and proved, and "ready to use" **false** for three
   concrete reasons (no total-bijection `Iso` constructor; `ConsumesByte` never
   derived for `seq`/`iso`; no single-value decode entry point) — all three fixed
-  in `Iso.ofTotal`, `seqConsumesByte`/`isoConsumesByte`, `decodeWholeOne`, with
-  `Codec/Examples.lean` (`u16le`/`u16be`) as the witness. It also found the
-  remaining hole is `huniq` for unequal-length `alt`. **Do not re-audit; continue
-  from the box above.** One reviewer claim was **refuted** on inspection: the
+  in `Iso.ofTotal`, `seqConsumesByte`/`isoConsumesByte`, `decodeWholeOne` — all
+  format-agnostic, **none with an in-tree caller**, because `[S3]` means this
+  package ships no concrete codec. A `Codec/Examples.lean` (`u8`/`u16le`/`u16be`)
+  was written and then **removed**: that is `../lean-basen`'s territory, and adding
+  it here was a `[S3]` breach. It also found the remaining hole is `huniq` for
+  unequal-length `alt`. **Do not re-audit; continue from the box above.** One reviewer claim was **refuted** on inspection: the
   paper's `iterate` does _not_ trivially satisfy `Iso.law` — substituting its two
   `Just ∘ driver` directions into `apply a = some b ↔ unapply b = some a` gives
   exactly the fixpoint-agreement claim, so `[D7]` is correct as written.
