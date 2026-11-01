@@ -1383,6 +1383,53 @@ theorem commitRemainder_spec (a : Array UInt8) (c : USize) :
     commitRemainder a c = ByteArray.mk (a.extract c.toNat a.size) := by
   rw [commitRemainder, byteSlice_spec]
 
+/-! ## Task 6.7: the Layer-2 seam is measured faster, and is deliberately NOT wired
+
+The two spellings of "the bytes of `a` at-or-after `c`" are
+`ByteArray.mk ((a.toList.drop c).toArray)` — the `List` transport the refinement uses,
+chosen because it is `Classical.choice`-free — and `commitRemainder a c.toUSize`, the
+Layer-2 `memcpy` seam.
+
+**The seam genuinely pays.** Measured `n` = 65536, same run, values checked identical
+over six cursors including `0` and `n`:
+
+| transport | cost |
+| --- | --- |
+| `ByteArray.mk ((a.toList.drop c).toArray)` | **~1.5 ms** |
+| `commitRemainder a c.toUSize` | **~24 µs** |
+
+So **~50–75×** (measured 36–63× across sizes and runs; the bench lane prints it live),
+which is why task 6.7 went looking for a consumer rather than declaring the seam
+pointless.
+
+**Why there is still no theorem connecting them, and why the seam is not wired.** The
+obvious proof needs `Array.extract`'s readback on the `List` side, i.e.
+`Array.toList_extract` — and in this toolchain **`Array.toList_extract` and
+`Array.getElem_extract` both report `[propext, Classical.choice, Quot.sound]`**. This
+was checked with `#print axioms`, not assumed. There is therefore **no route to this
+equality inside the `[propext, Quot.sound]`-only gate**, and a Layer-1 path may not
+carry a transport that nothing axiom-clean connects to the refinement it is supposed
+to refine.
+
+Two consequences, both recorded rather than papered over:
+
+1. **The seam stays unwired, on evidence.** The speed-up is real and quantified; the
+   axiom cost is real and quantified; the decision is that the second outweighs the
+   first for a path whose whole point is being `Classical.choice`-free. Task 2.4's
+   header wording ("available but unused") is therefore still exactly right, and this
+   note says *why* rather than leaving it looking like an oversight. If a future
+   toolchain makes `Array.extract`'s readback axiom-clean, the wiring is one lemma and
+   one call site away.
+2. **A second, independent obstacle** is the cursor wrap: `c.toUSize.toNat` is
+   `c % 2 ^ numBits`, so the two sides agree exactly when the cursor does not wrap, and
+   discharging that needs `System.Platform.numBits = 64` — also outside the gate
+   (`AGENTS.md`'s rail). It is satisfiable in practice (no buffer reaches `2^63`
+   bytes), but it is a premise the clean route would have to carry as well.
+
+`commitRemainder` remains exercised by the bench's Layer-2 lanes and pinned by
+`commitRemainder_spec`, so its runtime contract is still evidence-backed — it simply
+has no *library* caller, which is the state this section documents. -/
+
 /-! ## Refinement: the packed encoder equals the spec `encode` -/
 
 /-- If the readback equality holds, `encodeArray d x` is `none` exactly when
