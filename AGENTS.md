@@ -88,25 +88,22 @@ ledger is `openspec/changes/codec-review-remediation/tasks.md` (open work and th
 definition of done), its evidence base is `review.md` (the adversarial findings,
 ids `R<lens>.<n>`), and its edit licence is `proposal.md` / `design.md`.
 
-**It is 49/56, NOT complete — 2.6 was reopened after an adversarial review found its
-"DONE" overstated.** Do not archive. `tasks.md` wins if this line disagrees with it —
-run `openspec list --json` for the live count rather than trusting this number.
+**It is 51/56, NOT complete.** 2.6 and 7.6 have closed (see their completion notes);
+what remains is **§7's five other post-review corrections**. Do not archive.
+`tasks.md` wins if this line disagrees with it — run `openspec list --json` for the
+live count rather than trusting this number.
 
-**Next steps, in one place: `tasks.md` 2.6's "Work for next session, in order".**
-Read that block before doing anything else; it is the whole direction, and it now
-carries the two plan corrections and the one open blocker so a fresh session does
-not repeat them. In brief, and only so you can recognise it when you get there:
+**Next steps, in one place: `tasks.md` §7.** Read 7.1 onward before doing anything
+else; 7.1/7.2 need decisions (add the missing bench lanes, or delete the unsourced
+rows) rather than proofs, and each carries its own evidence. In brief, so you
+recognise the terrain:
 
-- **Step 1 is mechanical.** Seven lemmas are written out in that block, verified
-  against a green build and `[propext, Quot.sound]`-only; copy them into
-  `Codec/Sound.lean`. Nothing to re-derive.
-- **Step 4 is blocked** on one missing `Codec/Codec.lean` lemma — the identity
-  `(Suffix.empty n).prepend s = s`. Three failed attack modes are recorded there;
-  read them before trying, and do not start step 4 until the lemma exists.
-- **One plan item was false and is withdrawn** (`RelAligned` cannot be _strict_:
-  at equal lengths it _is_ `relUnambiguous`). See "Plan Correction 1".
-
-After 2.6 closes, **§7** (six post-review corrections) is what remains.
+- **7.1 / 7.2 are the load-bearing ones** — unsourced performance figures and mixed
+  measurement vintages. 7.1 offers (a) add lanes (preferred) or (b) delete the rows;
+  pick one and record it.
+- **7.3–7.5 are bookkeeping** (a missing completion note, the `lean-notes` split's
+  accounting, a stale "74 findings" count in `design.md`).
+- **7.6 is done** — `decodeFull_spec_byte` is the named witness it asked for.
 
 `lean-basen` (18/25) is a separate change whose work happens in the sibling repo
 `../lean-basen`, in that repo's own `nix develop`; it does not touch this tree. No
@@ -120,18 +117,19 @@ entry there ever reads like a task list, move it to the ledger.
 Five facts about that change are worth stating here **only because a reader who
 skips the ledger would get them wrong**, and all five are also in `tasks.md`:
 
-- **`decodeFull_spec`'s `huniq` is still unsupplied, and that is the open work.**
-  The `Codec/Sound.lean` uniqueness section is real mathematics — all true,
-  `[propext, Quot.sound]`-only — but its headline lemma is **indexed by list
-  length** and `huniq` is **not**, so it does not yield `huniq`. The closing route
-  is `LengthConst` + `relRepeat_length_of_const` + `lengths_eq_of_const`, proved
-  and written out in `tasks.md` 2.6. Do not re-derive it.
+- **`decodeFull_spec`'s `huniq` is now supplied at `Codec.byte`, and nowhere
+  else.** `Codec.decodeFull_spec_byte` needs no hypothesis; it goes through
+  `huniq_byte`, which uses `LengthConst` + `relRepeat_length_of_const` +
+  `lengths_eq_of_const` to hand `relRepeat_unique_same_length` the length index it
+  demands. For any **other** codec `huniq` remains a hypothesis and the general
+  derivation is open — do not claim it is discharged there, and do not re-derive the
+  `byte` chain (it is proved and axiom-checked). See `tasks.md` 2.6.
 - **Run the wired surfaces, not the specification.** `decodeWhole` /
   `decodeWholeBytes` and `encodeWhole` / `encodeWholeRepeat` / `encodeWholeBytes`
   are the named entry points, each tied to `decodeFull` / `encode` /
   `encodeRepeat` by a law. `decodeFull` and `encodeRepeat` stay the specification.
-  (Those laws equate them to `decodeFull`, so they **carry `huniq`** — that is
-  finding 7.6, not a defect in the wiring.)
+  (Those laws equate them to `decodeFull`; where that carries `huniq` it is finding
+  7.6, not a defect in the wiring.)
 - **Read `tasks.md` 6.1b's "SESSION 9" block before touching
   `Codec/Packed.lean`** (five plan corrections), and check `#print axioms` on
   **any** new transport lemma rather than assuming — the `Classical.choice` trap
