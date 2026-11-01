@@ -280,9 +280,9 @@ byteSlice_spec]`, then `rfl` closes the `ByteArray.mk` eta — instead of
   is false too: `uniqCounterexampleRel` **is** `LengthDet` (verified by compiling
   `LengthDet uniqCounterexampleRel`); what excludes it is the length _index_.
 
-  **The gap IS closable, and the route is proved (this session, in a probe).** A
-  step relation whose every value fixes the length to a _constant_ `c` pins the
-  consuming list's length — that is the missing bridge, and it is two short lemmas:
+  **The gap IS closable, and the route is proved.** A step relation whose every
+  value fixes the length to a _constant_ `c` pins the consuming list's length —
+  that is the missing bridge, and it is two short lemmas:
 
       LengthConst R c   := ∀ ⦃a⦄ {m} (t : Bytes m), R a t → m = c
       lengthConst_byte  : LengthConst (Rel Codec.byte) 1
@@ -295,25 +295,107 @@ byteSlice_spec]`, then `rfl` closes the `ByteArray.mk` eta — instead of
   `lengths_eq_of_const` supplies the index `relRepeat_unique_same_length` demands,
   so `byte`'s two consuming lists are equal. **That is the closing of R2.7.**
 
+  **RANK-1 LEMMA SET — BUILT AGAINST THE REAL LIBRARY 2026-11-02, NOTHING TO
+  RE-DERIVE.** The following were compiled against a green `lake build` (probe
+  `import Codec`, `lake env lean`), all `[propext, Quot.sound]`-only, and are the
+  complete set 2.6(b) needs that does **not** touch the cast blocker below. Write
+  them into `Codec/Sound.lean` verbatim:
+
+      LengthConst R c             := ∀ ⦃a⦄ {m} (t : Bytes m), R a t → m = c
+      lengthConst_byte            : LengthConst (Rel Codec.byte) 1
+      relRepeat_length_of_const   : LengthConst R c → c ≠ 0 →
+                                    relRepeat R xs n s → xs.length * c = n
+      lengths_eq_of_const         : (above, both) → xs.length = ys.length
+      lengthDet_of_lengthConst    : LengthConst R c → LengthDet R
+      relUnambiguous_of_relAligned: RelAligned R → relUnambiguous R
+      productive_byte             : Productive Codec.byte
+
+  Bodies as proved: `lengthConst_byte` is `rw [Rel_byte] at h; obtain ⟨hm, -⟩ := h;
+exact hm`. `relRepeat_length_of_const` is `induction xs generalizing n s`, cons
+  case `obtain ⟨m, hm, s₁, s₂, hsp, hR, hrest⟩ := ...; subst (hc s₁ hR);
+rw [List.length_cons, Nat.succ_mul, ih (n - m) s₂ hrest]; exact
+Nat.sub_add_cancel hm` (note: `Nat.sub_add_cancel`, **not** `omega` — `omega`
+  stalls on the reconstructed equation). `lengths_eq_of_const` ends in
+  `Nat.eq_of_mul_eq_mul_right (Nat.pos_of_ne_zero hc0) (…trans …symm)` — it needs
+  **`Nat.pos_of_ne_zero`**, the `c ≠ 0` form is not accepted directly.
+  `relUnambiguous_of_relAligned` is `hal s s (Nat.le_refl n) ha hb (fun _ => rfl)`.
+  `productive_byte` is `(productive_iff_consumesByte Codec.byte).2 byteConsumesByte`.
+
+  **PLAN CORRECTION 1 — step 2's `RelAligned`-strictness sub-item was FALSE and is
+  withdrawn.** It asked for "a witness relation with `relUnambiguous` but not
+  `RelAligned`". That cannot exist: at equal lengths `RelAligned` _is_
+  `relUnambiguous`, so `relUnambiguous R → RelAligned R` holds (`hal s s
+(Nat.le_refl n)`). The new lemma goes the **other** way and is now proved above.
+  The real decidability ordering is `LengthConst → LengthDet` (proved:
+  `lengthDet_of_lengthConst`) and `LengthDet ⟹ RelAligned` (needs `DecidableEq α`
+  — a classical axiom, so **inadmissible here**; do not attempt it). Record this
+  ordering in the `LengthDet`/`RelAligned` docstrings instead of the strictness
+  claim.
+
+  **PLAN CORRECTION 2 — `RelAligned` is now redundant as a _hypothesis_ and the plan
+  must say so.** With `LengthConst` in hand, `huniq` for `byte` needs
+  `LengthConst` + productivity + the indexed theorem; `RelAligned` remains only as
+  the docstring's "unambiguity extended across lengths" notion and as an input to
+  `relRepeat_unique_same_length`. **Do not delete it** (that theorem still takes
+  it), but stop presenting it as the closing route — `LengthConst` is.
+
+  **BLOCKER — `Suffix.empty`'s `prepend` identity, and three failed attack modes
+  (2026-11-02).** Step 4 (`decodeFull_spec_byte`) needs exactly one `Codec/Codec.lean`
+  lemma that does not exist:
+
+      (Suffix.empty n).prepend s = s      -- s : Bytes (n - (Suffix.empty n).remaining) = Bytes n
+
+  `Codec.lean` has the sibling for `Suffix.id` (`prepend_id`) and for `Suffix.drop`
+  (`drop_zero_eq_id`) but not this one. **Verified failure modes — do not repeat
+  them:**
+
+  - `(Suffix.empty n).remaining` is **not definitionally `0` at the `Suffix`
+    level** (`hle : 0 ≤ n` is a field), so `rw [h]`, `subst`, and `cases` on
+    `(Suffix.empty n).remaining = 0` are **all rejected** (`subst`/`cases` want a
+    bare variable; `rw` finds nothing inside the `dite` scrutinee's _type_).
+  - `prepend_apply` builds its `splice_add` `Fin`-cast from
+    `(Suffix.empty n).remaining` _before_ any reduction, so `cast_fin_symm_val`
+    cannot fire on the resulting `cast (congrArg Fin …) i` — it is no longer
+    syntactically a `cast_fin_symm_val` instance.
+  - `simp only [concat, Suffix.empty]` rewrites `n - (Suffix.empty n).remaining`
+    to `n - 0` **inside the `dite` scrutinee's type**, after which the `Fin` index
+    of the _other_ branch no longer matches and `dite_eq_left`'s goal becomes
+    unprovable. **Note this is not `dite_eq_left`'s fault** — the deprecation
+    message on `dif_pos` ("use `dite_eq_left` instead") is a red herring; nothing
+    broke here.
+
+  **ALSO CORRECTED — `Suffix.prepend`'s argument order.** `Suffix.prepend t s₀`
+  takes `s₀` as the **prefix** and `t.bytes` as the **tail**
+  (`splice (n - t.remaining) s₀ (cast … t.bytes)`). So
+  `(Suffix.empty n).prepend ·` is the _everything-consumed_ case
+  (`concat s emptyBytes`) — **not** the nothing-consumed case. Half of one session
+  was spent with this backwards.
+
+  **The route to try first (not yet executed):** `change`/`show` the goal into the
+  raw `splice` form so the length is a **variable** `Bytes k` before touching
+  `Suffix.empty` at all, then close with `splice_apply` + `cast_bytes_val'` +
+  `dite_eq_left` at the variable length, and transport back. `cast_bytes_val'`
+  (already in `Codec.lean`) is the tool for the nested-cast form and it was never
+  made to fire.
+
   **Work for next session, in order.**
-  1. Add `LengthConst`, `lengthConst_byte`, `relRepeat_length_of_const`,
-     `lengths_eq_of_const` to `Codec/Sound.lean` (bodies are in this note; they
+  1. Add the seven rank-1 lemmas above to `Codec/Sound.lean` (bodies given; they
      compile as written). Check `#print axioms` on each.
-  2. Add `relUnambiguous_of_relAligned : RelAligned R → relUnambiguous R` — the
-     implication the `RelAligned` docstring asserts in prose but no lemma proves.
-     Also prove `RelAligned` is _strict_ (a witness relation with `relUnambiguous`
-     but not `RelAligned`), so the docstring's "extended across lengths" is
-     anchored to a theorem. **Decide and record** whether to keep `RelAligned` at
-     all once `LengthConst` exists — it may become redundant, which would be the
-     better outcome (fewer hypotheses, and `relUnambiguous` back as the only one).
-  3. Add `Productive Codec.byte` (two rewrites from `productive_iff_consumesByte` +
-     `byteConsumesByte`), so all three hypotheses of
-     `relRepeat_unique_same_length` are discharged for `byte` — today the
-     "neither is vacuous" note covers two of three.
+  2. ~~Add `relUnambiguous_of_relAligned` and prove `RelAligned` strict.~~ **Done /
+     corrected** — the lemma is in the set above; the strictness half is withdrawn
+     (Plan Correction 1). Record the `LengthConst → LengthDet ⟹ RelAligned`
+     ordering in the docstrings.
+  3. **`productive_byte` is in the rank-1 set above** — already proved, so all
+     three hypotheses of `relRepeat_unique_same_length` are discharged for `byte`
+     once step 1 lands.
   4. Add the actual consumer: `decodeFull_spec_byte`, i.e. `decodeFull_spec`
      instantiated at `Codec.byte` with `huniq` supplied. This is the deliverable
      that closes the finding, and it gives the new lemma family a call site
-     (it currently has **zero**).
+     (it currently has **zero**). **This step is BLOCKED on the
+     `Suffix.empty`-`prepend` lemma above** — its `huniq` must be extracted from
+     `decodeRepeat` membership via `decodeRepeat_spec`, and that extraction is
+     where the cast identity is needed. Do not start step 4 before the blocker
+     lemma exists in `Codec/Codec.lean`.
   5. **Fix every overclaim found by the review** (each is a one-line edit):
      `Sound.lean:768` (wrong causal attribution), `:789` ("can honestly be
      replaced by"), `:824` ("exactly the hypothesis `huniq` needs"), `:909`
