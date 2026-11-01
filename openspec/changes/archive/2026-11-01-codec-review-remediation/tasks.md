@@ -445,10 +445,15 @@ rfl` (the fact is definitional) and
     outline" or that `huniq` has no supplier — both were true when written and are
     now stale, and stale in the direction that understates the result.
 
-  **What this does NOT claim.** `huniq` is supplied for `Codec.byte` **only**. For
-  any other codec it remains a hypothesis, and the general derivation is still open;
-  `AGENTS.md`'s bullet now says exactly this, because the previous wording ("still
-  unsupplied") became false the moment `huniq_byte` landed.
+  **Scope, stated so it is not misread as unfinished work.** `huniq` is supplied for
+  `Codec.byte` **only** — and that is what this task asked for: "add one concrete
+  instance so the hypothesis is demonstrably satisfiable in-tree". A _general_
+  derivation for arbitrary codecs was never in scope (`huniq` is a hypothesis by
+  design in `decodeFull_spec`, and for a non-constant-length relation it is not
+  derivable at all without further hypotheses — see `huniq_not_derivable`). So this
+  is **complete, not deferred**. The `AGENTS.md` bullet says the same, because the
+  previous wording ("still unsupplied") became false the moment `huniq_byte`
+  landed.
 
 - [x] 2.7 **Fix the C comments' overclaim** (R2.11, R2.12).
       `blitBytes`'s C agrees with the Lean body _value-for-value_ via `min`
