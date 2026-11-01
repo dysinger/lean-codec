@@ -113,24 +113,71 @@ findings marked **superseded** are re-derived in
 
 ### Still open — mechanical polish (in `lean-basen`, not RFC-conformance)
 
-- [ ] 5.2 **AGENTS.md drift (in `../lean-basen/AGENTS.md`).** The doc still says
-      the facade `Base` is "currently scoped to B2/B4/B8/B10/B16; B32/B64 are in
-      progress" and "`Base32.lean`/`Base64.lean` are the remaining work — tasks
-      3.6/3.7." Both are stale (all seven bases landed). Fix the two bullets, and
-      the "Active work: `basen-uniform-leaf-api`" section's "Remaining" line.
-- [ ] 5.3 **`bench` executable not wired as a flake/default.nix target.**
-      `lakefile.lean` declares `lean_exe bench`, but `flake.nix` has no
-      `packages.bench` and `default.nix` has no `bench` target (`nix build .#bench`
-      fails). Add it or document as dev-loop-only.
-- [ ] 5.4 **`lakefile.lean` pins `@ "master"` vs the template's `@ "main"`.**
-      Undocumented and a floating ref outside the pinned flake. Comment it.
-- [ ] 5.8 **Dead/redundant `have`s** in `BaseN/Base8.lean` & `BaseN/Base10.lean`.
-- [ ] 5.9 **`BaseN/Base2.lean` `valToBit` falls back to `49` for invalid input** —
-      a doc note on the asymmetry with `bitVal`'s `2` sentinel.
-- [ ] 5.12 **`lake-manifest.json` (gitignored) vs `flake.lock` rev note** — one-line
-      AGENTS.md note.
-- [ ] 5.13 **Exported laws named `byte0`/`byte1`/… (bare lowercase)** in base32/64;
-      rename to lowerCamelCase would be cleaner.
+- [x] 5.2 **AGENTS.md drift (in `../lean-basen/AGENTS.md`).** — **done.** The
+      stale `Base`-enum bullet was not just out of date, it described a facade that
+      **does not exist**: there is no `Base` inductive and no `BaseN.roundtrip`
+      dispatch (`BaseN.lean` is module re-exports only, by design — task 4.1).
+      Replaced with the seven-bases statement plus the honest "ledger lives in
+      `lean-codec`" direction; the `basen-uniform-leaf-api` "Remaining: 3.6/3.7"
+      section — an archived change — was replaced by the settled base32/64 shape
+      note (kept, because a future edit to those two files still needs it).
+- [x] 5.3 **`bench` executable not wired as a flake/default.nix target.** —
+      **done.** `default.nix` gained a `bench` derivation (`targets = "bench"`,
+      `mainProgram = "bench"`), `flake.nix` exposes `packages.bench`. Deliberate
+      choice: it is a **package, not a `checks` entry** — the lane value-checks
+      known vectors, which is evidence, not proof, and must not be able to fail the
+      proof gate. Its `installPhase` **runs** the executable, so `nix build .#bench`
+      verifies rather than merely producing a binary: the vectors are
+      `example … := rfl`, so a wrong one is an elaboration error. Verified both
+      ways this session — sandboxed `nix build .#packages.aarch64-darwin.bench`
+      builds (45 jobs), runs, installs `bin/bench`, and exits 0; corrupting one
+      hex vector to `[0x36, 0x37]` fails `lake build bench` with
+      `has type ?m.13 = ?m.13 but is expected to have type
+    Base16.hexBlockUnapply 102 = some [54, 55]`.
+- [x] 5.4 **`lakefile.lean` pins `@ "master"` vs the template's `@ "main"`.** —
+      **done.** Commented in `lakefile.lean` and cross-referenced from AGENTS.md.
+      The finding's framing was wrong on one point worth recording: `master` is
+      **not** a mistake here — it is this ecosystem's actual default branch (the
+      template predates it), and the ref is a **floating dev-loop ref, not a pin**:
+      `default.nix` rewrites the `require` to `./codec-src`, so a Nix build never
+      reads that line and `flake.lock` is the only reproducibility anchor. Pinning
+      it to a SHA would only make `lake build` fail after a lock bump.
+- [x] 5.8 **Dead/redundant `have`s** in `BaseN/Base8.lean` & `BaseN/Base10.lean`. —
+      **done, and the review's premise was partly wrong.** Nothing was "dead" in
+      the sense of unused-by-name; the redundancy was _provable-inline_. Removed
+      **six** `have`s (all re-`omega`-derivable from context, build re-verified):
+      `hdiv64`/`hdiv8` in `oct_sum_eq`, `hdiv100`/`hdiv10` in `dig_sum_eq` (plain
+      `omega` rediscovers `Nat.div_add_mod`), and `hmod`/`hmod'`/`hc8`/`hf8` in
+      `oct_decompose_unique`'s two branches. **Refuted by experiment, not kept:**
+      `hbv64`/`hbv8`/`hbv0` (`octBlockApply_unapply`) and `h0`/`h1`/`h2`
+      (`digDigit_valid_of_byte`) are load-bearing — they feed `valToOct_lt_256` /
+      `valToDig_lt_256` / `*_valid`; likewise the `hlen : m = 3` lemmas are
+      load-bearing despite being consumed only through `omega` (removing them
+      failed with `omega could not prove the goal ... a := ↑m`). Each removal was
+      applied and built, so no claim here is by inspection alone.
+- [x] 5.9 **`BaseN/Base2.lean` `valToBit` falls back to `49` for invalid input** —
+      **done.** The docstring now states the asymmetry is **deliberate**: `bitVal`
+      has an out-of-range `2` sentinel (so `bitValid`, defined as `bitVal e ≤ 1`,
+      can detect it), while `valToBit` has no in-band sentinel — every `b ≠ 0` maps
+      to `'1'`, so `valToBit 7 = valToBit 1`. Sound only because every proved use
+      supplies `b ≤ 1`. Recorded why neither sentinel should be "harmonised": `2`
+      is not a character and `48` would alias `b = 0`. `valToBit` itself depends on
+      no axioms (checked).
+- [x] 5.12 **`lake-manifest.json` (gitignored) vs `flake.lock` rev note** —
+      **done.** AGENTS.md now has a short "Two files that look like they pin
+      `codec` but do not" subsection: `lakefile.lean`'s git ref is the floating
+      dev-loop ref and is rewritten by `default.nix`; `lake-manifest.json` is
+      whatever the last local `lake update` wrote and drifts silently;
+      `flake.lock`'s `nodes.codec.locked.rev` is the only anchor, and the one to
+      check on a `bad import` from a sandboxed build.
+- [x] 5.13 **Exported laws named `byte0`/`byte1`/… (bare lowercase)** in base32/64;
+      rename to lowerCamelCase would be cleaner. — **done.** Renamed
+      `byte0`…`byte4` → `byte0Of`…`byte4Of` (`Base32.lean`, 5 lemmas) and
+      `byte0`…`byte2` → `byte0Of`…`byte2Of` (`Base64.lean`, 3 lemmas), with every
+      call site and docstring. No external references existed (`grep` across both
+      repos). All eight are `[propext, Quot.sound]`-only (checked, not assumed),
+      both `roundtrip` laws still are, and the AGENTS.md base32/64 note now uses
+      the `Of` names so a future edit does not reintroduce the bare ones.
 
 ## Status (re-anchored 2026-10-20): this change is complete except mechanical polish
 
