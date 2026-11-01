@@ -555,6 +555,33 @@ constructor that wraps an `Iso`, so the inverse guarantee is **structural**:
 the law is a field, and the two theorems above hold **unconditionally** for every
 description — no solver, no per-combinator gate, no prefix-disjointness condition.
 
+### Worked leaf codecs — and the three gaps they exposed
+
+`[S3]` keeps core free of formats: every real format belongs downstream. But the
+library had **no worked example anywhere**, and when one was written (`u16le`, two
+bytes little-endian) it failed in three places that only a composed codec can
+reveal. All three are now fixed in the library:
+
+| gap                                              | what it blocked                                                                                                 | fix                                                                                                |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| No total-bijection `Iso` constructor             | writing a leaf's `law` by hand — measured at ~40 lines of `UInt8`/`UInt16` coercion lemmas for one 2-byte codec | `Iso.ofTotal f g hgf hfg`, law discharged from two round-trip equations                            |
+| `ConsumesByte` derived only for leaves and `alt` | **every** composed codec (`seq`/`iso`) had to prove productivity by hand                                        | `seqConsumesByte`, `isoConsumesByte`                                                               |
+| No single-value decode entry point               | a leaf codec author could only decode a _repetition_; `decodeOne` is committed-choice and unwired               | `decodeWholeOne` / `decodeWholeOneBytes`, with `decodeWholeOne_eq` tying them to the specification |
+
+`Codec/Examples.lean` is the resulting worked example (`u8`, `u16le`, `u16be`). It is
+**not** a format library and not part of the contract: it is the inhabitation witness
+(these are the first non-`byte` codecs the whole-buffer machinery is instantiated at)
+and the copy-paste recipe. Every definition and law in it is proved — zero `sorry`,
+zero `Classical.choice`, `[propext, Quot.sound]`-only — and `Bench.lean`'s
+`benchExamples` lane checks the decoded values and the encode/decode round trip at run
+time, since a well-founded recursion does not reduce under `decide`.
+
+**What is deliberately not covered, stated so that coverage is not mistaken for
+completeness:** no `varint`, no `utf8`, no length-prefixed or tagged-sum format. Those
+need `alt` with _unequal_ branch lengths, which is precisely where `huniq` stops being
+derivable (see `Codec/Sound.lean` and the `[S1]`/`huniq` discussion below) — a real
+proof obligation, not something an examples module can discharge.
+
 ## Scope
 
 - **`codec`** (this package): the pure framework — `Iso`, `Codec`, `Rel`, the two
