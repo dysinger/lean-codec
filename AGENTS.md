@@ -241,16 +241,17 @@ in `../lean-basen`. Never "fix" it by editing the importing Lean file.
   the gap to named causes, never to "boxed scalars".** The owner has explicitly
   set **no ratio to hit**; the requirement is to make the per-element loop as fast
   as it can be and to say honestly where it stands. Measured 2026-11-03 with
-  `bench`'s `benchDecodeShapes` lane (task 6.4), `n` = 8 KiB, load average 4-5 on
-  10 cores, one process: `decodeFullArrayRoot` (packed `Array`+`Nat`) **63 ns/step**,
-  `decodeFullFastRoot` (`Bytes`/`Suffix`) **76**, `decodeArray`'s single step **15-22**,
-  **`packedCands` alone 52**, and an **ideal `Id.run` cursor loop 6 ns/step**
-  (`arr[k]!`, `Nat` cursor, `Array.push`) against a `memcpy` of 0.045 ns/byte. The
-  attribution is the point: the `Array` read is 4 ns, so the memory floor is not
-  the problem; the per-step `List` that `decodeArray` returns costs +16 ns, and
-  **`packedCands`'s `.attach`/`filterMap` rebuild, done on every step, costs +30 ns
-  on top of that** — it is the single largest term in the whole decode and the next
-  thing to remove (6.6). Withdrawn, because no lane ever produced them: the
+  `bench`'s `benchDecodeShapes` lane (task 6.4), `n` = 4-8 KiB, load average ~1.5-2
+  on 10 cores, one process: `decodeFullArrayRoot` (packed `Array`+`Nat`) **48
+  ns/step**, `decodeFullFastRoot` (`Bytes`/`Suffix`) **75**, `decodeArray`'s single
+  step **12**, `packedCands` **32**, and an **ideal `Id.run` cursor loop 6 ns/step**
+  (`arr[k]!`, `Nat` cursor, `Array.push`). The attribution is the point, and it
+  moved once: the `Array` read is 3 ns, so the memory floor is not the problem; the
+  per-step `List` that `decodeArray` returns costs +6 ns; and `packedCands` — a
+  `filterMap` of two `dif`s rebuilt on every step, measured at 91 ns/step — was the
+  largest single term until 6.6 replaced it with an `attach.map` (**32 ns**), taking
+  the whole packed decode from 63 to 48 ns/byte. What is left is the `List` plus the
+  accumulator, against a 6 ns/step floor. Withdrawn, because no lane ever produced them: the
   "~1,200–1,290 ns/byte", "~8.5× floor", and "20–40× ceiling" figures that used to
   sit here. **Do not quote a "× off C" ratio for a per-element codec measured
   against `memcpy`** — `memcpy` moves a byte; a parser does per-element work, so the
