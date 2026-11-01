@@ -101,7 +101,7 @@ skips the ledger would get them wrong**, and all four are also in `tasks.md`:
   §3/§4 rewrite the paragraphs that quote the performance numbers §6 fixes;
   correcting those claims against today's numbers would canonize the defect. If
   `tasks.md` disagrees with this line, `tasks.md` wins.
-- **6.4, 6.2, 6.6, 6.3 and 6.5 have landed; the next work is 6.7 (the Layer-2 seam).** `lake build` is green, there are **no `sorry`s anywhere in the
+- **§6 is complete: 6.1a/6.1b/6.2/6.3/6.4/6.5/6.6/6.7 all closed. The next work is §3 (README derivations).** `lake build` is green, there are **no `sorry`s anywhere in the
   tree**, and 6.1b's gate (`Codec.decodeFullArrayRoot_eq`) holds: the packed
   `Array UInt8` + `Nat`-cursor decoder is proved equal to `decodeFull`,
   `[propext, Quot.sound]`-only. `bench`'s new `benchDecodeShapes` lane now prints
