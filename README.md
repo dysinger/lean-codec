@@ -690,22 +690,37 @@ reference for a parser is a hand-written C parser over the same bytes, and this
 repo does not yet ship one. So the figures below are given **as ns/step and as a
 multiple of the measured pure-Lean floor**, not as a ratio to `memcpy`.
 
-Measured with `bench`'s `benchDecodeShapes` lane on an idle-ish machine (load
-average ~1.5–2 on 10 cores), `n` = 4–8 KiB, 15 samples of 3 calls each — the
-_absolute_ values move with machine load, so treat the **ratios between rows in one
-run** as the usable information. The single-step figures come from a decomposition
-run at the same `n`; each is reproducible from a lane that prints it.
+Measured with `bench`'s `benchDecodeShapes` lane, `n` = 4–8 KiB, 15 samples of 3
+calls each, on a **busy** machine (load average ~12 on 10 cores for the figures
+quoted here) — the _absolute_ values move with load by a factor of 2–3, so treat the
+**ratios between rows in one run** as the usable information and the ns/step column
+as indicative only.
 
-| shape                                                 | ns/step | × floor | note                                       |
-| ----------------------------------------------------- | ------- | ------- | ------------------------------------------ |
-| `memcpy` (`copySlice`), for scale                     | ~0.03   | —       | ~125 ns / 4 KiB                            |
-| `Array` indexed read alone                            | 3       | 0.5×    | the memory floor                           |
-| **ideal `Id.run` cursor loop** (`arr[k]!` + `Nat`)    | **6**   | **1×**  | **the achievable pure-Lean floor**         |
-| `decodeArray` single step (`List (α × Nat)` result)   | 12      | 2×      | +6 ns for the per-step `List`              |
-| `packedCands` alone (now an `attach.map`)             | 32      | 5.3×    | was 91 with a `filterMap` of two `dif`s    |
-| `decodeFullArrayRoot` (packed `Array` + `Nat` cursor) | **48**  | 8×      | = the search over `packedCands`            |
-| `decodeFullFastRoot` (`Bytes`/`Suffix` cursor)        | 75      | 12.5×   | +27 ns for the `Suffix`/`bdrop` plumbing   |
-| `decodeFull` (the `Bytes n` specification itself)     | ~30,000 | —       | super-linear: re-walks the suffix per step |
+**Every row now names the `benchRatio` label that prints it**, because a table of
+figures with no lane behind it is the defect this section was written to remove. The
+single-step decomposition rows (`arrayRead`, `idealCursor`, `packedCands`) were
+quoted for several revisions _without_ a lane; `benchDecodeShapes` grew the three
+missing lanes so the claim is now true rather than aspirational.
+
+| shape                                                 | lane label         | ns/step | × floor | note                                       |
+| ----------------------------------------------------- | ------------------ | ------- | ------- | ------------------------------------------ |
+| `memcpy` (`copySlice`), for scale                     | `benchCalibration` | ~0.03   | —       | ~125 ns / 4 KiB                            |
+| `Array` indexed read alone                            | `arrayRead`        | 3       | 0.5×    | the memory floor                           |
+| **ideal `Id.run` cursor loop** (`arr[k]!` + `Nat`)    | `idealCursor`      | **6**   | **1×**  | **the achievable pure-Lean floor**         |
+| `decodeArray` single step (`List (α × Nat)` result)   | `decodeArray step` | 12      | 2×      | +6 ns for the per-step `List`              |
+| `packedCands` alone (now an `attach.map`)             | `packedCands`      | 32      | 5.3×    | was 91 with a `filterMap` of two `dif`s    |
+| `decodeFullArrayRoot` (packed `Array` + `Nat` cursor) | `decodeFullArray`  | **48**  | 8×      | = the search over `packedCands`            |
+| `decodeFullFastRoot` (`Bytes`/`Suffix` cursor)        | `decodeFullFast`   | 75      | 12.5×   | +27 ns for the `Suffix`/`bdrop` plumbing   |
+| `decodeFull` (the `Bytes n` specification itself)     | `decodeFull spec`  | ~30,000 | —       | super-linear: re-walks the suffix per step |
+
+**Vintage of the ns/step column.** Every figure above is from **one** run (the
+2026-11-03 `benchDecodeShapes` run at load average ~1.5–2). Do not mix a figure
+from this table with one quoted in `AGENTS.md` or in `tasks.md` from a different
+run: `decodeArray step` in particular has measured anywhere between 12 and 34
+ns/step depending on machine load, and `packedCands` reads 32 post-`attach.map`
+(6.6) versus 91 pre-6.6 (`filterMap` of two `dif`s) — two different code shapes,
+not two measurements of one. When a newer run is quoted anywhere, the older column
+is superseded as a whole, not row by row.
 
 **How to read the ratio column.** The `memcpy` reference is taken in the same
 sample, but a slow measured call evicts the source from cache before the
