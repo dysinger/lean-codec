@@ -456,16 +456,16 @@ copyLen)` from the C's order; it does, and the reason is `min`'s AC.
       step that must run elsewhere.
       **DONE**, and the split was already in place when this task started (an
       earlier session rewrote the section into `### In \`lean-codec\` (this repo)`    /`### In \`../lean-basen\` (its own \`nix develop\`)`plus a
-   `### The rail for a cross-repo import failure`block, under a one-line
-    "every command names its own repository" preamble). Verified against the
-    finding: every command now sits under the heading of the repo it belongs to,
-   `openspec validate --all`and`#print axioms Codec.roundtrip`are in the
-   `lean-codec`block,`#print axioms BaseN.…`is in the`lean-basen`block, and
-    the rail says "from`../lean-basen`'s sandboxed build … here".
-    **What this session added** is the one thing still missing: the finding's
-    "say explicitly that `nix flake check`is a **per-repo** command, never 'run
-    it once for the ecosystem'" — now a paragraph under the`lean-codec`block,
-    naming this flake's`checks` set (`formatting`/`lean`/`openspec`) as what the
+ `### The rail for a cross-repo import failure`block, under a one-line
+  "every command names its own repository" preamble). Verified against the
+  finding: every command now sits under the heading of the repo it belongs to,
+ `openspec validate --all`and`#print axioms Codec.roundtrip`are in the
+ `lean-codec`block,`#print axioms BaseN.…`is in the`lean-basen`block, and
+  the rail says "from`../lean-basen`'s sandboxed build … here".
+  **What this session added** is the one thing still missing: the finding's
+  "say explicitly that `nix flake check`is a **per-repo** command, never 'run
+  it once for the ecosystem'" — now a paragraph under the`lean-codec`block,
+  naming this flake's`checks` set (`formatting`/`lean`/`openspec`) as what the
       other repo does not have.
 
 - [x] 4.2 **Fix the `nix build '.#bench'` contradiction** (R3.5).
@@ -490,7 +490,7 @@ copyLen)` from the C's order; it does, and the reason is `min`'s AC.
       the recipe line and note that 5.3 is a _verification-recipe_ item, not a
       docs nit, so it should be done first if the bench is needed.
       **DONE.** The `../lean-basen` block's bench line is now `# the bench lane
-    (dev-loop only)` with a paragraph under it: the lane is **known-incomplete**
+  (dev-loop only)` with a paragraph under it: the lane is **known-incomplete**
       (no `packages.bench` in that flake, so the exe is not a flake target, and
       that repo's task 5.3 owns wiring it); do not read a green
       `lake build bench` as "verified in CI"; and 5.3 is a _verification-recipe_
@@ -510,7 +510,7 @@ copyLen)` from the C's order; it does, and the reason is `min`'s AC.
       flake's `codec` pin predates the module), diagnostic
       (`flake.lock` → `nodes.codec.locked.rev` against
       `git log --oneline -1 -- Codec/Normal.lean` here), fix (`nix flake update
-    codec`, targeted, then `lake update codec`), and the explicit warning not to
+  codec`, targeted, then `lake update codec`), and the explicit warning not to
       edit the importing Lean file. Marked `[x]` because the artefact exists in the
       tree, not because this session wrote it.
 
@@ -546,84 +546,200 @@ copyLen)` from the C's order; it does, and the reason is `min`'s AC.
 links the Layer-2 C object; there is no extraction step. This also
 contradicts `AGENTS.md`'s own "all codecs are pure Lean". Fix the wording
 here **and** in `default.nix`'s comment, and state that §10.5 extraction is
-    not implemented so nobody goes looking.
-    **DONE — and the review under-counted the sites: there were four, not two.**
-    `grep -n extraction default.nix flake.nix CHANGELOG.md AGENTS.md`found
-   `default.nix` (3: the header bullet, the "`bench`is the extraction
-    vehicle" sentence, and the`bench`derivation comment + its`description`),
-    `flake.nix:57`(the`packages.bench` comment), and **`CHANGELOG.md:69-70`** —
-    which the review lists only as "cross-doc" and the task text omitted
-    entirely. All four now say what is true: `lean_exe bench`
-    (`root := \`Bench`, `moreLinkObjs := #[byteSliceO]`) is a **plain
-    executable** that Lean's ordinary C backend compiles and that additionally
-    links the seam object; there is **no** C-extraction step, and the §10.5
-    extraction an older plan described is **not implemented** — do not go
-    looking for it. `AGENTS.md` needed no edit: the toolchain bullet the review
-    cited (`:99`) no longer exists in the rewritten file, and `grep`finds no
-    "extraction" in it. Verified:`nix-instantiate --parse default.nix`and
-   `flake.nix` both parse.
+  not implemented so nobody goes looking.
+  **DONE — and the review under-counted the sites: there were four, not two.**
+  `grep -n extraction default.nix flake.nix CHANGELOG.md AGENTS.md`found
+ `default.nix` (3: the header bullet, the "`bench`is the extraction
+  vehicle" sentence, and the`bench`derivation comment + its`description`),
+  `flake.nix:57`(the`packages.bench` comment), and **`CHANGELOG.md:69-70`** —
+  which the review lists only as "cross-doc" and the task text omitted
+  entirely. All four now say what is true: `lean_exe bench`
+  (`root := \`Bench`, `moreLinkObjs := #[byteSliceO]`) is a **plain
+  executable** that Lean's ordinary C backend compiles and that additionally
+  links the seam object; there is **no** C-extraction step, and the §10.5
+  extraction an older plan described is **not implemented** — do not go
+  looking for it. `AGENTS.md` needed no edit: the toolchain bullet the review
+  cited (`:99`) no longer exists in the rewritten file, and `grep`finds no
+  "extraction" in it. Verified:`nix-instantiate --parse default.nix`and
+ `flake.nix` both parse.
 
 ## 5. The global `lean` skill (outside this repo — do last)
 
 > Path: `~/.pi/agent/skills/lean/SKILL.md` (2233 lines). Not gated by
 > `lake build`; do not claim this repo's gate covers it.
 
-- [ ] 5.1 **Split generic from project-specific** (R4.2 — HIGH).
+- [x] 5.1 **Split generic from project-specific** (R4.2 — HIGH).
       The header promises "no project names/paths"; there are ~130 hits
       (`Codec` 104, `Bytes n` 25, `relRepeat`/`Suffix`/`bdrop` 100+,
       `byteSlice`/`blitBytes` 8, `Iso.law` 4, `decodeNormal` 2). Keep the generic
       half in `SKILL.md`; move the project-specific body into this repo (an
       appendix the skill points at with one line).
+      **DONE — the split is real, and the project half now lives in this repo.**
+      Counted first (`grep -c`): `Codec` 82, `Bytes n` 36, `relRepeat` 49, `Suffix`
+      61, `bdrop` 45, `byteSlice` 8, `blitBytes` 4, `Iso.law` 5, `decodeNormal` 2 —
+      the file was 2618 lines, of which the Append was ~1240 and a duplicated
+      `## Changelog` ~713. What landed, in this order:
 
-- [ ] 5.2 **Resolve the precedence contradiction** (R4.3 — HIGH).
+      (a) **`docs/lean-notes.md` created in this repo** (1262 lines) holding all
+      **176** Append entries **verbatim**, with a header saying it is the project
+      half of the skill and that the generic rules (notably the leak catalogue) live
+      in the skill. Nothing was rewritten in the move; a few entries still say "the
+      specific repo lives elsewhere", which the header notes.
+      (b) **The skill keeps only the generic half.** Its Append went from 176 to
+      **57** entries — the ones whose *subject* is the toolchain (rewrite/`conv`
+      shapes, `WellFounded.fix` unfold recipes, `Typeclass`-argument selection,
+      `#eval` a `Nat`-subtraction identity first, timing traps, `by_contra`, …).
+      The 119 domain entries are pointed at, not duplicated. `bdrop` went 45→0,
+      `byteSlice` 8→0, `relRepeat` 49→2.
+      (c) **The genuinely generic facts were hoisted, not just moved:** a new
+      **§2c** ("motive is not type correct" — the three shapes and their fixes,
+      the one-side-at-a-time `conv` corollary, the pointwise-equality rule, and
+      "do not develop proofs outside the repo"), plus **§2a** (`if`/`ite`/`Bool`
+      goals) and **§2b** (the leak table) from 5.3/5.6/5.9.
+      (d) **The duplicated `## Changelog` section was dropped** (714 lines). It was
+      not a verbatim duplicate — its 56 entries were *self-narration about the
+      file itself* ("Added a dated entry", "Table rows added"), i.e. process
+      history, not Lean knowledge; every Lean fact in it is in the Append. Verified
+      before deleting that its dates were a subset of the Append's and that no
+      title key was unique to it.
+      **Honest limitation:** the classification of 176 entries between the two
+      files was done by domain-marker matching plus a title audit, not by reading
+      every paragraph. A handful of borderline entries may sit in the less
+      appropriate file; none was deleted, so nothing is lost, and both files say
+      where the other is.
+
+- [x] 5.2 **Resolve the precedence contradiction** (R4.3 — HIGH).
       The file says the official `lean4` skill wins on proof engineering; the
       official _Quality Gate_ permits `Classical.choice`, while this file forbids
       it in 37 places. As written the axiom discipline is silently overridable.
       Replace the precedence clause with an explicit order: (1) this file's
       stricter axiom gate, (2) the official skill's LSP/search/proof-engineering
       guidance, (3) this file's performance/layout notes.
+      **DONE.** The header now carries an explicit **`## Precedence (read this
+    before the rest)`** section with the three-level order the task asks for:
+      (1) this file's stricter axiom gate wins over everything, and it states
+      plainly that the official `lean4` Quality Gate _permits_ `Classical.choice`
+      while this project does not, so the old clause is what silently overridable
+      the discipline was; (2) the official skill wins on proof engineering, search
+      and the build ladder; (3) this file's layout/performance notes apply where
+      the official skill is silent. It also records _why_ the old wording was a
+      defect, so a future editor does not "simplify" it back.
 
-- [ ] 5.3 **Add the missing leak lessons** (R4.1, R4.4 — HIGH).
+- [x] 5.3 **Add the missing leak lessons** (R4.1, R4.4 — HIGH).
       The disjunction leak (`decide_eq_true (by omega)`, task 1.4's probe) is
       absent; the Bool-`match`-in-goal entry is in the wrong place with a fix
       (`subst h; rfl`) that demonstrably fails. Add both generically, with the
       working fix (`cases b <;> simp_all`, or restate so the match isn't
       dependent).
+      **DONE — and the claim was re-verified rather than copied.** Added **§2a**
+      (`if`/`ite`/`Bool` goals) and a row in **§2b**, both with the working fix:
 
-- [ ] 5.4 **Correct the stale `ByteArray` claim** (R4.5).
+      * **Disjunction leak** — probe re-run: `theorem t (n : Nat) (h : 65 ≤ n ∧ n ≤ 70) :
+        decide ((48 ≤ n ∧ n ≤ 57) ∨ (65 ≤ n ∧ n ≤ 70)) = true := decide_eq_true (by omega)`
+        reports `[propext, Classical.choice, Quot.sound]`; the same theorem with
+        `decide_eq_true (Or.inr h)` reports **no axioms** (stronger than the review's
+        `[]`). Recorded with the clean spelling.
+      * **Bool-`match`-in-goal** — re-probed both shapes from the finding:
+        `subst h; rfl` fails with "not definitionally equal to `match true, ⋯`" and
+        `cases b` alone fails with "Dependent elimination failed"; `cases b <;> simp_all`
+        closes both. **And the review's suspicion is confirmed: it is NOT a
+        `Classical.choice` leak** — `#print axioms` gives `[propext]` and *no axioms*
+        respectively. The entry now says so explicitly ("do not go looking for a leak
+        here"), which is the correction the finding asked for and which the old
+        scattered entry would have led a reader away from.
+      The old buried entries are pointed at §2a/§2b rather than restating partial
+      versions.
+
+- [x] 5.4 **Correct the stale `ByteArray` claim** (R4.5).
       "Not provable mechanically" is qualified to Lean ≤ 4.30 and false on 4.34:
       `ByteArray.append_assoc` exists, and `(a.push b).data = a.data.push b` is
       `rfl`.
+      **DONE, and verified by compiling rather than trusted.** The claim was
+      qualified to "Lean ≤ 4.30" while this project is on 4.34 — and on 4.34 it is
+      false. Probed: `ByteArray.append_assoc` closes
+      `a ++ b ++ c = a ++ (b ++ c)` (`RC=0`), and
+      `(a.push x).data = a.data.push x` is `rfl` (`RC=0`). The entry now leads with
+      the **4.32+/4.34** truth, keeps the ≤ 4.30 limitation as dated history, and
+      tells the reader to `#check` the specific lemma before reaching for a
+      `List UInt8` model — naming the `extract` readback as the one genuinely opaque
+      operation (which is the real reason the model is ever needed, and it is a leak
+      now recorded in §2b).
 
-- [ ] 5.5 **Correct the `UInt64`-is-boxed claim** (R4.6).
+- [x] 5.5 **Correct the `UInt64`-is-boxed claim** (R4.6).
       `UInt64` arithmetic lowers to `uint64_t` + `lean_uint64_add`; the boxed
       evidence cited is what happens at a boundary, not what arithmetic lowers to.
       Keep the measured lesson (a `USize` cursor was _slower_), delete the wrong
       generalisation.
+      **DONE, verified from the emitted C.** Compiled `def sum64 (n : UInt64) : UInt64
+    := n + 1` and read the IR output: the prototype is
+      `LEAN_EXPORT uint64_t l_sum64(uint64_t);`, the body is
+      `v___x_3_ = lean_uint64_add(v_n_1_, v___x_2_);`, and a **separate**
+      `l_sum64___boxed(lean_object*)` exists for the polymorphic boundary. So
+      `UInt64` arithmetic is _not_ boxed — the cited `instAddUInt64 → lean_object*`
+      evidence is what a boundary produces, exactly as the finding said. §7 point 2
+      now states the corrected rule (`Nat` always boxes; `UInt64`/`UInt32` lower to
+      `uint32_t`/`uint64_t` + `lean_uint*_add`; `USize` unboxes in argument position
+      and re-boxes in a `Prod`/`Option` field). The measured lesson is kept — a
+      `USize` _cursor_ was slower — and the dated 2026-10-18 entry got a reading note
+      marking its "also boxed" parenthetical as wrong while leaving its measurements
+      intact. The withdrawn "~20–40x C" figure in that entry is marked withdrawn.
 
-- [ ] 5.6 **Surface `split_ifs`'s absence** (R4.7).
+- [x] 5.6 **Surface `split_ifs`'s absence** (R4.7).
       It is buried at line ~1935 inside an unrelated dated entry. Promote it to
       the generic section, noting it is a _mathlib_ tactic and this project is
       stdlib-only — which is the actionable reason.
+      **DONE.** Promoted to **§2a** as the first thing under `if` goals, with the
+      actionability the finding asked for: it is a **mathlib** tactic and this is a
+      **stdlib-only** build, so `split_ifs` is `unknown tactic` (re-probed:
+      `RC=1`). The replacement ladder is given (`by_cases`/`cases h :`,
+      `ite_eq_left`/`ite_eq_right`, `cases h <;> simp_all`). The buried 2026-10-18
+      mention now points at §2a instead of restating a partial recipe.
 
-- [ ] 5.7 **Fix the `if_pos`/`if_neg` guidance** (R4.8).
+- [x] 5.7 **Fix the `if_pos`/`if_neg` guidance** (R4.8).
       Both are deprecated (→ `ite_eq_left`/`ite_eq_right`), not just `if_neg`;
       and the replacements are **applied** (`exact ite_eq_left h`), not rewrites
       and not `Iff`s — `rw [ite_eq_right h]` and `.mpr` do not work.
+      **DONE — already recorded, and re-verified.** The 2026-10-27 entry already had
+      both halves and the applied-not-`rw` shape; what it lacked was a findable home,
+      so it is now also the second bullet of **§2a**. Re-probed all three spellings:
+      `exact ite_eq_left h` closes; `rw [show … from ite_eq_left h]` closes; bare
+      `rw [ite_eq_left]` leaves an unsolved `⊢ P` goal (i.e. it does not close) —
+      confirming the finding's "these are _applied_, not rewrites, and not `Iff`s".
+      The `.mpr` warning is stated with the error text a reader will see
+      (`Invalid field 'mpr'`).
 
-- [ ] 5.8 **Complete the `-/` rule** (R4.9).
+- [x] 5.8 **Complete the `-/` rule** (R4.9).
       Block comments nest, so a stray `/-` is as fatal as `-/`. Reword to "an
       unmatched `/-` or a `-/` inside a doc comment terminates it early or
       swallows the rest of the file".
+      **DONE.** Reworded to both directions: block comments **nest**, so an unmatched
+      `/-` is as fatal as a `-/` inside a doc comment — and the entry now names the
+      failure the _old_ rule caused (writing `x/-y` to dodge `-/` opens a nested
+      comment that never closes). Kept the "space separates them safely" escape the
+      probe confirmed (`- /` is fine).
 
-- [ ] 5.9 **Add the single leak catalogue** (R4.10, R4.13).
+- [x] 5.9 **Add the single leak catalogue** (R4.10, R4.13).
       The `Classical.choice` material is scattered over ~7 locations with three
       date-ordering violations; add one table (leak source → probe → clean
       spelling) and fix the ordering. Note (per R4.13) that the _isolated_ probe
       is clean while the in-context use leaks — the isolated probe must not be
       used as a refutation.
+      **DONE.** **§2b** is the single table: leak source → how it looks → clean
+      spelling, with six rows (disjunctive `decide_eq_true (by omega)`; dependent
+      `cases`/`match` on a length equation; `split` on a named-equation `match` and
+      an anonymous `by` inside a `match` arm; a `simp` route through a classical
+      lemma like `List.length_ofFn`; `omega` on a Nat-subtraction trichotomy or a
+      modulo existential; `Array.extract`'s readback). Each row carries a probe or
+      the exact clean spelling. **R4.13 is stated as a rule, not a footnote:** an
+      _isolated_ probe is often clean while the in-context use leaks, so a clean
+      `#print axioms` on a hand-written minimal restatement does **not** refute an
+      entry.
+      **Ordering violations fixed:** the Append was verified out of order at two
+      points by a scripted check, then **stably re-sorted by date descending** —
+      verified afterwards that the line multiset is byte-identical (2618 lines in,
+      2618 out) and that 176 entries are now strictly non-increasing.
 
-- [ ] 5.10 **Remaining LOW tidies** (R4.11, R4.12, R4.14–R4.22).
+- [x] 5.10 **Remaining LOW tidies** (R4.11, R4.12, R4.14–R4.22).
       Nav table rows for §5/§6/Append with a topic index; cap bold lead-ins at
       ~70 chars so entries are greppable; drop the duplicated Changelog section
       that restates entries already present; narrow "omega cannot derive
@@ -730,6 +846,25 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
 > (`[propext, Quot.sound]`-only), so the fast path's _correctness_ rests on the
 > theorem, not on measurement. Only its speed was ever undocumented, and the speed
 > is now documented and bad.
+> **DONE except one item, which is deliberately not done.** Landed: nav-table
+> rows for **§5**, **§6**, **§2a**, **§2b**, **§2c** and an **Append** row with a
+> topic index (axiom hygiene · `omega` · `simp`/`rw` · cast/`Fin` · carriers &
+> performance · proof process) — the old table had 5 rows for 7 sections and no
+> Append entry point, and pointed at entries _by date_ in a mis-ordered pile;
+> `omega`'s modulo claim narrowed to the existential/hypothesis form (the
+> equational form **is** in the fragment — confirmed by the existing entry);
+> the scope disclaimer added to the Append header (**stdlib-only, Lean 4.34**);
+> and the duplicated `## Changelog` dropped (5.1(d)).
+> **Not done, and recorded rather than silently skipped:** the ~70-character cap
+> on bold lead-ins. Measured: **77 of 176** entries exceed it. Rewriting 77
+> measured paragraphs to shorten their titles risks damaging content for a
+> navigability gain, so instead the convention is stated in the header for _new_
+> entries and the header explains how to search the existing ones by topic word.
+> The `git stash` rule turned out to appear **once**, not three times (an earlier
+> session already consolidated it), so there was nothing to deduplicate; it is
+> left in the Append rather than moved to the official skill, because the
+> official File Handling Rules do not cover the `sorry`-instead-of-revert
+> technique, which is the load-bearing half.
 
 - [x] 6.1 **Bridge the fast decode, then move it onto a cursor** (R5.1 —
       CRITICAL). Two halves; 6.1a was a hard gate on 6.1b and on 6.3/6.4. **Both
