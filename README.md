@@ -710,6 +710,15 @@ L1-resident and pushes the span far past `IO.monoNanosNow`'s ~41 ns granularity:
 | `idealCursor`     | 16 ns/step         | **2.4 ns/step** | 6.7×  |
 | `decodeFullArray` | 49 ns/step         | **27 ns/step**  | 1.8×  |
 
+> **Caveat on the `burst (warm)` column — it is a best case, not yet a range.**
+> `benchBurst` currently reports the **minimum** of 5 timed rounds, and the rounds
+> decay with cache warm-up (measured, one invocation: 25578 → 22425 → 15405 →
+> 12742 → 11931 ns/op). So 2.4 ns/step is the _fully-warm_ round, and the gap
+> derived from it is derived from the most favourable endpoint. The lane is being
+> fixed to report min/median/max over a genuinely L1-resident working set; until
+> then treat the `warm` column as a lower bound. Recorded at the top of
+> `AGENTS.md` as the next session's single task.
+
 So the honest picture is two numbers, and **neither is "the" answer**: a _floor_ is a
 compute claim and comes from the burst; a _throughput_ figure comes from the
 interleaved lane. Which one you want depends on whether your input is hot — for a
