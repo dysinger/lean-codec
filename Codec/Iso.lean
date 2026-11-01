@@ -72,7 +72,9 @@ leaf codec (a 2-byte little-endian integer, a base-N element, a bit-field) does 
 need partiality at all: it needs a pair of mutually inverse total functions. Before
 this constructor the only way to say that was to fill three fields by hand and
 close an `↔` — measured at ~40 lines of `UInt8`/`UInt16` coercion lemmas for a
-single `u16le`, which is why no leaf codec existed in the tree (`Codec/Examples.lean`).
+single 2-byte integer codec. The leaves themselves live downstream (`lean-basen`,
+`lean-text`): `[S3]` keeps this package free of concrete formats, so what belongs
+here is the constructor, not an example of it.
 
 `ofTotal f g : Iso α β` is total in both directions (`some ∘ f`, `some ∘ g`), and
 its `law` is discharged from the two round-trip equations.

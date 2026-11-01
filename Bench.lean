@@ -1189,41 +1189,6 @@ unsafe def benchCReference (n : Nat) : IO Unit := do
   Codec.Bench.benchBurst "C reference (hand-written)" (n / 8) 200 (fun _ => arrayAt 0) cLane
   Codec.Bench.benchBurst "Lean decodeWhole       " (n / 8) 200 (fun _ => arrayAt 0) lLane
 
-/-- **Value checks for `Codec/Examples.lean`** — the executable half of the worked
-leaf codecs (`u16le`/`u16be`), which cannot live as kernel `decide` because
-`decodeWhole` runs through a well-founded recursion that does not reduce.
-
-This is a **value** check, not a proof: it compares against the expected value and
-fails the lane on a mismatch, so a regression in `Iso.ofTotal`, `seqConsumesByte`,
-or `decodeWholeOne` shows up here rather than only in review. The proofs live in
-`Codec/Examples.lean`; this lane is what makes them checkable against a running
-decoder as well. -/
-unsafe def benchExamples : IO Unit := do
-  let expect (label : String) (got : Option UInt16) (want : Option UInt16) : IO Unit := do
-    if got != want then
-      throw (IO.userError s!"examples: {label} — got {repr got}, expected {repr want}")
-  -- little-endian 0x1234 = bytes 34 12
-  expect "u16le 0x3412" (Codec.decodeWholeOne Codec.Examples.u16le
-    Codec.Examples.u16leConsumesByte #[0x34, 0x12]) (some 0x1234)
-  -- big-endian: the same bytes are a different value
-  expect "u16be 0x3412" (Codec.decodeWholeOne Codec.Examples.u16be
-    Codec.Examples.u16beConsumesByte #[0x34, 0x12]) (some 0x3412)
-  -- two values in the buffer: the single-value entry point must refuse, not take a prefix
-  expect "u16le two values rejected" (Codec.decodeWholeOne Codec.Examples.u16le
-    Codec.Examples.u16leConsumesByte #[0x34, 0x12, 0x78, 0x56]) none
-  -- encode → decode round trip at a concrete value, for both endianness-es.
-  let roundTrip (label : String) (d : Codec UInt16) (h : ConsumesByte d) : IO Unit := do
-    match encode d (0x1234 : UInt16) with
-    | some e =>
-        let back := Codec.decodeWholeOne d h (bytesToArray e.2)
-        expect label back (some 0x1234)
-    | none => throw (IO.userError s!"examples: {label} — encode returned none")
-  roundTrip "u16le encode/decode round trip" Codec.Examples.u16le
-    Codec.Examples.u16leConsumesByte
-  roundTrip "u16be encode/decode round trip" Codec.Examples.u16be
-    Codec.Examples.u16beConsumesByte
-  IO.println "examples (u16le/u16be): value + round trip OK"
-
 /-- The fused single-step decoder `decodeFast`: peels one `Codec.byte` in O(1),
 without re-traversing. Confirms `decodeFast` agrees with `decode` on the remainder
 length (the `Suffix` carries no decidable value-equality, so this lanes checks the
@@ -1574,8 +1539,6 @@ unsafe def main (args : List String) : IO Unit := do
   -- a `memcpy` ratio for a per-element codec is a category error). Value-checked
   -- against `decodeWhole` before it prints anything.
   Codec.Bench.benchCReference mCapped
-  -- The worked leaf codecs (`Codec/Examples.lean`): value + round-trip checks.
-  Codec.Bench.benchExamples
   -- TEMPORARY: ISO 8601 timestamp (AST-shaped) speed test.
   Codec.Bench.benchIso8601Encode reps
   Codec.Bench.benchIso8601Decode reps
