@@ -49,6 +49,29 @@ leak `Classical.choice`). -/
 def arrayToBytes (a : Array UInt8) : Bytes a.size :=
   fun i => a[i.val]
 
+/-- Pack a length-indexed `Bytes n` into a contiguous `Array UInt8`.
+
+This is the **one** `Bytes n → Array` transport in the library, and it is stated
+here so that a caller does not invent its own. It goes through `List.ofFn`, which
+is the `Fin n`-indexed enumeration; the result's size is `n` by `List.ofFn`'s own
+length fact, so the round-trip `arrayToBytes (bytesToArray s) = s` is `rfl` by
+`funext`/`Fin.ext` and needs no `Array.extract`/`toList` machinery — which is the
+transport family `README.md`'s "Representations" section records as removed
+precisely because it was the `Classical.choice` source in the old `List`-carrier
+design. -/
+def bytesToArray {n : Nat} (s : Bytes n) : Array UInt8 :=
+  Array.mk (List.ofFn s)
+
+/-- The packing transport is size-preserving: `(bytesToArray s).size = n`.
+`rfl`, because `Array.mk`'s size is the list's length and `List.ofFn`'s is its
+index. -/
+theorem bytesToArray_size {n : Nat} (s : Bytes n) : (bytesToArray s).size = n := by
+  -- Named lemmas only: `simp [bytesToArray]` reaches `List.length_ofFn` through a
+  -- classical route and leaks `Classical.choice` (checked with `#print axioms`),
+  -- which is exactly the transport-lemma hazard the removed `List` carrier had.
+  show (List.ofFn s).length = n
+  exact List.length_ofFn
+
 /-! ## The packed decoder -/
 
 /-- The packed decoder: read bytes by an `Array UInt8` index and thread a consumed
@@ -1263,6 +1286,71 @@ theorem decodeFullArrayRoot_eq {α : Type} (d : Codec α) (h : ConsumesByte d)
       exact congrFun Option.map_id _
     rw [hmap, hbd]
 
+
+/-! ## The wired fast surface (task 6.3)
+
+`decodeFullArrayRoot` is the fast decoder and is proved equal to the specification,
+but until this section it was only *available*: no library-level entry point named it,
+so a caller reaching for "decode this whole buffer" had to know to find it. These two
+functions are that entry point, and they are what `README.md` points readers at.
+
+The division of labour is the same one the rest of the library keeps:
+
+* **`decodeWhole`** takes the runtime carrier (`Array UInt8`) and is the fast path —
+  the packed cursor decoder, `decodeFullArrayRoot`.
+* **`decodeWholeBytes`** takes the *specification* carrier (`Bytes n`), packs it, and
+  delegates. The packing is the one `bytesToArray` transport, so no caller invents
+  its own.
+
+Both are equal to `decodeFull`, which is what lets every law about the specification
+be read off for the wired surface without a second set of proofs. -/
+
+/-- **The fast, whole-buffer full-consumption decoder — the surface to run.** Takes
+the packed carrier and routes straight to `decodeFullArrayRoot` (the `Array UInt8` +
+`Nat`-cursor search). Measured on an idle-ish machine at `n` = 4 KiB: **48 ns/byte**,
+against 75 for the `Bytes`/`Suffix` `decodeFullFastRoot` and a 6 ns/step ideal-loop
+floor — see `README.md`'s "Where the speed actually goes".
+
+This is deliberately a *named* entry point rather than a note telling readers to call
+`decodeFullArrayRoot`: a fast path that is merely available is a fast path nobody
+takes. -/
+def decodeWhole {α : Type} (d : Codec α) (h : ConsumesByte d) (a : Array UInt8) :
+    Option (List α) :=
+  decodeFullArrayRoot d h a
+
+/-- **`decodeWhole` decodes exactly the specification.** `arrayToBytes`-readback of
+the packed input, decoded by `decodeFull`, is what `decodeWhole` returns — so every
+law stated about `decodeFull` (in particular `decodeFull_spec`'s "`some xs` iff `xs`
+is a full-consumption `decodeRepeat` result") applies to the wired surface unchanged.
+One rewrite of the bridge; `[propext, Quot.sound]`-only. -/
+theorem decodeWhole_eq {α : Type} (d : Codec α) (h : ConsumesByte d)
+    (a : Array UInt8) :
+    decodeWhole d h a = decodeFull d h a.size (arrayToBytes a) :=
+  decodeFullArrayRoot_eq d h a
+
+/-- **The specification-carrier entry point.** Packs a `Bytes n` and delegates to
+`decodeWhole`; it exists so a caller holding the spec carrier has a wired path too,
+rather than being left to choose between the slow `decodeFull` and hand-rolling the
+packing. -/
+def decodeWholeBytes {α : Type} (d : Codec α) (h : ConsumesByte d) {n : Nat}
+    (s : Bytes n) : Option (List α) :=
+  decodeWhole d h (bytesToArray s)
+
+/-- **`decodeWholeBytes` decodes exactly the specification, at the caller's own
+index.** The packed delegate's `a.size` is `n` (`bytesToArray_size`), so the right
+side is `decodeFull d h n` applied to the readback — i.e. the law a caller who
+started from `Bytes n` would state. `[propext, Quot.sound]`-only. -/
+theorem decodeWholeBytes_eq {α : Type} (d : Codec α) (h : ConsumesByte d) {n : Nat}
+    (s : Bytes n) :
+    decodeWholeBytes d h s = decodeFull d h (bytesToArray s).size
+      (arrayToBytes (bytesToArray s)) :=
+  decodeWhole_eq d h (bytesToArray s)
+
+/-- **The packed carrier is not a second spec.** The wired surface's input size is
+the caller's index: `(bytesToArray s).size = n`, so `decodeWholeBytes`'s specification
+is `decodeFull d h n` over a `Bytes n`, not over some carrier-private length. -/
+theorem decodeWholeBytes_size {n : Nat} (s : Bytes n) : (bytesToArray s).size = n :=
+  bytesToArray_size s
 
 /-- The packed full-consumption decoder equals the *first* spec `decode` result,
 with its suffix packed as a `ByteArray` and its consumed count read back. (The
