@@ -4,51 +4,43 @@ Guidance for AI coding agents working in this repository.
 
 > ## NEXT SESSION: ONE TASK, AND ONLY THIS TASK
 >
-> **`k > 1` candidates in the packed decode — measure first, then decide. No
-> OpenSpec change; work on the tree.**
+> **No task is set. The `k > 1` measurement below closed the last priced question;
+> the next one is the owner's call.**
 >
-> **Why now.** The previous session fixed `benchBurst` (min/median/max over an
-> L1-resident working set) and re-derived the table. The measured warm figures are
-> `idealCursor` **~3.0 ns/step** against `decodeFullArray` **~31.8 ns/step**, i.e.
-> **~10–11×**. Every remaining named cause of that gap — the per-step `List` that
-> `decodeArray` returns, `packedCands`' list build, the accumulator — has now been
-> priced at or near zero for the `byte` codec, because **`byte` has exactly one
-> candidate per cursor position**. The search loop that the numbers are about
-> (`decodeFullArraySearch` walking `packedCands`) therefore never iterates on the
-> measured workload: the lane measures the _degenerate_ `k = 1` case and calls the
-> result "the decoder".
+> **What was just established, so the next session does not redo it.** A `k > 1` lane
+> now exists (`Bench.lean`, `benchDecodeShapes`: `satisfy (fun _ => true) | satisfy
+(fun _ => true)`, which yields **two** candidates at every cursor position, with its
+> premise asserted before timing). It needed one new library lemma —
+> `Codec.altConsumesByte` — because every `ConsumesByte` witness in the tree was for a
+> codec with exactly one candidate. Measured, two runs at load ~2.9, burst medians:
 >
-> **The task, in order:**
+> ```
+> idealCursor                 10253 / 10709 ns            -> 2.50 / 2.61 ns/step
+> decodeFullArray (k = 1)     14615 / 14087 ns (512 st)   -> 28.5 / 27.5
+> decodeFullArray k=2         28105 / 26173 ns (512 st)   -> 54.9 / 51.1
+> packedCands k=1  (per call) 75 / 75 ns
+> packedCands k=2  (per call) 94 / 95 ns
+> ```
 >
-> 1. **Build a lane that actually produces `k > 1`.** A `Codec` whose decode has
->    several candidates at one position — `byte | byte` gives two, and a
->    `satisfy`-guarded alternative gives one or two — on a buffer where the
->    fully-consuming candidate is **not** the first. Assert the lane's premise
->    (`packedCands` length > 1 at some cursor) rather than assuming it, so a lane
->    that silently degenerates to `k = 1` fails instead of reporting a number.
-> 2. **Measure `benchBurst` on it**: min/median/max, L1-resident, next to the same
->    `idealCursor` floor in the same run. That gives the per-candidate cost of the
->    search, which is the only un-priced term left.
-> 3. **Only then** decide whether anything is worth rewriting. Do **not** optimise
->    before step 2 produces a number, and do **not** re-quote the ~10–11× as if it
->    covered `k > 1` — it does not, and saying so is the whole deliverable if the
->    measurement says the search is cheap.
-> 4. Record the outcome in `README.md` (a new row, with its measured range and its
->    vintage stamp) whether or not it moves the gap.
+> So: the second candidate costs **~24–26 ns/step** (the search is ~1.9× the `k = 1`
+> decode), `packedCands` accounts for **~19–20** of that, and **~4–7 ns/step is the
+> `decodeArray` re-list plus the singleton `PackedCand` allocation**. The ~10–11×
+> headline is a **lower bound**; at `k = 2` the gap is **19.6–21.9×**.
 >
-> **Finish with:** `lake build` and `lake build bench` green with zero warnings,
-> `openspec validate --all` green, then commit `Bench.lean` and `README.md`
-> (individual files, never `git add -A`) and push.
+> **The obvious next candidate, if the owner wants one:** attack that ~4–7 ns/step
+> residue, not `packedCands` (already measured as the smaller half). It is a real but
+> bounded prize on a ~55 ns/step decode — measure first, exactly as this session did.
 >
-> **Also, and it is not optional:** every figure you write down must be the literal
-> output of a lane you ran in that session, pasted in. This repository has had six
-> performance figures wrong at some point (6 → 15 → 2.4 → 3.0 for the floor;
-> 32 → 430 → 3 for `packedCands`; 3 for the array read), and every one of them was
-> caught by running the lane, not by reading it.
+> **Requirements for whatever is done next:** green `lake build` + `lake build bench`
+> (zero warnings), green `openspec validate --all`, individual-file commits, and
+> **every figure must be a lane's literal output pasted in from that session.**
+> This repository has had seven performance figures wrong at some point (6 → 15 →
+> 2.4 → 3.0 → 2.5–2.6 for the floor; 32 → 430 → 3 → 75 for `packedCands`; 3 for the
+> array read), and every one was caught by running a lane, not by reading it.
 >
-> **Explicitly out of scope, and do not start them:** any new OpenSpec change;
-> `lean-basen` (separate repo, separate session); and any optimisation of the
-> decoder itself _before_ step 2 has printed a number.
+> **Explicitly out of scope:** any new OpenSpec change; `lean-basen` (separate repo,
+> separate session); and any decoder rewrite without a measurement that says which
+> term it removes and by how much.
 
 **Four hard requirements, before anything else:**
 
@@ -325,11 +317,13 @@ in `../lean-basen`. Never "fix" it by editing the importing Lean file.
   re-measurement. What did not survive:
 
   - `packedCands` was first attributed **91**, then **32**, then **~430 ns/call**,
-    and is **3 ns/call hot / ~1,860 ns/call across 8 cold buffers**. The 430 was a
-    _memory_ figure wearing a compute label: `packedCands` on `byte` builds a
-    one-element list, so what it was timing was first-touching a 4 KiB array.
-  - The "ideal floor" was quoted as **6 ns/step**, then **16**, then **2.4**, and is
-    **~3.0 warm (burst median) / ~18–22 cold**. Each step of that sequence was a
+    then **3 ns/call hot**, and in the burst lane is **75 ns/call hot at `k = 1`**
+    and **94–95 at `k = 2`**. Read those as one codec per number: the 3 was
+    `Codec.byte`, whose `decodeArray` result is a one-element list, while 75 is
+    `satisfy (fun _ => true)`. The 430 was a _memory_ figure wearing a compute label
+    — first-touching a 4 KiB array — which is why the burst lane exists at all.
+  - The "ideal floor" was quoted as **6 ns/step**, then **16**, then **2.4**, then
+    **3.0**, and is **~2.5–2.6 warm (latest burst median) / ~15–18 cold**. Each step of that sequence was a
     different mistake: the 6 came from a lane that `Array.push`-ed every element
     (floor plus n elements of growth); the 16 is a real number but _cold_; and the
     2.4 was the **minimum of 5 decaying rounds** at an `8n` working set — the most
