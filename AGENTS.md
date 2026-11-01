@@ -4,76 +4,54 @@ Guidance for AI coding agents working in this repository.
 
 > ## NEXT SESSION: ONE TASK, AND ONLY THIS TASK
 >
-> **No task is set. The `k > 1` measurement below closed the last priced question;
-> the next one is the owner's call.**
+> **`huniq` for unequal-length `alt` — the one real proof obligation left in the
+> whole-buffer story. No OpenSpec change; work on the tree.**
 >
-> **What was just established, so the next session does not redo it.** A `k > 1` lane
-> now exists (`Bench.lean`, `benchDecodeShapes`: `satisfy (fun _ => true) | satisfy
-(fun _ => true)`, which yields **two** candidates at every cursor position, with its
-> premise asserted before timing). It needed one new library lemma —
-> `Codec.altConsumesByte` — because every `ConsumesByte` witness in the tree was for a
-> codec with exactly one candidate. Measured, two runs at load ~2.9, burst medians:
+> **Why this and nothing else.** A three-reviewer audit of the project against
+> `PAPER.md`/`README.md` established that the core is pure and proved but that
+> "ready to use" was false for three reasons — no `Iso` helper, no `ConsumesByte`
+> for `seq`/`iso`, no single-value decode — and **all three are now fixed**
+> (`Iso.ofTotal`, `Codec.seqConsumesByte`/`isoConsumesByte`, `decodeWholeOne`,
+> plus `Codec/Examples.lean` with `u16le`/`u16be`). What is left is the fourth,
+> and it is a theorem, not an ergonomics gap:
 >
-> ```
-> idealCursor                 10000 / 10090 / 10396 ns       -> 2.46 ns/step
-> decodeFullArray (k = 1)     13692 / 14013 / 14232 (512 st) -> 27.4
-> decodeFullArray k=2         26691 / 26840 / 27645 (512 st) -> 52.4
-> packedCands k=1  (per call) 85 / 86 / 87 ns
-> packedCands k=2  (per call) 105 / 106 / 107 ns
-> ```
+> `decodeFull_spec` takes `huniq` (at most one value list fully consumes a string).
+> It is discharged **only** at `Codec.byte`, through a chain that needs
+> `LengthConst` — a _constant-step-length_ relation. Every variable-length format
+> (a `varint`, a text format, anything with `alt` over unequal lengths) is outside
+> it. `huniq_not_derivable` already machine-checks that unambiguity + productivity
+> do **not** imply `huniq`, so this is not a formality.
 >
-> So: the second candidate costs **~25 ns/step** (the search is ~1.9× the `k = 1`
-> decode), `packedCands` accounts for **~20** of that, and **~5 ns/step is the
-> `decodeArray` re-list plus the singleton `PackedCand` allocation**. The ~10–11×
-> headline is a **lower bound**; at `k = 2` the gap is **~21×**.
+> **The task:**
 >
-> **Two lane-construction rules this session paid for, both now enforced in code:**
+> 1. State the honest general sufficient condition. `relRepeat_unique_same_length`
+>    is indexed by list length; the counterexample (`[a]` vs `[b, b]`) is excluded
+>    by the _length index_, not by `LengthDet`. So the work is a condition that
+>    pins the consuming list's length without requiring constant step length —
+>    the `RelAligned` direction already sketched in `Codec/Sound.lean`.
+> 2. Discharge it at **one** new codec with unequal-length branches (`varint`-shaped:
+>    `satisfy`-guarded `alt`), so the premise has an in-tree supplier that is not
+>    `Codec.byte`. That is the same move task 2.6 made for `byte`, and it is what
+>    turns "proved for literals" into "proved for a real format".
+> 3. Record the outcome in `Codec/Sound.lean`'s section note and `README.md`
+>    (the `[S1]`/`huniq` discussion). If the condition turns out not to be
+>    statable without new hypotheses, say so and say exactly which — do not weaken
+>    `decodeFull_spec`'s statement to make it go through.
 >
-> 1. **A sink of `(…).length` measures nothing.** The length is a constant for a
->    fixed-arity codec, so the optimiser drops the call — that is how the old "3
->    ns/call" `packedCands` figure was manufactured, and it is **withdrawn**. Fold the
->    candidate _values_ in, and assert the sink actually moves (`eraseDups`).
-> 2. **`lean --run` is the interpreter; `lake build bench` is compiled C.** The same
->    `packedCands` call reads ~850–1050 ns interpreted and 86 ns compiled. Quote only
->    what the compiled `bench` executable prints; a `lean --run` figure pasted against
->    a compiled one is a 10× error.
+> **Requirements:** green `lake build` + `lake build bench` (zero warnings),
+> green `openspec validate --all`, individual-file commits, `#print axioms` on
+> **every** new lemma must report `[propext, Quot.sound]`-only (run it; do not
+> assume — the `Classical.choice` trap has bitten twice in this tree), and every
+> figure you write must be a lane's literal output from that session.
 >
-> **The C reference exists now, and it re-frames every ratio in this file.**
-> `Codec/CRef.c` + `benchCReference` measure a hand-written C parser doing the same
-> job (one value per byte, value-checked against `decodeWhole` before it prints).
-> Measured, burst medians, two runs, load ~1.4:
+> **Explicitly out of scope:** any new OpenSpec change; `lean-basen`; a hand-written
+> C parser for `k > 1` (the `CRef` reference exists and measures ~4× at `k = 1`);
+> and `utf8`, which needs a text-carrier decision, not a proof fix.
 >
-> ```
-> idealCursor (Lean loop)   10532 / 10059 ns (4096 st)  -> 2.57 / 2.46 ns/step
-> C reference (hand-written) 3598 / 3507 ns (512 st)    -> 7.03 / 6.85
-> decodeWhole (Lean)        14623 / 13811 ns (512 st)   -> 28.6 / 27.0
-> Lean / C                                               -> ~4x  (4.1, 3.9)
-> ```
->
-> So **the gap to hand-written C is ~4x**. The 10–21× figures are relative to this
-> repo's _own floor_; quoting them as "off C" is the exact category error the
-> attribution bullet warns about, and it went unnoticed for several revisions only
-> because there was no C column. Do not re-derive "off C" numbers from the Lean floor.
->
-> **The obvious next candidate, if the owner wants one:** the ~4× is now attributable
-> — C spends most of its 6.9 ns/step _materialising_ an n-element value array, and so
-> does the Lean decode. The prize worth attacking next is value materialisation
-> (decoding to something other than `List α`), not `packedCands` (already measured as
-> the smaller half of the per-candidate cost). Measure first.
->
-> **Requirements for whatever is done next:** green `lake build` + `lake build bench`
-> (zero warnings), green `openspec validate --all`, individual-file commits, and
-> **every figure must be a lane's literal output pasted in from that session.**
-> This repository has had eight performance figures wrong at some point (6 → 15 →
-> 2.4 → 3.0 → 2.46 for the floor; 91 → 32 → 430 → 3 → 75 → 86 for `packedCands`,
-> the 3 withdrawn outright; 3 → 11–18 for the array read; and "~11×" derived from a
-> cherry-picked burst round), and every one was caught by running a lane, not by
-> reading it. Two of them were caught by the _owner_ asking why two committed
-> figures could not both be true — that is also a legitimate lane.
->
-> **Explicitly out of scope:** any new OpenSpec change; `lean-basen` (separate repo,
-> separate session); and any decoder rewrite without a measurement that says which
-> term it removes and by how much.
+> **Known-open, recorded so it is not rediscovered:** `decodeOne` is a
+> committed-choice decoder with no completeness theorem and no wired entry point;
+> `decodeFullArray` is a documented footgun (commits to `head?`); the Layer-2
+> seams are trusted-not-proven by design and are excluded from the axiom gate.
 
 **Four hard requirements, before anything else:**
 
@@ -364,6 +342,18 @@ in `../lean-basen`. Never "fix" it by editing the importing Lean file.
     min/median/max over one L1-resident buffer, and 3.0 is its median.
   - The `Array` read was quoted as **3** and is **~14–18** (cold, per `n`) / **~78
     ns per call** (burst, one read per call).
+
+  **A three-reviewer audit (against `PAPER.md`/`README.md`) is on the record.**
+  It found the core pure and proved, and "ready to use" **false** for three
+  concrete reasons (no total-bijection `Iso` constructor; `ConsumesByte` never
+  derived for `seq`/`iso`; no single-value decode entry point) — all three fixed
+  in `Iso.ofTotal`, `seqConsumesByte`/`isoConsumesByte`, `decodeWholeOne`, with
+  `Codec/Examples.lean` (`u16le`/`u16be`) as the witness. It also found the
+  remaining hole is `huniq` for unequal-length `alt`. **Do not re-audit; continue
+  from the box above.** One reviewer claim was **refuted** on inspection: the
+  paper's `iterate` does _not_ trivially satisfy `Iso.law` — substituting its two
+  `Just ∘ driver` directions into `apply a = some b ↔ unapply b = some a` gives
+  exactly the fixpoint-agreement claim, so `[D7]` is correct as written.
 
   **Warm and cold are two different questions and the bench now prints both.**
   `benchRatio` interleaves a same-size `memcpy` (right for a ratio to `memcpy`, but
