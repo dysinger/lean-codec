@@ -96,12 +96,18 @@ It does not touch this tree. Its ledger is
 (it MODIFIES "The `basen` bases are `Codec` values"), so read `openspec/specs/basen/spec.md`
 immediately before archiving it and re-validate after.
 
-**Two deferrals from the archived change are recorded and still unowned** — neither
-is a task, and neither should be silently absorbed into a new change:
-the `lean` skill's ~70-char bold-lead-in tidy (archived `tasks.md` 5.10, 42 of 59
-entries over the cap), and `huniq`'s general derivation for codecs other than
-`Codec.byte` (archived `tasks.md` 2.6 — supplied at `Codec.byte`, open in general).
-Pick them up deliberately or leave them.
+**One deferral from the archived change is still unowned:** the `lean` skill's
+~70-char bold-lead-in tidy (archived `tasks.md` 5.10 — six of seven items landed,
+the seventh would rewrite most headings in a file outside this repo; 42 of 59
+entries are over the cap). It is cosmetic and outside the repo, which is why it did
+not block the archive. Pick it up deliberately or leave it.
+
+**Not a deferral, and not to be "finished" later:** `huniq` is supplied for
+`Codec.byte` only (`decodeFull_spec_byte`). Task 2.6 asked for exactly one concrete
+instance so the premise is demonstrably satisfiable in-tree, and that is done. For
+an arbitrary codec `huniq` is a hypothesis _by design_ — and for a
+non-constant-length relation the un-indexed statement is simply false
+(`Codec.huniq_not_derivable`). Do not reopen this as unfinished work.
 
 **Direction lives in exactly two places: this file and `openspec/`** — no
 `HANDOFF.md`, no notes file, no scratch tree. `openspec/lean-notes.md` is
