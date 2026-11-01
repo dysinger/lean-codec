@@ -655,6 +655,47 @@ unsafe def benchRatio (label : String) (bytes : Nat) (samples : Nat)
   -- independent lane (this file's `benchDecodeFull` times `decodeFull` directly).
   IO.println s!"{label} [{bytes}]: {medM} ns ({nsPerByte} ns/byte) vs memcpy {medC} ns = {ratio10 / 10}.{ratio10 % 10}x"
 
+/-- **The wired encode surface (task 6.5)**: `encodeWholeRepeat` accumulates through
+`encodeArray` with no per-element `Bytes` intermediate, where `fastEncodeRepeat` still
+calls `encode p x` per element and re-reads the result through `pushBytes`.
+
+Two claims checked, not assumed:
+
+* the **value** equals `encodeRepeat`'s, through `encodeWholeRepeat_eq` — so an
+  accumulation bug in the wired fold fails here rather than silently emitting
+  different bytes;
+* the **round trip** closes: decoding the wired encoder's output with the wired
+  decoder gives back the input list, which is the property a caller actually wants and
+  which no single-side law states on its own. -/
+unsafe def benchEncodeWhole (n : Nat) (reps : Nat) : IO Unit := do
+  let xs : List UInt8 := List.replicate n (1 : UInt8)
+  let (r, dt) ← timeBatch reps fun _ => encodeWholeRepeat Codec.byte xs
+  match r with
+  | some a =>
+      -- `encodeWholeRepeat_eq`: the byte list is the specification's.
+      let expected := (encodeRepeat Codec.byte xs).map (fun e : Sigma fun k => Bytes k =>
+        List.ofFn e.2)
+      if (some a.toList) != expected then
+        throw (IO.userError "encodeWholeRepeat ≠ encodeRepeat (the law disagrees at run time)")
+      -- the round trip through the wired decoder
+      match decodeWhole Codec.byte byteConsumesByte a with
+      | some ys =>
+          if ys != xs then
+            throw (IO.userError s!"encodeWhole/decodeWhole round trip: expected {n} elements, got {ys.length}")
+      | none => throw (IO.userError "encodeWhole/decodeWhole round trip: decode returned none")
+      printLane "encodeWhole (6.5)" n (dt / reps) n
+  | none => throw (IO.userError "encodeWholeRepeat: expected some, got none")
+
+/-- Ratio lane for the wired encoder against the same-run `memcpy`, so its cost is
+read on the same scale as the decode lanes rather than a bare ns figure. -/
+unsafe def benchEncodeWholeRatio (n : Nat) (samples : Nat) : IO Unit := do
+  let xs : List UInt8 := List.replicate n (1 : UInt8)
+  Codec.Bench.benchRatio "encodeWhole (6.5) " n samples 1
+    (fun _ => xs)
+    (fun ys => match encodeWholeRepeat Codec.byte ys with
+               | some a => a.foldl (fun (x : UInt8) b => x * 31 + b) 7
+               | none => 200)
+
 /-- **The measured decode paths** (task 6.4). Everything measured is a *proved*
 implementation of the same specification — `decodeFull` — so the numbers compare
 implementation shapes, not correctness:
@@ -1038,6 +1079,9 @@ unsafe def main (args : List String) : IO Unit := do
   -- The wired fast surface (6.3): correct, and it *is* the packed path.
   Codec.Bench.benchDecodeWhole mCapped
   Codec.Bench.benchDecodeWholeBytes mCapped
+  -- The wired encode surface (6.5): correct, round-trips, and measured.
+  Codec.Bench.benchEncodeWhole mCapped reps
+  Codec.Bench.benchEncodeWholeRatio mCapped 15
   Codec.Bench.benchDecodeFast nCapped reps
   -- Task 6.4: the ratio lanes. Run LAST, so a slow or aborting lane above cannot
   -- silently hide them, and read their output next to `uptime` (rule 5).
