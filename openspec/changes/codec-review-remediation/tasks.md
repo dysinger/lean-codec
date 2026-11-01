@@ -328,7 +328,18 @@ copyLen)` from the C's order; it does, and the reason is `min`'s AC.
 
 ## 3. `README.md`: correct the derivations, keep the quotations
 
-- [ ] 3.1 **Refile `[D2]`** (R1.2 — CRITICAL; design D6).
+> **§3 COMPLETE 2026-11-03.** All twelve entries done in one pass, and the checks
+> that mattered were run against the code rather than taken from the review:
+> `Codec.satisfy` genuinely still takes a bare `(UInt8 → Bool)` (so `[D8]` needed
+> scoping, not a claim it was converted); `relSepBy` is genuinely `False` on `[]`
+> (so `[S6]`'s "one-or-more, zero-or-more" was half false); `Iso.foldl` genuinely
+> takes `measure : α → Nat` + `MeasureDecreases` (so `[D7]`'s invented
+> "chain-isolated" phrase could be replaced with something checkable). Every
+> `[D#]`/`[S#]` anchor id is unchanged and `[D2]` was refiled without renumbering.
+> Every verbatim paper quotation the review verified is untouched; only the
+> derived reasoning around them changed.
+
+- [x] 3.1 **Refile `[D2]`** (R1.2 — CRITICAL; design D6).
       It sits under "Departures (observable-semantics changes)" while its body
       says "`codec` keeps it that way" — and the paper's `parse` filters to
       whole-string matches (`[x | (x, "") ← p s]`) while `decode` returns every
@@ -339,7 +350,7 @@ copyLen)` from the C's order; it does, and the reason is `min`'s AC.
       `Rel` is the whole-string graph, and the README's own law
       (`Rel d x s ↔ (x, empty) ∈ decode d s`) states the true relationship.
 
-- [ ] 3.2 **Strengthen the §7.5 hook** (R1.3).
+- [x] 3.2 **Strengthen the §7.5 hook** (R1.3).
       The quotation is verbatim-correct; "almost as an aside" and "muses"
       undersell the paper's own explicit deferral. Quote §5's stronger statement
       ("It is not safe because it is not checked that the two directions are
@@ -348,7 +359,7 @@ copyLen)` from the C's order; it does, and the reason is `min`'s AC.
       "how the invariants of `Iso` values could be encoded in a dependently typed
       language" — so the "it" has its antecedent.
 
-- [ ] 3.3 **Correct `[D4]`'s mechanism** (R1.4, R1.7).
+- [x] 3.3 **Correct `[D4]`'s mechanism** (R1.4, R1.7).
       `ignore` fails because `apply` is **not injective** (`const (Just ())`
       collapses all of `α` to `()`), so `law` would demand
       `apply a = some () ⟺ unapply () = some a` for every `a`. The README's
@@ -361,7 +372,7 @@ copyLen)` from the C's order; it does, and the reason is `min`'s AC.
       one space while requiring ≥1 on input. Drop "all three share the same
       shape" — only the first two are direct `ignore` instantiations.
 
-- [ ] 3.4 **Reconcile `[S1]` with `[S4]`** (R1.5).
+- [x] 3.4 **Reconcile `[S1]` with `[S4]`** (R1.5).
       `[S1]` lists `foldl`/`foldr` under "the strict law holds for every core
       `Iso` … unconditionally", but `Codec/Iso.lean` restricts `apply` to
       _terminal_ seeds — a domain restriction — and `[S4]` itself says the folds
@@ -370,7 +381,7 @@ copyLen)` from the C's order; it does, and the reason is `min`'s AC.
       with a `MeasureDecreases` witness. Do not leave the two anchors
       contradicting each other.
 
-- [ ] 3.5 **Correct `[D7]`** (R1.6).
+- [x] 3.5 **Correct `[D7]`** (R1.6).
       (a) "per-element 'chain-isolated in both directions' precondition" is
       invented vocabulary with no paper counterpart and is not what `codec`
       requires. The real obligation is a `measure : α → Nat` plus a proof each
@@ -381,7 +392,7 @@ copyLen)` from the C's order; it does, and the reason is `min`'s AC.
       **plus** the repetition triple **plus** a `ConsumesByte` witness.
       Say what is actually true; this anchor is what a porter reproduces.
 
-- [ ] 3.6 **Fix `[S6]`'s diagnosis** (R1.8).
+- [x] 3.6 **Fix `[S6]`'s diagnosis** (R1.8).
       `many` is a value because it is a polymorphic **function of the `Syntax`
       class** — i.e. `[D6]`'s typeclass embedding — not because Haskell is lazy.
       Keep strictness for the _AST/induction_ obstacle only, and add the
@@ -389,20 +400,20 @@ copyLen)` from the C's order; it does, and the reason is `min`'s AC.
       `Codec → Productive → Rel → Codec` (and the mutual-inductive escape failing
       the universe check). Cross-reference `[D6]`.
 
-- [ ] 3.7 **Fix `[S6]`'s `sepBy` claim** (R1.9).
+- [x] 3.7 **Fix `[S6]`'s `sepBy` claim** (R1.9).
       It says `codec` derives `sepBy`/`chainr1` "(one-or-more, zero-or-more)";
       `Codec/Combinators.lean`'s `relSepBy` is **one-or-more only** and its own
       docstring says so, and the README's `[S5]`/`[S6]` lay section says
       one-or-more. Make both statements say: one-or-more `sepBy` (= `sepBy1`) and
       `chainl1`/`chainr1`; zero-or-more is `optional` of the one-or-more form.
 
-- [ ] 3.8 **Fix `[D6]`'s 1:1 implication** (R1.10).
+- [x] 3.8 **Fix `[D6]`'s 1:1 implication** (R1.10).
       The seven constructors are counted correctly, but the entry implies a
       literal translation of the paper's five `Syntax` methods. `satisfy` has no
       paper counterpart (it is a fused `subset p $ token` leaf); the paper's
       `token` is `codec`'s `byte`. Add that clause.
 
-- [ ] 3.9 **Scope `[D8]` correctly** (R1.11).
+- [x] 3.9 **Scope `[D8]` correctly** (R1.11).
       `Iso.element`/`Iso.subset` do take `[DecidableEq α]`/`[DecidablePred p]`,
       but `Codec.satisfy` still takes a bare `(UInt8 → Bool)` — exactly the
       "unverifiable `Bool`" the entry says was replaced, and it is the leaf a
@@ -411,18 +422,18 @@ copyLen)` from the C's order; it does, and the reason is `min`'s AC.
       `Codec.satisfy` keeps the paper's free-form predicate because a
       `DecidablePred` over `UInt8` would be no more checkable.
 
-- [ ] 3.10 **Transcribe the paper's type headlines verbatim** (R1.12).
+- [x] 3.10 **Transcribe the paper's type headlines verbatim** (R1.12).
       Use `newtype Parser α = Parser (String → [(α, String)])` and
       `data Rel α = Rel [(α, String)]`, not the `::`-annotated forms. These are
       `[D1]`/`[D2]`'s headline types and a porter types them literally.
 
-- [ ] 3.11 **Fix the abstraction block's signatures** (R1.18).
+- [x] 3.11 **Fix the abstraction block's signatures** (R1.18).
       `decode` takes `d` **explicitly**
       (`decode (d : Codec α) {n : Nat} (s : Bytes n)`), and the `Rel` law must not
       use a free `n` — bind it via `s : Bytes n` (or write `Suffix.empty _`).
       This block is the most-copied part of the README.
 
-- [ ] 3.12 **The remaining LOW precision fixes** (R1.13–R1.17, R1.19–R1.22).
+- [x] 3.12 **The remaining LOW precision fixes** (R1.13–R1.17, R1.19–R1.22).
       One pass, all mechanical: - give the paper's full citation once (Haskell'10, 2010, Baltimore) and
       tie the section-numbered claims to the copy in `PAPER.md`; - cite §3.3, not §4.2, for the parser/printer asymmetry (`|` as
       backtracking union vs left-biased `mplus`); - `[D5]`: name the real foil (the paper's Parsec discussion, look-ahead 1)
@@ -652,8 +663,9 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
 > theorem, not on measurement. Only its speed was ever undocumented, and the speed
 > is now documented and bad.
 
-- [ ] 6.1 **Bridge the fast decode, then move it onto a cursor** (R5.1 —
-      CRITICAL). Two halves; **6.1a is a hard gate on 6.1b and on 6.3/6.4.**
+- [x] 6.1 **Bridge the fast decode, then move it onto a cursor** (R5.1 —
+      CRITICAL). Two halves; 6.1a was a hard gate on 6.1b and on 6.3/6.4. **Both
+      halves are closed — 6.1a and 6.1b below.**
 
 - [x] 6.1a **Prove `decodeFullFastRoot = decodeFull`** (the gate; ~9 MiB/s path
       is currently verified by _measurement only_). Landed already: `b894536`,
