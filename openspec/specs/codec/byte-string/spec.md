@@ -19,6 +19,14 @@ _spec_. A **Layer-2 fast path** SHALL be permitted to introduce an
 to `Bytes n` (by a definitional law or an `[propext, Quot.sound]`-only
 refinement) and is never a second spec substrate.
 
+Every document in the repository that names this type SHALL name it **once and
+identically**: `Bytes n := Fin n → UInt8`, with the length index. A doc that
+spells `Bytes` without its index, or as a different carrier (`List UInt8`,
+`Array UInt8`, `ByteArray`), SHALL be treated as a defect and corrected — not as
+a stale-but-harmless summary — because a reader can implement against it. In
+particular `CHANGELOG.md` SHALL record the shipped definition, not a
+superseded one.
+
 #### Scenario: The length is part of the type
 
 - **WHEN** a byte string of length `n` is constructed
@@ -37,6 +45,24 @@ refinement) and is never a second spec substrate.
 - **THEN** that surface is a transport layer proved equal to `Bytes n` (definitionally or
   `[propext, Quot.sound]`-only), not a second proof substrate, and `Bytes n` remains the single
   length-indexed substrate the spec and its laws are stated over.
+
+#### Scenario: Every doc names the same type
+
+- **WHEN** any file in the repository (source, `README.md`, `AGENTS.md`,
+  `CHANGELOG.md`, or an `openspec/` artifact) mentions the byte-string substrate
+- **THEN** it spells the length-indexed `Bytes n := Fin n → UInt8` — the exact
+  definition in `Codec/Codec.lean` — and no document advertises a `List UInt8`
+  carrier as the spec substrate (that carrier was removed deliberately; see
+  `README.md`'s "Representations" section, which calls the carrier split "the
+  defect").
+
+#### Scenario: The changelog cannot drift from the source
+
+- **WHEN** the substrate definition changes, or a changelog entry describes it
+- **THEN** the `CHANGELOG.md` text and `Codec/Codec.lean` agree, and a
+  contradiction between them is treated as a build-relevant documentation defect
+  (the reader would otherwise reintroduce the removed `List`/`Array` transport
+  lemmas and the `Classical.choice` leaks they caused).
 
 ### Requirement: Finitary byte equality is decidable without classical logic
 
