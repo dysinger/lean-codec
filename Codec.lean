@@ -28,3 +28,4 @@ import Codec.Normal
 import Codec.Packed
 import Codec.ByteSlice
 import Codec.DecodeOne
+import Codec.Examples
