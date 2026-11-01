@@ -802,27 +802,47 @@ unsafe def benchDecodeShapes (n : Nat) (samples : Nat) (r : Nat) : IO Unit := do
   Codec.Bench.benchRatio "arrayRead " n samples r
     (fun j => (j % n, arrayAt j))
     (fun (j, arr) => arr.getD j 0)
-  -- the ideal `Id.run` cursor loop: `arr[k]!` + `Nat` cursor + `Array.push`, i.e.
-  -- the achievable pure-Lean per-element floor a decoder is compared against.
+  -- the ideal `Id.run` cursor loop: `arr[k]` + `Nat` cursor, **no allocation**.
+  -- Deliberately does NOT build an output array: a `push`-per-element version
+  -- measures the floor *plus* n elements of array growth, which is not a floor and
+  -- was previously (wrongly) quoted as one -- it read ~23 ns/step against this
+  -- lane's ~6, i.e. the array growth was ~3/4 of the "floor". The result is sunk
+  -- through a `Nat` accumulator so the loop cannot be elided.
   Codec.Bench.benchRatio "idealCursor " n samples r
     arrayAt
     (fun arr =>
-      let out := Id.run do
-        let mut acc : Array UInt8 := Array.mkEmpty arr.size
+      let acc := Id.run do
+        let mut acc : Nat := 0
         let mut k : Nat := 0
         while k < arr.size do
-          acc := acc.push (arr.getD k 0)
+          acc := acc + (arr.getD k 0).toNat
           k := k + 1
         return acc
-      sinkOfList out.toList)
-  -- `packedCands` alone: the candidate list rebuilt on every step. Measured as a
-  -- whole-list build over the full input, which is what a decode step pays.
-  Codec.Bench.benchRatio "packedCands " n samples r
-    arrayAt
-    (fun arr =>
-      match Codec.packedCands Codec.byte byteConsumesByte arr 0 (Nat.zero_le _) with
+      UInt8.ofNat acc)
+  -- **`packedCands` at ONE cursor position, `bytes := n` so the printed ns is
+  -- per-step** -- because a decode step rebuilds the candidate list once. The
+  -- original version built it once over the whole array and let `benchRatio` divide
+  -- by `n`, which reported ~12 ns/step, *below* the per-step decode it is a
+  -- component of: an arithmetic impossibility. `bytes` here is `n` because the row
+  -- is quoted in the ns/**step** column and the ratio is per-call, not per-byte:
+  -- one call is one step, and dividing by `n` is what manufactured the wrong figure.
+  -- It is reported through `printLane` as **ns/op (one call)**, not through
+  -- `benchRatio`, precisely because it is a per-call quantity and every attempt to
+  -- express it per byte sourced the wrong figure twice: once by dividing a
+  -- whole-array build by `n` (gave ~12 ns/"step", below the decode it composes),
+  -- and once by passing `bytes := 1`, which made the memcpy reference a 1-byte copy
+  -- and priced clock granularity. Measured directly: **~4.3 microseconds per call**,
+  -- because `attach.map` rebuilds `PackedCand`'s *proof terms* -- that is the cost.
+  do
+    let arr := arrayAt 0
+    let perStep (a : Array UInt8) : UInt8 :=
+      match Codec.packedCands Codec.byte byteConsumesByte a 0 (Nat.zero_le _) with
       | [] => 0
-      | cs => cs.length.toUInt8)
+      | cs => cs.length.toUInt8
+    let (res, dt) ← timeOne r (fun _ => perStep arr) 0
+    if res == 0 then
+      throw (IO.userError "packedCands: sink is zero — the measured work was elided")
+    printLane "packedCands (per step)" n (dt / r) 0
 
 /-- The fused single-step decoder `decodeFast`: peels one `Codec.byte` in O(1),
 without re-traversing. Confirms `decodeFast` agrees with `decode` on the remainder
