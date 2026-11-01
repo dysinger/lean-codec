@@ -1093,6 +1093,37 @@ theorem prepend_id {n : Nat} (s : Bytes n) :
     simp
   · omega
 
+/-- Prepending to the **fully-consumed** suffix is the identity: with nothing
+remaining, `Suffix.empty`'s slot is the whole string and its own tail is empty, so
+`Suffix.prepend` has nothing to reassemble. Pointwise form, keeping the
+`(Suffix.empty n).remaining` spelling so the `splice_add` index is the one
+`cast_fin_symm_val` is instantiated at. `[propext]`-only.
+
+Note the arg-orientation: `Suffix.prepend t s₀` takes `s₀` as the **prefix** and
+`t.bytes` as the **tail**, so `(Suffix.empty n).prepend ·` is the
+_everything-consumed_ case (`concat s emptyBytes`), not the nothing-consumed one
+(that is `prepend_id`). -/
+theorem prepend_empty_apply (n : Nat) (s : Bytes (n - (Suffix.empty n).remaining))
+    (i : Fin n) : (Suffix.empty n).prepend s i = s i := by
+  have hidx := cast_fin_symm_val (splice_add (Nat.sub_le n (Suffix.empty n).remaining)) i
+  have hlt : i.val < n - (Suffix.empty n).remaining := by
+    rw [show n - (Suffix.empty n).remaining = n - 0 from rfl]
+    exact i.isLt
+  rw [prepend_apply]
+  unfold concat
+  rw [dite_eq_left (by rw [hidx]; exact hlt)]
+  exact congrArg s (Fin.ext hidx)
+
+/-- The byte-string form of `prepend_empty_apply`: prepending to the fully-consumed
+suffix gives back the input. The sibling of `prepend_id` (which is the
+_nothing_-consumed case), and the lemma the `decodeRepeat_spec`-based uniqueness
+needs. `[propext, Quot.sound]`-only. -/
+theorem prepend_empty_self (n : Nat) (s : Bytes (n - (Suffix.empty n).remaining)) :
+    (Suffix.empty n).prepend s = s := by
+  apply Bytes.ext
+  intro i
+  exact prepend_empty_apply n s i
+
 /-- `relRepeat`'s `cons` case: a non-empty list relates to a string iff its head
 relates via the step `R` and its tail relates via `relRepeat`, with a compatible
 split. -/
