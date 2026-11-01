@@ -526,7 +526,28 @@ success having consumed less than the whole buffer. Its theorem
 `decodeFullArray_spec` is true — it honestly proves the function equal to the
 `head?` of `decode` — so this is a _decoder_ defect, not a proof defect. The
 backtracking full-consumption decoder is `decodeFullArrayRoot` (proved equal to
-`decodeFull` by `decodeFullArrayRoot_eq`); use that one.
+`decodeFull` by `decodeFullArrayRoot_eq`) — and for a whole buffer you should not
+call it by hand. **`decodeWhole`** is the wired surface:
+
+```lean
+-- the fast, whole-buffer full-consumption decoder — the surface to run
+decodeWhole      : Codec α → ConsumesByte d → Array UInt8 → Option (List α)
+decodeWholeBytes : Codec α → ConsumesByte d → Bytes n      → Option (List α)
+```
+
+`decodeWhole` delegates straight to the packed `Array UInt8` + `Nat`-cursor search;
+`decodeWholeBytes` takes the _specification_ carrier and packs it through the one
+`bytesToArray` transport, so a caller holding `Bytes n` has a fast path too instead
+of choosing between the slow `decodeFull` and hand-rolling the packing. Both are
+tied to the specification by a law — `decodeWhole_eq : decodeWhole d h a = decodeFull
+d h a.size (arrayToBytes a)` and `decodeWholeBytes_eq` — so every theorem about
+`decodeFull` reads off for the wired surface with no second set of proofs. The
+bench checks both the value and the law at run time, and measures the wired surface
+against `decodeFullArrayRoot` in the same run: they are the same number, which is
+what "wired" means.
+
+`decodeFull` itself stays exactly what it was: **the specification**, written for its
+proofs and not for speed. It is not a default anyone should reach for.
 
 ### Where the speed actually goes (measured, with its causes named)
 
