@@ -1785,7 +1785,44 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
       per-element codec (see the corrected requirement in
       `specs/codec/spec.md`). Do not restore them as "distance from C".
 
-- [ ] 6.3 **Wire the fast path and retire the slow default** (R5.1, R2.4).
+- [x] 6.3 **Wire the fast path and retire the slow default** (R5.1, R2.4).
+
+      **DONE 2026-11-03.** What was missing was not a fast decoder — `decodeFullArrayRoot`
+      existed and was proved equal to `decodeFull` — but a *named library entry point*:
+      nothing in the API pointed at it, so the fast path was merely available. Three
+      things landed in `Codec/Packed.lean` and `Bench.lean`:
+
+      | what | why |
+      | --- | --- |
+      | `bytesToArray` + `bytesToArray_size` | the **one** `Bytes n → Array` transport, so callers do not invent one |
+      | `decodeWhole` / `decodeWhole_eq` | the wired surface over the packed carrier, proved `= decodeFull` |
+      | `decodeWholeBytes` / `decodeWholeBytes_eq` / `_size` | the spec-carrier entry point, so a `Bytes n` caller has a fast path too |
+
+      **The `Classical.choice` trap bit again, and it is recorded at the lemma.**
+      `bytesToArray_size` was first proved by `simp [bytesToArray]`, which reaches
+      `List.length_ofFn` through a classical route: `#print axioms` reported
+      `[propext, Classical.choice, Quot.sound]`. It is now `show (List.ofFn s).length
+      = n; exact List.length_ofFn`, reporting `[propext]`. This is the same hazard
+      `README.md`'s "Representations" section records for the removed `List` carrier's
+      transport lemmas — a transport lemma is exactly where it recurs, which is why a
+      transport added by this task was checked rather than assumed.
+
+      **Verified at run time, not asserted.** `benchDecodeWhole` checks the value
+      against `decodeFull` through `decodeWhole_eq` (so a wiring change that returned
+      something else fails), `benchDecodeWholeBytes` checks it agrees with `decodeWhole`
+      and that the size is preserved, and the ratio lane measures the wired surface
+      **in the same run** as `decodeFullArrayRoot`: both report **92 ns/byte** on the
+      same load, which is what "wired" means — a divergence would mean the wiring left
+      the fast path.
+
+      **"Retire the slow default" needed no code change, and that is the finding.**
+      `decodeFull` has no default consumer: it is used inside proofs *as the
+      specification* (which is correct and must stay) and by the bench's explicit
+      slow-path lane (also correct). It is now documented as the specification and
+      explicitly "not a default anyone should reach for", with the wired surface named
+      in its place. Nothing was deleted, because nothing was wrongly defaulting.
+
+      The original task text follows.
       **Target, measured by 6.4:** a whole-input loop over the cursor step must
       not allocate per step, and must move from today's **57 ns/step** toward the
       measured **6 ns/step** ideal-loop floor — the 51 ns between them being
@@ -2029,9 +2066,10 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
 6. **6.6 — DONE 2026-11-03** (commit `2f930e1`): `packedCands` is an `attach.map`
    rather than a `filterMap` of two `dif`s, taking the packed decode from 63 to
    48 ns/byte (~25%) and leaving the per-step `List` as the largest remaining term.
-   **Then 6.3, 6.5, 6.7** — wire the fast path, adopt `encodeArray`'s shape, wire
-   the seam. 6.3 now starts from a measured 48 ns/byte against a 6 ns/step floor.
-7. **6.7** — wire the Layer-2 seam once a real consumer exists.
+7. **6.3 — DONE 2026-11-03**: `decodeWhole`/`decodeWholeBytes` are the named wired
+   surfaces, each proved equal to `decodeFull`, with the law checked at run time and
+   the wired surface measured identical to `decodeFullArrayRoot` in the same run.
+   **6.5** (encode) is the last throughput item before **6.7** (the Layer-2 seam).
 
 **Why 6.4 ran before 6.3/6.5 and why that was right:** the docs must state what
 the code _measures_, and 6.4 was the only lane that could produce a number. It
