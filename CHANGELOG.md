@@ -71,6 +71,44 @@ Lean's ordinary C backend compiles it — that additionally links the Layer-2
 seam object (`Codec/ByteSlice.c`, via `moreLinkObjs`). It is **not** a
   C-extraction step; there is none in the lakefile.
 
+- `Iso.ofTotal f g hgf hfg`: **a total bijection is an `Iso`**, with the inverse
+  law discharged from the two round-trip equations. The `Iso` fields are partial and
+  its `law` is an `↔` over both directions — right for the theory, but a concrete
+  leaf codec (a fixed-width integer, a base-N element) needs no partiality, only a
+  pair of mutually inverse total functions. Without this the only way to express one
+  was to fill three fields and close the `↔` by hand. It deliberately does not
+  express a _partial_ leaf; for those the `Iso` structure remains the tool, which is
+  the `[D4]` lesson (capture, don't discard), so the two forms are complementary.
+- `Codec.seqConsumesByte` / `Codec.isoConsumesByte`: `ConsumesByte` (the
+  productivity witness every whole-buffer decoder takes as a parameter) **derived**
+  for `seq` and `iso`. It had been supplied only for leaves (`byte`, `satisfy`) and
+  for `alt`, so the shape every composed codec takes had no witness at all — the
+  `lean-basen` repo hand-proves `ConsumesByte` per block, which is the cost this
+  removes. `seqConsumesByte` reuses `decode_seq_mem`, which is why it lives in
+  `Codec/Sound` rather than beside `altConsumesByte` in `Codec/Decode` (no cycle
+  would allow the latter).
+- `Codec.decodeWholeOne` / `Codec.decodeWholeOneBytes`: **decode a whole buffer as
+  exactly one value**, with `decodeWholeOne_eq` tying it to `decodeFull`. The
+  existing wired surfaces answer "how many values does this buffer hold"
+  (`Option (List α)`), which is the wrong question for a single-value codec, and
+  there was no wired entry point for the single-value case at all: `decodeOne`
+  threads a cursor but is the committed-choice decoder, unproven against the
+  specification and unwired, while `decodeFull` is the repetition form. Defined as
+  the projection of the wired surface (`decodeWhole` at a singleton) so every law
+  about `decodeWhole` reads off without a second decoder whose agreement would need
+  establishing. A buffer holding two values returns `none` rather than taking a
+  prefix — that is the documented `decodeFullArray` head-projection defect, not a
+  behaviour to repeat.
+- `Codec/CRef.c` + `Bench.lean`'s `benchCReference`: a **hand-written C reference
+  parser**, bench-only. Every ratio in this package was previously relative to its
+  own pure-Lean cursor floor; `AGENTS.md` records that a `memcpy` ratio is a
+  category error for a per-element codec and that the honest reference is a C
+  parser. It is **not** Layer 2 and not a trust seam: no `@[extern]` in `Codec/`,
+  nothing proven depends on it, it is excluded from the `#print axioms` gate by
+  construction, and it is linked into `bench` only. It decodes one value per byte
+  (the same job `decodeWhole Codec.byte` does, including the `n`-element value
+  array) and is value-checked against `decodeWhole` before it prints.
+
 ### Changed
 
 - Wrapped the denotation (`Rel`/`relRepeat`/`Productive`/`single`) in
