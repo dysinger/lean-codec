@@ -757,13 +757,32 @@ All cold cells are from the same two-run session and move with load; they are
 order-of-magnitude, not point measurements. The two burst rows are the ones a gap may
 be taken from, and only as a range.
 
-**The `packedCands` row is a memory figure, not a compute figure.** Measured
-directly: **3 ns/call** on a hot, constant array, **~1,860 ns/call** across 8
-different 4 KiB buffers, and **430 and 541 ns/call** in the two interleaved runs
-above. The spread is cache, not code — `packedCands` on `byte` builds a one-element
-list, and the 400+ numbers are the cost of touching a cold 4 KiB array, not of the
-`attach.map`. It is also why it cannot be a per-step term of the ~27 ns decode: it
-_is_ the same first touch, counted again. Do not sum it into the decode.
+**The `packedCands` row, and a figure that has now been withdrawn twice.** The old
+entry here claimed **3 ns/call on a hot, constant array**. **That claim is deleted,
+not qualified.** It came from a sink of `(…).length` — a constant `1` for a codec with
+one candidate — so the optimiser dropped nearly the whole call; a function that
+indexes an array cannot cost 3 ns in a tree where the bare index measures ~12. It
+was never a `packedCands` number.
+
+The replacement is the lane in `benchDecodeShapes`, which is a **burst** over 8
+buffers that differ _at the cursor_ (buffers differing only at byte 0 yield the same
+candidate and an invariant sink — the gate now rejects that), with the candidate
+values folded into the sink:
+
+| lane              | burst (min / median / max, ns per call) |
+| ----------------- | --------------------------------------- |
+| `packedCands k=1` | 85 / 86 / 87                            |
+| `packedCands k=2` | 105 / 106 / 107                         |
+
+Two calibration notes, both of which cost a wrong figure this session:
+
+- **`lean --run` is the interpreter, not the compiled cost.** A `lean --run` probe of
+  this exact call reads ~850–1050 ns/call. Quoting that against the compiled 86 is a
+  10× error in the other direction. Only rows printed by the `lake build bench`
+  executable may be quoted.
+- The interleaved-lane figure (**430–541 ns/call**, two runs, above) is _cold_: it
+  re-touches a 4 KiB array per call. It is a memory figure wearing a compute label,
+  which is exactly the confusion this section exists to keep apart.
 
 **What the numbers say, stated at the strength the evidence supports.** In a warm
 loop the packed decoder is **~27–28 ns/step against a ~2.6–2.7 ns/step pure-Lean
@@ -797,20 +816,18 @@ cores, burst medians, 512 steps per burst:
 **What that says — the search is linear in `k`, and its cost is not all in
 `packedCands`.**
 
-- The second candidate costs **23.6–26.3 ns/step**: roughly one whole extra decode
-  step, i.e. the backtracking search runs at **~1.9×** the `k = 1` decode (measured
-  ratios 1.92 and 1.86). The ~10–11× headline is therefore a **lower bound** for a
-  real backtracking codec: at `k = 2` the gap to the floor is **19.6–21.9×**.
-- `packedCands` moves only **75 → 94–95 ns/call** for the extra candidate: **~19–20
-  ns** of the ~24–26 ns per-candidate cost. So **~4–7 ns/step is _not_
-  `packedCands`** — it is the `decodeArray` re-list plus the singleton `PackedCand`
-  allocation in `decodeFullArraySearch`. That residue is what a rewrite would have
-  to attack, and it is now a measured number rather than a guess.
-- `packedCands` at **75 ns hot** also qualifies the older "3 ns/call hot" figure in
-  `AGENTS.md`: that one was taken on `Codec.byte`, whose `decodeArray` result is a
-  one-element list, so the two are different codecs and not comparable. Both are
-  honest; the 3 is left in `AGENTS.md` with that qualification rather than silently
-  replaced.
+- The second candidate costs **~25 ns/step** (52.4 − 27.4): roughly one whole extra
+  decode step, so the backtracking search runs at **~1.9×** the `k = 1` decode. The
+  ~10–11× headline is therefore a **lower bound** for a real backtracking codec; at
+  `k = 2` the gap to the floor is **~21×**.
+- `packedCands` moves **86 → 106 ns/call** for the extra candidate: **~20 ns** of the
+  ~25 ns per-candidate cost. So **~5 ns/step is _not_ `packedCands`** — it is the
+  `decodeArray` re-list plus the singleton `PackedCand` allocation in
+  `decodeFullArraySearch`. That residue is what a rewrite would have to attack, and
+  it is a measured number rather than a guess.
+- `packedCands` measures **86 ns/call** at `k = 1` and **106** at `k = 2` in the
+  compiled burst lane. The older "3 ns/call hot" figure is **withdrawn outright** —
+  it was a folded-away sink, not a measurement (see the note above).
 
 **Nothing was optimised as a result.** The task was to price the term _before_
 rewriting it, and the numbers say the rewrite is worth ~4–7 ns/step of a ~55 ns/step
