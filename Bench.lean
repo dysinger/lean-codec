@@ -1023,30 +1023,93 @@ unsafe def benchDecodeShapes (n : Nat) (samples : Nat) (r : Nat) : IO Unit := do
     let one : Codec UInt8 := bothByte
     let hOne : ConsumesByte one := satisfyConsumesByte _
     let arr := arrayAt 0
-    -- cursor bound: `j % (a.size + 1) < a.size + 1`, hence `≤ a.size`.
-    -- `Nat.mod_lt_of_lt` supplies it without a positivity premise on the modulus.
-    have hbnd : ∀ (j : Nat) (a : Array UInt8), j % (a.size + 1) ≤ a.size := by
-      intro j a
-      have h : j % (a.size + 1) < a.size + 1 := Nat.mod_lt _ (Nat.zero_lt_succ _)
-      omega
-    -- The sink must depend on the *candidate* list, not just its length: the length
-    -- is a constant (1 or 2), so a length-only sink is folded away and the lane
-    -- aborts on a zero sink (measured: it did). Folding the candidate *values* in
-    -- keeps the whole `packedCands` call live.
-    -- Seed from the per-call cursor (which `benchBurst` varies), so the sink is
-    -- never a constant that can fold to zero; the candidate *values* are folded in
-    -- so the whole `packedCands` call stays live.
-    let cands1 (j : Nat) (a : Array UInt8) : UInt8 :=
-      let cs := Codec.packedCands one hOne a (j % (a.size + 1)) (hbnd j a)
-      cs.foldl (fun (s : UInt8) c => s * 31 + c.val.1) ((j % 251).toUInt8 + 1)
-    let cands2 (j : Nat) (a : Array UInt8) : UInt8 :=
-      let cs := Codec.packedCands twoCands hTwo a (j % (a.size + 1)) (hbnd j a)
-      cs.foldl (fun (s : UInt8) c => s * 31 + c.val.1) ((j % 251).toUInt8 + 1)
+    -- **The cursor is hoisted OUT of the timed closure, and the premise asserts it.**
+    -- The first version of this lane computed `j % (a.size + 1)` and its bound proof
+    -- (`hbnd j a`) *inside* the measured closure, with `j` varying per call: it
+    -- priced a `Nat` modulus plus a proof-term construction, not `packedCands`, and
+    -- reported 75/95 ns — which contradicted the decode it is a component of (75
+    -- alone is more than the whole 27.5 ns/step `k = 1` decode step). Fixed here.
+    --
+    -- The cursor is therefore fixed at a mid-buffer position and the per-call
+    -- variation lives in the *sink seed* only, which cannot be elided because the
+    -- fold consumes the candidate values.
+    let c : Nat := arr.size / 2
+    let hc : c ≤ arr.size := by omega
+    -- The sink must depend on the candidate *values*, not just their length: the
+    -- length is a constant (1 or 2) and a length-only sink is folded away — that is
+    -- the trap that made the older "3 ns/call" reading and that aborted this lane's
+    -- own `k = 2` variant on a zero sink.
+    let cands1 (j : Nat) (_ : Array UInt8) : UInt8 :=
+      let cs := Codec.packedCands one hOne arr c hc
+      cs.foldl (fun (s : UInt8) x => s * 31 + x.val.1) ((j % 251).toUInt8 + 1)
+    let cands2 (j : Nat) (_ : Array UInt8) : UInt8 :=
+      let cs := Codec.packedCands twoCands hTwo arr c hc
+      cs.foldl (fun (s : UInt8) x => s * 31 + x.val.1) ((j % 251).toUInt8 + 1)
     -- premise: one candidate for `k=1`, two for `k=2`, at the same cursor
-    let k1 : Nat := (Codec.packedCands one hOne arr 0 (Nat.zero_le _)).length
-    let k2 : Nat := (Codec.packedCands twoCands hTwo arr 0 (Nat.zero_le _)).length
+    let k1 : Nat := (Codec.packedCands one hOne arr c hc).length
+    let k2 : Nat := (Codec.packedCands twoCands hTwo arr c hc).length
     if k1 != 1 || k2 != 2 then
       throw (IO.userError s!"packedCands k lane: premise failed — got {k1} and {k2} candidates, expected 1 and 2")
+    if c >= arr.size then
+      throw (IO.userError "packedCands k lane: premise failed — cursor is at the end of the buffer")
+    -- **The arithmetic consistency gate.** `packedCands` is *one component* of one
+    -- decode step, and it is rebuilt on every step, so a standalone measurement of it
+    -- cannot exceed the whole decode step that contains it. This lane exists because
+    -- that constraint was violated and nobody checked: the old row read 3 ns/call
+    -- (a length-only sink, folded away) and the first version of this lane read 75,
+    -- while a *standalone* probe of the same codec costs ~800 ns — so both numbers
+    -- were artifacts of a partially-folded closure, and neither was stated against
+    -- the constraint that would have caught it.
+    --
+    -- Comparing across lanes is unsound here (different codecs, different cache
+    -- state), so the gate is on what this lane can prove on its own: the sink must
+    -- move. A folded closure returns the same value for every call.
+    let probe1 := (List.range 12).map (fun j => cands1 j arr)
+    let probe2 := (List.range 12).map (fun j => cands2 j arr)
+    if (probe1.eraseDups).length < 2 then
+      throw (IO.userError "packedCands k=1 lane: the sink is invariant across calls — the closure was folded, this is not a measurement")
+    if (probe2.eraseDups).length < 2 then
+      throw (IO.userError "packedCands k=2 lane: the sink is invariant across calls — the closure was folded, this is not a measurement")
+    -- **Vary the BUFFER, not just the seed.** With a fixed buffer and the per-call
+    -- variation carried only by the seed, the closure's *data* arguments are
+    -- loop-invariant, so the optimiser keeps most of the computation and the row is
+    -- not a measurement. Rotating the buffer is what defeats it. (A `lean --run`
+    -- probe of this same call reads ~850–1050 ns/call — that is the *interpreter*,
+    -- not the compiled cost; `lake build bench` compiles to C. The two are not
+    -- comparable and only the compiled row below may be quoted.)
+    -- The 8 buffers must differ **at the cursor**, not only at byte 0: the candidate
+    -- `packedCands` produces is `(byte at cursor, cursor+1)`, so buffers differing
+    -- only at index 0 yield the *same* candidate and an invariant sink. That is a
+    -- property of the codec, not of the optimiser, and it is why the gate must be
+    -- satisfied by real data variation rather than by a seed.
+    let pool : Array (Array UInt8) :=
+      (Array.range 8).map fun k =>
+        Array.mk (List.ofFn (fun (i : Fin 4096) =>
+          UInt8.ofNat ((k * 7 + i.val) % 251)))
+    let bufs : Array (Array UInt8) := pool
+    let cOf (a : Array UInt8) : Nat := a.size / 2
+    have hcOf : ∀ (a : Array UInt8), cOf a ≤ a.size := by
+      intro a; unfold cOf; omega
+    let c : Nat := cOf arr
+    let cands1 (j : Nat) (_ : Array UInt8) : UInt8 :=
+      let a := bufs[j % 8]!
+      let cs := Codec.packedCands one hOne a (cOf a) (hcOf a)
+      cs.foldl (fun (s : UInt8) x => s * 31 + x.val.1 + x.val.2.toUInt8) cs.length.toUInt8
+    let cands2 (j : Nat) (_ : Array UInt8) : UInt8 :=
+      let a := bufs[j % 8]!
+      let cs := Codec.packedCands twoCands hTwo a (cOf a) (hcOf a)
+      cs.foldl (fun (s : UInt8) x => s * 31 + x.val.1 + x.val.2.toUInt8) cs.length.toUInt8
+    -- premise: one candidate for `k=1`, two for `k=2`, at the same cursor
+    let k1 : Nat := (Codec.packedCands one hOne arr c (hcOf arr)).length
+    let k2 : Nat := (Codec.packedCands twoCands hTwo arr c (hcOf arr)).length
+    if k1 != 1 || k2 != 2 then
+      throw (IO.userError s!"packedCands k lane: premise failed — got {k1} and {k2} candidates, expected 1 and 2")
+    -- **The invariance gate.** A partially-folded closure returns a *constant*; if
+    -- the sink cannot be made to differ across buffers, the lane is not measuring.
+    if (List.range 8).all (fun j => cands1 j arr == cands1 0 arr) then
+      throw (IO.userError "packedCands k=1 lane: sink invariant across buffers — the closure was folded, this is not a measurement")
+    if (List.range 8).all (fun j => cands2 j arr == cands2 0 arr) then
+      throw (IO.userError "packedCands k=2 lane: sink invariant across buffers — the closure was folded, this is not a measurement")
     Codec.Bench.benchBurst "packedCands k=1 " n 200 (fun _ => arr) cands1
     Codec.Bench.benchBurst "packedCands k=2 " n 200 (fun _ => arr) cands2
 
