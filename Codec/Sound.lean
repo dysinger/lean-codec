@@ -127,6 +127,54 @@ theorem decode_seq_mem {α β : Type} (d₁ : Codec α) (d₂ : Codec β) (x : �
     refine ⟨(x₂, t₂), hd₂, ?_⟩
     rw [List.mem_singleton]
 
+/-! ### `ConsumesByte` for composed codecs
+
+`ConsumesByte` (`Codec.Decode`) is the productivity witness every whole-buffer
+decoder takes as a parameter. Until this section it was supplied **only** for
+leaves (`byteConsumesByte`, `satisfyConsumesByte`) and — as of the `k > 1` bench
+work — for `alt` (`Codec.altConsumesByte`). Nothing derived it for `seq` or `iso`,
+so the shape *every real format takes* (a sequence of fields, viewed through an
+`Iso`) had no witness at all: a downstream author defining `u16le` as
+`iso … (byte * byte)` had to prove productivity by hand.
+
+They live here rather than beside `altConsumesByte` in `Codec/Decode.lean`
+because the `seq` case reuses `decode_seq_mem`, which is defined above and is the
+membership lemma for `seq`. `Codec/Decode.lean` cannot import `Codec/Sound.lean`
+without a cycle.
+
+Both are `[propext, Quot.sound]`-only, zero `sorry`, zero `Classical.choice`. -/
+
+/-- **`seq` of two consumers consumes.** The composition case: `seq d₁ d₂` threads
+two suffixes, so the second step's remaining length is bounded by the first's,
+which is bounded by `n`. -/
+theorem seqConsumesByte {α β : Type} (d₁ : Codec α) (d₂ : Codec β)
+    (h₁ : ConsumesByte d₁) (h₂ : ConsumesByte d₂) : ConsumesByte (Codec.seq d₁ d₂) := by
+  intro x n s t hmem
+  obtain ⟨t₁, t₂, hd₁, hd₂, rfl⟩ := (decode_seq_mem d₁ d₂ x s t).1 hmem
+  have hlt₁ : t₁.remaining < n := h₁ x.1 s t₁ hd₁
+  have hlt₂ : t₂.remaining < t₁.remaining := h₂ x.2 t₁.bytes t₂ hd₂
+  -- `(Suffix.trans t₁ t₂).remaining` is `t₂.remaining` by `rfl`.
+  show t₂.remaining < n
+  omega
+
+/-- **`iso` of a consumer consumes.** An `Iso` only *renames* the value — the
+consumed-length is untouched — so the inner witness transfers directly. -/
+theorem isoConsumesByte {α β : Type} (i : Iso α β) (d : Codec α)
+    (h : ConsumesByte d) : ConsumesByte (Codec.iso i d) := by
+  intro x n s t hmem
+  rw [decode, List.mem_filterMap] at hmem
+  obtain ⟨cand, hmem', hf⟩ := hmem
+  rcases cand with ⟨a, tr⟩
+  cases happ : i.apply a with
+  | none => simp [happ] at hf
+  | some y =>
+      -- `hf : (i.apply a).map (fun y => (y, tr)) = some (x, t)`, so `tr = t`. Use the
+      -- equality to move the membership onto `t`; a `rfl` pattern here would
+      -- *eliminate* `tr` (substituting it away) and then the rewrite has no name.
+      simp only [happ, Option.map_some, Option.some.injEq, Prod.mk.injEq] at hf
+      obtain ⟨-, htr⟩ := hf
+      exact h a s t (htr ▸ hmem')
+
 /-- The bidirectional law: decoding yields `x` with suffix `r` remaining iff the
 input is `r` prepended to a relating prefix `s₀`. Unconditional — soundness and
 completeness of the *nondeterministic* decoder against `Rel`, for every
