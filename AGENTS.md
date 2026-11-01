@@ -81,12 +81,27 @@ nix develop --command openspec list --json | sed -n '/^{/,$p'   # active changes
 nix develop --command openspec validate --all                    # spec deltas sound
 ```
 
-**No change is open in this repo.** `codec-review-remediation` was archived on
-2026-11-01 into `openspec/changes/archive/2026-11-01-codec-review-remediation/`,
-and its requirements are now live under `openspec/specs/codec/**` — read those for
-the behavioural contract, and the archived `tasks.md` / `review.md` for how it got
-there and what was measured. **Nothing here is direction: the next session starts a
-new change, not a continuation.**
+**No change is open in this repo — the next one to create is `codec-performance`.**
+`codec-review-remediation` was archived on 2026-11-01 into
+`openspec/changes/archive/2026-11-01-codec-review-remediation/`, and its
+requirements are now live under `openspec/specs/codec/**` — read those for the
+behavioural contract, and the archived `tasks.md` / `review.md` for how it got
+there and what was measured. **Do not continue that change; start the new one.**
+
+**`codec-performance` exists to close one measured blind spot, and its first task
+is already identified.** Every performance lane in `Bench.lean` exercises
+`Codec.byte`, i.e. **exactly one candidate per step** — the cheapest possible
+shape. `packedCands` rebuilds a candidate list (and `PackedCand`'s proof terms) on
+every step, so a codec with _several_ alternatives per step pays that rebuild once
+per candidate, and **nothing in the bench measures that shape at all**. That is an
+unmeasured gap in a library whose selling point is that its claims are measured,
+and it is the reason to open the change — not "go faster". Before designing any
+optimisation, add a lane whose step relation yields k > 1 candidates and find out
+what the real cost curve is; the answer may well be that `@[inline]`/`@[specialize]`
+(measured: **zero** effect on the k = 1 path) still buys nothing, in which case say
+so and stop. Start from the warm/cold distinction already established: a _floor_ is
+a compute claim and comes from a `benchBurst` lane, a _throughput_ figure from the
+interleaved `benchRatio` lane, and the two must never be divided by each other.
 
 The one change still open anywhere in this tree's orbit is **`lean-basen`**, whose
 work happens in the sibling repo `../lean-basen` in that repo's own `nix develop`.
