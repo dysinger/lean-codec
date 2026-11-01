@@ -776,18 +776,30 @@ value sits on the empty string), yet at `n = 2` **both** `[a]` (one 2-byte step)
 of the same string.
 
 So the honest statement needs **two** extra hypotheses beyond unambiguity, and this
-section proves the law for exactly that pair:
+section proves the law for that pair:
 
-* `LengthDet R` — each value relates only to strings of one length. Rules out the
-  counterexample above.
+* `LengthDet R` — each value relates only to strings of one length.
 * `RelAligned R` — values are identified by their shared byte prefix; unambiguity
   extended *across* lengths, so the induction can compare two first steps whose
   lengths differ.
 
-Both are discharged for `byte` (`lengthDet_byte`, `relAligned_byte`), so neither is
-vacuous. The result is `relRepeat_unique_same_length`: uniqueness **indexed by list
-length**, which is the form `huniq` can honestly be replaced by — the counterexample's
-two lists differ in length, so the index excludes it.
+**Which hypothesis excludes the counterexample, stated correctly:** it is the
+**length index**, not `LengthDet`. `uniqCounterexampleRel` is *already* `LengthDet`
+(each value sits at exactly one length), so saying `LengthDet` "rules it out" would
+be false; what rules it out is that `[a]` and `[b, b]` differ in *list length*, and
+`relRepeat_unique_same_length` concludes only for equal-length lists.
+
+**Scope of the result, stated precisely.** `relRepeat_unique_same_length` is
+uniqueness **indexed by list length**:
+
+    relRepeat R xs n s → relRepeat R ys n s → xs.length = ys.length → xs = ys
+
+It is therefore **strictly weaker** than `huniq`, which has no length hypothesis, and
+it does **not** by itself discharge `decodeFull_spec`'s premise. The bridge is proved
+below in outline and is the open work (task 2.6 of `codec-review-remediation`): for a
+*constant*-length step relation the consuming list's length is pinned by `n`, so
+`xs.length = ys.length` follows and the index is discharged. Until that lands,
+`huniq` is an undischarged hypothesis with no in-tree supplier.
 
 Lemmas, all `[propext, Quot.sound]`-only with zero `Classical.choice`:
 `relRepeat_prefix_inj` / `relRepeat_suffix_inj` (same-length splices agree in their
@@ -821,10 +833,15 @@ theorem relRepeat_suffix_inj {n m : Nat} (hm : m ≤ n)
   exact this
 
 /-- A step relation is **length-determinate** when each value relates only to strings
-of a single length. This is exactly the hypothesis `huniq` needs beyond
-`relUnambiguous` + productivity (see the section note above), and it is *not*
-implied by unambiguity. It holds for `byte` (which lives only at `Bytes 1`) and for
-any codec whose leaves are fixed-width in their *value*. -/
+of a single length. It is one of the two hypotheses
+`relRepeat_unique_same_length` needs beyond unambiguity, and it is *not* implied by
+it. It holds for `byte` (which lives only at `Bytes 1`) and for any codec whose
+leaves are fixed-width in their *value*.
+
+Note what it does **not** say: it does not pin the length of a *list* of steps — two
+values may each sit at one length while a list of them has any number of elements.
+Pinning the list length needs the stronger, constant-length form (see the section
+note and task 2.6). -/
 def LengthDet {α : Type} (R : α → {m : Nat} → Bytes m → Prop) : Prop :=
   ∀ ⦃a : α⦄ {m₁ m₂ : Nat} (t₁ : Bytes m₁) (t₂ : Bytes m₂), R a t₁ → R a t₂ → m₁ = m₂
 
@@ -905,10 +922,10 @@ theorem lengthDet_byte : LengthDet (Rel Codec.byte) := by
   subst ha₂
   rfl
 
-/-- `RelAligned` holds for `byte`: both related strings are the one-byte `single`,
-so the shared prefix (index `0`) already determines the value. The companion of
-`lengthDet_byte`, completing the satisfiability evidence for the uniqueness
-hypothesis pair. `[propext, Quot.sound]`-only. -/
+/-- `RelAligned` holds for `byte`: both related strings are the one-byte `single`, so
+the shared prefix (index `0`) already determines the value. Proved directly from
+`Rel_byte` (no appeal to `relUnambiguous`); the companion of `lengthDet_byte` for
+the uniqueness hypothesis pair. `[propext, Quot.sound]`-only. -/
 theorem relAligned_byte : RelAligned (Rel Codec.byte) := by
   intro a b m₁ m₂ t₁ t₂ _hle h₁ h₂ hagree
   rw [Rel_byte] at h₁ h₂
