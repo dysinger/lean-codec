@@ -90,10 +90,13 @@ ids `R<lens>.<n>`), and its edit licence is `proposal.md` / `design.md`.
 
 **It is 56/56 — all tasks complete, and the change is ready to archive.** Verify
 with `openspec list --json` rather than trusting this number, and read the archive
-hazards above before running `openspec archive`: the MODIFIED requirements in
-`specs/codec/` **replace** their blocks wholesale, and `lean-basen` (a separate
-change, separate repo) still MODIFIES "The `basen` bases are `Codec` values", so the
-required order is recorded in `tasks.md`.
+hazards above before running `openspec archive`. **This change does not collide
+with `lean-basen`**: its deltas touch `byte-string` / `partial-remainder` /
+`review-remediation`, while `lean-basen` MODIFIES `openspec/specs/basen/spec.md` — so
+`codec-review-remediation` can be archived in either order. The MODIFIED-replaces-
+wholesale hazard is `lean-basen`'s to carry, and it is recorded there, not here.
+(An earlier revision of this paragraph claimed the order was "recorded in
+`tasks.md`"; it was not, and need not be.)
 
 **Next steps: archive this change, then start the next one — there is no open task
 left in `codec-review-remediation`.** The two pieces of unfinished business that a
@@ -116,12 +119,9 @@ Five facts about that change are worth stating here **only because a reader who
 skips the ledger would get them wrong**, and all five are also in `tasks.md`:
 
 - **`decodeFull_spec`'s `huniq` is now supplied at `Codec.byte`, and nowhere
-  else.** `Codec.decodeFull_spec_byte` needs no hypothesis; it goes through
-  `huniq_byte`, which uses `LengthConst` + `relRepeat_length_of_const` +
-  `lengths_eq_of_const` to hand `relRepeat_unique_same_length` the length index it
-  demands. For any **other** codec `huniq` remains a hypothesis and the general
-  derivation is open — do not claim it is discharged there, and do not re-derive the
-  `byte` chain (it is proved and axiom-checked). See `tasks.md` 2.6.
+  else.** `Codec.decodeFull_spec_byte` needs no hypothesis. For any **other** codec
+  `huniq` remains a hypothesis and the derivation is open — do not claim it is
+  discharged there. The chain itself is in `tasks.md` 2.6; do not re-derive it.
 - **Run the wired surfaces, not the specification.** `decodeWhole` /
   `decodeWholeBytes` and `encodeWhole` / `encodeWholeRepeat` / `encodeWholeBytes`
   are the named entry points, each tied to `decodeFull` / `encode` /
@@ -261,33 +261,38 @@ in `../lean-basen`. Never "fix" it by editing the importing Lean file.
 - **Speed: get as close to C as possible, with no set threshold — and attribute
   the gap to named causes, never to "boxed scalars".** The owner has explicitly
   set **no ratio to hit**; the requirement is to make the per-element loop as fast
-  as it can be and to say honestly where it stands. **These figures are ONE run,
-  vintage-stamped `benchDecodeShapes`, 2026-11-03, `n` = 4-8 KiB, load average
-  ~1.5-2 on 10 cores, one process** — do not mix a number from here with one from a
-  different run, and do not restate them without the stamp. In that run,
-  `decodeFullArrayRoot` (packed `Array`+`Nat`) was **48 ns/step**,
-  `decodeFullFastRoot` (`Bytes`/`Suffix`) **75**, `decodeArray`'s single step **12**,
-  `packedCands` **32**, the `Array` indexed read **3**, and an **ideal `Id.run` cursor
-  loop 6 ns/step** (`arr[k]!`, `Nat` cursor, `Array.push`).
+  as it can be and to say honestly where it stands.
 
-  The attribution is the point, and it has a **history** that must be read as
-  history: `packedCands` was **91 ns/step when it was a `filterMap` of two `dif`s
-  rebuilt on every step** (measured pre-6.6), and **32 after 6.6 replaced it with an
-  `attach.map`** — two different code shapes, not two measurements of one. That
-  change took the whole packed decode from 63 to 48 ns/byte. The `Array` read at
-  3 ns says the memory floor is not the problem; the per-step `List` that
-  `decodeArray` returns costs +6 ns; what is left is that `List` plus the
-  accumulator, against a 6 ns/step floor. **Machine load is a 2–3× factor on the
-  absolute column** (the same lane has read `decodeArray step` at both 12 and 34
-  ns/step), so only ratios within one run are meaningful — which is why the
-  vintage stamp is mandatory rather than decorative. Withdrawn, because no lane ever produced them: the
-  "~1,200–1,290 ns/byte", "~8.5× floor", and "20–40× ceiling" figures that used to
-  sit here. **Do not quote a "× off C" ratio for a per-element codec measured
-  against `memcpy`** — `memcpy` moves a byte; a parser does per-element work, so the
-  comparison is a category error and the honest reference is a hand-written C
-  _parser_, which this repo does not yet measure. Before timing anything here read
-  `tasks.md` 6.1b's MEASUREMENT RULES: naive timing reliably produces a wrong number
-  (dead-code elimination reporting `0 ns/op`, loop hoisting, cold-start means).
+  **The numbers live in `README.md`'s stamped table, not here** (this file's rule 2:
+  one source of truth per concern). Quote them only with that table's vintage stamp,
+  and only from the run that produced it.
+
+  **What belongs here is the attribution discipline, and the fact that it has been
+  wrong twice.** The named causes are: the per-step `List` that `decodeArray`
+  returns; `packedCands`' `attach.map` rebuilding `PackedCand`'s _proof terms_; and
+  the accumulator. The `Array` indexed read is cheap enough that the memory floor is
+  **not** the problem — that part of the attribution has survived every
+  re-measurement. What did not survive:
+
+  - `packedCands` was first attributed **91**, then **32**, and is really **~430 ns
+    per call**. The 32 came from a lane that built the candidate list once over the
+    whole array and let the harness divide by `n`.
+  - The "ideal floor" was quoted as **6 ns/step** and is **~15**. The lane was
+    `Array.push`-ing every element, so it measured the floor plus an output array.
+  - The `Array` read was quoted as **3** and is **~12**.
+
+  So: **a number is sourced because the lane, run, prints it — not because a lane
+  exists.** Three rows were labelled with a lane and still did not match it. When
+  you quote a figure here, run the lane in the same session and paste its output.
+
+  Withdrawn, because no lane ever produced them: the "~1,200–1,290 ns/byte",
+  "~8.5× floor", and "20–40× ceiling" figures that used to sit here. **Do not quote a
+  "× off C" ratio for a per-element codec measured against `memcpy`** — `memcpy`
+  moves a byte; a parser does per-element work, so the comparison is a category error
+  and the honest reference is a hand-written C _parser_, which this repo does not yet
+  measure. Before timing anything here read `tasks.md` 6.1b's MEASUREMENT RULES:
+  naive timing reliably produces a wrong number (dead-code elimination reporting
+  `0 ns/op`, loop hoisting, cold-start means).
 
 - **The packed cursor is `Nat`, not `USize`.** A `System.Platform.numBits = 64`
   premise would break the `[propext, Quot.sound]`-only gate. `commitRemainder` is
