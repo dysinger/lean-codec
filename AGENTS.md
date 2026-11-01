@@ -4,55 +4,51 @@ Guidance for AI coding agents working in this repository.
 
 > ## NEXT SESSION: ONE TASK, AND ONLY THIS TASK
 >
-> **Fix `benchBurst` and re-derive the performance figures. No OpenSpec change for
-> this — do it directly, on the tree, in one session.**
+> **`k > 1` candidates in the packed decode — measure first, then decide. No
+> OpenSpec change; work on the tree.**
 >
-> **The bug.** `Bench.lean`'s `benchBurst` takes the **minimum** of 5 timed rounds
-> (`best == 0 || t1 - t0 < best`). The rounds are not independent — they differ only
-> in how warm the cache is — so the min is systematically the _most favourable_
-> round. Measured on the `idealCursor` loop at n = 4096, one invocation:
+> **Why now.** The previous session fixed `benchBurst` (min/median/max over an
+> L1-resident working set) and re-derived the table. The measured warm figures are
+> `idealCursor` **~3.0 ns/step** against `decodeFullArray` **~31.8 ns/step**, i.e.
+> **~10–11×**. Every remaining named cause of that gap — the per-step `List` that
+> `decodeArray` returns, `packedCands`' list build, the accumulator — has now been
+> priced at or near zero for the `byte` codec, because **`byte` has exactly one
+> candidate per cursor position**. The search loop that the numbers are about
+> (`decodeFullArraySearch` walking `packedCands`) therefore never iterates on the
+> measured workload: the lane measures the _degenerate_ `k = 1` case and calls the
+> result "the decoder".
 >
-> ```
-> round 0: 25578 ns/op      (cold)
-> round 1: 22425
-> round 2: 15405
-> round 3: 12742
-> round 4: 11931            (fully warm)  <- what the lane reports
-> ```
+> **The task, in order:**
 >
-> So the published "**2.4 ns/step pure-Lean floor**" is a _best case_, not a floor,
-> and the ~11× gap derived from it is derived from a cherry-picked endpoint. This is
-> the same defect the warm/cold correction was meant to remove, one layer down.
-> Do not trust any figure currently in `README.md`'s table until you have re-run it.
->
-> **Do all three, in this order:**
->
-> 1. **Report a range, not a min.** Have `benchBurst` collect every round and print
->    `min / median / max` (and the round count), so the decay is visible instead of
->    hidden behind one endpoint. The data is already collected; this is the cheap fix.
-> 2. **Make "warm" actually mean L1-resident.** It rotates 8 buffers of `n` bytes,
->    so the working set is `8n` = 32 KiB at n = 4096 — past L1. Use **one** buffer and
->    vary a byte _inside_ it per call: the input still changes (so nothing hoists)
->    while the working set stays resident.
-> 3. **Re-derive the table and correct `README.md`.** With (1) and (2) in place, re-run
->    `bench 4096 4096`, replace the `warm ns/step` column with the measured range, and
->    restate the gap as a range. Update `AGENTS.md`'s attribution bullet if the
->    numbers move it.
+> 1. **Build a lane that actually produces `k > 1`.** A `Codec` whose decode has
+>    several candidates at one position — `byte | byte` gives two, and a
+>    `satisfy`-guarded alternative gives one or two — on a buffer where the
+>    fully-consuming candidate is **not** the first. Assert the lane's premise
+>    (`packedCands` length > 1 at some cursor) rather than assuming it, so a lane
+>    that silently degenerates to `k = 1` fails instead of reporting a number.
+> 2. **Measure `benchBurst` on it**: min/median/max, L1-resident, next to the same
+>    `idealCursor` floor in the same run. That gives the per-candidate cost of the
+>    search, which is the only un-priced term left.
+> 3. **Only then** decide whether anything is worth rewriting. Do **not** optimise
+>    before step 2 produces a number, and do **not** re-quote the ~10–11× as if it
+>    covered `k > 1` — it does not, and saying so is the whole deliverable if the
+>    measurement says the search is cheap.
+> 4. Record the outcome in `README.md` (a new row, with its measured range and its
+>    vintage stamp) whether or not it moves the gap.
 >
 > **Finish with:** `lake build` and `lake build bench` green with zero warnings,
-> `openspec validate --all` green, then commit `Bench.lean` and `README.md` (and
-> `AGENTS.md` if edited) — **individual files, never `git add -A`** — and push.
+> `openspec validate --all` green, then commit `Bench.lean` and `README.md`
+> (individual files, never `git add -A`) and push.
 >
 > **Also, and it is not optional:** every figure you write down must be the literal
-> output of a lane you ran in that session, pasted in. This repository has had five
-> performance figures wrong at some point (6 → 15 → 2.4 for the floor; 32 → 430 → 3
-> for `packedCands`; 3 for the array read), and every one of them was caught by
-> running the lane, not by reading it.
+> output of a lane you ran in that session, pasted in. This repository has had six
+> performance figures wrong at some point (6 → 15 → 2.4 → 3.0 for the floor;
+> 32 → 430 → 3 for `packedCands`; 3 for the array read), and every one of them was
+> caught by running the lane, not by reading it.
 >
-> **Explicitly out of scope, and do not start them:** any new OpenSpec change; the
-> `k > 1` candidate blind spot (record it only if (1)-(3) leave you with time and a
-> measured result worth recording); `lean-basen` (separate repo, separate session);
-> and any optimisation of the decoder itself.
+> **Explicitly out of scope, and do not start them:** any new OpenSpec change;
+> `lean-basen` (separate repo, separate session); and any optimisation of the
+> decoder itself _before_ step 2 has printed a number.
 
 **Four hard requirements, before anything else:**
 
@@ -332,11 +328,15 @@ in `../lean-basen`. Never "fix" it by editing the importing Lean file.
     and is **3 ns/call hot / ~1,860 ns/call across 8 cold buffers**. The 430 was a
     _memory_ figure wearing a compute label: `packedCands` on `byte` builds a
     one-element list, so what it was timing was first-touching a 4 KiB array.
-  - The "ideal floor" was quoted as **6 ns/step**, then **16**, and is **~2.4 warm /
-    ~16 cold**. The 6 came from a lane that `Array.push`-ed every element (floor
-    plus n elements of growth); the 16 is a real number but _cold_, because
-    `benchRatio` interleaves a `memcpy` per sample and evicts the input.
-  - The `Array` read was quoted as **3** and is **~12**.
+  - The "ideal floor" was quoted as **6 ns/step**, then **16**, then **2.4**, and is
+    **~3.0 warm (burst median) / ~18–22 cold**. Each step of that sequence was a
+    different mistake: the 6 came from a lane that `Array.push`-ed every element
+    (floor plus n elements of growth); the 16 is a real number but _cold_; and the
+    2.4 was the **minimum of 5 decaying rounds** at an `8n` working set — the most
+    favourable endpoint of the wrong variant. `benchBurst` now reports
+    min/median/max over one L1-resident buffer, and 3.0 is its median.
+  - The `Array` read was quoted as **3** and is **~14–18** (cold, per `n`) / **~78
+    ns per call** (burst, one read per call).
 
   **Warm and cold are two different questions and the bench now prints both.**
   `benchRatio` interleaves a same-size `memcpy` (right for a ratio to `memcpy`, but
@@ -346,6 +346,15 @@ in `../lean-basen`. Never "fix" it by editing the importing Lean file.
   **throughput** figure comes from the interleaved lane. Never present one as the
   other — that conflation is what made a 2.4 ns/step floor read as 16 and turned an
   ~11× gap into a claimed ~3×.
+
+  **And a burst is a _range_, not a point.** `benchBurst` used to report the
+  minimum of its rounds and the rounds are not independent — they differ only in
+  cache warm-up, so the minimum is systematically the most favourable one. It now
+  prints min/median/max and the round count, over **one** buffer (the working set is
+  `n`, not `8n`; the old 8-buffer rotation is still printed as `(burst@8buf)`).
+  Quote the **median** and the range, never the min alone. The same rule as the rest
+  of this section: the lane is the source, and the lane now prints the spread it
+  always had.
 
   So: **a number is sourced because the lane, run, prints it — not because a lane
   exists.** Three rows were labelled with a lane and still did not match it. When
