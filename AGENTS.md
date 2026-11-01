@@ -33,10 +33,14 @@ Guidance for AI coding agents working in this repository.
 >    by the _length index_, not by `LengthDet`. So the work is a condition that
 >    pins the consuming list's length without requiring constant step length —
 >    the `RelAligned` direction already sketched in `Codec/Sound.lean`.
-> 2. Discharge it at **one** new codec with unequal-length branches (`varint`-shaped:
->    `satisfy`-guarded `alt`), so the premise has an in-tree supplier that is not
->    `Codec.byte`. That is the same move task 2.6 made for `byte`, and it is what
->    turns "proved for literals" into "proved for a real format".
+> 2. Discharge the condition **generically**, at the _schema_ a variable-length
+>    format is built from — `alt` of two `satisfy`-guarded branches with a
+>    disjointness premise, stated over an abstract predicate — so the premise gets an
+>    in-tree supplier that is not `Codec.byte`. **Do not instantiate it at a concrete
+>    format**: `[S3]` keeps formats out of this package, and the `varint` that would
+>    consume the lemma belongs in `../lean-basen`. A generic schema-level lemma is
+>    the reusable artifact; a `varint` here would repeat the `Codec/Examples.lean`
+>    breach that was just removed.
 > 3. Record the outcome in `Codec/Sound.lean`'s section note and `README.md`
 >    (the `[S1]`/`huniq` discussion). If the condition turns out not to be
 >    statable without new hypotheses, say so and say exactly which — do not weaken
@@ -382,6 +386,13 @@ in `../lean-basen`. Never "fix" it by editing the importing Lean file.
   So: **a number is sourced because the lane, run, prints it — not because a lane
   exists.** Three rows were labelled with a lane and still did not match it. When
   you quote a figure here, run the lane in the same session and paste its output.
+  This package has had **eight** performance figures wrong at some point (6 → 15 →
+  2.4 → 3.0 → 2.46 for the floor; 91 → 32 → 430 → 3 → 75 → 86 for `packedCands`,
+  the 3 withdrawn outright; 3 → 11–18 for the array read; and "~11×" derived from a
+  cherry-picked burst round). **Two were caught by the owner asking why two
+  committed figures could not both be true, not by a lane** — so an internal
+  inconsistency between two numbers is itself a legitimate check, and "it came from
+  a lane" is not sufficient.
 
   Withdrawn, because no lane ever produced them: the "~1,200–1,290 ns/byte",
   "~8.5× floor", and "20–40× ceiling" figures that used to sit here. **Do not quote a
