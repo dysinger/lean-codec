@@ -1319,9 +1319,11 @@ def decodeWhole {α : Type} (d : Codec α) (h : ConsumesByte d) (a : Array UInt8
   decodeFullArrayRoot d h a
 
 /-- **`decodeWhole` decodes exactly the specification.** `arrayToBytes`-readback of
-the packed input, decoded by `decodeFull`, is what `decodeWhole` returns — so every
-law stated about `decodeFull` (in particular `decodeFull_spec`'s "`some xs` iff `xs`
-is a full-consumption `decodeRepeat` result") applies to the wired surface unchanged.
+the packed input, decoded by `decodeFull`, is what `decodeWhole` returns, so every
+law about `decodeFull` transfers — **carrying its hypotheses with it**. In
+particular `decodeFull_spec` is *conditional* on full-consumption uniqueness
+(`huniq`, see `Codec.Sound`'s "Full-consumption uniqueness" section), so it explains
+the wired surface only under that premise; this equality does not supply it.
 One rewrite of the bridge; `[propext, Quot.sound]`-only. -/
 theorem decodeWhole_eq {α : Type} (d : Codec α) (h : ConsumesByte d)
     (a : Array UInt8) :
