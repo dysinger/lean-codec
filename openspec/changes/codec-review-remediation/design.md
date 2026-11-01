@@ -2,10 +2,12 @@
 
 ## Context
 
-Four adversarial reviews produced 74 findings across four lenses; `review.md`
-holds the verbatim reports and an id-indexed table (`R1.1`…`R4.22`). This design
-records only the _judgement calls_ — which findings to fix, how, and which to
-decline — because the findings themselves are already evidence-backed.
+Five adversarial reviews produced 75 findings across five lenses; `review.md`
+holds the verbatim reports and an id-indexed table (`R1.1`…`R4.22`, `R5.1`). The
+fifth (`R5`) is the _measured_ lens — it runs the built binary rather than reading
+it — and was added after the first four. This design records only the _judgement
+calls_ — which findings to fix, how, and which to decline — because the findings
+themselves are already evidence-backed.
 
 The constraint set is unchanged from the library's own rules:
 
