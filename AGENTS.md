@@ -86,29 +86,38 @@ nix develop --command openspec instructions apply \
 The active change is **`codec-review-remediation`**; work it and nothing else. Its
 ledger is `openspec/changes/codec-review-remediation/tasks.md` (open work and the
 definition of done), its evidence base is `review.md` (the adversarial findings,
-ids `R<lens>.<n>`), and its edit licence is `proposal.md` / `design.md`. It is
-**50/50 complete**: every section is done and the next step is archive, not
-implementation. `tasks.md` wins if this line disagrees with it.
+ids `R<lens>.<n>`), and its edit licence is `proposal.md` / `design.md`.
+
+**It is 49/56, NOT complete — 2.6 was reopened after an adversarial review of this
+session's own work found its "DONE" overstated.** The next work is **`tasks.md` 2.6**
+(which carries the full, proved plan) followed by **§7** (six post-review
+corrections). Do not archive. `tasks.md` wins if this line disagrees with it — run
+`openspec list --json` for the live count rather than trusting this number.
 
 `lean-basen` (18/25) is a separate change whose work happens in the sibling repo
 `../lean-basen`, in that repo's own `nix develop`; it does not touch this tree. No
 change scoped to **this** repo is still in progress beyond the active one.
 
-**Direction lives in exactly two places: this file and `openspec/`.** If you are
-looking for "what do I do next" and you are not reading `AGENTS.md` or
-`openspec/changes/<name>/tasks.md`, you are reading something stale — say so and
-delete it rather than following it.
+**Direction lives in exactly two places: this file and `openspec/`** — no
+`HANDOFF.md`, no notes file, no scratch tree. `openspec/lean-notes.md` is
+_lessons, not direction_ (it is the project half of the global `lean` skill); if an
+entry there ever reads like a task list, move it to the ledger.
 
 Five facts about that change are worth stating here **only because a reader who
 skips the ledger would get them wrong**, and all five are also in `tasks.md`:
 
-- **The code half is finished.** `lake build` is green with **no `sorry`
-  anywhere**, and the packed decoder and every wired surface are proved equal to
-  the specification, `[propext, Quot.sound]`-only.
+- **`decodeFull_spec`'s `huniq` is still unsupplied, and that is the open work.**
+  The `Codec/Sound.lean` uniqueness section is real mathematics — all true,
+  `[propext, Quot.sound]`-only — but its headline lemma is **indexed by list
+  length** and `huniq` is **not**, so it does not yield `huniq`. The closing route
+  is proved and written out in `tasks.md` 2.6 (`LengthConst` +
+  `relRepeat_length_of_const` + `lengths_eq_of_const`). Do not re-derive it.
 - **Run the wired surfaces, not the specification.** `decodeWhole` /
   `decodeWholeBytes` and `encodeWhole` / `encodeWholeRepeat` / `encodeWholeBytes`
   are the named entry points, each tied to `decodeFull` / `encode` /
   `encodeRepeat` by a law. `decodeFull` and `encodeRepeat` stay the specification.
+  (Those laws equate them to `decodeFull`, so they **carry `huniq`** — that is
+  finding 7.6, not a defect in the wiring.)
 - **Read `tasks.md` 6.1b's "SESSION 9" block before touching
   `Codec/Packed.lean`** (five plan corrections), and check `#print axioms` on
   **any** new transport lemma rather than assuming — the `Classical.choice` trap
@@ -395,11 +404,13 @@ the required order in the later change's `tasks.md`.
 - Our supplement (project layout, proving-over-primitives, `partial`/coinduction
   lessons, the `Classical.choice` and `omega`-modulo traps above): global skill
   `lean`. It holds **only the generic half** — keep it that way.
-- **`docs/lean-notes.md` is this project's half of that skill.** It is the
+- **`openspec/lean-notes.md` is this project's half of that skill.** It is the
   domain-specific record (`Codec`, `Bytes n`, `relRepeat`, `Suffix`, the Layer-2
   seams) that used to live in the skill's Append; the skill points here. Read it
   when a proof involves this library's own primitives, and add to it — not to the
-  global skill — when the lesson only makes sense knowing this library.
+  global skill — when the lesson only makes sense knowing this library. It holds
+  **lessons, not direction**: 57 of its entries are also still in the skill, which
+  `tasks.md` 7.4 tracks closing. Do not add a new entry to both files.
 - Lean PR/convention/proof/MWE skills: `lean-pr`, `lean-bisect`, `lean-proof`,
   `lean-mwe`, `mathlib-build`, `mathlib-pr`, `mathlib-review`, `nightly-testing`,
   `lean4-setup` (all under the `leanprover` skill family).
