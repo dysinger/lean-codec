@@ -10,18 +10,23 @@ focused entry per lesson, `#print axioms`-verified where an axiom claim is made.
 `openspec/changes/<name>/tasks.md`; if an entry here ever reads like a task list,
 it is a defect — move it to the ledger.
 
-**Duplication status — measured 2026-11-02, not carried over.** The earlier claim here
-(57 skill entries duplicated verbatim, all 176 of the original Append) **no longer
-holds and is withdrawn**. The split has since been done properly, so the two files
-are genuinely not mirrors: this file held **178** dated entries and the skill **59**,
-of which **8** appear word-for-word in both. Counts by the shape of the measurement:
-compared on normalized full bodies, 8 of 59 match exactly; compared on a 120-char
-prefix, 23 share an opening. The `AGENTS.md` "one source of truth per concern" rule
-therefore has no large violation left to drain, and `tasks.md` 7.4 is closed on that
-basis. **Do not add a new entry to both files** — a generic lesson goes in the
-skill, a domain-specific one here. The specific low-level reasons a lesson was once
-duplicated are not recorded because they are no longer true; trust the counts above
-over any older number you find quoted. **Reproduce it** with `grep -c '^- 20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]'`
+**Duplication status — re-measured 2026-11-04, not carried over.** The earlier claim
+here (57 skill entries duplicated verbatim, all 176 of the original Append) **no
+longer holds and is withdrawn**. The split has since been done properly, so the two
+files are genuinely not mirrors: this file holds **180** dated entries and the skill
+**66**, of which **4** appear word-for-word in both (measured on normalized full
+bodies; on a 120-char prefix **8** share an opening). The `AGENTS.md` "one source of
+truth per concern" rule therefore has no large violation left to drain, and
+`tasks.md` 7.4 stays closed on that basis. **Do not add a new entry to both files** —
+a generic lesson goes in the skill, a domain-specific one here. The specific
+low-level reasons a lesson was once duplicated are not recorded because they are no
+longer true; trust the counts above over any older number you find quoted. (Both
+numbers moved on 2026-11-04 rather than drifting: 5 generic entries were added to
+the skill and 1 domain-specific one here, and the overlap is 4 exact.) The older 8/23 figures came from a
+method that is not recorded, so **no trend is claimed** — re-run the measurement below
+rather than comparing against them.
+
+**Reproduce it** with `grep -c '^- 20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]'`
 on each file for the totals, and for the overlap split both on `\n(?=- 20\d\d-\d\d-\d\d — )`,
 normalise each body with `' '.join(body.split())`, and intersect the two sets — the skill
 lives outside the repo, so without that recipe a fresh clone cannot check the claim.
@@ -1279,5 +1284,7 @@ dsimp; omega` closes the `Fin`-proof-transparent goal (bare `rfl`/`congr` leaves
   `Fin.foldr_succ`/`getElem_cons_zero`/`getElem_cons_succ`).
 
 - 2026-11-02 — **Two of my own diagnoses of a stuck rewrite were _falsified_ by a two-line probe; write the probe before the note.** While blocked on `(Suffix.empty n).prepend s = s`, I twice explained the failure from memory of the error text — first "`subst`/`cases` on a structure-field projection are refused", then "`cases` fails when another hypothesis's type mentions the projection". Both are **false**, each refuted in one `example`: `example (n : Nat) : (Suffix.empty n).remaining = 0 := rfl` proves the fact definitionally, and `(h : (Suffix.empty n).remaining = 0) (s : Bytes (n - (Suffix.empty n).remaining))` closes by `cases h; trivial`. Hours of "the eliminator rejects a projection" reasoning were built on a wrong foundation. **The rule:** when a rewrite is stuck, the _first_ artifact to write is a minimal `example` isolating the mechanism you believe is responsible, asserted with `fail_if_success` so that it fails if and only if your diagnosis is wrong. A plausible root cause is a hypothesis with a cheap test, not evidence.
+
+- 2026-11-04 — **`open Codec` hijacks `pure`; use `return ()` in `do`.** `Codec.pure` is a **constructor** (`pure : α → Codec α`), and with the namespace open it shadows `Monad.pure` in `do`-notation, so `pure ()` in an `IO` block elaborates to a `Codec Unit` and fails with the misleading `of sort Type 1 but is expected to have type IO Unit`. Same class of collision as `open`ing any namespace that declares a `pure`/`map`/`bind`; two fixes, both local: use `return ()` inside `do`, or qualify (`IO.pure ()` is **not** a thing in this toolchain — `IO.pure` is an unknown constant, which is itself a trap worth knowing), so `return` is the reliable spelling. Symmetrically, `open Codec` also puts `Iso` (root namespace) and `Codec` (type _and_ namespace) in scope, so `Codec.iso`/`Codec.pure` written unqualified can silently pick the wrong one.
 
 - 2026-11-02 — **`simp only [f]` unfolds `f` inside a `dite` scrutinee's _type_, which silently re-spells the goal and makes correctly-stated lemmas unfireable.** Verified reproducer: with `def mylen (n : Nat) : Nat := 0`, the goal `(if h : i.val < mylen n then i.val else 0) = i.val` becomes `(if h : i.val < 0 then …)` after `simp only [mylen]`. This is exactly the trap that consumed the `Suffix.empty`-`prepend` session: `simp only [concat, Suffix.empty]` rewrote `n - (Suffix.empty n).remaining` to `n - 0` **inside** the `dite` scrutinee of `concat`, after which a lemma stated at the `remaining`-spelling (`cast_fin_symm_val (splice_add (Nat.sub_le n (Suffix.empty n).remaining))`) still had the right _term_ but `rw` no longer found the pattern — while the printed goal looked "almost right". **Fixes, in order:** (a) do not `simp only` a definition that appears in a scrutinee's type — use `unfold` plus targeted `rw`, or `conv` to confine the rewrite; (b) state helpers **at the variable length** (`∀ k, …`, with `k := n - t.remaining` supplied by the caller) so no definition sits inside a scrutinee's type at all. Also a red herring to record: Lean's `dif_pos` deprecation says "use `dite_eq_left` instead", which invites blaming `dite_eq_left` when the goal had already been corrupted upstream — when a `dite` lemma "does not find the pattern", print the goal and inspect the scrutinee's **type** before changing tactic.
