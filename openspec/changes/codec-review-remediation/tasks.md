@@ -448,26 +448,55 @@ copyLen)` from the C's order; it does, and the reason is `min`'s AC.
 
 ## 4. `AGENTS.md`: process and attribution defects
 
-- [ ] 4.1 **Split the verification recipe by repository** (R3.4).
+- [x] 4.1 **Split the verification recipe by repository** (R3.4).
       It opens "In `../lean-basen`, from **its own** `nix develop`" and then lists
       `openspec validate --all` (**this** repo), an unqualified `nix flake check`
       (ambiguous between two different flakes), and a `BaseN` axiom probe. Give
       each repository its own subsection and its own commands, and mark inline any
       step that must run elsewhere.
+      **DONE**, and the split was already in place when this task started (an
+      earlier session rewrote the section into `### In \`lean-codec\` (this repo)`    /`### In \`../lean-basen\` (its own \`nix develop\`)`plus a
+   `### The rail for a cross-repo import failure`block, under a one-line
+    "every command names its own repository" preamble). Verified against the
+    finding: every command now sits under the heading of the repo it belongs to,
+   `openspec validate --all`and`#print axioms Codec.roundtrip`are in the
+   `lean-codec`block,`#print axioms BaseN.…`is in the`lean-basen`block, and
+    the rail says "from`../lean-basen`'s sandboxed build … here".
+    **What this session added** is the one thing still missing: the finding's
+    "say explicitly that `nix flake check`is a **per-repo** command, never 'run
+    it once for the ecosystem'" — now a paragraph under the`lean-codec`block,
+    naming this flake's`checks` set (`formatting`/`lean`/`openspec`) as what the
+      other repo does not have.
 
-- [ ] 4.2 **Fix the `nix build '.#bench'` contradiction** (R3.5).
+- [x] 4.2 **Fix the `nix build '.#bench'` contradiction** (R3.5).
       It is used as the post-`nix develop` example three lines above forbidding
       foreground builds. Replace with the dev-loop command `lake build bench`, and
       state that `nix build '.#bench'` exists (`flake.nix:58`) as the
       sandboxed/CI equivalent and is a long build (`nohup`, never foreground).
+      **DONE, and the offending example no longer existed.** The review cited
+      `AGENTS.md:63` (inside a toolchain bullet) and `:303`; the `Current state` /
+      toolchain rewrite an earlier session performed deleted that bullet, so the
+      contradiction had already gone. The one remaining mention was at the bottom
+      in **Git conventions** (`untracked Codec/*.c breaks nix build .#bench`),
+      which is the genuinely useful fact. That line now cross-references the dev
+      loop — "the dev-loop command is `lake build bench`, which links the `.c` from
+      the working tree and does not care about `git`" — and states that
+      `nix build '.#bench'` exists as `flake.nix:58`/`packages.bench` and is a
+      **long** build: `nohup`, never foreground.
 
-- [ ] 4.3 **Flag the `../lean-basen` bench lane as known-incomplete** (R3.6).
+- [x] 4.3 **Flag the `../lean-basen` bench lane as known-incomplete** (R3.6).
       The recipe presents `lake build bench` there as green, but that repo's task
       5.3 records that the `bench` exe is not wired as a flake target. Annotate
       the recipe line and note that 5.3 is a _verification-recipe_ item, not a
       docs nit, so it should be done first if the bench is needed.
+      **DONE.** The `../lean-basen` block's bench line is now `# the bench lane
+    (dev-loop only)` with a paragraph under it: the lane is **known-incomplete**
+      (no `packages.bench` in that flake, so the exe is not a flake target, and
+      that repo's task 5.3 owns wiring it); do not read a green
+      `lake build bench` as "verified in CI"; and 5.3 is a _verification-recipe_
+      item, to be done first if the bench is needed.
 
-- [ ] 4.4 **Record the `bad import Codec.Normal` rail** (R3.7 — the missing rail).
+- [x] 4.4 **Record the `bad import Codec.Normal` rail** (R3.7 — the missing rail).
       Symptom, cause, fix: in `../lean-basen`, a `bad import 'Codec.Normal'` from
       the _sandboxed_ build means the flake's `codec` pin predates the module —
       **not** a bad import. Check
@@ -475,8 +504,17 @@ copyLen)` from the C's order; it does, and the reason is `min`'s AC.
       `git log --oneline -1 -- Codec/Normal.lean` here, then
       `nix flake update codec` (targeted, not all inputs) and `lake update codec`.
       Explicitly: do **not** "fix" it by editing the importing Lean file.
+      **DONE — already landed before this session.** `AGENTS.md`'s
+      `### The rail for a cross-repo import failure` block carries the finding
+      verbatim: symptom (sandboxed `bad import` of a core module), cause (the
+      flake's `codec` pin predates the module), diagnostic
+      (`flake.lock` → `nodes.codec.locked.rev` against
+      `git log --oneline -1 -- Codec/Normal.lean` here), fix (`nix flake update
+    codec`, targeted, then `lake update codec`), and the explicit warning not to
+      edit the importing Lean file. Marked `[x]` because the artefact exists in the
+      tree, not because this session wrote it.
 
-- [ ] 4.5 **Trim `Current state` and fix its precision** (R3.8, R3.9, R3.12).
+- [x] 4.5 **Trim `Current state` and fix its precision** (R3.8, R3.9, R3.12).
       The block is ~90 lines and restates completed-change internals, which the
       file's own header routes to `tasks.md`; and it duplicates the leak findings
       now canonicalised by task 1.4. Cut it to the forward-looking distillate
@@ -487,13 +525,43 @@ copyLen)` from the C's order; it does, and the reason is `min`'s AC.
       three changes from this root, one `in-progress` (`lean-basen`, the proxy
       ledger for `../lean-basen`); say "no change scoped to this repo is still
       in progress".
+      **DONE.** `Current state` is cut from ~60 lines of prose to three
+      **machine-checkable** commands at the top (`openspec list --json`,
+      `openspec validate --all`, `openspec instructions apply --change … --json`)
+      plus five forward-looking bullets (the code half is finished; run the wired
+      surfaces not the spec; read 6.1b's SESSION 9 before touching `Packed.lean`;
+      the seam is unwired on an axiom argument; only `R5.1` may change a shape).
+      Removed: the `[D#]`-restating prose, the "work order §1/§2/§6/§3 done"
+      enumeration (now a single "§4, then §5" line that defers to `tasks.md`), and
+      the axiom-trap restatement task 1.4 canonicalised — it is now a one-line
+      pointer to the ergonomics catalogue. The `7.1/7.2/7.3` history block it
+      asked to relocate was **already gone** from the file (an earlier session
+      deleted it), so there was nothing to move; the archived change's own
+      `tasks.md` remains the reference. The `lean-basen` sentence now reads "it does
+      not touch this tree. No change scoped to **this** repo is still in progress
+      beyond the active one" — the R3.12 reword.
 
-- [ ] 4.6 **Stop calling `bench` an "extraction"** (R3.10).
+- [x] 4.6 **Stop calling `bench` an "extraction"** (R3.10).
       `lakefile.lean` declares a plain `lean_exe bench` (`root := \`Bench`) that
 links the Layer-2 C object; there is no extraction step. This also
 contradicts `AGENTS.md`'s own "all codecs are pure Lean". Fix the wording
 here **and** in `default.nix`'s comment, and state that §10.5 extraction is
-      not implemented so nobody goes looking.
+    not implemented so nobody goes looking.
+    **DONE — and the review under-counted the sites: there were four, not two.**
+    `grep -n extraction default.nix flake.nix CHANGELOG.md AGENTS.md`found
+   `default.nix` (3: the header bullet, the "`bench`is the extraction
+    vehicle" sentence, and the`bench`derivation comment + its`description`),
+    `flake.nix:57`(the`packages.bench` comment), and **`CHANGELOG.md:69-70`** —
+    which the review lists only as "cross-doc" and the task text omitted
+    entirely. All four now say what is true: `lean_exe bench`
+    (`root := \`Bench`, `moreLinkObjs := #[byteSliceO]`) is a **plain
+    executable** that Lean's ordinary C backend compiles and that additionally
+    links the seam object; there is **no** C-extraction step, and the §10.5
+    extraction an older plan described is **not implemented** — do not go
+    looking for it. `AGENTS.md` needed no edit: the toolchain bullet the review
+    cited (`:99`) no longer exists in the rewritten file, and `grep`finds no
+    "extraction" in it. Verified:`nix-instantiate --parse default.nix`and
+   `flake.nix` both parse.
 
 ## 5. The global `lean` skill (outside this repo — do last)
 
