@@ -1357,8 +1357,8 @@ theorem decodeWholeBytes_size {n : Nat} (s : Bytes n) : (bytesToArray s).size = 
 /-- **Decode a whole buffer as exactly ONE value.**
 
 `decodeWhole`/`decodeWholeBytes` answer "how many values does this buffer hold" —
-`Option (List α)`. For a single-value codec (`u16le`, a header, a whole message) that
-is the wrong question, and until this function there was **no wired entry point for
+`Option (List α)`. For a single-value codec (a 2-byte integer, a header, a whole
+message) that is the wrong question, and until this function there was **no wired entry point for
 it**: `decodeOne` threads a cursor but is the committed-choice decoder, unproven
 against the spec, and never wired; `decodeFull` is the repetition form. So a
 downstream author with a 2-byte integer codec had to either invent repetition

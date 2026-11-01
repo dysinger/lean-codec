@@ -134,7 +134,7 @@ decoder takes as a parameter. Until this section it was supplied **only** for
 leaves (`byteConsumesByte`, `satisfyConsumesByte`) and — as of the `k > 1` bench
 work — for `alt` (`Codec.altConsumesByte`). Nothing derived it for `seq` or `iso`,
 so the shape *every real format takes* (a sequence of fields, viewed through an
-`Iso`) had no witness at all: a downstream author defining `u16le` as
+`Iso`) had no witness at all: a downstream author defining a 2-byte integer as
 `iso … (byte * byte)` had to prove productivity by hand.
 
 They live here rather than beside `altConsumesByte` in `Codec/Decode.lean`
