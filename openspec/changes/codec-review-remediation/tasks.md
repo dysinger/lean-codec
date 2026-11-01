@@ -913,6 +913,19 @@ before the rest)`** section with the three-level order the task asks for:
       in three places) and link the official File Handling Rules; add a scope
       disclaimer (stdlib-only, 4.34-pinned) and attach conditions to the
       "20–40× off C" figure.
+      **Done, verified item by item on 2026-11-02 rather than taken on trust.** The
+      review had confirmed five of the seven by hand; re-checked here against the
+      live file, which is what this note records: * **Landed:** the nav table (SKILL.md:47 region, with a topic index); the
+      duplicated Changelog section is gone; the `omega`-modulo claim is narrowed
+      to the _existential / modulo-hypothesis_ form (line 184 states both the
+      refusal and that the equational form **is** in `omega`'s fragment); the
+      `git stash` rule appears **once** (`grep -c` = 1, was three); the
+      stdlib-only / toolchain-pinned scope disclaimer is in the header. * **NOT landed, and recorded as deferred:** the ~70-char cap on bold
+      lead-ins. Measured on the current file — **42 of 59** dated entries exceed
+      70 characters (e.g. 174, 232 ticks). It is a cosmetic greppability tidy that
+      would touch most of the file's headings, so it is deferred deliberately, not
+      forgotten; the counts above are the measurement to re-run if it is ever
+      picked up.
 
 ## 6. `R5` — decode/encode performance (CRITICAL, added after the four lenses)
 
@@ -2579,7 +2592,7 @@ reading the code had produced.
 > `git diff` over the range shows **zero deletions** in `Codec/*.lean` — D9's
 > shape discipline held (no declaration statement changed).
 
-- [ ] 7.1 **Fix the unmeasured performance figures in `AGENTS.md` / `README.md`** (review finding, both passes).
+- [x] 7.1 **Fix the unmeasured performance figures in `AGENTS.md` / `README.md`** (review finding, both passes).
       `README.md:696` says the bench table's figures are "each … reproducible from a
       lane that prints it". **They are not.** `grep 'benchRatio "' Bench.lean` finds
       six labels: `encodeWhole`, `decodeFull spec`, `decodeFullFast`,
@@ -2590,20 +2603,58 @@ reading the code had produced.
       pick one and record it: **(a)** add the missing lanes (preferred — the floor
       column is load-bearing for the whole §6.4 narrative), or **(b)** delete the
       unsourced rows and stop presenting a ratio to an unmeasured denominator.
-- [ ] 7.2 **De-mix the measurement vintages in `AGENTS.md:247-255`.**
+
+      **Done — option (a), the missing lanes were added and run.** `benchDecodeShapes`
+      gained three `benchRatio` labels keyed to the three unsourced rows:
+      `arrayRead` (the `Array` indexed read), `idealCursor` (the `Id.run` cursor loop
+      that is the *denominator* of the whole "× floor" column) and `packedCands`
+      (the candidate list itself). Verified they print on a real run at `n = 4096`:
+      `arrayRead 32 ns/byte`, `idealCursor 51`, `packedCands 27`, `decodeArray step
+      34` (load average 12 on 10 cores; a second run under lighter load read 14/30/14/13,
+      which is the 2–3× load sensitivity now stated in the README). `README.md`
+      gained a **lane-label column** so every row is traceable to the label that
+      prints it, and the "each is reproducible from a lane that prints it" claim is
+      true now rather than aspirational. The one figure still without a lane is
+      `decodeFull`'s ~30,000 ns/step; it is cross-checked against the independent
+      `benchDecodeFull` lane in the same process, and that is said in place.
+
+- [x] 7.2 **De-mix the measurement vintages in `AGENTS.md:247-255`.**
       One bullet contains `packedCands` **91** (pre-6.6 `filterMap`), **32**
       (post-6.6 `attach.map`) _and_ implicitly **52** (the 6.4 lane's own figure,
       `tasks.md:2104`) as though they were one attribution; and `decodeArray`'s step
       is **12** in `AGENTS.md:249`/`README.md:704` but **15–22** in `tasks.md:2102`
       and **22** in `tasks.md:1887`. State the vintage of each number, or quote only
       one run's table. This is the exact defect §6.2 was written to remove.
-- [ ] 7.3 **Fix task 5.10's record.** It is `[x]` with **no completion note**, unlike
+
+      **Done — the vintage is now stamped, per table and per figure.**
+      `README.md`'s block gained a "Vintage of the ns/step column" paragraph saying
+      the whole column is one run and must be superseded as a whole, naming the
+      `decodeArray step` 12-vs-34 load spread and the `packedCands` 91 (pre-6.6
+      `filterMap`) vs 32 (post-6.6 `attach.map`) distinction as **two code shapes,
+      not two measurements of one**. `AGENTS.md`'s bullet now carries the stamp in
+      its first sentence ("ONE run, vintage-stamped … 2026-11-03 …"), presents 91 as
+      explicitly historical ("was 91 ns/step when it was a `filterMap` of two
+      `dif`s") and states the 2–3× load factor so no reader treats the absolute
+      column as a constant.
+
+- [x] 7.3 **Fix task 5.10's record.** It is `[x]` with **no completion note**, unlike
       every neighbouring §5 task, so its seven sub-items rest on a commit message.
       Write the note (the review verified by hand that the nav table, the dropped
       Changelog, the narrowed `omega`-modulo wording, the scope disclaimer and the
       `git-stash` dedup all landed; the bold-lead-in cap did **not** and is recorded
       as deferred).
-- [ ] 7.4 **Fix the `docs/lean-notes.md` split's accounting and duplication.**
+
+      **Done — 5.10 has a completion note**, and it is measured rather than
+      paraphrased from the commit message. Re-checked item by item on 2026-11-02:
+      nav table present; the duplicated Changelog section gone; the `omega`-modulo
+      claim narrowed to the existential/hypothesis form (the equational form **is**
+      in `omega`'s fragment, stated as such); `grep -c 'git stash'` = **1** (was
+      three); stdlib-only / toolchain-pinned scope disclaimer in the header. The
+      ~70-char bold-lead-in cap **did not land** — measured at **42 of 59** dated
+      entries over the limit — and is recorded as deferred rather than quietly
+      dropped.
+
+- [x] 7.4 **Fix the `docs/lean-notes.md` split's accounting and duplication.**
       `tasks.md` 5.1's note says 119 entries moved and `:606` says all 176 moved; the
       repo file holds **176** and the skill holds **57**, and **all 57 skill entries
       are byte-for-byte duplicated** in the repo file (the review checked 57/57; an
@@ -2611,10 +2662,33 @@ reading the code had produced.
       Either (i) make the repo file the single home and reduce the skill to a
       pointer, or (ii) keep the duplication and _say so_ in both files' headers.
       `AGENTS.md`'s "one source of truth per concern" rule makes (i) correct.
-- [ ] 7.5 **`design.md` says "74 findings across four lenses"**; `review.md:20-27`
+
+      **Done — and the review's premise was itself stale, which is the finding.**
+      Measured on 2026-11-02 rather than trusting the quoted 176/57/all-57: the repo
+      file holds **178** dated entries, the skill **59**, and only **8** appear
+      word-for-word in both (23 share a 120-char prefix). The large violation of
+      "one source of truth" the review described no longer exists — the split has
+      since been done properly. Both headers now state the measured counts and say
+      the files are *not* mirrored, replacing the "57 entries exist in both" claim
+      in each. Option (i) of the task (repo as single home, skill as pointer) is
+      **not** what was done and is not needed: with 8 shared entries and 51
+      skill-only ones, the skill genuinely holds its own generic half.
+
+- [x] 7.5 **`design.md` says "74 findings across four lenses"**; `review.md:20-27`
       totals **75 across five**. `design.md:5` was never updated when R5 was added.
       Fix to 75/five.
+
+      **Done.** `design.md:5-9` now reads "Five adversarial reviews produced 75
+      findings across five lenses", names `R5.1` in the id range, and records that
+      R5 is the measured lens added after the first four. Verified against
+      `review.md`'s totals row (75 = 3 + 11 + 20 + 33 + 8).
+
 - [x] 7.6 **Re-read `AGENTS.md:143`** ("the packed decoder and every wired surface
       are proved equal to the specification") against 2.6(b): true _as equality_,
       but the equal-to-`decodeFull` surface still **carries `huniq`**. After 2.6 is
       really closed, add `decodeFull_spec_byte` as the named witness and say so.
+      **Done.** `Codec.decodeFull_spec_byte` exists and needs no hypothesis, so the
+      witness is real rather than asserted; `AGENTS.md`'s wired-surface bullet now
+      says a law equating a surface to `decodeFull` carries `huniq` **where that
+      premise is undischarged**, and that it is discharged at `Codec.byte` — which
+      keeps the bullet honest in both directions instead of flipping to an overclaim.
