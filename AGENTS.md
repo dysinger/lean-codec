@@ -74,61 +74,52 @@ drift again; a stated precedence cannot). The removed `List`-carrier's
 
 ## Current state
 
-**Do not record status here — point at it.** The live answer is one command:
+**Do not record status here — compute it.** Three commands answer everything:
 
 ```bash
-nix develop --command openspec list --json | sed -n '/^{/,$p'
+nix develop --command openspec list --json | sed -n '/^{/,$p'   # active changes + counts
+nix develop --command openspec validate --all                    # spec deltas sound
+nix develop --command openspec instructions apply \
+  --change codec-review-remediation --json                       # open tasks + next step
 ```
 
-The active change is **`codec-review-remediation`**; work it and nothing else.
-Its ledger is `openspec/changes/codec-review-remediation/tasks.md` (open work and
-the definition of done), its evidence base is `review.md` (the adversarial
-findings, ids `R<lens>.<n>`), and its edit licence is `proposal.md` / `design.md`.
-Apply it with `openspec instructions apply --change codec-review-remediation
---json` rather than from memory of this file.
+The active change is **`codec-review-remediation`**; work it and nothing else. Its
+ledger is `openspec/changes/codec-review-remediation/tasks.md` (open work and the
+definition of done), its evidence base is `review.md` (the adversarial findings,
+ids `R<lens>.<n>`), and its edit licence is `proposal.md` / `design.md`. **Work
+order: §4, then §5** — `tasks.md` wins if this line disagrees with it.
+
+`lean-basen` (18/25) is a separate change whose work happens in the sibling repo
+`../lean-basen`, in that repo's own `nix develop`; it does not touch this tree. No
+change scoped to **this** repo is still in progress beyond the active one.
 
 **Direction lives in exactly two places: this file and `openspec/`.** If you are
 looking for "what do I do next" and you are not reading `AGENTS.md` or
 `openspec/changes/<name>/tasks.md`, you are reading something stale — say so and
-delete it rather than following it. A `sorry` obligation's own docstring may state
-_what is open and why_; it may not carry a task list (that belongs in `tasks.md`),
-and it may never point at a path outside the repo (no `/tmp`, no scratch file).
+delete it rather than following it.
 
-Four facts about that change are worth stating here **only because a reader who
-skips the ledger would get them wrong**, and all four are also in `tasks.md`:
+Five facts about that change are worth stating here **only because a reader who
+skips the ledger would get them wrong**, and all five are also in `tasks.md`:
 
-- **Work order: §1 done, §2 done (2.6b's remainder torn down and recorded),
-  §6 done, §3 done. The next work is §4, then §5.** `tasks.md` wins if it
-  disagrees.
-- **§6 is complete** (6.1a/6.1b/6.2/6.3/6.4/6.5/6.6/6.7), and the code half of this
-  change is finished. `lake build` is green with **no `sorry` anywhere**, and the
-  gates that matter still hold: `Codec.decodeFullArrayRoot_eq` (the packed decoder
-  is `decodeFull`) and the wired surfaces below are all proved equal to the
-  specification, `[propext, Quot.sound]`-only.
+- **The code half is finished.** `lake build` is green with **no `sorry`
+  anywhere**, and the packed decoder and every wired surface are proved equal to
+  the specification, `[propext, Quot.sound]`-only.
 - **Run the wired surfaces, not the specification.** `decodeWhole` /
   `decodeWholeBytes` and `encodeWhole` / `encodeWholeRepeat` / `encodeWholeBytes`
   are the named entry points, each tied to `decodeFull` / `encode` /
   `encodeRepeat` by a law. `decodeFull` and `encodeRepeat` stay the specification.
-  Read `tasks.md` 6.1b's "SESSION 9" block before touching `Codec/Packed.lean`
-  (five plan corrections), and check `#print axioms` on **any** new transport lemma
-  rather than assuming — 6.3 hit the `Classical.choice` trap in `bytesToArray_size`
-  and 6.7 hit it again in an `Array.extract` readback.
+- **Read `tasks.md` 6.1b's "SESSION 9" block before touching
+  `Codec/Packed.lean`** (five plan corrections), and check `#print axioms` on
+  **any** new transport lemma rather than assuming — the `Classical.choice` trap
+  bit twice exactly there.
 - **The Layer-2 `memcpy` seam is deliberately NOT wired, for an axiom reason.**
   `commitRemainder` is ~50–75× faster than the `List` transport (measured live by
-  `benchRemainderTransports`), but the connecting lemma needs `Array.toList_extract`,
-  which carries `Classical.choice` in this toolchain. Speed is not the obstacle;
-  the gate is. Do not "fix" this by weakening to a classical proof.
-- **Speed: no threshold, attribute the gap.** The owner asked for "as close to C as
-  possible" with **no set bar**, so `bench`'s lanes report and the docs state the
-  measured numbers; nothing asserts pass/fail against a figure nobody chose. Current
-  honest figures and their decomposition are in the speed bullet below and in
-  `tasks.md` 6.4/6.6.
+  `benchRemainderTransports`), but the connecting lemma needs
+  `Array.toList_extract`, which carries `Classical.choice` here. Speed is not the
+  obstacle; the gate is. Do not "fix" this by weakening to a classical proof.
 - **Only `R5.1` may change a declaration _shape_** (design D9), and it must keep
   every theorem's statement, prove the new definition equal to the old, and stay
   `[propext, Quot.sound]`-only / zero-`sorry` / `#eval`-able. Nothing else may.
-
-`lean-basen` (18/25) is a separate change whose work happens in the sibling repo
-`../lean-basen`, in that repo's own `nix develop`; it does not touch this tree.
 
 **History is not direction.** What landed, when, and what was measured belongs in
 the change's `tasks.md` and in `CHANGELOG.md` — including for archived changes,
@@ -169,6 +160,11 @@ nix develop --command lake build bench      # the bench lane (links Codec/ByteSl
 nix develop --command openspec validate --all   # after ANY spec or task edit
 ```
 
+`openspec` above needs **this** repo's `openspec/` root; `nix flake check` is
+likewise a **per-repo** command (this flake's `checks` are
+`formatting`/`lean`/`openspec`, which `../lean-basen` does not have) — never
+"run it once for the ecosystem".
+
 **`lake build` enforces zero-`sorry`.** `lakefile.lean`'s `codec` lib carries
 `moreLeanArgs := #["-DwarningAsError=true"]`, so `sorry`'s
 `declaration uses 'sorry'` warning becomes an **error** and the build exits
@@ -194,9 +190,14 @@ nix develop --command lake env lean /tmp/c.lean    # expect [propext, Quot.sound
 
 ```bash
 nix develop --command lake build         # library + Axioms.lean: zero sorry/warnings
-nix develop --command lake build bench   # the bench lane (dev-loop; there is no
-                                         # packages.bench — that repo's task 5.3)
+nix develop --command lake build bench   # the bench lane (dev-loop only)
 ```
+
+The `bench` line above is **known-incomplete**: there is no `packages.bench` in
+that flake, so the exe is not a flake target — that repo's task 5.3 owns wiring
+it. Do not read a green `lake build bench` as "the bench is verified in CI",
+and do not add a `nix build '.#bench'` for it here. 5.3 is a
+_verification-recipe_ item, not a docs nit; do it first if you need the bench.
 
 `Axioms.lean` is a `@[default_target]` lib, so `lake build` runs its `#guard_msgs`
 gates; a `Classical.choice` regression fails the build. To check one law by hand:
@@ -381,7 +382,11 @@ the required order in the later change's `tasks.md`.
 - `lake-manifest.json` is gitignored (the library shouldn't pin deps);
   `flake.lock` **is** tracked, for reproducibility.
 - New files matter to Nix: `src = ./.` snapshots only **git-tracked** files, so an
-  untracked `Codec/*.c` breaks `nix build .#bench` from a clean clone.
+  untracked `Codec/*.c` breaks the sandboxed bench build from a clean clone.
+  (The dev-loop command is `lake build bench`, which links the `.c` from the
+  working tree and does not care about `git`. `nix build '.#bench'` exists —
+  `flake.nix:58`, `packages.bench` — as the sandboxed/CI equivalent, and it is a
+  **long** build: `nohup`, never foreground.)
 
 ## Skills
 
