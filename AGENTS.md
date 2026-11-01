@@ -4,8 +4,21 @@ Guidance for AI coding agents working in this repository.
 
 > ## NEXT SESSION: ONE TASK, AND ONLY THIS TASK
 >
-> **`huniq` for unequal-length `alt` — the one real proof obligation left in the
-> whole-buffer story. No OpenSpec change; work on the tree.**
+> **`lean-basen`: finish the seven remaining polish tasks, then archive it.**
+> **Owner decision, 2026-11-04.** That work happens in the sibling repo
+> `../lean-basen` in its own `nix develop`; the ledger is
+> `openspec/changes/lean-basen/tasks.md` here plus its `tasks.md` there. See
+> `## Current state` for the verified per-task state, the dependency order, the
+> archive hazard, and the stale-`flake.lock` trap — all four are recorded there and
+> none are repeated here. **Do not archive until the seven are done**: the
+> archive command accepts an incomplete change without complaint, so a green archive proves
+> nothing.
+>
+> ---
+>
+> **Queued AFTER that (do not start it in the same session):** `huniq` for
+> unequal-length `alt` — the one real proof obligation left in this repo's
+> whole-buffer story. Kept below in full so the analysis is not lost.
 >
 > **Why this and nothing else.** A three-reviewer audit of the project against
 > `PAPER.md`/`README.md` established that the core is pure and proved but that
@@ -151,12 +164,31 @@ requirements are now live under `openspec/specs/codec/**` — read those for the
 behavioural contract, and the archived `tasks.md` / `review.md` for how it got
 there and what was measured. **Do not continue that change.**
 
-**`lean-basen` is open and is NOT the next session's work.** Its code lives in the
-sibling repo `../lean-basen` in that repo's own `nix develop`, so it touches nothing
-here; its ledger is `openspec/changes/lean-basen/tasks.md` (this repo) plus its own
-`tasks.md` there. It carries the MODIFIED-replaces-wholesale archive hazard (it
-MODIFIES "The `basen` bases are `Codec` values"). **Leave it alone until the boxed
-task is done** — then it is a separate session in a separate repo.
+**`lean-basen` IS the next session's work (owner decision, 2026-11-04), and it is
+`in-progress` at 18/25** — do not archive it. Its code lives in the sibling repo
+`../lean-basen` in that repo's own `nix develop`, so it touches nothing here; its
+ledger is `openspec/changes/lean-basen/tasks.md` (this repo) plus its own `tasks.md`
+there. **The seven open tasks are mechanical polish, not proofs**: 5.2 (AGENTS.md
+drift) → 5.3/5.4/5.12 (build wiring + notes) → 5.8/5.9/5.13 (code/doc nits), in that
+dependency order (the change's own status block gives it). Verified still open on
+2026-11-04, not merely unticked: `lakefile.lean` pins `@ "master"` (template uses
+`main`); no `packages.bench` in `flake.nix`; `byte0`/`byte1` are bare lowercase
+exports in `Base32.lean`/`Base64.lean`; `Base2.valToBit` falls back to `49` on
+invalid input.
+
+**Archive hazard, and why the archive was refused on 2026-11-04.** This change
+MODIFIES "The `basen` bases are `Codec` values", and a MODIFIED block **replaces the
+live requirement wholesale** on archive. `openspec archive` does **not** check task
+completion — verified from its `--help` — so a green archive is not evidence of
+anything. Before archiving: finish the seven tasks, re-read
+`openspec/specs/basen/spec.md` and confirm the delta is a superset, archive, then
+`openspec validate --all` again.
+
+**When working there, first:** `../lean-basen` pins `codec` through `flake.lock`,
+and that pin **predates** this repo's `Iso.ofTotal` /
+`seqConsumesByte` / `isoConsumesByte` / `decodeWholeOne` — so those are not available
+there until a targeted `nix flake update codec` + `lake update codec`. A `bad import`
+failure means the pin is stale, never that the import is wrong.
 
 **No deferral remains.** The one item 5.10 left open — the `lean` skill's
 ~70-char bold-lead-in cap — was closed on 2026-11-02: all 60 entries now comply,
