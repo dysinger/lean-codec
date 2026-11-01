@@ -38,9 +38,28 @@ Guidance for AI coding agents working in this repository.
 >    what the compiled `bench` executable prints; a `lean --run` figure pasted against
 >    a compiled one is a 10× error.
 >
-> **The obvious next candidate, if the owner wants one:** attack that ~5 ns/step
-> residue, not `packedCands` (already measured as the smaller half). It is a real but
-> bounded prize on a ~52 ns/step decode — measure first.
+> **The C reference exists now, and it re-frames every ratio in this file.**
+> `Codec/CRef.c` + `benchCReference` measure a hand-written C parser doing the same
+> job (one value per byte, value-checked against `decodeWhole` before it prints).
+> Measured, burst medians, two runs, load ~1.4:
+>
+> ```
+> idealCursor (Lean loop)   10532 / 10059 ns (4096 st)  -> 2.57 / 2.46 ns/step
+> C reference (hand-written) 3598 / 3507 ns (512 st)    -> 7.03 / 6.85
+> decodeWhole (Lean)        14623 / 13811 ns (512 st)   -> 28.6 / 27.0
+> Lean / C                                               -> ~4x  (4.1, 3.9)
+> ```
+>
+> So **the gap to hand-written C is ~4x**. The 10–21× figures are relative to this
+> repo's _own floor_; quoting them as "off C" is the exact category error the
+> attribution bullet warns about, and it went unnoticed for several revisions only
+> because there was no C column. Do not re-derive "off C" numbers from the Lean floor.
+>
+> **The obvious next candidate, if the owner wants one:** the ~4× is now attributable
+> — C spends most of its 6.9 ns/step _materialising_ an n-element value array, and so
+> does the Lean decode. The prize worth attacking next is value materialisation
+> (decoding to something other than `List α`), not `packedCands` (already measured as
+> the smaller half of the per-candidate cost). Measure first.
 >
 > **Requirements for whatever is done next:** green `lake build` + `lake build bench`
 > (zero warnings), green `openspec validate --all`, individual-file commits, and
@@ -372,8 +391,15 @@ in `../lean-basen`. Never "fix" it by editing the importing Lean file.
   "~8.5× floor", and "20–40× ceiling" figures that used to sit here. **Do not quote a
   "× off C" ratio for a per-element codec measured against `memcpy`** — `memcpy`
   moves a byte; a parser does per-element work, so the comparison is a category error
-  and the honest reference is a hand-written C _parser_, which this repo does not yet
-  measure. Before timing anything here read `tasks.md` 6.1b's MEASUREMENT RULES:
+  and the honest reference is a hand-written C _parser_. **This repo now measures
+  one** (`Codec/CRef.c` + `benchCReference`, bench-only, not Layer 2, not in the
+  axiom gate), value-checked against `decodeWhole` before it prints. Measured:
+  **Lean ≈ 4× the C parser** (28.6 / 27.0 ns/step vs 7.03 / 6.85), so the "10–21×"
+  figures are _Lean-relative_ and must never be quoted as "off C" — that was the
+  category error this bullet warned about, committed by omission while no C column
+  existed. Note also the Lean floor (2.5) is _faster_ than the C reference (6.9):
+  C spends most of its time materialising an n-element value array, not parsing.
+  Before timing anything here read `tasks.md` 6.1b's MEASUREMENT RULES:
   naive timing reliably produces a wrong number (dead-code elimination reporting
   `0 ns/op`, loop hoisting, cold-start means).
 
