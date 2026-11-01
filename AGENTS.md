@@ -74,41 +74,34 @@ drift again; a stated precedence cannot). The removed `List`-carrier's
 
 ## Current state
 
-**Do not record status here — compute it.** Three commands answer everything:
+**Do not record status here — compute it.** Two commands answer everything:
 
 ```bash
 nix develop --command openspec list --json | sed -n '/^{/,$p'   # active changes + counts
 nix develop --command openspec validate --all                    # spec deltas sound
-nix develop --command openspec instructions apply \
-  --change codec-review-remediation --json                       # open tasks + next step
 ```
 
-The active change is **`codec-review-remediation`**; work it and nothing else. Its
-ledger is `openspec/changes/codec-review-remediation/tasks.md` (open work and the
-definition of done), its evidence base is `review.md` (the adversarial findings,
-ids `R<lens>.<n>`), and its edit licence is `proposal.md` / `design.md`.
+**No change is open in this repo.** `codec-review-remediation` was archived on
+2026-11-01 into `openspec/changes/archive/2026-11-01-codec-review-remediation/`,
+and its requirements are now live under `openspec/specs/codec/**` — read those for
+the behavioural contract, and the archived `tasks.md` / `review.md` for how it got
+there and what was measured. **Nothing here is direction: the next session starts a
+new change, not a continuation.**
 
-**It is 56/56 — all tasks complete, and the change is ready to archive.** Verify
-with `openspec list --json` rather than trusting this number, and read the archive
-hazards above before running `openspec archive`. **This change does not collide
-with `lean-basen`**: its deltas touch `byte-string` / `partial-remainder` /
-`review-remediation`, while `lean-basen` MODIFIES `openspec/specs/basen/spec.md` — so
-`codec-review-remediation` can be archived in either order. The MODIFIED-replaces-
-wholesale hazard is `lean-basen`'s to carry, and it is recorded there, not here.
-(An earlier revision of this paragraph claimed the order was "recorded in
-`tasks.md`"; it was not, and need not be.)
+The one change still open anywhere in this tree's orbit is **`lean-basen`**, whose
+work happens in the sibling repo `../lean-basen` in that repo's own `nix develop`.
+It does not touch this tree. Its ledger is
+`openspec/changes/lean-basen/tasks.md` here (the planning half) and its own
+`tasks.md` there; **it carries the MODIFIED-replaces-wholesale archive hazard**
+(it MODIFIES "The `basen` bases are `Codec` values"), so read `openspec/specs/basen/spec.md`
+immediately before archiving it and re-validate after.
 
-**Next steps: archive this change, then start the next one — there is no open task
-left in `codec-review-remediation`.** The two pieces of unfinished business that a
-fresh session should _know about but not silently absorb_ are recorded in `tasks.md`
-as explicit deferrals: the `lean` skill's ~70-char bold-lead-in tidy (5.10's note,
-42 of 59 entries over) and `huniq`'s general derivation for codecs other than
-`Codec.byte` (2.6's completion note). Neither is a task; both are stated so they are
-chosen rather than forgotten.
-
-`lean-basen` (18/25) is a separate change whose work happens in the sibling repo
-`../lean-basen`, in that repo's own `nix develop`; it does not touch this tree. No
-change scoped to **this** repo is still in progress beyond the active one.
+**Two deferrals from the archived change are recorded and still unowned** — neither
+is a task, and neither should be silently absorbed into a new change:
+the `lean` skill's ~70-char bold-lead-in tidy (archived `tasks.md` 5.10, 42 of 59
+entries over the cap), and `huniq`'s general derivation for codecs other than
+`Codec.byte` (archived `tasks.md` 2.6 — supplied at `Codec.byte`, open in general).
+Pick them up deliberately or leave them.
 
 **Direction lives in exactly two places: this file and `openspec/`** — no
 `HANDOFF.md`, no notes file, no scratch tree. `openspec/lean-notes.md` is
