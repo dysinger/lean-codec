@@ -1,6 +1,6 @@
 ---
-
-## description: "Update a change - revise existing planning artifacts and keep them coherent (Experimental)"
+description: "Update a change - revise existing planning artifacts and keep them coherent (Experimental)"
+---
 
 Revise a change's existing planning artifacts and keep them coherent. Never edit code.
 
