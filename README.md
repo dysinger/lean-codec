@@ -545,22 +545,22 @@ reference for a parser is a hand-written C parser over the same bytes, and this
 repo does not yet ship one. So the figures below are given **as ns/step and as a
 multiple of the measured pure-Lean floor**, not as a ratio to `memcpy`.
 
-Measured 2026-11-03 by `bench`'s `benchDecodeShapes` lane, `n` = 8 KiB, 15
-samples of 3 calls each, load average 4–5 on 10 cores — the _absolute_ values are
-inflated by contention, so treat the **ratios between rows in one run** as the
-usable information. The single-step figures come from a separate decomposition run
-at the same `n`; each is reproducible from a lane that prints it.
+Measured with `bench`'s `benchDecodeShapes` lane on an idle-ish machine (load
+average ~1.5–2 on 10 cores), `n` = 4–8 KiB, 15 samples of 3 calls each — the
+_absolute_ values move with machine load, so treat the **ratios between rows in one
+run** as the usable information. The single-step figures come from a decomposition
+run at the same `n`; each is reproducible from a lane that prints it.
 
 | shape                                                 | ns/step | × floor | note                                       |
 | ----------------------------------------------------- | ------- | ------- | ------------------------------------------ |
-| `memcpy` (`copySlice`), for scale                     | ~0.03   | —       | ~250 ns / 8 KiB                            |
-| `Array` indexed read alone                            | 4       | 0.7×    | the memory floor                           |
+| `memcpy` (`copySlice`), for scale                     | ~0.03   | —       | ~125 ns / 4 KiB                            |
+| `Array` indexed read alone                            | 3       | 0.5×    | the memory floor                           |
 | **ideal `Id.run` cursor loop** (`arr[k]!` + `Nat`)    | **6**   | **1×**  | **the achievable pure-Lean floor**         |
-| `decodeArray` single step (`List (α × Nat)` result)   | 15–22   | 3–4×    | +9–16 ns for the per-step `List`           |
-| `packedCands` alone (`.attach` + `filterMap`)         | 52      | 8.7×    | +30 ns over the decode step it wraps       |
-| `decodeFullArrayRoot` (packed `Array` + `Nat` cursor) | **63**  | 10.5×   | = the search over `packedCands`            |
-| `decodeFullFastRoot` (`Bytes`/`Suffix` cursor)        | 76      | 12.7×   | +13 ns for the `Suffix`/`bdrop` plumbing   |
-| `decodeFull` (the `Bytes n` specification itself)     | ~64,000 | —       | super-linear: re-walks the suffix per step |
+| `decodeArray` single step (`List (α × Nat)` result)   | 12      | 2×      | +6 ns for the per-step `List`              |
+| `packedCands` alone (now an `attach.map`)             | 32      | 5.3×    | was 91 with a `filterMap` of two `dif`s    |
+| `decodeFullArrayRoot` (packed `Array` + `Nat` cursor) | **48**  | 8×      | = the search over `packedCands`            |
+| `decodeFullFastRoot` (`Bytes`/`Suffix` cursor)        | 75      | 12.5×   | +27 ns for the `Suffix`/`bdrop` plumbing   |
+| `decodeFull` (the `Bytes n` specification itself)     | ~30,000 | —       | super-linear: re-walks the suffix per step |
 
 **How to read the ratio column.** The `memcpy` reference is taken in the same
 sample, but a slow measured call evicts the source from cache before the
@@ -574,24 +574,25 @@ within noise with a standalone probe taken at `n` = 1 MiB (69 and 57 ns/byte).
 **What these numbers say — three things, all of which change decisions:**
 
 1. **The carrier is not the bottleneck.** The packed `Array`+`Nat` decoder is
-   only 1.2× faster than the `Bytes`/`Suffix` one (63 vs 76 ns/byte), so the
-   `Suffix`/`bdrop` plumbing costs ~13 ns/byte — not the order of magnitude the
+   only ~1.6× faster than the `Bytes`/`Suffix` one (48 vs 75 ns/byte), so the
+   `Suffix`/`bdrop` plumbing costs ~27 ns/byte — not the order of magnitude the
    earlier ledger attributed to it. `Bytes n` therefore stays the specification
    **and** the runtime is already on contiguous memory, which is exactly the
    two-layer arrangement this document describes elsewhere. No carrier change is
    needed.
-2. **The largest single term is a rebuildable candidate list, not arithmetic.**
-   `packedCands` — a `filterMap` over `(decodeArray d a k).attach`, reconstructed
-   from scratch on **every step** — costs 52 ns/step, 2.4× the decode step it
-   wraps and 8.7× the ideal loop. For a productive leaf codec like `byte` that
-   list has exactly one element. It is an allocator cost with a known removal
-   (fold the single-candidate case, or carry the candidate forward instead of
-   re-deriving it), i.e. a _code-shape_ defect of the same class as the ones §6
-   of the remediation ledger targets — not a language limit.
+2. **The largest single term was a rebuildable candidate list, and it has been
+   removed.** `packedCands` — once a `filterMap` over `(decodeArray d a k).attach`
+   re-deciding two `dif`s per element on **every step** — measured 91 ns/step.
+   Most of that was not the decode: `.attach` alone was 25 and an `attach.map`
+   without the filter was 32, so the two `dif`s were ~59 of the 91. It now builds
+   by `map` with the two facts supplied once from the cursor bound, and the
+   whole-input packed decode went from 63 to **48 ns/byte** (~25%). What remains
+   in the search is the per-step `List` that `decodeArray` returns, plus the
+   accumulator.
 3. **The pure-Lean floor is 6 ns/step and it is reachable in the same types.** An
    `Id.run` loop reading `arr[k]!`, advancing a `Nat` cursor and pushing into an
    `Array` already runs there, with no `List`, no `.attach`, and no closure. So
-   the distance from today's 63 ns to the floor is **10× of ordinary allocation
+   the distance from today's 48 ns to the floor is **8× of ordinary allocation
    and list overhead**, and closing it needs no new carrier, no `USize`, and no
    C.
 
