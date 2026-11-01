@@ -88,11 +88,25 @@ ledger is `openspec/changes/codec-review-remediation/tasks.md` (open work and th
 definition of done), its evidence base is `review.md` (the adversarial findings,
 ids `R<lens>.<n>`), and its edit licence is `proposal.md` / `design.md`.
 
-**It is 49/56, NOT complete — 2.6 was reopened after an adversarial review of this
-session's own work found its "DONE" overstated.** The next work is **`tasks.md` 2.6**
-(which carries the full, proved plan) followed by **§7** (six post-review
-corrections). Do not archive. `tasks.md` wins if this line disagrees with it — run
-`openspec list --json` for the live count rather than trusting this number.
+**It is 49/56, NOT complete — 2.6 was reopened after an adversarial review found its
+"DONE" overstated.** Do not archive. `tasks.md` wins if this line disagrees with it —
+run `openspec list --json` for the live count rather than trusting this number.
+
+**Next steps, in one place: `tasks.md` 2.6's "Work for next session, in order".**
+Read that block before doing anything else; it is the whole direction, and it now
+carries the two plan corrections and the one open blocker so a fresh session does
+not repeat them. In brief, and only so you can recognise it when you get there:
+
+- **Step 1 is mechanical.** Seven lemmas are written out in that block, verified
+  against a green build and `[propext, Quot.sound]`-only; copy them into
+  `Codec/Sound.lean`. Nothing to re-derive.
+- **Step 4 is blocked** on one missing `Codec/Codec.lean` lemma — the identity
+  `(Suffix.empty n).prepend s = s`. Three failed attack modes are recorded there;
+  read them before trying, and do not start step 4 until the lemma exists.
+- **One plan item was false and is withdrawn** (`RelAligned` cannot be _strict_:
+  at equal lengths it _is_ `relUnambiguous`). See "Plan Correction 1".
+
+After 2.6 closes, **§7** (six post-review corrections) is what remains.
 
 `lean-basen` (18/25) is a separate change whose work happens in the sibling repo
 `../lean-basen`, in that repo's own `nix develop`; it does not touch this tree. No
@@ -110,8 +124,8 @@ skips the ledger would get them wrong**, and all five are also in `tasks.md`:
   The `Codec/Sound.lean` uniqueness section is real mathematics — all true,
   `[propext, Quot.sound]`-only — but its headline lemma is **indexed by list
   length** and `huniq` is **not**, so it does not yield `huniq`. The closing route
-  is proved and written out in `tasks.md` 2.6 (`LengthConst` +
-  `relRepeat_length_of_const` + `lengths_eq_of_const`). Do not re-derive it.
+  is `LengthConst` + `relRepeat_length_of_const` + `lengths_eq_of_const`, proved
+  and written out in `tasks.md` 2.6. Do not re-derive it.
 - **Run the wired surfaces, not the specification.** `decodeWhole` /
   `decodeWholeBytes` and `encodeWhole` / `encodeWholeRepeat` / `encodeWholeBytes`
   are the named entry points, each tied to `decodeFull` / `encode` /
