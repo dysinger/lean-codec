@@ -945,6 +945,45 @@ unsafe def benchDecodeShapes (n : Nat) (samples : Nat) (r : Nat) : IO Unit := do
   -- varies an offset inside it per call: the working set stays resident, which the
   -- old 8-buffer rotation (`8n` = 32 KiB at `n` = 4096) did not.
   Codec.Bench.benchBurst "idealCursor " n 200 (fun _ => arrayAt 0) idealLoopAt
+  -- **The `k > 1` lane (AGENTS.md's task): the search's per-CANDIDATE cost.**
+  --
+  -- Everything above is measured on `Codec.byte`, which has **exactly one** candidate
+  -- per cursor position, so `decodeFullArraySearch` never iterates and the whole
+  -- search term is unpriced — the "~10.5x gap to the floor" is the degenerate
+  -- `k = 1` case, not a backtracking search. This lane supplies the missing `k`.
+  --
+  -- The codec: `satisfy (fun _ => true) | satisfy (fun _ => true)` — **two**
+  -- candidates at every position, each consuming exactly one byte, each able to
+  -- complete the buffer. That is the worst case for the search: the first candidate
+  -- succeeds and the second is never tried on the *happy* path, but the candidate
+  -- list is built (and its `PackedCand` proofs attached) with two entries instead of
+  -- one, which is exactly the cost the `byte` lane cannot see. Measured against the
+  -- same `n` as `decodeFullArray`, so the two rows subtract.
+  let bothByte : Codec UInt8 := Codec.satisfy (fun _ => true)
+  let twoCands : Codec UInt8 := Codec.alt bothByte bothByte
+  let hTwo : ConsumesByte twoCands :=
+    altConsumesByte _ _ (satisfyConsumesByte _) (satisfyConsumesByte _)
+  -- **Assert the premise.** A lane that silently degenerates to `k = 1` would report
+  -- a number that looks like a search measurement and is not one — the exact defect
+  -- this lane exists to fix. So the candidate count is checked before timing.
+  let probe : Array UInt8 := Array.mk (List.ofFn (bytesAt 0))
+  let kAt0 : Nat := (packedCands twoCands hTwo probe 0 (Nat.zero_le _)).length
+  let kB : Nat := (packedCands twoCands hTwo probe (probe.size / 2) (by omega)).length
+  if kAt0 < 2 || kB < 2 then
+    throw (IO.userError s!"k > 1 lane: premise failed — candidate counts were {kAt0} and {kB}, expected ≥ 2 at both cursors")
+  let dfaTwo (arr : Array UInt8) : UInt8 :=
+    match decodeFullArrayRoot twoCands hTwo arr with
+    | some xs => sinkOfList xs
+    | none => 200
+  Codec.Bench.benchRatio "decodeFullArray k=2 " n samples r arrayAt dfaTwo
+  let twoWindow (j : Nat) (base : Array UInt8) : UInt8 :=
+    if base.size = 0 then 200
+    else
+      let w := base.extract ((j * 8) % base.size) (((j * 8) % base.size) + (base.size / 8))
+      match decodeFullArrayRoot twoCands hTwo w with
+      | some xs => sinkOfList xs + UInt8.ofNat w.size
+      | none => 200
+  Codec.Bench.benchBurst "decodeFullArray k=2 " (n / 8) 200 (fun _ => arrayAt 0) twoWindow
   -- **`packedCands` at ONE cursor position, `bytes := n` so the printed ns is
   -- per-step** -- because a decode step rebuilds the candidate list once. The
   -- original version built it once over the whole array and let `benchRatio` divide
@@ -969,6 +1008,47 @@ unsafe def benchDecodeShapes (n : Nat) (samples : Nat) (r : Nat) : IO Unit := do
     if res == 0 then
       throw (IO.userError "packedCands: sink is zero — the measured work was elided")
     printLane "packedCands (per step)" n (dt / r) 0
+  -- **`packedCands` at `k = 2`, hot, under the burst lane.** The row above is a
+  -- *cold* figure (it re-reads a 4 KiB array once), which is why it is 430–650 and
+  -- why it cannot be a per-step term of the decode. This one is the attribution the
+  -- `k > 1` lane needs: `packedCands` is rebuilt on every step, so if the `k = 2`
+  -- search costs ~2× the `k = 1` search, the per-candidate cost of this function is
+  -- where it shows. Bursted over ONE hot buffer with the cursor varied per call, so
+  -- what it prints is compute, not first-touch.
+  do
+    let bothByte : Codec UInt8 := Codec.satisfy (fun _ => true)
+    let twoCands : Codec UInt8 := Codec.alt bothByte bothByte
+    let hTwo : ConsumesByte twoCands :=
+      altConsumesByte _ _ (satisfyConsumesByte _) (satisfyConsumesByte _)
+    let one : Codec UInt8 := bothByte
+    let hOne : ConsumesByte one := satisfyConsumesByte _
+    let arr := arrayAt 0
+    -- cursor bound: `j % (a.size + 1) < a.size + 1`, hence `≤ a.size`.
+    -- `Nat.mod_lt_of_lt` supplies it without a positivity premise on the modulus.
+    have hbnd : ∀ (j : Nat) (a : Array UInt8), j % (a.size + 1) ≤ a.size := by
+      intro j a
+      have h : j % (a.size + 1) < a.size + 1 := Nat.mod_lt _ (Nat.zero_lt_succ _)
+      omega
+    -- The sink must depend on the *candidate* list, not just its length: the length
+    -- is a constant (1 or 2), so a length-only sink is folded away and the lane
+    -- aborts on a zero sink (measured: it did). Folding the candidate *values* in
+    -- keeps the whole `packedCands` call live.
+    -- Seed from the per-call cursor (which `benchBurst` varies), so the sink is
+    -- never a constant that can fold to zero; the candidate *values* are folded in
+    -- so the whole `packedCands` call stays live.
+    let cands1 (j : Nat) (a : Array UInt8) : UInt8 :=
+      let cs := Codec.packedCands one hOne a (j % (a.size + 1)) (hbnd j a)
+      cs.foldl (fun (s : UInt8) c => s * 31 + c.val.1) ((j % 251).toUInt8 + 1)
+    let cands2 (j : Nat) (a : Array UInt8) : UInt8 :=
+      let cs := Codec.packedCands twoCands hTwo a (j % (a.size + 1)) (hbnd j a)
+      cs.foldl (fun (s : UInt8) c => s * 31 + c.val.1) ((j % 251).toUInt8 + 1)
+    -- premise: one candidate for `k=1`, two for `k=2`, at the same cursor
+    let k1 : Nat := (Codec.packedCands one hOne arr 0 (Nat.zero_le _)).length
+    let k2 : Nat := (Codec.packedCands twoCands hTwo arr 0 (Nat.zero_le _)).length
+    if k1 != 1 || k2 != 2 then
+      throw (IO.userError s!"packedCands k lane: premise failed — got {k1} and {k2} candidates, expected 1 and 2")
+    Codec.Bench.benchBurst "packedCands k=1 " n 200 (fun _ => arr) cands1
+    Codec.Bench.benchBurst "packedCands k=2 " n 200 (fun _ => arr) cands2
 
 /-- The fused single-step decoder `decodeFast`: peels one `Codec.byte` in O(1),
 without re-traversing. Confirms `decodeFast` agrees with `decode` on the remainder
