@@ -793,6 +793,36 @@ unsafe def benchDecodeShapes (n : Nat) (samples : Nat) (r : Nat) : IO Unit := do
       match cs with
       | (x, _) :: _ => x
       | [] => 200)
+  -- **the three rows the README's table quotes but no lane printed (task 7.1).**
+  -- Each isolates one named cost term, and each is the term the "× floor" column
+  -- divides by, so leaving them unmeasured made the whole ratio narrative
+  -- unsourced. `benchRatio` prints ns/op, so divide by `n` for ns/step.
+  --
+  -- `Array` indexed read alone: the memory floor, no codec logic at all.
+  Codec.Bench.benchRatio "arrayRead " n samples r
+    (fun j => (j % n, arrayAt j))
+    (fun (j, arr) => arr.getD j 0)
+  -- the ideal `Id.run` cursor loop: `arr[k]!` + `Nat` cursor + `Array.push`, i.e.
+  -- the achievable pure-Lean per-element floor a decoder is compared against.
+  Codec.Bench.benchRatio "idealCursor " n samples r
+    arrayAt
+    (fun arr =>
+      let out := Id.run do
+        let mut acc : Array UInt8 := Array.mkEmpty arr.size
+        let mut k : Nat := 0
+        while k < arr.size do
+          acc := acc.push (arr.getD k 0)
+          k := k + 1
+        return acc
+      sinkOfList out.toList)
+  -- `packedCands` alone: the candidate list rebuilt on every step. Measured as a
+  -- whole-list build over the full input, which is what a decode step pays.
+  Codec.Bench.benchRatio "packedCands " n samples r
+    arrayAt
+    (fun arr =>
+      match Codec.packedCands Codec.byte byteConsumesByte arr 0 (Nat.zero_le _) with
+      | [] => 0
+      | cs => cs.length.toUInt8)
 
 /-- The fused single-step decoder `decodeFast`: peels one `Codec.byte` in O(1),
 without re-traversing. Confirms `decodeFast` agrees with `decode` on the remainder
