@@ -101,8 +101,7 @@ skips the ledger would get them wrong**, and all four are also in `tasks.md`:
   §3/§4 rewrite the paragraphs that quote the performance numbers §6 fixes;
   correcting those claims against today's numbers would canonize the defect. If
   `tasks.md` disagrees with this line, `tasks.md` wins.
-- **6.4 has landed as a measuring lane; the next work is the code shape it
-  identified.** `lake build` is green, there are **no `sorry`s anywhere in the
+- **6.4, 6.2, 6.6 and 6.3 have landed; the next work is 6.5 (encode).** `lake build` is green, there are **no `sorry`s anywhere in the
   tree**, and 6.1b's gate (`Codec.decodeFullArrayRoot_eq`) holds: the packed
   `Array UInt8` + `Nat`-cursor decoder is proved equal to `decodeFull`,
   `[propext, Quot.sound]`-only. `bench`'s new `benchDecodeShapes` lane now prints
@@ -110,10 +109,14 @@ skips the ledger would get them wrong**, and all four are also in `tasks.md`:
   re-measurement is done and the packed path's figure is no longer invented. What
   the lane showed is that the remaining cost is **`packedCands`'s per-step
   `.attach`/`filterMap` rebuild** (52 ns/step against a 6 ns/step ideal loop), not
-  the carrier — so the next work is a code-shape change to the candidate list, and
-  `tasks.md` 6.6 records the decision. Read `tasks.md` 6.1b's "SESSION 9" block
-  before touching `Codec/Packed.lean` (five plan corrections, including a
-  `Classical.choice` leak that was already in the tree).
+  the carrier. 6.6 fixed it (`packedCands` is an `attach.map`, 91 -> 32 ns/step),
+  and 6.3 wired the result into named surfaces: **`decodeWhole`** (packed carrier)
+  and **`decodeWholeBytes`** (`Bytes n`), each proved equal to `decodeFull`. Run
+  those, not `decodeFull`, which stays the specification. Read `tasks.md` 6.1b's
+  "SESSION 9" block before touching `Codec/Packed.lean` (five plan corrections,
+  including a `Classical.choice` leak that was already in the tree) — and note that
+  6.3 hit the same trap again in `bytesToArray_size`, so check `#print axioms` on any
+  new transport lemma rather than assuming.
 - **Benchmark numbers from this repo are not trustworthy without the rules.** Every
   in-repo measurement attempt before 6.4 made a wrong number that was briefly
   believed (dead-code elimination reporting `0 ns/op`, loop hoisting of a pure
