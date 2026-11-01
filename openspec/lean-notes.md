@@ -10,13 +10,18 @@ focused entry per lesson, `#print axioms`-verified where an axiom claim is made.
 `openspec/changes/<name>/tasks.md`; if an entry here ever reads like a task list,
 it is a defect — move it to the ledger.
 
-**Known duplication, stated rather than hidden.** The skill's Append keeps 57
-entries that are _also_ present here verbatim (this file holds all 176 of the
-original Append; the skill kept the 57 generic ones when the split happened). The
-repo's "one source of truth per concern" rule (see `AGENTS.md`) is therefore
-violated 57 times today. `tasks.md` 7.4 tracks closing it — either drain the
-skill to a pointer, or keep both and keep this note accurate. Do not add a _new_
-entry to both files.
+**Duplication status — measured 2026-11-02, not carried over.** The earlier claim here
+(57 skill entries duplicated verbatim, all 176 of the original Append) **no longer
+holds and is withdrawn**. The split has since been done properly, so the two files
+are genuinely not mirrors: this file held **178** dated entries and the skill **59**,
+of which **8** appear word-for-word in both. Counts by the shape of the measurement:
+compared on normalized full bodies, 8 of 59 match exactly; compared on a 120-char
+prefix, 23 share an opening. The `AGENTS.md` "one source of truth per concern" rule
+therefore has no large violation left to drain, and `tasks.md` 7.4 is closed on that
+basis. **Do not add a new entry to both files** — a generic lesson goes in the
+skill, a domain-specific one here. The specific low-level reasons a lesson was once
+duplicated are not recorded because they are no longer true; trust the counts above
+over any older number you find quoted.
 
 **The generic rules live in the skill, not here.** In particular the axiom-hygiene
 catalogue is `SKILL.md` §2b; this file is the raw measured record behind it, plus
