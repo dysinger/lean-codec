@@ -7,10 +7,15 @@
 # `pkgs` blob, no overlay assumption — and returns:
 #   - `native` — the `lake build` library (`.olean` artifacts + `libcodec.a`),
 #   - `check`  — the Lean proof-validation gate (`lake build`, fails on `sorry`),
-#   - `bench`  — the §10.5 extraction + benchmark executable (`lake build bench`).
+#   - `bench`  — the benchmark executable (`lake build bench`), a plain
+#                `lean_exe` that also links the Layer-2 C seam object.
 #
 # `native`/`check` are the SAME `lake build`; `check` is the proof gate,
-# `native` is the installable library, `bench` is the extraction vehicle.
+# `native` is the installable library. `bench` is a benchmark executable, **not**
+# a C-extraction step: `lakefile.lean` declares `lean_exe bench (root := `Bench,
+# moreLinkObjs := #[byteSliceO])`, and Lean's ordinary C backend compiles it.
+# The §10.5 extraction an older plan described is not implemented — do not go
+# looking for it.
 #
 # Plain nixpkgs `lean4`. The bulk fast path uses the Lean runtime's own
 # `@[extern]` C primops (`ByteArray.push`/`copySlice`), compiled by the plain
@@ -109,12 +114,13 @@ in
     '';
   };
 
-  # `bench` — the §10.5 extraction + benchmark executable. Builds the `bench`
-  # lean_exe (extracting the `decode`/`encode`/`decodeRepeat`/`encodeRepeat`
-  # hot path to C, then linking against the Lean runtime) and installs it.
+  # `bench` — the benchmark executable. Builds the `bench` `lean_exe` (a plain
+  # executable: Lean's ordinary C backend compiles it, and `moreLinkObjs` links
+  # the Layer-2 seam object `Codec/ByteSlice.c` -> `byteSliceO`) and installs it.
+  # There is no C-extraction step; see the header comment.
   bench = mkLakeBuild {
     name = "bench";
-    description = "${meta.description} (extraction + benchmark executable)";
+    description = "${meta.description} (benchmark executable)";
     targets = "bench";
     mainProgram = "bench";
     install = ''
