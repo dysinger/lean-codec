@@ -2604,19 +2604,23 @@ reading the code had produced.
       column is load-bearing for the whole §6.4 narrative), or **(b)** delete the
       unsourced rows and stop presenting a ratio to an unmeasured denominator.
 
-      **Done — option (a), the missing lanes were added and run.** `benchDecodeShapes`
-      gained three `benchRatio` labels keyed to the three unsourced rows:
-      `arrayRead` (the `Array` indexed read), `idealCursor` (the `Id.run` cursor loop
-      that is the *denominator* of the whole "× floor" column) and `packedCands`
-      (the candidate list itself). Verified they print on a real run at `n = 4096`:
-      `arrayRead 32 ns/byte`, `idealCursor 51`, `packedCands 27`, `decodeArray step
-      34` (load average 12 on 10 cores; a second run under lighter load read 14/30/14/13,
-      which is the 2–3× load sensitivity now stated in the README). `README.md`
-      gained a **lane-label column** so every row is traceable to the label that
-      prints it, and the "each is reproducible from a lane that prints it" claim is
-      true now rather than aspirational. The one figure still without a lane is
-      `decodeFull`'s ~30,000 ns/step; it is cross-checked against the independent
-      `benchDecodeFull` lane in the same process, and that is said in place.
+      **Done — option (a), the missing lanes were added and run, and then REOPENED
+      and corrected after a review proved two of the three lanes were measuring the
+      wrong thing.** Adding the lanes exposed that the quoted figures had never been
+      right: `arrayRead` **12** (was quoted 3), `idealCursor` **15** (was quoted 6),
+      `packedCands` **~430 ns per call** (was quoted 32). Each wrong number had a
+      distinct cause, and both are now fixed in `Bench.lean`:
+      * `idealCursor` `Array.push`-ed every element into a fresh output array, so it
+        measured the floor **plus n elements of growth**; it now sinks into a `Nat`
+        and allocates nothing.
+      * `packedCands` was built **once over the whole array** and the harness divided
+        by `n`, reporting ~12 ns/"step" — *below* the 48 ns/step decode it is a
+        component of, an arithmetic impossibility. It is now timed per call and
+        printed as ns/op by `printLane`, with no per-byte division to hide behind.
+      The lesson, which is the durable output of this task: **a number is sourced
+      because the lane, run, prints it — not because a lane exists.** Three rows were
+      labelled with a lane while still not matching it, which is worse than an
+      unsourced row because it looks checked.
 
 - [x] 7.2 **De-mix the measurement vintages in `AGENTS.md:247-255`.**
       One bullet contains `packedCands` **91** (pre-6.6 `filterMap`), **32**
@@ -2626,16 +2630,17 @@ reading the code had produced.
       and **22** in `tasks.md:1887`. State the vintage of each number, or quote only
       one run's table. This is the exact defect §6.2 was written to remove.
 
-      **Done — the vintage is now stamped, per table and per figure.**
-      `README.md`'s block gained a "Vintage of the ns/step column" paragraph saying
-      the whole column is one run and must be superseded as a whole, naming the
-      `decodeArray step` 12-vs-34 load spread and the `packedCands` 91 (pre-6.6
-      `filterMap`) vs 32 (post-6.6 `attach.map`) distinction as **two code shapes,
-      not two measurements of one**. `AGENTS.md`'s bullet now carries the stamp in
-      its first sentence ("ONE run, vintage-stamped … 2026-11-03 …"), presents 91 as
-      explicitly historical ("was 91 ns/step when it was a `filterMap` of two
-      `dif`s") and states the 2–3× load factor so no reader treats the absolute
-      column as a constant.
+      **Done — and the first attempt at this task was itself an instance of the
+      defect it was fixing.** It stamped the table "one run, load ~1.5–2" while the
+      paragraph four lines above said "busy, load ~12", and the table provably mixed
+      two sources (three rows from a withdrawn probe, two from `benchDecodeShapes`).
+      Corrected: `README.md` now states one run at load ~2.6–3.3, carries a
+      "what was wrong with the previous table" subsection naming all three bad rows
+      and their causes, and `AGENTS.md` no longer restates the numbers at all (rule
+      2) — it quotes the attribution *history* (91 → 32 → ~430) precisely so the next
+      reader does not re-adopt a superseded figure. The pre-6.6 91/25/32/59 probe
+      numbers that remain in `README.md` are labelled as that probe's and as **not on
+      the same scale** as the per-call figure.
 
 - [x] 7.3 **Fix task 5.10's record.** It is `[x]` with **no completion note**, unlike
       every neighbouring §5 task, so its seven sub-items rest on a commit message.
@@ -2692,3 +2697,60 @@ reading the code had produced.
       says a law equating a surface to `decodeFull` carries `huniq` **where that
       premise is undischarged**, and that it is discharged at `Codec.byte` — which
       keeps the bullet honest in both directions instead of flipping to an overclaim.
+
+## 8. Post-completion review corrections (added 2026-11-02)
+
+> A hypercritical review of §7's work (a fresh session given `PAPER.md`,
+> `README.md`, `AGENTS.md`, the Lean skills and the ledger, then told to assume the
+> authors were careless) found that **two of the three lanes added in 7.1 were
+> measuring the wrong thing**, and that the figures they produced had never matched
+> the quoted values. Everything here is reproducible; the numbers below were run in
+> the session that recorded them.
+
+- [x] 8.1 **Correct the three benchmark figures and the lanes that produce them.**
+      `idealCursor` push-ed into an output `Array` (floor + n allocations, quoted as
+      the floor) and `packedCands` was built once over the whole array then divided
+      by `n` (reported ~12 ns/"step", below the 48 ns/step decode it composes).
+      Corrected: `idealCursor` sinks a `Nat` and allocates nothing → **15 ns/step**;
+      `packedCands` is timed per call via `printLane` → **~430 ns/op**; `arrayRead`
+      is **12**. `README.md`'s table is rebuilt from one run with the corrected
+      values, and a "what was wrong with the previous table" subsection names each
+      bad row and its cause. The `8× to the floor` claim in the prose became ~3.2×.
+- [x] 8.2 **`AGENTS.md` stops restating measured numbers** (its own rule 2). The
+      21-line table and the lemma chain are now pointers to `README.md`'s stamped
+      table and `tasks.md` 2.6; what stays is the _attribution discipline_ and the
+      history of the three wrong figures, which is operating instruction rather than
+      status.
+- [x] 8.3 **Fix a false archive pointer.** `AGENTS.md` said the required archive
+      order "is recorded in `tasks.md`"; it was not, and need not be — this change's
+      deltas do not collide with `lean-basen`'s `basen` requirement. Now stated as
+      the fact it is.
+- [x] 8.4 **Correct four docstring axiom footprints.** `lengthConst_byte`,
+      `relRepeat_length_of_const`, `lengths_eq_of_const` are `[propext]`-only and
+      `lengthDet_of_lengthConst` has **no axioms at all**; all four claimed
+      `[propext, Quot.sound]`. Measured with `#print axioms`, corrected in place.
+- [x] 8.5 **Withdraw two overclaims in the `huniq` family.** `huniq_byte` said "the
+      reason it was _never_ vacuous" (it was unsupplied until now); `decodeFull_spec_byte`
+      said "every other instantiation in the tree carries `huniq`" (there are no
+      others — `grep` finds exactly one call site, itself), and called itself "the
+      call site this whole lemma family was built for" (nothing calls it). Both now
+      say what is true: it is a witness of satisfiability, not an integration.
+- [x] 8.6 **Make the proof use the chain the docstring describes.** `huniq_byte`
+      passed `lengthDet_byte` while `lengthDet_of_lengthConst` + `lengthConst_byte`
+      were in scope, so the docstring's `LengthConst → LengthDet` ordering was
+      asserted but not exercised. Now it is.
+- [x] 8.7 **State `decodeRepeat_mem_iff`'s specialisation honestly.** Its docstring
+      read general; the theorem is at `Codec.byte`. The general form is just
+      `decodeRepeat_spec` at `Suffix.empty` (a rename, not a theorem), so the
+      specialisation is kept and the docstring now says why.
+- [x] 8.8 **Make `lean-notes.md`'s entry counts reproducible from a clone.** The
+      178/59/8/23 numbers were correct but unverifiable in-repo; the grep/split recipe
+      is now written next to them.
+
+**Confirmed by the review and not re-litigated:** every declaration asserted here is
+true; the axiom footprint across **all 823** `Codec.*` constants is
+`[propext, Quot.sound]`-only with **zero** `Classical.choice` (broader than the
+ledger claimed); `lake build` genuinely enforces zero-`sorry` via
+`moreLeanArgs` on the lib; `huniq_byte`'s statement is exactly `decodeFull_spec`'s
+binder at `Codec.byte`; `openspec validate --all` passes; and the `byte-string`
+MODIFIED delta is a strict superset of the main spec (no archive hazard).
