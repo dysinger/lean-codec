@@ -691,56 +691,58 @@ repo does not yet ship one. So the figures below are given **as ns/step and as a
 multiple of the measured pure-Lean floor**, not as a ratio to `memcpy`.
 
 Measured with `bench`'s `benchDecodeShapes` lane, `n` = 4 KiB, 15 samples of 3 calls
-each, at load average **~2.6–3.3 on 10 cores** (an earlier revision of this table
-said "busy, load ~12" in one paragraph and "load ~1.5–2" in another for the same
-numbers; both were wrong about the run that produced the values now shown).
+each, at load average ~2.3–2.6 on 10 cores.
 
-### What was wrong with the previous table, and why it is being said
+### Warm versus cold: the table had been conflating two different questions
 
-Three of these rows — `arrayRead`, `idealCursor`, `packedCands` — were quoted for
-several revisions **without a lane behind them**, and when the lanes were finally
-written (task 7.1) the numbers did not reproduce. Two of them were wrong by a
-factor, and one by three orders of magnitude:
+Every `benchRatio` lane interleaves a same-size `memcpy` with the measured call, so
+both sides see the same cache state. That is correct for a _ratio to `memcpy`_ — and
+it also **evicts the 4 KiB input between calls**, so the figure it prints is
+_cold-input_ cost. That is a legitimate number. It is **not** "the achievable
+pure-Lean per-element floor", which is a claim about _compute_.
 
-- **`idealCursor` was quoted as 6 ns/step and is 15–16.** The old figure came from a
-  lane that `Array.push`-ed every element into a fresh output array, so it measured
-  the loop _plus_ n elements of array growth — and then that grown loop was quoted
-  as "the achievable pure-Lean floor". The lane now sinks into a `Nat` and allocates
-  nothing, which is what a floor means.
-- **`packedCands` was quoted as 32 ns/step and is ~420–440 ns per step.** The old
-  lane built the candidate list **once over the whole array** and let the harness
-  divide by `n`, which reported ~12 ns/step — _below_ the 48 ns/step decode it is a
-  component of, an arithmetic impossibility that was visible all along to anyone who
-  checked. It is now measured per call and printed as ns/op, with no per-byte
-  division to hide behind. The cost is real and is `attach.map` rebuilding
-  `PackedCand`'s _proof terms_ on every step.
-- **`arrayRead` was quoted as 3 ns and is 12.**
+The bench now prints both. `benchBurst` runs 200 back-to-back calls inside one
+timing window (varying the input per call so nothing hoists), which keeps the buffer
+L1-resident and pushes the span far past `IO.monoNanosNow`'s ~41 ns granularity:
 
-The lesson is recorded in `openspec/lean-notes.md` and in the ledger, but the short
-version belongs here: **a number is not sourced because a lane exists; it is sourced
-because the lane, run, prints that number.** The three rows above were each labelled
-with a lane while still not matching it.
+| lane              | interleaved (cold) | burst (warm)    | ratio |
+| ----------------- | ------------------ | --------------- | ----- |
+| `idealCursor`     | 16 ns/step         | **2.4 ns/step** | 6.7×  |
+| `decodeFullArray` | 49 ns/step         | **27 ns/step**  | 1.8×  |
 
-| shape                                                 | lane label         | ns/step | × floor | note                                          |
-| ----------------------------------------------------- | ------------------ | ------- | ------- | --------------------------------------------- |
-| `memcpy` (`copySlice`), for scale                     | `benchCalibration` | ~0.03   | —       | ~125 ns / 4 KiB                               |
-| `Array` indexed read alone                            | `arrayRead`        | 12      | 0.8×    | the memory floor                              |
-| **ideal `Id.run` cursor loop** (`arr[k]` + `Nat`)     | `idealCursor`      | **15**  | **1×**  | **the achievable pure-Lean floor** (no alloc) |
-| `decodeArray` single step (`List (α × Nat)` result)   | `decodeArray step` | 12      | 0.8×    | the per-step `List`, no measurable premium    |
-| `packedCands` alone (now an `attach.map`)             | `packedCands`      | ~430    | 28×     | an `attach.map` rebuilding proof terms        |
-| `decodeFullArrayRoot` (packed `Array` + `Nat` cursor) | `decodeFullArray`  | **48**  | 3.2×    | the whole decode, one candidate searched      |
-| `decodeFullFastRoot` (`Bytes`/`Suffix` cursor)        | `decodeFullFast`   | 75      | 5×      | +27 ns for the `Suffix`/`bdrop` plumbing      |
-| `decodeFull` (the `Bytes n` specification itself)     | `decodeFull spec`  | ~30,000 | —       | super-linear: re-walks the suffix per step    |
+So the honest picture is two numbers, and **neither is "the" answer**: a _floor_ is a
+compute claim and comes from the burst; a _throughput_ figure comes from the
+interleaved lane. Which one you want depends on whether your input is hot — for a
+codec run in a loop over an already-resident buffer, the burst is the relevant one,
+and the gap to the floor is ~**11×**, not the ~3× a cold-divided-by-cold column
+implied.
 
-**Two rows are not in the "×" column on purpose.** `packedCands` at ~430 ns/step is
-**larger than the 48 ns/step whole-input decode that contains it**, which is the
-tell that a decode step does _not_ pay `packedCands`' full cost per step: it pays it
-once per _candidate searched_, and `byte` yields one candidate that usually succeeds
-immediately, so the `attach.map` rebuild is amortised across the search rather than
-charged per byte. Quoting it as a per-step term of the decode sum was the error; the
-honest statement is the one you can check — it is expensive per call, and the packed
-decode is 48 ns/step anyway. `decodeFull spec` is omitted at the same kind of
-distance for a different reason (super-linear, so ns/step is not flat in `n`).
+| shape                                                 | lane                           | cold ns/step | warm ns/step | note                                       |
+| ----------------------------------------------------- | ------------------------------ | ------------ | ------------ | ------------------------------------------ |
+| `memcpy` (`copySlice`), for scale                     | `benchCalibration`             | ~0.03        | —            | ~125 ns / 4 KiB                            |
+| `Array` indexed read alone                            | `arrayRead`                    | 12           | —            | a single read, not a loop                  |
+| **ideal `Id.run` cursor loop** (`arr[k]` + `Nat`)     | `idealCursor` (+`(burst)`)     | 16           | **2.4**      | **the achievable pure-Lean compute floor** |
+| `decodeArray` single step (`List (α × Nat)` result)   | `decodeArray step`             | 12           | —            | the per-step `List`                        |
+| `packedCands` alone (now an `attach.map`)             | `packedCands (per step)`       | ~430–490     | —            | cold-input dominated; see below            |
+| `decodeFullArrayRoot` (packed `Array` + `Nat` cursor) | `decodeFullArray` (+`(burst)`) | **49**       | **27**       | the whole decode, one candidate searched   |
+| `decodeFullFastRoot` (`Bytes`/`Suffix` cursor)        | `decodeFullFast`               | 75–84        | —            | the `Suffix`/`bdrop` path                  |
+| `decodeFull` (the `Bytes n` specification itself)     | `decodeFull spec`              | ~30,000      | —            | super-linear: re-walks the suffix per step |
+
+**The `packedCands` row is a memory figure, not a compute figure.** Measured
+directly: **3 ns/call** on a hot, constant array, **~1,860 ns/call** across 8
+different 4 KiB buffers, and ~430–490 ns/call in the interleaved lane. The spread is
+cache, not code — `packedCands` on `byte` builds a one-element list, and the 400+
+numbers are the cost of touching a cold 4 KiB array, not of the `attach.map`. It is
+also why it cannot be a per-step term of the 27 ns decode: it _is_ the same first
+touch, counted again. Do not sum it into the decode.
+
+**What the numbers say, stated at the strength the evidence supports.** In a warm
+loop the packed decoder is **~27 ns/step against a ~2.4 ns/step pure-Lean floor** —
+about **11×** — and the whole of that gap is per-step work (a `List` cell, the
+search, the accumulator), not memory bandwidth. On cold input the same decoder is
+~49 ns/step, because it is then paying to stream the buffer. Both are honest; they
+answer different questions, and a document that quoted one as the other is what this
+section used to do.
 
 **How to read the ratio column.** The `memcpy` reference is taken in the same
 sample, but a slow measured call evicts the source from cache before the reference
@@ -763,12 +765,14 @@ within noise with a standalone probe taken at `n` = 1 MiB (69 and 57 ns/byte).
 **What these numbers say — three things, all of which change decisions:**
 
 1. **The carrier is not the bottleneck.** The packed `Array`+`Nat` decoder is
-   only ~1.6× faster than the `Bytes`/`Suffix` one (48 vs 75 ns/byte), so the
-   `Suffix`/`bdrop` plumbing costs ~27 ns/byte — not the order of magnitude the
-   earlier ledger attributed to it. `Bytes n` therefore stays the specification
+   only ~1.6× faster than the `Bytes`/`Suffix` one (49 vs 75–84 ns/step cold), so
+   the `Suffix`/`bdrop` plumbing costs ~25–35 ns/step — not the order of magnitude
+   the earlier ledger attributed to it. `Bytes n` therefore stays the specification
    **and** the runtime is already on contiguous memory, which is exactly the
    two-layer arrangement this document describes elsewhere. No carrier change is
-   needed.
+   needed. (An earlier revision justified this with a "~27 ns for the `Suffix`
+   penalty" figure that was the _difference between two lanes' whole-buffer spans_
+   rather than a measured A/B; the conclusion survives, the derivation did not.)
 2. **A rebuildable candidate list was the largest single term, and it was
    removed.** `packedCands` — once a `filterMap` over `(decodeArray d a k).attach`
    re-deciding two `dif`s per element on **every step** — measured **91** on the
@@ -780,15 +784,17 @@ within noise with a standalone probe taken at `n` = 1 MiB (69 and 57 ns/byte).
    the cursor bound, and the whole-input packed decode went from 63 to **48
    ns/byte** (~25%). What remains in the search is the per-step `List` that
    `decodeArray` returns, plus the accumulator.
-3. **The pure-Lean floor is ~15 ns/step, not 6, and the earlier claim was an
-   artefact of the lane measuring it.** An `Id.run` loop reading `arr[k]` and
-   advancing a `Nat` cursor, with **no** output array, runs there — that is the
-   floor. The "6 ns/step, reachable by pushing into an `Array`" figure that stood
-   here measured the loop _plus_ an n-element `Array.push` growth, and quoted the
-   total as the floor. Corrected, the distance from today's 48 ns to the floor is
-   **~3.2×**, not 8×, and it is ordinary per-step overhead rather than a mystery.
-   This is a weaker claim than the one it replaces and it is the one the lane
-   supports.
+3. **The pure-Lean floor is ~2.4 ns/step warm, and the gap to it is ~11×.** An
+   `Id.run` loop reading `arr[k]` and advancing a `Nat` cursor, with no output
+   array, runs there in a burst. This figure has been wrong twice in this table's
+   history and both mistakes are worth naming, because they are the two ways a
+   benchmark lies: first it was **6**, from a lane that `Array.push`-ed every
+   element and quoted the loop _plus_ n elements of growth as "the floor"; then it
+   was **16**, which is correct but _cold_ — `benchRatio` interleaves a `memcpy`
+   per sample, evicting the 4 KiB input, so it measures memory-bound cost and not
+   compute. The bench now prints both, and the floor is the burst figure. The
+   decoder is 27 ns/step warm against it, so the distance is **~11×**, and it is
+   per-step work rather than a mystery or a bandwidth limit.
 
 **What is _not_ claimed.** No measured path is within a small single-digit
 multiple of a hand-written C parser, because no such reference is measured in
