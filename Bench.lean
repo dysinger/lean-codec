@@ -1113,6 +1113,82 @@ unsafe def benchDecodeShapes (n : Nat) (samples : Nat) (r : Nat) : IO Unit := do
     Codec.Bench.benchBurst "packedCands k=1 " n 200 (fun _ => arr) cands1
     Codec.Bench.benchBurst "packedCands k=2 " n 200 (fun _ => arr) cands2
 
+/-! ## The hand-written C reference parser (benchmark only, **not** Layer 2)
+
+`AGENTS.md` records that every ratio in this repository is against the repo's own
+pure-Lean floor, and that the honest reference for a per-element codec is a
+**hand-written C parser over the same bytes** — not `memcpy`, which moves a byte
+and does no per-element work. This section is that reference.
+
+Three properties make it a *reference* rather than a flattering straw man:
+
+* **Same job.** `decodeWhole Codec.byte` decodes a whole `n`-byte buffer as many
+  `Codec.byte`: one value per byte, consuming the buffer exactly. The C side
+  allocates an `n`-element value array, fills it from the input, and returns it —
+  deliberately not an output-free checksum loop, which would skip the allocation
+  the Lean side pays for and flatter C by exactly the term under discussion.
+* **Value-checked at run time** against the Lean decoder, so a divergence fails
+  the lane instead of silently changing what "the same bytes" means.
+* **Not part of the library.** No `@[extern]` in `Codec/`; this declaration lives
+  in the bench, `Codec/CRef.c` is linked only into `bench`, and the library stays
+  pure Lean. It is excluded from the `#print axioms` gate by construction — it is
+  not a proof, it is a yardstick. -/
+
+/-- The C reference parser: decode `a` as many `Codec.byte`, one value per byte.
+`@[extern]` swaps the emitted call for `codec_cRefByteMany` in `Codec/CRef.c`; the
+Lean body below is what the *kernel* sees, and it is the specification the C must
+match (the same arrangement as the Layer-2 seams, but with no trust claim: nothing
+proven depends on it). -/
+@[extern "codec_cRefByteMany"]
+opaque cRefByteMany (a : ByteArray) : Option (Array UInt8)
+
+/-- **The honest C-vs-Lean figure**, with the value check that makes it meaningful.
+
+The lane reports C's ns/step next to the Lean decoder's, and refuses to print if
+the two disagree — a C reference that computes something *else* faster is not a
+reference. The C call is timed through the same `benchBurst` machinery (median of
+rounds, one L1-resident buffer, input varied per call) so the two numbers are
+produced the same way. -/
+unsafe def benchCReference (n : Nat) : IO Unit := do
+  let bytesAt (j : Nat) : Bytes n :=
+    fun i => if i.val = 0 then UInt8.ofNat (j % 8 + 1) else (1 : UInt8)
+  let arrayAt (j : Nat) : Array UInt8 := Array.mk (List.ofFn (bytesAt j))
+  -- **Value check first.** The C must decode to the same list the Lean decoder
+  -- returns, for several inputs, before any number from it is trustworthy.
+  for j in [0:4] do
+    let a := arrayAt j
+    let ba := ByteArray.mk a
+    let c := cRefByteMany ba
+    let l := decodeWhole Codec.byte byteConsumesByte a
+    match c, l with
+    | some ca, some xs =>
+        if ca.toList != xs then
+          throw (IO.userError s!"C reference disagrees with decodeWhole at input {j}: {ca.size} vs {xs.length} values")
+    | none, none => return ()
+    | _, _ => throw (IO.userError "C reference and decodeWhole disagree on Some/None")
+  -- Same input shape, same burst machinery, both sides.
+  -- Both lanes decode a **different `n/8`-byte window** of the same hot buffer per
+  -- call, so neither closure is loop-invariant (a fixed input is folded away — the
+  -- trap that cost two of this repo's withdrawn figures) and both pay the same
+  -- `Array.extract` per call. `n` in the label is the decoded byte count.
+  let window (j : Nat) (a : Array UInt8) : Array UInt8 :=
+    if a.size = 0 then a
+    else
+      let off := (j * 8) % a.size
+      a.extract off (off + (a.size / 8))
+  let cLane (j : Nat) (a : Array UInt8) : UInt8 :=
+    let w := window j a
+    match cRefByteMany (ByteArray.mk w) with
+    | some out => sinkOfList out.toList + UInt8.ofNat w.size
+    | none => 200
+  let lLane (j : Nat) (a : Array UInt8) : UInt8 :=
+    let w := window j a
+    match decodeWhole Codec.byte byteConsumesByte w with
+    | some xs => sinkOfList xs + UInt8.ofNat w.size
+    | none => 200
+  Codec.Bench.benchBurst "C reference (hand-written)" (n / 8) 200 (fun _ => arrayAt 0) cLane
+  Codec.Bench.benchBurst "Lean decodeWhole       " (n / 8) 200 (fun _ => arrayAt 0) lLane
+
 /-- The fused single-step decoder `decodeFast`: peels one `Codec.byte` in O(1),
 without re-traversing. Confirms `decodeFast` agrees with `decode` on the remainder
 length (the `Suffix` carries no decidable value-equality, so this lanes checks the
@@ -1459,6 +1535,10 @@ unsafe def main (args : List String) : IO Unit := do
   -- `reps = 3` per sample: `decodeFull` (the spec shape) is super-linear, so a
   -- large rep count would dominate the run. The per-call figure is `dt / reps`.
   Codec.Bench.benchDecodeShapes mCapped 15 3
+  -- **The hand-written C reference** (`AGENTS.md` names it as the honest yardstick:
+  -- a `memcpy` ratio for a per-element codec is a category error). Value-checked
+  -- against `decodeWhole` before it prints anything.
+  Codec.Bench.benchCReference mCapped
   -- TEMPORARY: ISO 8601 timestamp (AST-shaped) speed test.
   Codec.Bench.benchIso8601Encode reps
   Codec.Bench.benchIso8601Decode reps
