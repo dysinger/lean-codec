@@ -754,6 +754,243 @@ def relFunctional {α : Type} (R : α → {n : Nat} → Bytes n → Prop) : Prop
 def relUnambiguous {α : Type} (R : α → {n : Nat} → Bytes n → Prop) : Prop :=
   ∀ ⦃a b⦄ {n : Nat} (s : Bytes n), R a s → R b s → a = b
 
+/-! ## Full-consumption uniqueness: what it needs, and what it does NOT follow from
+
+`decodeFull_spec` (in `Codec.Decode`) takes as a hypothesis
+
+    huniq : ∀ {x y} {n} (s : Bytes n),
+      (x, Suffix.empty n) ∈ decodeRepeat p h n s →
+      (y, Suffix.empty n) ∈ decodeRepeat p h n s → x = y
+
+i.e. *at most one value list fully consumes a given string*. It is a real
+precondition, not a restatement of anything already in the tree.
+
+**`huniq` does NOT follow from `relUnambiguous` plus productivity.** That was the
+belief when the gap was first recorded (task 2.6 of `codec-review-remediation`), and
+it is **false** — machine-checked below as `huniq_not_derivable`. The counterexample
+(`uniqCounterexampleRel`) relates one value to every 2-byte string and another to
+every 1-byte string. It is unambiguous (`uniqCounterexample_unambiguous`, one value
+per string at a fixed length) and productive (`uniqCounterexample_productive`, no
+value sits on the empty string), yet at `n = 2` **both** `[a]` (one 2-byte step) and
+`[b, b]` (two 1-byte steps) inhabit `relRepeat` — two distinct fully-consuming lists
+of the same string.
+
+So the honest statement needs **two** extra hypotheses beyond unambiguity, and this
+section proves the law for exactly that pair:
+
+* `LengthDet R` — each value relates only to strings of one length. Rules out the
+  counterexample above.
+* `RelAligned R` — values are identified by their shared byte prefix; unambiguity
+  extended *across* lengths, so the induction can compare two first steps whose
+  lengths differ.
+
+Both are discharged for `byte` (`lengthDet_byte`, `relAligned_byte`), so neither is
+vacuous. The result is `relRepeat_unique_same_length`: uniqueness **indexed by list
+length**, which is the form `huniq` can honestly be replaced by — the counterexample's
+two lists differ in length, so the index excludes it.
+
+Lemmas, all `[propext, Quot.sound]`-only with zero `Classical.choice`:
+`relRepeat_prefix_inj` / `relRepeat_suffix_inj` (same-length splices agree in their
+prefix / suffix), `splice_prefix_agree` (cross-length prefix agreement),
+`relRepeat_cons_eq` (the oriented core of the induction, with the IH as a parameter so
+its footprint is checkable standalone), and `relRepeat_unique_same_length`. -/
+
+
+/-- **Two splices of one string at the same length have the same prefix.** Reading
+every index below `m` recovers the prefix through `splice_prefix_read`, so equality
+of the whole strings forces equality of the prefixes. The workhorse the uniqueness
+argument reduces to. `[propext, Quot.sound]`-only. -/
+theorem relRepeat_prefix_inj {n m : Nat} (hm : m ≤ n)
+    (s₁ s₁' : Bytes m) (s₂ s₂' : Bytes (n - m))
+    (h : splice hm s₁ s₂ = splice hm s₁' s₂') : s₁ = s₁' := by
+  apply Bytes.ext
+  intro i
+  have hi : i.val < m := i.isLt
+  have key := congrFun h ⟨i.val, Nat.lt_of_lt_of_le hi hm⟩
+  rw [splice_prefix_read hm s₁ s₂ ⟨i.val, _⟩ hi,
+      splice_prefix_read hm s₁' s₂' ⟨i.val, _⟩ hi] at key
+  exact key
+
+/-- **Two splices of one string at the same length have the same suffix.** The dual
+of `relRepeat_prefix_inj`, via `bdrop_splice`. `[propext, Quot.sound]`-only. -/
+theorem relRepeat_suffix_inj {n m : Nat} (hm : m ≤ n)
+    (s₁ : Bytes m) (s₂ s₂' : Bytes (n - m))
+    (h : splice hm s₁ s₂ = splice hm s₁ s₂') : s₂ = s₂' := by
+  have := congrArg (bdrop m) h
+  rw [bdrop_splice hm s₁ s₂, bdrop_splice hm s₁ s₂'] at this
+  exact this
+
+/-- A step relation is **length-determinate** when each value relates only to strings
+of a single length. This is exactly the hypothesis `huniq` needs beyond
+`relUnambiguous` + productivity (see the section note above), and it is *not*
+implied by unambiguity. It holds for `byte` (which lives only at `Bytes 1`) and for
+any codec whose leaves are fixed-width in their *value*. -/
+def LengthDet {α : Type} (R : α → {m : Nat} → Bytes m → Prop) : Prop :=
+  ∀ ⦃a : α⦄ {m₁ m₂ : Nat} (t₁ : Bytes m₁) (t₂ : Bytes m₂), R a t₁ → R a t₂ → m₁ = m₂
+
+/-- **Values are identified by their shared prefix.** Two values related to byte
+strings that agree on the shorter one are equal. This is `relUnambiguous` *extended
+across lengths*: at equal lengths it is exactly unambiguity, and the extra content is
+that a value cannot be distinguished by bytes beyond its own step length. It is what
+lets the uniqueness induction compare the two decompositions' first steps when their
+lengths may differ. Satisfied by `byte` (`relUnambiguous` at `Bytes 1`). -/
+def RelAligned {α : Type} (R : α → {m : Nat} → Bytes m → Prop) : Prop :=
+  ∀ ⦃a b : α⦄ {m₁ m₂ : Nat} (t₁ : Bytes m₁) (t₂ : Bytes m₂) (hle : m₁ ≤ m₂),
+    R a t₁ → R b t₂ →
+    (∀ (i : Fin m₁), t₁ i = t₂ ⟨i.val, Nat.lt_of_lt_of_le i.isLt hle⟩) → a = b
+
+/-- Two splices of one string at lengths `m₁ ≤ m₂` agree on their `m₁`-prefix, read
+index-by-index. `[propext, Quot.sound]`-only. -/
+theorem splice_prefix_agree {n m₁ m₂ : Nat} (h₁ : m₁ ≤ n) (h₂ : m₂ ≤ n) (hle : m₁ ≤ m₂)
+    (s₁ : Bytes m₁) (s₂ : Bytes (n - m₁)) (s₁' : Bytes m₂) (s₂' : Bytes (n - m₂))
+    (heq : splice h₁ s₁ s₂ = splice h₂ s₁' s₂') :
+    ∀ (i : Fin m₁), s₁ i = s₁' ⟨i.val, Nat.lt_of_lt_of_le i.isLt hle⟩ := by
+  intro i
+  have hi : i.val < m₁ := i.isLt
+  have hlt2 : i.val < m₂ := Nat.lt_of_lt_of_le hi hle
+  have key := congrFun heq ⟨i.val, Nat.lt_of_lt_of_le hi h₁⟩
+  rw [splice_prefix_read h₁ s₁ s₂ ⟨i.val, _⟩ hi,
+      splice_prefix_read h₂ s₁' s₂' ⟨i.val, _⟩ hlt2] at key
+  exact key
+
+/-- A length-determinate-free step relation: `true` on any 2-byte string, `false` on
+any 1-byte string. Unambiguous at fixed length and productive, yet it admits two
+distinct fully-consuming lists at `n = 2`. -/
+def uniqCounterexampleRel : Bool → {m : Nat} → Bytes m → Prop
+  | true, m, _ => m = 2
+  | false, m, _ => m = 1
+
+theorem uniqCounterexample_unambiguous :
+    ∀ ⦃a b : Bool⦄ {m : Nat} (t : Bytes m), uniqCounterexampleRel a t →
+      uniqCounterexampleRel b t → a = b := by
+  intro a b m t ha hb
+  cases a <;> cases b <;> simp_all [uniqCounterexampleRel]
+
+theorem uniqCounterexample_productive :
+    ∀ a {m : Nat} (t : Bytes m), uniqCounterexampleRel a t → m ≠ 0 := by
+  intro a m t h
+  cases a <;> simp_all [uniqCounterexampleRel]
+
+theorem uniqCounterexample_single :
+    relRepeat uniqCounterexampleRel [true] 2 (fun _ => 0) :=
+  ⟨2, by omega, (fun _ => 0), (fun i : Fin 0 => i.elim0), by ext i; simp [splice, concat],
+   rfl, (relRepeat_nil _ _).2 rfl⟩
+
+theorem uniqCounterexample_pair :
+    relRepeat uniqCounterexampleRel [false, false] 2 (fun _ => 0) :=
+  ⟨1, by omega, (fun _ => 0), (fun _ => 0), by ext i; simp [splice, concat], rfl,
+   ⟨1, by omega, (fun _ => 0), (fun i : Fin 0 => i.elim0), by ext i; simp [splice, concat],
+    rfl, (relRepeat_nil _ _).2 rfl⟩⟩
+
+/-- **`huniq` is not derivable from unambiguity + productivity.** Two distinct
+fully-consuming lists of the same string, for a step relation that is both
+unambiguous and productive. What is missing is `LengthDet`; the lists also differ in
+*length*, which is why the honest uniqueness law is length-indexed. -/
+theorem huniq_not_derivable :
+    ¬ (∀ (xs ys : List Bool), relRepeat uniqCounterexampleRel xs 2 (fun _ => 0) →
+        relRepeat uniqCounterexampleRel ys 2 (fun _ => 0) → xs = ys) := by
+  intro h
+  have := h [true] [false, false] uniqCounterexample_single uniqCounterexample_pair
+  exact absurd this (by simp)
+
+/-- `LengthDet` holds for `byte`: `Rel byte a s` forces `s` to be the one-byte string
+`[a]`, so both `m₁` and `m₂` are `1`. The first in-tree discharge of the extra
+hypothesis, and the reason it is not vacuous. `[propext, Quot.sound]`-only. -/
+theorem lengthDet_byte : LengthDet (Rel Codec.byte) := by
+  intro a m₁ m₂ t₁ t₂ h₁ h₂
+  rw [Rel_byte] at h₁ h₂
+  obtain ⟨ha₁, -⟩ := h₁
+  obtain ⟨ha₂, -⟩ := h₂
+  subst ha₁
+  subst ha₂
+  rfl
+
+/-- `RelAligned` holds for `byte`: both related strings are the one-byte `single`,
+so the shared prefix (index `0`) already determines the value. The companion of
+`lengthDet_byte`, completing the satisfiability evidence for the uniqueness
+hypothesis pair. `[propext, Quot.sound]`-only. -/
+theorem relAligned_byte : RelAligned (Rel Codec.byte) := by
+  intro a b m₁ m₂ t₁ t₂ _hle h₁ h₂ hagree
+  rw [Rel_byte] at h₁ h₂
+  obtain ⟨hm₁, ht₁⟩ := h₁
+  obtain ⟨hm₂, ht₂⟩ := h₂
+  subst hm₁
+  subst hm₂
+  have e := hagree ⟨0, by omega⟩
+  simp only [] at ht₁ ht₂
+  rw [ht₁] at e
+  rw [ht₂] at e
+  exact e
+
+/-- The **oriented core** of the uniqueness induction: two decompositions of one
+string, with the first step no longer than the second, and an induction hypothesis
+supplied as a parameter (so this lemma is provable standalone and its footprint is
+checkable). `[propext, Quot.sound]`-only. -/
+theorem relRepeat_cons_eq {α : Type} (R : α → {m : Nat} → Bytes m → Prop)
+    (hld : LengthDet R) (hal : RelAligned R)
+    (n : Nat) (ih : ∀ (k : Nat), k < n → ∀ (t : Bytes k) (xs ys : List α),
+        relRepeat R xs k t → relRepeat R ys k t → xs.length = ys.length → xs = ys)
+    (a₀ b₀ : α) (us vs : List α) (m m' : Nat) (hm : m ≤ n) (hm' : m' ≤ n) (hle : m ≤ m')
+    (a : Bytes m) (b : Bytes (n - m)) (a' : Bytes m') (b' : Bytes (n - m'))
+    (hspl : splice hm a b = splice hm' a' b')
+    (hRa : R a₀ a) (hRa' : R b₀ a')
+    (hra : relRepeat R us (n - m) b) (hra' : relRepeat R vs (n - m') b')
+    (hne : m ≠ 0) (hltq : us.length = vs.length) : (a₀ :: us) = (b₀ :: vs) := by
+  have hxy : a₀ = b₀ := hal a a' hle hRa hRa'
+    (splice_prefix_agree hm hm' hle a b a' b' hspl)
+  have hmm : m = m' := hld a a' hRa (hxy ▸ hRa')
+  have hlt : n - m < n :=
+    Nat.sub_lt (Nat.lt_of_lt_of_le (Nat.pos_of_ne_zero hne) hm) (Nat.pos_of_ne_zero hne)
+  subst hxy
+  subst hmm
+  have hpre : a = a' := relRepeat_prefix_inj hm a a' b b' hspl
+  have hsuf : b = b' := relRepeat_suffix_inj hm a b b' (by rw [hspl, hpre])
+  subst hpre
+  subst hsuf
+  rw [ih (n - m) hlt b us vs hra hra' hltq]
+
+/-- **Full-consumption uniqueness, indexed by list length.** Under `LengthDet`,
+`RelAligned` (unambiguity extended across lengths) and productivity, there is at most
+one value list **of a given length** that consumes a string. This is the true form of
+`decodeFull_spec`'s `huniq`; the un-indexed statement is false — see the section note.
+`[propext, Quot.sound]`-only, zero `Classical.choice`. -/
+theorem relRepeat_unique_same_length {α : Type} (R : α → {m : Nat} → Bytes m → Prop)
+    (hld : LengthDet R) (hal : RelAligned R)
+    (hprod : ∀ a {m : Nat} (t : Bytes m), R a t → m ≠ 0) :
+    ∀ (n : Nat) (s : Bytes n) (xs ys : List α),
+      relRepeat R xs n s → relRepeat R ys n s → xs.length = ys.length → xs = ys := by
+  intro n
+  induction n using Nat.strongRecOn with
+  | ind n ih =>
+    intro s xs ys hx hy hlen
+    cases xs with
+    | nil =>
+        have : n = 0 := hx
+        cases ys with
+        | nil => rfl
+        | cons y ys =>
+          simp only [List.length_nil, List.length_cons] at hlen
+          omega
+    | cons x xs =>
+        cases ys with
+        | nil =>
+          simp only [List.length_nil, List.length_cons] at hlen
+          omega
+        | cons y ys =>
+          rcases hx with ⟨m₁, hm₁, s₁, s₂, hs₁, hR₁, href₁⟩
+          rcases hy with ⟨m₂, hm₂, s₁', s₂', hs₂, hR₂, href₂⟩
+          have hltq : xs.length = ys.length := by
+            simp only [List.length_cons] at hlen
+            omega
+          have hm0 : m₁ ≠ 0 := hprod x s₁ hR₁
+          have hspl : splice hm₁ s₁ s₂ = splice hm₂ s₁' s₂' := by rw [← hs₁, ← hs₂]
+          rcases Nat.le_total m₁ m₂ with hle | hle
+          · exact relRepeat_cons_eq R hld hal n ih x y xs ys m₁ m₂ hm₁ hm₂ hle
+              s₁ s₂ s₁' s₂' hspl hR₁ hR₂ href₁ href₂ hm0 hltq
+          · have hm2ne : m₂ ≠ 0 := hprod y s₁' hR₂
+            exact (relRepeat_cons_eq R hld hal n ih y x ys xs m₂ m₁ hm₂ hm₁ hle
+              s₁' s₂' s₁ s₂ hspl.symm hR₂ hR₁ href₂ href₁ hm2ne hltq.symm).symm
+
 theorem encodeRepeat_ne_none {α : Type} (p : Codec α) :
     ∀ (xs : List α) {n : Nat} (s : Bytes n), relRepeat (Rel p) xs n s → encodeRepeat p xs ≠ none := by
   intro xs
