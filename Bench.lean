@@ -470,6 +470,48 @@ unsafe def benchDecodeFullFast (n : Nat) : IO Unit := do
       IO.println s!"decodeFullFast root [{n}]: value + bridge OK (unbenchmarked, see 6.1b)"
   | none => throw (IO.userError "decodeFullFastRoot: expected some, got none")
 
+/-- **The wired fast surface (task 6.3)**: `decodeWhole` is the named entry point
+readers are pointed at, and this lane asserts it is both *correct* and *the fast
+path* — i.e. that wiring did not accidentally leave the surface on the slow route.
+
+Both claims are checked, not assumed:
+
+* the value is byte-for-byte what `decodeFull` returns, via the `decodeWhole_eq`
+  law, so a wiring change that broke the delegate fails here;
+* it is compared **against the specification decoder in the same run**, so if
+  `decodeWhole` ever stopped delegating to the packed cursor the lane would report a
+  slow number rather than hiding it. -/
+unsafe def benchDecodeWhole (n : Nat) : IO Unit := do
+  let s : Bytes n := bytesOf n
+  let a : Array UInt8 := bytesToArray s
+  match decodeWhole Codec.byte byteConsumesByte a with
+  | some xs =>
+      let expected : List UInt8 := List.replicate n (1 : UInt8)
+      if xs != expected then
+        throw (IO.userError s!"decodeWhole: expected {expected.length}×0x01 bytes, got length {xs.length}")
+      -- `decodeWhole_eq`, at this input: the wired surface *is* the specification.
+      -- Comparing against `decodeFull` (the slow spec decoder) is the check that
+      -- would catch a wiring change that returned something else.
+      if some xs != decodeFull Codec.byte byteConsumesByte (bytesToArray s).size
+            (arrayToBytes (bytesToArray s)) then
+        throw (IO.userError "decodeWhole ≠ decodeFull (the decodeWhole_eq law disagrees at run time)")
+      IO.println s!"decodeWhole [{n}]: value + decodeWhole_eq OK"
+  | none => throw (IO.userError "decodeWhole: expected some, got none")
+
+/-- `decodeWholeBytes` is the specification-carrier entry point; it must agree with
+`decodeWhole` on the same input (the packing transport is size-preserving and value-
+preserving), and it exists so a caller holding a `Bytes n` has a wired path rather
+than being told to pack by hand. -/
+unsafe def benchDecodeWholeBytes (n : Nat) : IO Unit := do
+  let s : Bytes n := bytesOf n
+  let a : Array UInt8 := bytesToArray s
+  if decodeWholeBytes Codec.byte byteConsumesByte s
+      != decodeWhole Codec.byte byteConsumesByte a then
+    throw (IO.userError "decodeWholeBytes ≠ decodeWhole on the packed readback")
+  if (bytesToArray s).size != n then
+    throw (IO.userError "bytesToArray_size disagrees at run time")
+  IO.println s!"decodeWholeBytes [{n}]: agrees with decodeWhole, size preserved"
+
 /-- The **packed cursor** decoder: `decodeFullArrayRoot` over an `Array UInt8`, with
 the `Nat` consumed-count cursor. This is task 6.1b's construction, and the lane's job
 is the same as `benchDecodeFullFast`'s: **assert correctness, not speed.**
@@ -651,6 +693,13 @@ unsafe def benchDecodeShapes (n : Nat) (samples : Nat) (r : Nat) : IO Unit := do
   Codec.Bench.benchRatio "decodeFullArray " n samples r
     arrayAt
     (fun arr => match decodeFullArrayRoot Codec.byte byteConsumesByte arr with
+                | some xs => sinkOfList xs
+                | none => 200)
+  -- the wired surface (6.3): must be the *same* number as `decodeFullArray`, since
+  -- it delegates; a divergence here means the wiring left the fast path.
+  Codec.Bench.benchRatio "decodeWhole (6.3) " n samples r
+    arrayAt
+    (fun arr => match decodeWhole Codec.byte byteConsumesByte arr with
                 | some xs => sinkOfList xs
                 | none => 200)
   -- floor: one raw cursor step (no search, no accumulator, no `Suffix`).
@@ -986,6 +1035,9 @@ unsafe def main (args : List String) : IO Unit := do
   -- The fast full-consumption decoder: value- AND bridge-checked, ratio-printing.
   Codec.Bench.benchDecodeFullFast mCapped
   Codec.Bench.benchDecodeFullArray mCapped
+  -- The wired fast surface (6.3): correct, and it *is* the packed path.
+  Codec.Bench.benchDecodeWhole mCapped
+  Codec.Bench.benchDecodeWholeBytes mCapped
   Codec.Bench.benchDecodeFast nCapped reps
   -- Task 6.4: the ratio lanes. Run LAST, so a slow or aborting lane above cannot
   -- silently hide them, and read their output next to `uptime` (rule 5).
