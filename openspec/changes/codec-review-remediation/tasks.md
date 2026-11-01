@@ -1907,8 +1907,52 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
       path, and because 6.3 will have established the pattern for "wire the fast
       shape behind a proved refinement".
 
-- [ ] 6.6 **Decide the carrier question the bar actually forces** (R5.1 — the
+- [x] 6.6 **Decide the carrier question the bar actually forces** (R5.1 — the
       one item here that is a _decision_, not an optimization).
+
+      **DONE 2026-11-03: the carrier question was answered by measurement and the
+      code-shape work it pointed at is landed.** `packedCands`'s `filterMap` of two
+      `dif`s — rebuilt on every step of the search — is now an `attach.map` with the
+      two facts supplied once from the cursor bound. Commit `2f930e1`.
+
+      Decomposed at `n` = 65536, one step per iteration: `packedCands` **91
+      ns/step**, of which `.attach` alone was 25 and a plain `attach.map` was 32 —
+      so the two `dif`s were ~59 of the 91. `packedCands` is rebuilt on **every**
+      step, so this was the dominant per-step cost in the library.
+
+      Effect, same machine, `decodeFullFastRoot` as the untouched control (so the
+      load cancels):
+
+      | | before | after |
+      | --- | --- | --- |
+      | `decodeFullArrayRoot` | 63–64 ns/byte | **47–48 ns/byte** |
+      | `decodeFullFastRoot` (control) | 76–77 | 74–75 |
+      | ratio packed/flat | 0.83 | **0.63** |
+
+      **~25% off the packed path**, and the answer to the carrier question is that
+      **no carrier change is needed**: `Bytes n` stays the specification, the runtime
+      is already on `Array UInt8`, and the remaining 8× to the measured 6 ns/step
+      floor is the per-step `List` that `decodeArray` returns plus the accumulator —
+      ordinary allocation, addressed by the same class of change, not by demoting the
+      spec.
+
+      **Signature note (the one shape change this task made).** `packedCands` gained
+      an explicit `hk : k ≤ a.size`. Every consumer already carried a cursor bound,
+      so no theorem's *statement* moved and no proof obligation was weakened;
+      `packedCands_eq_attach` — which the entire bridge cites — became `rfl` instead
+      of a `filterMap_eq_map_of_forall` argument, and `mem_packedCands` is its
+      analogue. Axioms re-checked on `packedCands`, `packedCands_eq_attach`,
+      `length_packedCands_le`, `array_bridge`, `decodeFullArrayRoot_eq`:
+      `[propext, Quot.sound]`-only throughout, zero `Classical.choice`, zero `sorry`.
+
+      **Spec measure (not an optimisation, measured while building the lane):** at
+      `n` = 8 KiB the load average alone moved `decodeFullArrayRoot` between 47 and
+      64 ns/byte across runs. That is why every figure above is quoted with its
+      control on the same run, and why the README's ratio column carries its own
+      caveat.
+
+      The rest of this entry is the pre-work decision record, kept because its
+      reasoning about the bar is still the governing one.
 
       **HALF-DECIDED 2026-11-03, by measurement — the carrier question is
       answered, the bar question is not.** 6.4's numbers settle the first half
@@ -1982,12 +2026,11 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
 5. **6.2 — DONE 2026-11-03.** `README.md`'s "honest ceiling" section and
    `AGENTS.md`'s speed bullet rewritten against 6.4's table, with the old figures
    explicitly withdrawn.
-6. **6.6's code-shape work comes next, then 6.3, 6.5, 6.7.** 6.4 relocated the
-   problem: the residual is **`packedCands`'s per-step `.attach`/`filterMap`**
-   (52 ns/step on its own, against a 6 ns/step floor), not the carrier. So the
-   highest-value next change is the candidate-list shape (6.6), which then feeds
-   6.3's wiring and 6.5's encode. Ordered ahead of 6.3 because wiring a path whose
-   dominant term is a rebuildable list would freeze the defect into the surface.
+6. **6.6 — DONE 2026-11-03** (commit `2f930e1`): `packedCands` is an `attach.map`
+   rather than a `filterMap` of two `dif`s, taking the packed decode from 63 to
+   48 ns/byte (~25%) and leaving the per-step `List` as the largest remaining term.
+   **Then 6.3, 6.5, 6.7** — wire the fast path, adopt `encodeArray`'s shape, wire
+   the seam. 6.3 now starts from a measured 48 ns/byte against a 6 ns/step floor.
 7. **6.7** — wire the Layer-2 seam once a real consumer exists.
 
 **Why 6.4 ran before 6.3/6.5 and why that was right:** the docs must state what
