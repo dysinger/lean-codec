@@ -181,7 +181,13 @@ loop is not invariant and cannot be hoisted.
 
 Both variants are printed, because they answer different questions: `(burst@8buf)`
 keeps the old shape (a caller streaming several buffers sees it), `(burst)` is the
-L1-resident one (a compute floor). -/
+L1-resident one (a compute floor). The **median is the figure to quote**; the min
+and max are printed so the spread is on the record rather than behind one endpoint.
+
+**What this lane cannot see.** Every row it is used on today (`idealCursor`,
+`arrayRead`, `decodeFullArray` at `Codec.byte`) has exactly **one candidate per
+cursor position**, so `decodeFullArraySearch` never iterates and the whole search
+term is unpriced. A `k > 1` lane is the next session's task (see `AGENTS.md`). -/
 unsafe def benchBurst {α : Type} [Inhabited α] (label : String) (n : Nat) (bursts : Nat)
     (mk : Nat → α) (measure : Nat → α → UInt8) : IO Unit := do
   -- Warm-up, so the first (cold) call is not part of any measured span.
@@ -850,26 +856,26 @@ unsafe def benchDecodeShapes (n : Nat) (samples : Nat) (r : Nat) : IO Unit := do
     match decodeFullArrayRoot Codec.byte byteConsumesByte arr with
     | some xs => sinkOfList xs
     | none => 200
-  -- The burst reuses ONE buffer, so the *input to the decode* must change per call;
-  -- perturbing only the sink would leave the decode loop-invariant and the
-  -- optimiser would hoist it (measured: the lane aborted with a zero sink, i.e.
-  -- "the measured work was elided"). So each call packs and decodes a **different**
-  -- 1-in-4 subsampled copy of the buffer. One `Array.ofFn` + `n/4`-byte decode per
-  -- call is real per-call work, not cache churn: the source buffer stays hot and the
-  -- subsample is 1 KiB, well inside L1. `n` in the label is the decoded byte count,
-  -- so the printed ns is per decoded step.
-  let perturbed (j : Nat) (m : Nat) (base : Array UInt8) : Array UInt8 :=
-    Array.ofFn fun (i : Fin m) =>
-      if j % 5 = 0 then base.getD (j % (max base.size 1)) 0 else base.getD (i.val % (max base.size 1)) 0
-  let dfaBurst (j : Nat) (base : Array UInt8) : UInt8 :=
-    let m : Nat := max (base.size / 4) 1
-    let arr := perturbed j m base
-    -- the decoded byte count, so the caller's `n` and this lane agree
-    match decodeFullArrayRoot Codec.byte byteConsumesByte arr with
-    | some xs => sinkOfList xs + UInt8.ofNat arr.size
-    | none => 200
+  -- **The burst at `n` exactly**, so the row can be divided by the `idealCursor`
+  -- burst at the same `n` — the whole point of a "gap to the floor". The decoded
+  -- input must differ per call or the decode hoists (measured: a sink-only
+  -- perturbation left the loop invariant and the lane aborted on a zero sink). So
+  -- each call decodes a **different `n`-byte window** of the same hot buffer,
+  -- window start staggered by `j`. The decode path is unchanged — same
+  -- `decodeFullArrayRoot`, same cursor, same result list — and the only per-call
+  -- overhead is one `Array.extract`, i.e. a `memcpy` of `n/8` bytes: the honest
+  -- cost of "a different input arrived". (An earlier attempt decoded a *subsampled
+  -- copy* of the buffer so the allocation would be cheap; that shrinks the working
+  -- set and turns a memory question into a different one, so it was withdrawn.)
+  let rootWindow (j : Nat) (base : Array UInt8) : UInt8 :=
+    if base.size = 0 then 200
+    else
+      let w := base.extract ((j * 8) % base.size) (((j * 8) % base.size) + (base.size / 8))
+      match decodeFullArrayRoot Codec.byte byteConsumesByte w with
+      | some xs => sinkOfList xs + UInt8.ofNat w.size
+      | none => 200
   Codec.Bench.benchRatio "decodeFullArray " n samples r arrayAt dfaRoot
-  Codec.Bench.benchBurst "decodeFullArray " (n / 4) 200 (fun _ => arrayAt 0) dfaBurst
+  Codec.Bench.benchBurst "decodeFullArray " (n / 8) 200 (fun _ => arrayAt 0) rootWindow
   -- the wired surface (6.3): must be the *same* number as `decodeFullArray`, since
   -- it delegates; a divergence here means the wiring left the fast path.
   Codec.Bench.benchRatio "decodeWhole (6.3) " n samples r
