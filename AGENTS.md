@@ -2,6 +2,58 @@
 
 Guidance for AI coding agents working in this repository.
 
+> ## NEXT SESSION: ONE TASK, AND ONLY THIS TASK
+>
+> **Fix `benchBurst` and re-derive the performance figures. No OpenSpec change for
+> this — do it directly, on the tree, in one session.**
+>
+> **The bug.** `Bench.lean`'s `benchBurst` takes the **minimum** of 5 timed rounds
+> (`best == 0 || t1 - t0 < best`). The rounds are not independent — they differ only
+> in how warm the cache is — so the min is systematically the _most favourable_
+> round. Measured on the `idealCursor` loop at n = 4096, one invocation:
+>
+> ```
+> round 0: 25578 ns/op      (cold)
+> round 1: 22425
+> round 2: 15405
+> round 3: 12742
+> round 4: 11931            (fully warm)  <- what the lane reports
+> ```
+>
+> So the published "**2.4 ns/step pure-Lean floor**" is a _best case_, not a floor,
+> and the ~11× gap derived from it is derived from a cherry-picked endpoint. This is
+> the same defect the warm/cold correction was meant to remove, one layer down.
+> Do not trust any figure currently in `README.md`'s table until you have re-run it.
+>
+> **Do all three, in this order:**
+>
+> 1. **Report a range, not a min.** Have `benchBurst` collect every round and print
+>    `min / median / max` (and the round count), so the decay is visible instead of
+>    hidden behind one endpoint. The data is already collected; this is the cheap fix.
+> 2. **Make "warm" actually mean L1-resident.** It rotates 8 buffers of `n` bytes,
+>    so the working set is `8n` = 32 KiB at n = 4096 — past L1. Use **one** buffer and
+>    vary a byte _inside_ it per call: the input still changes (so nothing hoists)
+>    while the working set stays resident.
+> 3. **Re-derive the table and correct `README.md`.** With (1) and (2) in place, re-run
+>    `bench 4096 4096`, replace the `warm ns/step` column with the measured range, and
+>    restate the gap as a range. Update `AGENTS.md`'s attribution bullet if the
+>    numbers move it.
+>
+> **Finish with:** `lake build` and `lake build bench` green with zero warnings,
+> `openspec validate --all` green, then commit `Bench.lean` and `README.md` (and
+> `AGENTS.md` if edited) — **individual files, never `git add -A`** — and push.
+>
+> **Also, and it is not optional:** every figure you write down must be the literal
+> output of a lane you ran in that session, pasted in. This repository has had five
+> performance figures wrong at some point (6 → 15 → 2.4 for the floor; 32 → 430 → 3
+> for `packedCands`; 3 for the array read), and every one of them was caught by
+> running the lane, not by reading it.
+>
+> **Explicitly out of scope, and do not start them:** any new OpenSpec change; the
+> `k > 1` candidate blind spot (record it only if (1)-(3) leave you with time and a
+> measured result worth recording); `lean-basen` (separate repo, separate session);
+> and any optimisation of the decoder itself.
+
 **Four hard requirements, before anything else:**
 
 1. **Play an audible alarm every time you pause** — see
@@ -74,6 +126,9 @@ drift again; a stated precedence cannot). The removed `List`-carrier's
 
 ## Current state
 
+**The next session's work is the boxed task at the top of this file. Everything in
+this section is background for it; nothing here competes with it.**
+
 **Do not record status here — compute it.** Two commands answer everything:
 
 ```bash
@@ -81,35 +136,20 @@ nix develop --command openspec list --json | sed -n '/^{/,$p'   # active changes
 nix develop --command openspec validate --all                    # spec deltas sound
 ```
 
-**No change is open in this repo — the next one to create is `codec-performance`.**
-`codec-review-remediation` was archived on 2026-11-01 into
+**No OpenSpec change is open in this repo, and none is to be created for the next
+session** — that session's work is the boxed task at the top of this file, done
+directly on the tree. `codec-review-remediation` was archived on 2026-11-01 into
 `openspec/changes/archive/2026-11-01-codec-review-remediation/`, and its
 requirements are now live under `openspec/specs/codec/**` — read those for the
 behavioural contract, and the archived `tasks.md` / `review.md` for how it got
-there and what was measured. **Do not continue that change; start the new one.**
+there and what was measured. **Do not continue that change.**
 
-**`codec-performance` exists to close one measured blind spot, and its first task
-is already identified.** Every performance lane in `Bench.lean` exercises
-`Codec.byte`, i.e. **exactly one candidate per step** — the cheapest possible
-shape. `packedCands` rebuilds a candidate list (and `PackedCand`'s proof terms) on
-every step, so a codec with _several_ alternatives per step pays that rebuild once
-per candidate, and **nothing in the bench measures that shape at all**. That is an
-unmeasured gap in a library whose selling point is that its claims are measured,
-and it is the reason to open the change — not "go faster". Before designing any
-optimisation, add a lane whose step relation yields k > 1 candidates and find out
-what the real cost curve is; the answer may well be that `@[inline]`/`@[specialize]`
-(measured: **zero** effect on the k = 1 path) still buys nothing, in which case say
-so and stop. Start from the warm/cold distinction already established: a _floor_ is
-a compute claim and comes from a `benchBurst` lane, a _throughput_ figure from the
-interleaved `benchRatio` lane, and the two must never be divided by each other.
-
-The one change still open anywhere in this tree's orbit is **`lean-basen`**, whose
-work happens in the sibling repo `../lean-basen` in that repo's own `nix develop`.
-It does not touch this tree. Its ledger is
-`openspec/changes/lean-basen/tasks.md` here (the planning half) and its own
-`tasks.md` there; **it carries the MODIFIED-replaces-wholesale archive hazard**
-(it MODIFIES "The `basen` bases are `Codec` values"), so read `openspec/specs/basen/spec.md`
-immediately before archiving it and re-validate after.
+**`lean-basen` is open and is NOT the next session's work.** Its code lives in the
+sibling repo `../lean-basen` in that repo's own `nix develop`, so it touches nothing
+here; its ledger is `openspec/changes/lean-basen/tasks.md` (this repo) plus its own
+`tasks.md` there. It carries the MODIFIED-replaces-wholesale archive hazard (it
+MODIFIES "The `basen` bases are `Codec` values"). **Leave it alone until the boxed
+task is done** — then it is a separate session in a separate repo.
 
 **No deferral remains.** The one item 5.10 left open — the `lean` skill's
 ~70-char bold-lead-in cap — was closed on 2026-11-02: all 60 entries now comply,
