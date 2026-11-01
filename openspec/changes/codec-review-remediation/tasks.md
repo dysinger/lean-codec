@@ -242,48 +242,70 @@ byteSlice_spec]`, then `rfl` closes the `ByteArray.mk` eta — instead of
       and `README.md`'s Layer-2 paragraph states the same, so the fact is in the
       code where it is consulted.
 
-- [~] 2.6 **Record or retire the dead API and unproved premise** (R2.5, R2.7).
-  (a) `Iso.element`/`Iso.subset` have zero callers. Either delete, or add a
-  one-line "public API, no in-tree caller" note — leaning retain, because
-  `[D8]`'s corrected decidable-witness argument is about exactly these
-  two (task 3.9).
-  (b) `decodeFull_spec` takes full-consumption uniqueness (`huniq`) as a
-  hypothesis and nothing in-repo supplies it. Either derive it from
-  `relUnambiguous` (which the repo already has) as
-  `decodeFull_spec_unambiguous`, or add one concrete instance so the
-  hypothesis is demonstrably satisfiable in-tree.
-  **(a) DONE — retained, with the note.** `Iso.element` and `Iso.subset` now
-  say "Public API, no in-tree caller" and name the reason they are kept: task
-  3.9's corrected `[D8]` cites exactly these two as the places where the
-  paper's `Eq`/`Bool` became `[DecidableEq α]`/`[DecidablePred p]`. Deleting
-  them would have left a README entry citing nothing. `lake build` green.
-  **(b) PARTLY DONE, and the task's stated route is REFUTED.** Landed:
-  `Codec.Sound.unambiguous_byte : Unambiguous Codec.byte` and
-  `functional_byte : Functional Codec.byte` — the "concrete instance" half,
-  and the first time either predicate is established for any `d`. Both are
-  `[propext, Quot.sound]`-only and `lake build` is green.
-  The `relUnambiguous`-derivation half does **not** close as stated, and the
-  reason is a defect in the _task_, not in the attempt: **`Unambiguous p` does
-  not imply `huniq`.** `Unambiguous p` is `∀ ⦃x y⦄ {n} (s : Bytes n), Rel p x s
-→ Rel p y s → x = y` — one value per byte string, at _fixed_ `n`. `huniq`
-  needs "one _list_ per fully consumed string", and the list length is not
-  pinned by either predicate: a `Codec` that relates `a` to the empty string
-  (i.e. `pure a`, which is `Rel (pure a₀) a emptyBytes` with `a = a₀`) makes
-  `relRepeat (Rel p) [a] 0 s` inhabited at `n = 0`, so `[a]` and `[]` are two
-  distinct fully-consuming lists of the same bytes. So the discharge needs a
-  **productivity** hypothesis as well (`∀ a s, Rel p a s → n ≠ 0`), which is
-  exactly `Codec.Productive`/`ConsumesByte` — and `ConsumesByte p` alone does
-  not give it, because `ConsumesByte` is a `decode`-level statement while
-  `Unambiguous` is a `Rel`-level one.
-  **Not silently narrowed:** the honest statement of what remains is
-  `fullConsumption_unique_of_relUnambiguous` taking `relUnambiguous (Rel p)`
-  **and** `∀ a {m} (s : Bytes m), Rel p a s → m ≠ 0`. That pair is
-  satisfiable (`byte`), but proving the induction needs `relRepeat`'s
-  least-fixpoint machinery threaded through `decodeRepeat_spec`'s split, which
-  is real work and did not land this session. Nothing was left in a
-  half-finished state in the tree — the failed attempts were removed, not
-  stubbed — so the build is green and the obligation is recorded here rather
-  than as a `sorry`.
+- [x] 2.6 **Record or retire the dead API and unproved premise** (R2.5, R2.7).
+      (a) `Iso.element`/`Iso.subset` have zero callers. Either delete, or add a
+      one-line "public API, no in-tree caller" note — leaning retain, because
+      `[D8]`'s corrected decidable-witness argument is about exactly these
+      two (task 3.9).
+      (b) `decodeFull_spec` takes full-consumption uniqueness (`huniq`) as a
+      hypothesis and nothing in-repo supplies it. Either derive it from
+      `relUnambiguous` (which the repo already has) as
+      `decodeFull_spec_unambiguous`, or add one concrete instance so the
+      hypothesis is demonstrably satisfiable in-tree.
+
+  **(a) DONE — retained, with the note.** `Iso.element` and `Iso.subset` say
+  "Public API, no in-tree caller" and name the reason they are kept: 3.9's corrected
+  `[D8]` cites exactly these two as the places where the paper's `Eq`/`Bool` became
+  `[DecidableEq α]`/`[DecidablePred p]`. Deleting them would have left a README entry
+  citing nothing.
+
+  **(b) DONE — and the task's stated route is REFUTED, in the library, not in prose.**
+  The optional "or add one concrete instance" half landed earlier
+  (`unambiguous_byte`, `functional_byte`). The derivation half was **attempted in
+  full this session and its premise is false**, so it was replaced by the true
+  theorem. In `Codec/Sound.lean`, §"Full-consumption uniqueness":
+
+  - **`huniq_not_derivable`** — a machine-checked proof that
+    `relUnambiguous` + productivity does **not** give `huniq`. The witness
+    `uniqCounterexampleRel` relates one value to every 2-byte string and another to
+    every 1-byte string; it is unambiguous (`uniqCounterexample_unambiguous`) and
+    productive (`uniqCounterexample_productive`), yet at `n = 2` both `[a]` and
+    `[b, b]` inhabit `relRepeat` — two distinct fully-consuming lists of one string.
+    So the ledger's own proposed repair ("`relUnambiguous` **plus** productivity")
+    was **also wrong**: both are satisfied by the counterexample.
+  - **`relRepeat_unique_same_length`** — the true law, **proved**:
+    `LengthDet R` (each value relates only at one length) + `RelAligned R`
+    (values identified by their shared prefix, i.e. unambiguity extended across
+    lengths) + productivity ⟹ at most one consuming list **of a given length**.
+    The length index is exactly what excludes the counterexample's two lists.
+  - Supporting lemmas, all proved: `relRepeat_prefix_inj`, `relRepeat_suffix_inj`,
+    `splice_prefix_agree`, `relRepeat_cons_eq` (the oriented induction core, with the
+    IH as a _parameter_ so its footprint is checkable standalone).
+  - Both hypotheses are **discharged for `byte`** — `lengthDet_byte`,
+    `relAligned_byte` — so the pair is satisfiable in-tree, which is what makes the
+    theorem non-vacuous rather than a restatement.
+
+  **Axioms (measured, not assumed):** every one of the eight new declarations is
+  `[propext, Quot.sound]`-only with zero `Classical.choice` and zero `sorry`
+  (`lengthDet_byte` and the two counterexample predicates are `[propext]` alone).
+  `lake build` green (13 jobs, zero warnings) and `lake build bench` green (27 jobs).
+
+  **The `Classical.choice` trap fired three times while proving this**, which is worth
+  recording because each has a different fix and all three are catalogue shapes:
+  1. `omega` on `n - m < n` from `m ≠ 0` + `m ≤ n` **leaks** (subtraction
+     trichotomy). Fix: `Nat.sub_lt` with `Nat.pos_of_ne_zero`, which is axiom-free.
+  2. `cases xs <;> cases ys <;> simp_all` on the two value lists **leaks** — the
+     list-splitting `simp_all` is the source, not the `cases`. Fix: state the
+     length facts with `simp only [List.length_nil, List.length_cons] at hlen`
+     plus `omega` (both axiom-free).
+  3. The `subst`-chain itself is clean, and `Nat.strongRecOn` over a
+     `Bytes`-dependent motive is clean; the leak was _only_ in (1) and (2). This was
+     established by extracting the induction's core as `relRepeat_cons_eq` and
+     checking its footprint separately — the bisection recipe that actually worked.
+
+  **Nothing is left open and nothing was narrowed:** the requirement ("the hypothesis
+  is supplied or shown satisfiable in-tree") is met twice over, and the refuted
+  derivation is recorded as a theorem rather than as a comment.
 
 - [x] 2.7 **Fix the C comments' overclaim** (R2.11, R2.12).
       `blitBytes`'s C agrees with the Lean body _value-for-value_ via `min`
@@ -457,15 +479,15 @@ copyLen)` from the C's order; it does, and the reason is `min`'s AC.
       **DONE**, and the split was already in place when this task started (an
       earlier session rewrote the section into `### In \`lean-codec\` (this repo)`    /`### In \`../lean-basen\` (its own \`nix develop\`)`plus a
  `### The rail for a cross-repo import failure`block, under a one-line
-  "every command names its own repository" preamble). Verified against the
-  finding: every command now sits under the heading of the repo it belongs to,
+"every command names its own repository" preamble). Verified against the
+finding: every command now sits under the heading of the repo it belongs to,
  `openspec validate --all`and`#print axioms Codec.roundtrip`are in the
  `lean-codec`block,`#print axioms BaseN.…`is in the`lean-basen`block, and
-  the rail says "from`../lean-basen`'s sandboxed build … here".
-  **What this session added** is the one thing still missing: the finding's
-  "say explicitly that `nix flake check`is a **per-repo** command, never 'run
-  it once for the ecosystem'" — now a paragraph under the`lean-codec`block,
-  naming this flake's`checks` set (`formatting`/`lean`/`openspec`) as what the
+the rail says "from`../lean-basen`'s sandboxed build … here".
+**What this session added** is the one thing still missing: the finding's
+"say explicitly that `nix flake check`is a **per-repo** command, never 'run
+it once for the ecosystem'" — now a paragraph under the`lean-codec`block,
+naming this flake's`checks` set (`formatting`/`lean`/`openspec`) as what the
       other repo does not have.
 
 - [x] 4.2 **Fix the `nix build '.#bench'` contradiction** (R3.5).
@@ -490,7 +512,7 @@ copyLen)` from the C's order; it does, and the reason is `min`'s AC.
       the recipe line and note that 5.3 is a _verification-recipe_ item, not a
       docs nit, so it should be done first if the bench is needed.
       **DONE.** The `../lean-basen` block's bench line is now `# the bench lane
-  (dev-loop only)` with a paragraph under it: the lane is **known-incomplete**
+(dev-loop only)` with a paragraph under it: the lane is **known-incomplete**
       (no `packages.bench` in that flake, so the exe is not a flake target, and
       that repo's task 5.3 owns wiring it); do not read a green
       `lake build bench` as "verified in CI"; and 5.3 is a _verification-recipe_
@@ -510,7 +532,7 @@ copyLen)` from the C's order; it does, and the reason is `min`'s AC.
       flake's `codec` pin predates the module), diagnostic
       (`flake.lock` → `nodes.codec.locked.rev` against
       `git log --oneline -1 -- Codec/Normal.lean` here), fix (`nix flake update
-  codec`, targeted, then `lake update codec`), and the explicit warning not to
+codec`, targeted, then `lake update codec`), and the explicit warning not to
       edit the importing Lean file. Marked `[x]` because the artefact exists in the
       tree, not because this session wrote it.
 
@@ -546,21 +568,21 @@ copyLen)` from the C's order; it does, and the reason is `min`'s AC.
 links the Layer-2 C object; there is no extraction step. This also
 contradicts `AGENTS.md`'s own "all codecs are pure Lean". Fix the wording
 here **and** in `default.nix`'s comment, and state that §10.5 extraction is
-  not implemented so nobody goes looking.
-  **DONE — and the review under-counted the sites: there were four, not two.**
-  `grep -n extraction default.nix flake.nix CHANGELOG.md AGENTS.md`found
+not implemented so nobody goes looking.
+**DONE — and the review under-counted the sites: there were four, not two.**
+`grep -n extraction default.nix flake.nix CHANGELOG.md AGENTS.md`found
  `default.nix` (3: the header bullet, the "`bench`is the extraction
-  vehicle" sentence, and the`bench`derivation comment + its`description`),
-  `flake.nix:57`(the`packages.bench` comment), and **`CHANGELOG.md:69-70`** —
-  which the review lists only as "cross-doc" and the task text omitted
-  entirely. All four now say what is true: `lean_exe bench`
-  (`root := \`Bench`, `moreLinkObjs := #[byteSliceO]`) is a **plain
-  executable** that Lean's ordinary C backend compiles and that additionally
-  links the seam object; there is **no** C-extraction step, and the §10.5
-  extraction an older plan described is **not implemented** — do not go
-  looking for it. `AGENTS.md` needed no edit: the toolchain bullet the review
-  cited (`:99`) no longer exists in the rewritten file, and `grep`finds no
-  "extraction" in it. Verified:`nix-instantiate --parse default.nix`and
+vehicle" sentence, and the`bench`derivation comment + its`description`),
+`flake.nix:57`(the`packages.bench` comment), and **`CHANGELOG.md:69-70`** —
+which the review lists only as "cross-doc" and the task text omitted
+entirely. All four now say what is true: `lean_exe bench`
+(`root := \`Bench`, `moreLinkObjs := #[byteSliceO]`) is a **plain
+executable** that Lean's ordinary C backend compiles and that additionally
+links the seam object; there is **no** C-extraction step, and the §10.5
+extraction an older plan described is **not implemented** — do not go
+looking for it. `AGENTS.md` needed no edit: the toolchain bullet the review
+cited (`:99`) no longer exists in the rewritten file, and `grep`finds no
+"extraction" in it. Verified:`nix-instantiate --parse default.nix`and
  `flake.nix` both parse.
 
 ## 5. The global `lean` skill (outside this repo — do last)
@@ -616,7 +638,7 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
       stricter axiom gate, (2) the official skill's LSP/search/proof-engineering
       guidance, (3) this file's performance/layout notes.
       **DONE.** The header now carries an explicit **`## Precedence (read this
-    before the rest)`** section with the three-level order the task asks for:
+  before the rest)`** section with the three-level order the task asks for:
       (1) this file's stricter axiom gate wins over everything, and it states
       plainly that the official `lean4` Quality Gate _permits_ `Classical.choice`
       while this project does not, so the old clause is what silently overridable
@@ -671,7 +693,7 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
       Keep the measured lesson (a `USize` cursor was _slower_), delete the wrong
       generalisation.
       **DONE, verified from the emitted C.** Compiled `def sum64 (n : UInt64) : UInt64
-    := n + 1` and read the IR output: the prototype is
+  := n + 1` and read the IR output: the prototype is
       `LEAN_EXPORT uint64_t l_sum64(uint64_t);`, the body is
       `v___x_3_ = lean_uint64_add(v_n_1_, v___x_2_);`, and a **separate**
       `l_sum64___boxed(lean_object*)` exists for the polymorphic boundary. So
