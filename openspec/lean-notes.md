@@ -21,7 +21,10 @@ therefore has no large violation left to drain, and `tasks.md` 7.4 is closed on 
 basis. **Do not add a new entry to both files** — a generic lesson goes in the
 skill, a domain-specific one here. The specific low-level reasons a lesson was once
 duplicated are not recorded because they are no longer true; trust the counts above
-over any older number you find quoted.
+over any older number you find quoted. **Reproduce it** with `grep -c '^- 20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]'`
+on each file for the totals, and for the overlap split both on `\n(?=- 20\d\d-\d\d-\d\d — )`,
+normalise each body with `' '.join(body.split())`, and intersect the two sets — the skill
+lives outside the repo, so without that recipe a fresh clone cannot check the claim.
 
 **The generic rules live in the skill, not here.** In particular the axiom-hygiene
 catalogue is `SKILL.md` §2b; this file is the raw measured record behind it, plus
