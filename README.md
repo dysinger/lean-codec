@@ -266,10 +266,20 @@ polymorphic **function of the `Syntax` class** (§3.4: `many :: Syntax δ ⇒ δ
 `codec` has no typeclass to hang it on — `Codec` is an inductive value — and there
 are then **two** independent obstacles to making it a `Codec` node:
 
-1. **A definitional cycle.** `many` as a `Codec` constructor needs a `Productive`
-   predicate over `Codec`, which needs `Rel`, which needs `Codec`: the order
-   `Codec → Productive → Rel → Codec` cannot be broken, and the mutual-inductive
-   escape fails the universe check. This was verified, not assumed.
+1. **A definitional cycle, for the _witness-carrying_ node.** `many` as a `Codec`
+   constructor needs a `Productive` predicate over `Codec`, which needs `Rel`, which
+   needs `Codec`: the order `Codec → Productive → Rel → Codec` cannot be broken, and
+   the mutual-inductive escape fails the universe check.
+   **Scope of that claim, stated precisely** (an earlier revision said only
+   "verified", which overstated it): what is established is that a `many` node
+   carrying its productivity witness as a _field_ is not definable in this ordering.
+   A `many` node _without_ the witness — `Rel (many p) := relRepeat (Rel p)`, with
+   `relRepeat` moved above `Rel` — would typecheck, since `relRepeat` is polymorphic
+   in its relation and `Productive`/`Rel` are ordinary `def`s over an
+   already-declared `Codec`. What such a node cannot have is a **total decoder**:
+   `decode` would need the witness at the use site, which is exactly what the
+   constructor field was for. So the cycle argument is why there is no _usable_ node,
+   not why no node at all can be written.
 2. **Strictness, secondarily.** Lean is strict, so a finite AST node cannot contain
    an unbounded repetition at all — the paper, being lazy, can hold one. This is
    what makes the omission _necessary_ rather than merely convenient, but it is not
@@ -456,8 +466,11 @@ fails". To ship `iterate` as an isomorphism you would have to _claim_ the two
 fixpoints agree — false in general — or burden every caller with a fragile
 precondition. `codec` omits `iterate` and defines `foldl`/`foldr` _directly_ by
 well-founded recursion (each step strictly decreases a measure, which _is_ the
-honest guarantee). `foldl` is all `chainl1` needs, so nothing is lost and no
-unsound law is shipped.
+honest guarantee). `chainl1` needs three things — `Iso.foldl`, the repetition
+triple, and a `ConsumesByte` witness for the decoder — and `codec` supplies all
+three, so nothing is lost and no unsound law is shipped. (An earlier revision of
+this paragraph said "`foldl` is all `chainl1` needs"; `[D7]`'s own text above
+corrects that, and the two now agree.)
 
 ### `[D8]` decidable checks instead of `Eq`/`Bool`
 
