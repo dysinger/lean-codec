@@ -64,6 +64,42 @@ theorem unapply_eq_some_of_apply (i : Iso α β) {a : α} {b : β}
     (h : i.apply a = some b) : i.unapply b = some a :=
   (i.law a b).1 h
 
+/-- **A total bijection is an `Iso` — the constructor every fixed-width leaf needs.**
+
+`Iso`'s fields are partial (`apply : α → Option β`), and its `law` is an `↔` over
+both directions. That is the right shape for the *theory*, but writing a concrete
+leaf codec (a 2-byte little-endian integer, a base-N element, a bit-field) does not
+need partiality at all: it needs a pair of mutually inverse total functions. Before
+this constructor the only way to say that was to fill three fields by hand and
+close an `↔` — measured at ~40 lines of `UInt8`/`UInt16` coercion lemmas for a
+single `u16le`, which is why no leaf codec existed in the tree (`Codec/Examples.lean`).
+
+`ofTotal f g : Iso α β` is total in both directions (`some ∘ f`, `some ∘ g`), and
+its `law` is discharged from the two round-trip equations.
+
+Note what it deliberately does **not** do: it gives no way to express a *partial*
+leaf (one that rejects some inputs). For those the `Iso` structure remains the
+tool, and the rejection has to be modelled in the value type — which is the `[D4]`
+lesson (capture, don't discard), so the two forms are complementary rather than
+redundant. -/
+def ofTotal {α : Type u} {β : Type v} (f : α → β) (g : β → α)
+    (hgf : ∀ a, g (f a) = a) (hfg : ∀ b, f (g b) = b) : Iso α β where
+  apply a := some (f a)
+  unapply b := some (g b)
+  law := by
+    intro a b
+    constructor
+    · rintro h
+      have hb : f a = b := by simpa using h
+      subst hb
+      show some (g (f a)) = some a
+      rw [hgf]
+    · rintro h
+      have ha : g b = a := by simpa using h
+      subst ha
+      show some (f (g b)) = some b
+      rw [hfg]
+
 /-! ## Category structure -/
 
 /-- `Iso` is a category: identity is the total isomorphism `some`. -/
