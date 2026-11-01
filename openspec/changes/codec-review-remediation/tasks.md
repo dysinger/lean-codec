@@ -2074,13 +2074,52 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
       not** publish a "× off C" figure for a per-element codec measured against
       `memcpy` — that is the failure mode this whole change exists to remove.
 
-- [ ] 6.7 **Wire the Layer-2 seam into whichever path wins** (R2.4, design D8's
+- [x] 6.7 **Wire the Layer-2 seam into whichever path wins** (R2.4, design D8's
       deferred work). `byteSlice`/`commitRemainder` are at the `memcpy` floor but
       **no library path calls them**. Only worth doing once 6.1b/6.3/6.5 create a
       real consumer — doing it before would be optimizing a seam nothing calls,
       which is exactly the state 2.4 records. Requires a proof of the two
       transports' equality, so budget for it; if it balloons, leave the docs
       honest (option (a) in 2.4) and record why.
+
+      **DONE 2026-11-03 — decided on measurement, and the answer is "not wired", for
+      a reason that is now proved rather than assumed.**
+
+      *The consumer exists, and the seam wins.* After 6.3/6.5 there is one path that
+      actually materializes a remainder — `decodeFullArray`'s suffix — and the two
+      transports were measured directly (`n` = 65536, same run, values compared
+      identical over six cursors including `0` and `n`):
+
+      | transport | cost |
+      | --- | --- |
+      | `ByteArray.mk ((a.toList.drop c).toArray)` | **~1.5 ms** |
+      | `commitRemainder a c.toUSize` | **~24 µs** |
+
+      **~50–75×** (36–63× across sizes and runs; the bench lane prints it live). So this task's premise ("the seam is at the floor but nothing
+      calls it, and it probably is not worth wiring") was **half wrong too**: the
+      speed-up is large and real, and worth chasing.
+
+      *And the answer is still no, because the proof is impossible inside the gate.*
+      The equality needs `Array.extract`'s readback, and in this toolchain
+      **`Array.toList_extract` and `Array.getElem_extract` both report
+      `[propext, Classical.choice, Quot.sound]`** — checked with `#print axioms`, not
+      assumed. An earlier attempt at this proof *did* land and *did* report
+      `Classical.choice`, which is how the wall was found (`Array.ext'` was not the
+      culprit; the `extract` readback underneath it is). A Layer-1 path may not carry
+      a transport that nothing axiom-clean connects to the refinement it is meant to
+      refine, so **the seam stays unwired on evidence** and task 2.4's "available but
+      unused" wording stays exactly right.
+
+      *Second, independent obstacle, recorded:* `c.toUSize.toNat` is `c % 2 ^ numBits`,
+      so the two sides agree only when the cursor does not wrap; discharging that
+      needs `System.Platform.numBits = 64`, which also leaves the gate. The first
+      obstacle already settles it, but the second would have to be carried too.
+
+      The full analysis (both measurements, both obstacles, and the "one lemma and
+      one call site away if the toolchain changes" note) is in `Codec/Packed.lean`
+      §"Task 6.7". This is the outcome the task itself allowed for — "if it balloons,
+      leave the docs honest and record why" — reached by measurement rather than by
+      trying it and guessing.
 
 ## The order, and why
 
@@ -2115,7 +2154,12 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
    accumulate through `encodeArray` with no per-element `Bytes` intermediate,
    measured 32 MiB/s against `fastEncodeRepeat`'s 20 at `n` = 4 KiB (the old "fast"
    encoder was only 1.2x over the slow one — no lane had measured that gap).
-   **6.7** (the Layer-2 seam) is the last item in §6.
+   **6.7 — DONE 2026-11-03**: the seam is **not wired**, and that is now a decision
+   on evidence — `commitRemainder` is ~50-75x faster than the `List` transport, but
+   the connecting lemma needs `Array.extract`'s readback and `Array.toList_extract` /
+   `Array.getElem_extract` both carry `Classical.choice` in this toolchain. §6 is
+   therefore **complete**. The comparison is kept live by
+   `benchRemainderTransports` so the trade-off stays checkable.
 
 **Why 6.4 ran before 6.3/6.5 and why that was right:** the docs must state what
 the code _measures_, and 6.4 was the only lane that could produce a number. It
