@@ -45,9 +45,12 @@ Guidance for AI coding agents working in this repository.
 > **Requirements for whatever is done next:** green `lake build` + `lake build bench`
 > (zero warnings), green `openspec validate --all`, individual-file commits, and
 > **every figure must be a lane's literal output pasted in from that session.**
-> This repository has had seven performance figures wrong at some point (6 → 15 →
-> 2.4 → 3.0 → 2.5–2.6 for the floor; 32 → 430 → 3 → 75 for `packedCands`; 3 for the
-> array read), and every one was caught by running a lane, not by reading it.
+> This repository has had eight performance figures wrong at some point (6 → 15 →
+> 2.4 → 3.0 → 2.46 for the floor; 91 → 32 → 430 → 3 → 75 → 86 for `packedCands`,
+> the 3 withdrawn outright; 3 → 11–18 for the array read; and "~11×" derived from a
+> cherry-picked burst round), and every one was caught by running a lane, not by
+> reading it. Two of them were caught by the _owner_ asking why two committed
+> figures could not both be true — that is also a legitimate lane.
 >
 > **Explicitly out of scope:** any new OpenSpec change; `lean-basen` (separate repo,
 > separate session); and any decoder rewrite without a measurement that says which
