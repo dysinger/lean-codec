@@ -549,6 +549,27 @@ what "wired" means.
 `decodeFull` itself stays exactly what it was: **the specification**, written for its
 proofs and not for speed. It is not a default anyone should reach for.
 
+**The encode side has the same wired surface, and needed it more.** `encodeRepeat`
+builds a nested `concat` closure per element, and `fastEncodeRepeat` — which was meant
+to be the fast path — still calls `encode p x` per element and re-reads the resulting
+`Bytes` closure byte-by-byte through `pushBytes`. So it re-stages the accumulator but
+keeps the per-element intermediate, and measured it is only ~1.2× better than the slow
+route (`fastEncodeRepeat` 20 MiB/s vs `encodeRepeat` 17 at 4 KiB). The wired surface
+accumulates through `encodeArray`'s shape instead, with no `Bytes` intermediate:
+
+```lean
+encodeWhole      : Codec α → α → Option (Array UInt8)          -- one value, packed
+encodeWholeRepeat: Codec α → List α → Option (Array UInt8)     -- a value list
+encodeWholeBytes : Codec α → α → Option (Σ n, Bytes n)         -- spec carrier out
+```
+
+Each is tied to the specification (`encodeWhole_eq`, `encodeWholeRepeat_eq`,
+`encodeWholeBytes_toList`), and the bench checks the law **and** the round trip —
+encode with `encodeWhole`, decode with `decodeWhole`, get the input back. Measured at
+`n` = 4 KiB: **32 MiB/s, against 17 for `encodeRepeat` and 20 for the old
+"fast" `fastEncodeRepeat`** — a 1.9× improvement over the encoder that was already
+supposed to be the fast one.
+
 ### Where the speed actually goes (measured, with its causes named)
 
 This section replaces an earlier one that claimed a "~20–40× slower than
