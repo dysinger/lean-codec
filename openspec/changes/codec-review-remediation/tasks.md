@@ -242,7 +242,7 @@ byteSlice_spec]`, then `rfl` closes the `ByteArray.mk` eta — instead of
       and `README.md`'s Layer-2 paragraph states the same, so the fact is in the
       code where it is consulted.
 
-- [ ] 2.6 **Record or retire the dead API and unproved premise** (R2.5, R2.7).
+- [x] 2.6 **Record or retire the dead API and unproved premise** (R2.5, R2.7).
       (a) `Iso.element`/`Iso.subset` have zero callers. Either delete, or add a
       one-line "public API, no in-tree caller" note — leaning retain, because
       `[D8]`'s corrected decidable-witness argument is about exactly these
@@ -339,9 +339,8 @@ Nat.sub_add_cancel hm` (note: `Nat.sub_add_cancel`, **not** `omega` — `omega`
   `relRepeat_unique_same_length`. **Do not delete it** (that theorem still takes
   it), but stop presenting it as the closing route — `LengthConst` is.
 
-  **BLOCKER — `Suffix.empty`'s `prepend` identity, with one refuted guess and the
-  confirmed cause (2026-11-02).** Step 4 (`decodeFull_spec_byte`) needs exactly one
-  `Codec/Codec.lean` lemma that does not exist:
+  **BLOCKER — RESOLVED 2026-11-02.** `decodeFull_spec_byte` needed one
+  `Codec/Codec.lean` lemma that did not exist:
 
       (Suffix.empty n).prepend s = s      -- s : Bytes (n - (Suffix.empty n).remaining) = Bytes n
 
@@ -378,16 +377,16 @@ rfl` (the fact is definitional) and
   (`concat s emptyBytes`) — **not** the nothing-consumed case. Half of one session
   was spent with this backwards.
 
-  **The route to try first (not yet executed, and now informed by the confirmed
-  cause):** do **not** `simp only [concat, Suffix.empty]` — that is what re-spells
-  the scrutinee. Instead `rw [prepend_apply]`, then `unfold concat` **without**
-  `simp`, so the `dite`'s scrutinee keeps the `remaining` spelling that
-  `cast_fin_symm_val` is instantiated at; discharge the two branches with
-  `dite_eq_left` and `rfl`-level casts. If that still resists, state the helper at
-  a **variable length** (`∀ k, …` with `k := n - t.remaining`) so no definition
-  sits inside a scrutinee's type at all.
+  **THE ROUTE WORKED, EXACTLY AS RECORDED.** `rw [prepend_apply]`, then
+  `unfold concat` **without** `simp` (so the `dite` scrutinee keeps the
+  `remaining` spelling `cast_fin_symm_val` is instantiated at), then
+  `dite_eq_left` with a `cast_fin_symm_val`-derived bound. Landed as
+  `Codec.prepend_empty_apply` (`[propext]`) and `Codec.prepend_empty_self`
+  (`[propext, Quot.sound]`), beside their `prepend_id` / `drop_zero_eq_id`
+  siblings. **The lesson that made the difference was testing the route before
+  believing it** — the previous session recorded it as a hypothesis and stopped.
 
-  **Work for next session, in order.**
+  **Work for next session, in order — ALL NOW DONE, recorded so it is not redone.**
   1. Add the seven rank-1 lemmas above to `Codec/Sound.lean` (bodies given; they
      compile as written). Check `#print axioms` on each.
   2. ~~Add `relUnambiguous_of_relAligned` and prove `RelAligned` strict.~~ **Done /
@@ -424,6 +423,32 @@ rfl` (the fact is definitional) and
   why this task took three attempts: `omega` on `n - m < n` from `m ≠ 0` leaks (use
   `Nat.sub_lt`), and `cases xs <;> cases ys <;> simp_all` over the value lists leaks
   (state lengths with `simp only [List.length_nil, List.length_cons]` + `omega`).
+
+  **COMPLETION NOTE (2026-11-02) — 2.6(b) is DONE.** Everything above is now
+  landed work; read it as history, not as a to-do. What exists in the tree:
+
+  - `Codec/Sound.lean`, §"Full-consumption uniqueness": `LengthConst`,
+    `lengthConst_byte`, `relRepeat_length_of_const`, `lengths_eq_of_const`,
+    `lengthDet_of_lengthConst`, `decodeRepeat_mem_iff`, `huniq_byte`,
+    `decodeFull_spec_byte` — plus the previously-landed `relUnambiguous_of_relAligned`
+    and `productive_byte`. **`decodeFull_spec_byte` needs no hypothesis**, so the
+    finding "`huniq` is an unproved premise with no in-tree supplier" is closed at
+    a concrete codec.
+  - `Codec/Codec.lean`: `prepend_empty_apply` / `prepend_empty_self`, the
+    fully-consumed sibling of `prepend_id`.
+  - Axiom footprints, all measured by `#print axioms` on the built library, zero
+    `Classical.choice`: `lengthConst_byte`/`relRepeat_length_of_const`/
+    `lengths_eq_of_const`/`lengthDet_of_lengthConst`/`prepend_empty_apply` are
+    `[propext]`; `decodeRepeat_mem_iff`/`huniq_byte`/`decodeFull_spec_byte`/
+    `prepend_empty_self` are `[propext, Quot.sound]`.
+  - The section note in `Sound.lean` no longer says the bridge is "proved below in
+    outline" or that `huniq` has no supplier — both were true when written and are
+    now stale, and stale in the direction that understates the result.
+
+  **What this does NOT claim.** `huniq` is supplied for `Codec.byte` **only**. For
+  any other codec it remains a hypothesis, and the general derivation is still open;
+  `AGENTS.md`'s bullet now says exactly this, because the previous wording ("still
+  unsupplied") became false the moment `huniq_byte` landed.
 
 - [x] 2.7 **Fix the C comments' overclaim** (R2.11, R2.12).
       `blitBytes`'s C agrees with the Lean body _value-for-value_ via `min`
@@ -2589,7 +2614,7 @@ reading the code had produced.
 - [ ] 7.5 **`design.md` says "74 findings across four lenses"**; `review.md:20-27`
       totals **75 across five**. `design.md:5` was never updated when R5 was added.
       Fix to 75/five.
-- [ ] 7.6 **Re-read `AGENTS.md:143`** ("the packed decoder and every wired surface
+- [x] 7.6 **Re-read `AGENTS.md:143`** ("the packed decoder and every wired surface
       are proved equal to the specification") against 2.6(b): true _as equality_,
       but the equal-to-`decodeFull` surface still **carries `huniq`**. After 2.6 is
       really closed, add `decodeFull_spec_byte` as the named witness and say so.
