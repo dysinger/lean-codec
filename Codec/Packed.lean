@@ -1354,6 +1354,56 @@ is `decodeFull d h n` over a `Bytes n`, not over some carrier-private length. -/
 theorem decodeWholeBytes_size {n : Nat} (s : Bytes n) : (bytesToArray s).size = n :=
   bytesToArray_size s
 
+/-- **Decode a whole buffer as exactly ONE value.**
+
+`decodeWhole`/`decodeWholeBytes` answer "how many values does this buffer hold" —
+`Option (List α)`. For a single-value codec (`u16le`, a header, a whole message) that
+is the wrong question, and until this function there was **no wired entry point for
+it**: `decodeOne` threads a cursor but is the committed-choice decoder, unproven
+against the spec, and never wired; `decodeFull` is the repetition form. So a
+downstream author with a 2-byte integer codec had to either invent repetition
+semantics or drop to an unwired internal.
+
+The definition is deliberately the **projection of the wired surface**, not a new
+decoder: it is `decodeWhole` at a singleton result. That is what makes it usable
+without new proofs — every law about `decodeWhole` (in particular
+`decodeWhole_eq`) reads off for it immediately, and there is no third decoder whose
+agreement with the spec would need establishing.
+
+A buffer holding two values returns `none`, not the first: this is "decode **one**
+value that consumes everything", and silently taking a prefix would be the
+`decodeFullArray` head-projection defect (`Codec/Packed.lean`, "Do not use
+`decodeFullArray` for full consumption" in `README.md`). -/
+def decodeWholeOne {α : Type} (d : Codec α) (h : ConsumesByte d)
+    (a : Array UInt8) : Option α :=
+  match decodeWhole d h a with
+  | some [x] => some x
+  | _ => none
+
+/-- The single-value entry point on the specification carrier. -/
+def decodeWholeOneBytes {α : Type} (d : Codec α) (h : ConsumesByte d) {n : Nat}
+    (s : Bytes n) : Option α :=
+  decodeWholeOne d h (bytesToArray s)
+
+/-- **`decodeWholeOne` is the `decodeWhole` singleton, hence the spec's.**
+
+`some x` exactly when the specification decodes the whole buffer to exactly the list
+`[x]`. Stated against `decodeFull` (via `decodeWhole_eq`) so a caller gets the
+specification link without re-deriving anything; `[propext, Quot.sound]`-only. -/
+theorem decodeWholeOne_eq {α : Type} (d : Codec α) (h : ConsumesByte d)
+    (a : Array UInt8) (x : α) :
+    decodeWholeOne d h a = some x ↔
+      decodeFull d h a.size (arrayToBytes a) = some [x] := by
+  unfold decodeWholeOne
+  rw [decodeWhole_eq]
+  cases hfull : decodeFull d h a.size (arrayToBytes a) with
+  | none => simp
+  | some xs => cases xs with
+    | nil => simp
+    | cons y ys => cases ys with
+      | nil => simp
+      | cons z zs => simp
+
 /-- The packed full-consumption decoder equals the *first* spec `decode` result,
 with its suffix packed as a `ByteArray` and its consumed count read back. (The
 packed carrier takes the first match, exactly as the packed `head?`-projection of
