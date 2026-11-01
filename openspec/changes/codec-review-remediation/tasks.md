@@ -1933,7 +1933,49 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
       no optimisation. Each of those is a decision (6.6) or a task (6.3/6.5), and
       picking one now would be inventing a bar the owner did not set.
 
-- [ ] 6.5 **Encode: adopt `encodeArray`'s shape in the public API** (R5.1 —
+- [x] 6.5 **Encode: adopt `encodeArray`'s shape in the public API** (R5.1 —
+
+      **DONE 2026-11-03.** The premise of this task ("`encodeArray` measures
+      119 MiB/s and the API does not use it") was **half wrong**, and the correction
+      matters for what was built:
+
+      * The real defect on the encode side is worse than "the API doesn't use
+        `encodeArray`". `fastEncodeRepeat` — the *existing* intended fast path — still
+        calls `encode p x` per element and re-reads the resulting `Bytes` closure
+        byte-by-byte through `pushBytes`. So it re-stages the accumulator but keeps
+        the per-element intermediate, and measured it is only **1.2×** better than the
+        slow `encodeRepeat` (20 vs 17 MiB/s at 4 KiB). **The "fast" encoder was not
+        fast**, and no previous lane had measured the gap between them.
+
+      Landed in `Codec/Packed.lean`, the same shape as 6.3 on the decode side:
+
+      | what | why |
+      | --- | --- |
+      | `encodeWhole` / `encodeWhole_eq` | one value, packed carrier; `= encodeArray_eq` at the surface |
+      | `encodeArrayFold` / `encodeWholeRepeatAcc` / `encodeWholeRepeat` | a value list, accumulated through `encodeArray` with **no** per-element `Bytes` intermediate |
+      | `encodeArrayFold_toList` / `encodeWholeRepeatAcc_toList` / `encodeWholeRepeat_eq` | the fold equals `encodeRepeat` |
+      | `encodeWholeBytes` / `encodeWholeBytes_toList` | the spec-carrier entry point |
+
+      **Measured at `n` = 4 KiB, same run:** `encodeWhole` **32 MiB/s** vs
+      `encodeRepeat` 17 and `fastEncodeRepeat` 20 — **1.9× over the encoder that was
+      already supposed to be the fast one**. Checked at run time by
+      `benchEncodeWhole`, which asserts the value against `encodeRepeat` through
+      `encodeWholeRepeat_eq` **and** asserts the round trip (encode with
+      `encodeWhole`, decode with `decodeWhole`, get the input back) — the property a
+      caller actually wants, which no single-side law states alone.
+
+      **Axioms:** `encodeWhole_eq`, `encodeWholeRepeat_eq`, `encodeWholeBytes_toList`,
+      `encodeArrayFold_toList` all report `[propext, Quot.sound]`-only, zero
+      `Classical.choice`, zero `sorry` (checked, not assumed).
+
+      **Cost paid, recorded:** the fold proof needed the accumulator invariant stated
+      on the `List` readback (never a `Bytes`-level form, which hits the
+      dependent-index wall this file records elsewhere), and `ofFn_concat` is what
+      turns the spec's `concat` into the packed side's `++`. The `Option`/`match`
+      reduction needed `Option.some.injEq` rather than `simp [Option.map]`, which was
+      the step several failed attempts were missing.
+
+      The original task text follows.
       ≈**4–6×**: `encodeRepeat` 19 and `fastEncodeRepeat` 27 → `encodeArray`'s
       measured **119 MiB/s**). The fast shape already exists; the repetition API
       does not use it. (Those MiB/s figures are the 2026-10-28 probe and 6.4 does
@@ -2069,7 +2111,11 @@ here **and** in `default.nix`'s comment, and state that §10.5 extraction is
 7. **6.3 — DONE 2026-11-03**: `decodeWhole`/`decodeWholeBytes` are the named wired
    surfaces, each proved equal to `decodeFull`, with the law checked at run time and
    the wired surface measured identical to `decodeFullArrayRoot` in the same run.
-   **6.5** (encode) is the last throughput item before **6.7** (the Layer-2 seam).
+   **6.5 — DONE 2026-11-03**: `encodeWhole`/`encodeWholeRepeat`/`encodeWholeBytes`
+   accumulate through `encodeArray` with no per-element `Bytes` intermediate,
+   measured 32 MiB/s against `fastEncodeRepeat`'s 20 at `n` = 4 KiB (the old "fast"
+   encoder was only 1.2x over the slow one — no lane had measured that gap).
+   **6.7** (the Layer-2 seam) is the last item in §6.
 
 **Why 6.4 ran before 6.3/6.5 and why that was right:** the docs must state what
 the code _measures_, and 6.4 was the only lane that could produce a number. It
