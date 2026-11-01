@@ -795,17 +795,21 @@ uniqueness **indexed by list length**:
     relRepeat R xs n s → relRepeat R ys n s → xs.length = ys.length → xs = ys
 
 It is therefore **strictly weaker** than `huniq`, which has no length hypothesis, and
-it does **not** by itself discharge `decodeFull_spec`'s premise. The bridge is proved
-below in outline and is the open work (task 2.6 of `codec-review-remediation`): for a
-*constant*-length step relation the consuming list's length is pinned by `n`, so
-`xs.length = ys.length` follows and the index is discharged. Until that lands,
-`huniq` is an undischarged hypothesis with no in-tree supplier.
+it does **not** by itself discharge `decodeFull_spec`'s premise. **The bridge is
+below and is proved, not outlined:** for a *constant*-length step relation
+(`LengthConst R c`) the consuming list's length is pinned by the input length
+(`relRepeat_length_of_const`, hence `lengths_eq_of_const`), so the index is
+discharged. `huniq_byte` applies that chain at `Codec.byte`, and
+`decodeFull_spec_byte` — which needs no hypothesis at all — is the result. So
+`huniq` now **has** an in-tree supplier, at one concrete codec, and the original
+finding ("an unproved premise") is closed.
 
 Lemmas, all `[propext, Quot.sound]`-only with zero `Classical.choice`:
 `relRepeat_prefix_inj` / `relRepeat_suffix_inj` (same-length splices agree in their
 prefix / suffix), `splice_prefix_agree` (cross-length prefix agreement),
 `relRepeat_cons_eq` (the oriented core of the induction, with the IH as a parameter so
-its footprint is checkable standalone), and `relRepeat_unique_same_length`. -/
+its footprint is checkable standalone), `relRepeat_unique_same_length`, and the
+`LengthConst` bridge into `huniq_byte` / `decodeFull_spec_byte`. -/
 
 
 /-- **Two splices of one string at the same length have the same prefix.** Reading
@@ -840,8 +844,10 @@ leaves are fixed-width in their *value*.
 
 Note what it does **not** say: it does not pin the length of a *list* of steps — two
 values may each sit at one length while a list of them has any number of elements.
-Pinning the list length needs the stronger, constant-length form (see the section
-note and task 2.6). -/
+Pinning the list length needs the stronger, constant-length form `LengthConst`
+(defined and used below), and the usable chain is `LengthConst → LengthDet`, proved
+as `lengthDet_of_lengthConst`. `LengthDet → RelAligned` would need a `DecidableEq α`
+and is deliberately not proved. -/
 def LengthDet {α : Type} (R : α → {m : Nat} → Bytes m → Prop) : Prop :=
   ∀ ⦃a : α⦄ {m₁ m₂ : Nat} (t₁ : Bytes m₁) (t₂ : Bytes m₂), R a t₁ → R a t₂ → m₁ = m₂
 
@@ -1017,6 +1023,122 @@ theorem relRepeat_unique_same_length {α : Type} (R : α → {m : Nat} → Bytes
           · have hm2ne : m₂ ≠ 0 := hprod y s₁' hR₂
             exact (relRepeat_cons_eq R hld hal n ih y x ys xs m₂ m₁ hm₂ hm₁ hle
               s₁' s₂' s₁ s₂ hspl.symm hR₂ hR₁ href₂ href₁ hm2ne hltq.symm).symm
+
+/-! ### Discharging `huniq` for `byte`
+
+The indexed theorem above concludes only when the two consuming lists have equal
+length. `decodeFull_spec`'s `huniq` has no such hypothesis, so the missing piece is
+a way to _pin_ a consuming list's length from the input length. A step relation
+whose every value sits at a fixed length `LengthConst R c` does exactly that: an
+`k`-step consumption accounts for `k * c` bytes, so `n` determines `k`.
+
+With `LengthConst` the chain is: `lengths_eq_of_const` supplies the index that
+`relRepeat_unique_same_length` demands, which yields `huniq_byte`, which is exactly
+`decodeFull_spec`'s premise at `Codec.byte`. `decodeFull_spec_byte` is the result —
+the first in-tree supplier of the hypothesis, and the call site this whole lemma
+family was built for.
+
+Why `LengthConst` and not the weaker `LengthDet`: `LengthDet` pins each value's own
+step length, but not how many steps a consuming list has (`huniq_not_derivable`
+exhibits exactly that gap), so it is insufficient on its own. All `[propext,
+Quot.sound]`-only, zero `Classical.choice`. -/
+
+/-- A step relation is **length-constant** when every value relates only to strings
+of one fixed length `c`. This is the hypothesis that pins the _number of steps_ of a
+consuming list, and it is what `LengthDet` cannot do. -/
+def LengthConst {α : Type} (R : α → {m : Nat} → Bytes m → Prop) (c : Nat) : Prop :=
+  ∀ ⦃a : α⦄ {m : Nat} (t : Bytes m), R a t → m = c
+
+/-- `byte` is `LengthConst` at `1`: `Rel byte a s` forces `s` to be the one-byte
+string. `[propext, Quot.sound]`-only. -/
+theorem lengthConst_byte : LengthConst (Rel Codec.byte) 1 := by
+  intro a m t h
+  rw [Rel_byte] at h
+  obtain ⟨hm, -⟩ := h
+  exact hm
+
+/-- **A constant-step relation's consuming-list length is determined by the input.**
+`k` steps of `c` bytes each account for `k * c` bytes, so `relRepeat R xs n s` forces
+`xs.length * c = n`. The bridge from a fixed step length to a fixed step _count_.
+`[propext, Quot.sound]`-only. -/
+theorem relRepeat_length_of_const {α : Type} (R : α → {m : Nat} → Bytes m → Prop)
+    (c : Nat) (hc : LengthConst R c) (hc0 : c ≠ 0) :
+    ∀ (n : Nat) (s : Bytes n) (xs : List α), relRepeat R xs n s → xs.length * c = n := by
+  intro n s xs href
+  induction xs generalizing n s with
+  | nil =>
+      rw [relRepeat_nil] at href
+      simp only [List.length_nil, Nat.zero_mul]
+      exact href.symm
+  | cons x rest ih =>
+      rw [relRepeat_cons] at href
+      obtain ⟨m, hm, s₁, s₂, hsp, hR, hrest⟩ := href
+      have hlen := hc s₁ hR
+      subst hlen
+      have hlt := ih (n - m) s₂ hrest
+      rw [List.length_cons, Nat.succ_mul, hlt]
+      exact Nat.sub_add_cancel hm
+
+/-- **Two consuming lists of one string have equal length**, under a constant step
+length. This is the length index `relRepeat_unique_same_length` asks for, supplied
+rather than assumed. `[propext, Quot.sound]`-only. -/
+theorem lengths_eq_of_const {α : Type} (R : α → {m : Nat} → Bytes m → Prop)
+    (c : Nat) (hc : LengthConst R c) (hc0 : c ≠ 0) :
+    ∀ (n : Nat) (s : Bytes n) (xs ys : List α),
+      relRepeat R xs n s → relRepeat R ys n s → xs.length = ys.length := by
+  intro n s xs ys hx hy
+  exact Nat.eq_of_mul_eq_mul_right (Nat.pos_of_ne_zero hc0)
+    ((relRepeat_length_of_const R c hc hc0 n s xs hx).trans
+      (relRepeat_length_of_const R c hc hc0 n s ys hy).symm)
+
+/-- **`LengthConst` implies `LengthDet`**, but not conversely: the constant form fixes
+a single length for _all_ values, the determinate form only that each value has one.
+This is the direction that composes — `LengthConst` is what pins a consuming list's
+length (`relRepeat_length_of_const`), so it is the hypothesis worth carrying.
+`[propext, Quot.sound]`-only. -/
+theorem lengthDet_of_lengthConst {α : Type} (R : α → {m : Nat} → Bytes m → Prop)
+    (c : Nat) (hc : LengthConst R c) : LengthDet R := by
+  intro a m₁ m₂ t₁ t₂ h₁ h₂
+  rw [hc t₁ h₁, hc t₂ h₂]
+
+/-- `decodeRepeat` membership at full consumption, spelled as `relRepeat`. The bridge
+that lets the `relRepeat`-level uniqueness meet the decoder's own membership (it
+needs `prepend_empty_self` to eliminate `decodeRepeat_spec`'s `∃ s₀` at an empty
+remainder). `[propext, Quot.sound]`-only. -/
+theorem decodeRepeat_mem_iff {n : Nat} (s : Bytes n) (xs : List UInt8) :
+    (xs, Suffix.empty n) ∈ decodeRepeat Codec.byte byteConsumesByte n s ↔
+      relRepeat (Rel Codec.byte) xs n s := by
+  rw [decodeRepeat_spec Codec.byte byteConsumesByte]
+  constructor
+  · rintro ⟨s₀, hs, hrel⟩
+    have hpre : (Suffix.empty n).prepend s₀ = s := hs.symm
+    rw [prepend_empty_self] at hpre
+    subst hpre
+    exact hrel
+  · intro hrel
+    exact ⟨s, (prepend_empty_self n s).symm, hrel⟩
+
+/-- **`huniq` holds at `Codec.byte`** — the first in-tree supplier of
+`decodeFull_spec`'s hypothesis, and the reason it was never vacuous.
+`[propext, Quot.sound]`-only. -/
+theorem huniq_byte : ∀ {x y : List UInt8} {n : Nat} (s : Bytes n),
+    (x, Suffix.empty n) ∈ decodeRepeat Codec.byte byteConsumesByte n s →
+    (y, Suffix.empty n) ∈ decodeRepeat Codec.byte byteConsumesByte n s → x = y := by
+  intro x y n s hx hy
+  have hrx := (decodeRepeat_mem_iff s x).1 hx
+  have hry := (decodeRepeat_mem_iff s y).1 hy
+  exact relRepeat_unique_same_length (Rel Codec.byte) lengthDet_byte relAligned_byte
+    ((productive_iff_consumesByte Codec.byte).2 byteConsumesByte) n s x y hrx hry
+    (lengths_eq_of_const (Rel Codec.byte) 1 lengthConst_byte (Nat.one_ne_zero) n s x y hrx hry)
+
+/-- **`decodeFull_spec` at `Codec.byte`, with its premise discharged.** Every other
+instantiation in the tree carries `huniq` as a hypothesis; this is the one that does
+not, so it witnesses that the hypothesis is satisfiable on a real codec rather than
+being an unproved premise. `[propext, Quot.sound]`-only. -/
+theorem decodeFull_spec_byte {n : Nat} (s : Bytes n) (xs : List UInt8) :
+    decodeFull Codec.byte byteConsumesByte n s = some xs ↔
+      (xs, Suffix.empty n) ∈ decodeRepeat Codec.byte byteConsumesByte n s :=
+  decodeFull_spec Codec.byte byteConsumesByte huniq_byte s xs
 
 theorem encodeRepeat_ne_none {α : Type} (p : Codec α) :
     ∀ (xs : List α) {n : Nat} (s : Bytes n), relRepeat (Rel p) xs n s → encodeRepeat p xs ≠ none := by
