@@ -167,6 +167,28 @@ theorem satisfyConsumesByte (p : UInt8 → Bool) : ConsumesByte (Codec.satisfy p
       omega
     · simp [hb] at hmem
 
+/-- **`|` of two consumers consumes.** The `alt` case of `ConsumesByte`: an `alt`
+decodes by concatenation (`decode (d₁ | d₂) s = decode d₁ s ++ decode d₂ s`), so a
+membership in the union is a membership in one side, and that side's witness
+supplies the bound.
+
+This is the lemma the `k > 1` bench lane needs and did not have: every existing
+witness in the tree (`byteConsumesByte`, `satisfyConsumesByte`) is for a codec with
+**exactly one** candidate per cursor position, so no lane could be built over a
+codec whose decode yields several. With it, `altConsumesByte` makes
+`Codec.byte | Codec.byte` a legal `decodeWhole` argument.
+
+`[propext, Quot.sound]`-only, zero `sorry`. -/
+theorem altConsumesByte {α : Type} (d₁ d₂ : Codec α)
+    (h₁ : ConsumesByte d₁) (h₂ : ConsumesByte d₂) : ConsumesByte (Codec.alt d₁ d₂) := by
+  intro x n s t hmem
+  -- `decode (d₁ | d₂) s` is `decode d₁ s ++ decode d₂ s` **by `rfl`**: the `alt`
+  -- case of `decode` is literally the append, so membership unfolds without a
+  -- named lemma.
+  rcases List.mem_append.1 hmem with hmem | hmem
+  · exact h₁ x s t hmem
+  · exact h₂ x s t hmem
+
 /-! ## The full-consumption repetition decoder
 
 The §4.4 blow-up is the *all-prefix* enumeration: `decodeRepeat p h n s`
