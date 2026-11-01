@@ -15,21 +15,32 @@ Guidance for AI coding agents working in this repository.
 > codec with exactly one candidate. Measured, two runs at load ~2.9, burst medians:
 >
 > ```
-> idealCursor                 10253 / 10709 ns            -> 2.50 / 2.61 ns/step
-> decodeFullArray (k = 1)     14615 / 14087 ns (512 st)   -> 28.5 / 27.5
-> decodeFullArray k=2         28105 / 26173 ns (512 st)   -> 54.9 / 51.1
-> packedCands k=1  (per call) 75 / 75 ns
-> packedCands k=2  (per call) 94 / 95 ns
+> idealCursor                 10000 / 10090 / 10396 ns       -> 2.46 ns/step
+> decodeFullArray (k = 1)     13692 / 14013 / 14232 (512 st) -> 27.4
+> decodeFullArray k=2         26691 / 26840 / 27645 (512 st) -> 52.4
+> packedCands k=1  (per call) 85 / 86 / 87 ns
+> packedCands k=2  (per call) 105 / 106 / 107 ns
 > ```
 >
-> So: the second candidate costs **~24–26 ns/step** (the search is ~1.9× the `k = 1`
-> decode), `packedCands` accounts for **~19–20** of that, and **~4–7 ns/step is the
+> So: the second candidate costs **~25 ns/step** (the search is ~1.9× the `k = 1`
+> decode), `packedCands` accounts for **~20** of that, and **~5 ns/step is the
 > `decodeArray` re-list plus the singleton `PackedCand` allocation**. The ~10–11×
-> headline is a **lower bound**; at `k = 2` the gap is **19.6–21.9×**.
+> headline is a **lower bound**; at `k = 2` the gap is **~21×**.
 >
-> **The obvious next candidate, if the owner wants one:** attack that ~4–7 ns/step
+> **Two lane-construction rules this session paid for, both now enforced in code:**
+>
+> 1. **A sink of `(…).length` measures nothing.** The length is a constant for a
+>    fixed-arity codec, so the optimiser drops the call — that is how the old "3
+>    ns/call" `packedCands` figure was manufactured, and it is **withdrawn**. Fold the
+>    candidate _values_ in, and assert the sink actually moves (`eraseDups`).
+> 2. **`lean --run` is the interpreter; `lake build bench` is compiled C.** The same
+>    `packedCands` call reads ~850–1050 ns interpreted and 86 ns compiled. Quote only
+>    what the compiled `bench` executable prints; a `lean --run` figure pasted against
+>    a compiled one is a 10× error.
+>
+> **The obvious next candidate, if the owner wants one:** attack that ~5 ns/step
 > residue, not `packedCands` (already measured as the smaller half). It is a real but
-> bounded prize on a ~55 ns/step decode — measure first, exactly as this session did.
+> bounded prize on a ~52 ns/step decode — measure first.
 >
 > **Requirements for whatever is done next:** green `lake build` + `lake build bench`
 > (zero warnings), green `openspec validate --all`, individual-file commits, and
@@ -316,12 +327,12 @@ in `../lean-basen`. Never "fix" it by editing the importing Lean file.
   **not** the problem — that part of the attribution has survived every
   re-measurement. What did not survive:
 
-  - `packedCands` was first attributed **91**, then **32**, then **~430 ns/call**,
-    then **3 ns/call hot**, and in the burst lane is **75 ns/call hot at `k = 1`**
-    and **94–95 at `k = 2`**. Read those as one codec per number: the 3 was
-    `Codec.byte`, whose `decodeArray` result is a one-element list, while 75 is
-    `satisfy (fun _ => true)`. The 430 was a _memory_ figure wearing a compute label
-    — first-touching a 4 KiB array — which is why the burst lane exists at all.
+  - `packedCands` was attributed **91**, then **32**, then **~430 ns/call**, then
+    **3 ns/call hot**, and in the compiled burst lane is **86 ns/call at `k = 1`**
+    and **106 at `k = 2`**. **The 3 is withdrawn, not qualified**: its sink was
+    `(…).length`, a constant, so the call was folded away. The 430 is a _memory_
+    figure wearing a compute label (first-touching a 4 KiB array). Treat the
+    remaining numbers as one lane each, and never as a sequence that "improved".
   - The "ideal floor" was quoted as **6 ns/step**, then **16**, then **2.4**, then
     **3.0**, and is **~2.5–2.6 warm (latest burst median) / ~15–18 cold**. Each step of that sequence was a
     different mistake: the 6 came from a lane that `Array.push`-ed every element
