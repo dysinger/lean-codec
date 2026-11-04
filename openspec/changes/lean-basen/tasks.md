@@ -133,7 +133,7 @@ findings marked **superseded** are re-derived in
       builds (45 jobs), runs, installs `bin/bench`, and exits 0; corrupting one
       hex vector to `[0x36, 0x37]` fails `lake build bench` with
       `has type ?m.13 = ?m.13 but is expected to have type
-    Base16.hexBlockUnapply 102 = some [54, 55]`.
+  Base16.hexBlockUnapply 102 = some [54, 55]`.
 - [x] 5.4 **`lakefile.lean` pins `@ "master"` vs the template's `@ "main"`.** —
       **done.** Commented in `lakefile.lean` and cross-referenced from AGENTS.md.
       The finding's framing was wrong on one point worth recording: `master` is
@@ -179,17 +179,144 @@ findings marked **superseded** are re-derived in
       both `roundtrip` laws still are, and the AGENTS.md base32/64 note now uses
       the `Of` names so a future edit does not reintroduce the bare ones.
 
-## Status (re-anchored 2026-10-20): this change is complete except mechanical polish
+## Status (re-anchored 2026-11-04): pre-archive audit found three blockers
 
 The substantive work (seven `Codec`-value bases + facade + bench + gate) is **done**
-and landed (`basen-uniform-leaf-api`, archived; lean-basen commits
-`7eefebc`…`bef44ae`). `lake build` green, zero `sorry`/warnings, every per-base
-`roundtrip` `[propext, Quot.sound]`-only, `nix flake check` green.
+and landed. All seven mechanical polish items (5.2–5.13) are closed. A
+pre-archive hypercritical audit (2026-11-04) then found **three release blockers**,
+recorded below as §6. They are fixed in this session before archiving.
 
-**Remaining here: only 5.2/5.3/5.4/5.8/5.9/5.12/5.13** — seven mechanical polish
-items in `../lean-basen` (no proofs). The substantive RFC conformance work
-(rejection, canonical form, converse/injectivity) lives in
-**`basen-rfc-conformance-theorems`**, the active change.
+## 6. Pre-archive audit findings (2026-11-04) — release blockers
 
-Do the polish items in dependency order: 5.2 (AGENTS.md, unblocks correct context)
-→ 5.3/5.4/5.12 (build wiring + notes) → 5.8/5.9/5.13 (code/doc nits).
+A subagent reviewer compared `../lean-basen` against `../lean-codec` across four
+axes (project uniformity, theorem coverage, code quality, archive readiness).
+Three findings block the archive. Each was re-verified by hand here before fixing.
+
+- [ ] 6.1 **THE PROOF GATE IS NOT ENFORCED — `lakefile.lean` has no
+      `moreLeanArgs`.** `lean-codec/lakefile.lean:20` sets
+      `moreLeanArgs := #["-DwarningAsError=true"]`; `lean-basen/lakefile.lean`
+      does not (`grep -n moreLeanArgs lakefile.lean` → no hits). Consequence,
+      **verified by experiment by the reviewer** in a throwaway project with this
+      repo's dev shell: `theorem foo : 1 = 2 := by sorry` gives
+      `warning: declaration uses 'sorry'` then `Build completed successfully`,
+      **exit 0**; adding the flag gives `error: declaration uses 'sorry'`,
+      `error: build failed`, **exit 1**.
+
+      This is the most serious finding because three files *claim the gate is
+      enforced*: `AGENTS.md:23` ("the proof gate: zero sorry"), `README.md`
+      ("the proof gate"), and `default.nix` (`check` = "proof-validation gate").
+      That is the exact failure `lean-codec` documents the flag as existing to
+      prevent: "making the **compiler** the authority instead of a parallel
+      `sorry` lint that could drift". `lean-basen` inherited the prose and not
+      the mechanism. **Fix**: set the flag on both `lean_lib basen` AND
+      `lean_lib Axioms` (a `sorry` in a gate target must also fail), verify it is
+      load-bearing by stubbing a theorem to `sorry`, then keep the prose
+      (which becomes true only at that point).
+
+- [~] 6.2 **`b64Zh` / `b64Zm9` are orphaned definitions.**
+  `BaseN/Base64.lean:2147,2150` declare them; `grep -rn '\bb64Zh\b'`
+  across the repo returned **one** hit — the definition itself. No theorem
+  mentions either. So the RFC 4648 §3.5 non-canonical-pad-bit rejection for
+  the concrete vectors `Zh==` / `Zm9=` was **true but unstated** (both
+  `#eval` to `none`). A def with no theorem is worse than either half alone.
+
+      **SPIKED 2026-11-04 — approach chosen on evidence.** Two candidates were
+      spiked in `/tmp` before writing anything:
+
+      - **(A) block-level + lift.** Reject at `b64BlockApply` — the level the
+        RFC actually constrains — then lift through the tail element's relation.
+      - **(B) generic.** "Any 1-byte tail whose 2nd-char value has non-zero low
+        nibble is rejected."
+
+      **A won, and not narrowly.** B's statement requires characterising
+      `b64BlockDecodeLenient` for arbitrary valid characters; its three nested
+      `if`s and the `c2 = 61 && c3 = 61` branch refuse to reduce under `unfold`
+      (`lenient1` alone took 3 attempts and never closed). Six attempts, one
+      goal still open. A closed in four, because `b64BlockApply`'s definition
+      *is* the §3.5 check (`if b64BlockUnapply bs = some cs then some bs else
+      none`), so `split` on that guard is a direct reading of the RFC and every
+      sub-goal is a `decide`.
+
+      A secondary argument for A: every existing rejection law in
+      `Base64.lean` (`reject_ZgAAAA`, `reject_bad_length`, `reject_pad_first`)
+      is per-vector. A generic block law would be the only one of its kind,
+      against a repo the same audit dinged for exactly that kind of
+      inconsistency. And the *general* fact is already reachable by composing
+      `decodeFullB64_char` with `b64Tail1_pad_bits`, so B's generality does not
+      require a second derivation at a different level.
+
+      **Landed this session** (verified, gated in `Axioms.lean`, all
+      `[propext]`-only except the bridge):
+
+      - `b64BlockApply_b64Zh_chars` — the block decoder rejects `Zh==`'s chars;
+      - `b64TailApply_b64Zh_chars` — the tail element therefore cannot apply;
+      - `not_rel_b64TailElem_of_apply_none` — the bridge from a block-level
+        `none` to the tail element's relation (this one is
+        `[propext, Quot.sound]`).
+
+      **Still open — the whole-input lift.** `decodeFullB64 b64Zh = none`
+      remains unproved. The remaining obligation is exactly:
+      `decodeFullB64_some` gives `⟨blocks, t, tails⟩` with the tail decoding
+      successfully; one must show `blocks = []` (a 4-char *full* block cannot
+      contain the pads at slots 2/3, since a full-block element is
+      alphabet-only) and then apply `not_rel_b64TailElem_of_apply_none`. The
+      proof shape mirrors `decodeFullB64_reject_ZgAAAA`: `cases blocks` at the
+      `relRepeat_cons`/`relRepeat_nil` split, with
+      `Rel_b64BlockElem_canonical` killing the `cons` branch. Start by reading
+      that theorem, not by re-deriving it.
+
+      **Do not restart from B.** The spike settled it; the cost is in
+      characterising `b64BlockDecodeLenient`, not in the §3.5 statement.
+
+- [x] 6.3 **Two commit messages claim theorems that do not exist.** —
+      **PARTLY RESOLVED.** Commit `9d5074e` implied `b64Zh`/`b64Zm9` rejection
+      is proved, and `3dfc249` says of `b32Tail1_pad_bits_mod4` that "`MZ======`
+      … is not an encoding of anything" — while `MZ` appears zero times in
+      `Base32.lean`. The base64 half is now _partly_ backed by the three lemmas
+      above (the block-level rejection is proved; the whole-input statement is
+      not). The base32 `MZ======` claim has **no** theorem behind it at all and
+      is still open. Since commit messages cannot be rewritten without
+      rewriting history, the fix is the theorems — 6.2's remaining lift plus a
+      base32 twin. **Do not treat this as closed by 6.2's partial landing.**
+
+- [ ] 6.4 **`Axioms.lean` gate covers 91 of 404 theorems (22.5%).** Per module:
+      Base2 16/31, Base4 12/31, Base8 12/31, Base10 12/31, Base16 24/60,
+      Base32 49/97, Base64 49/94, Common 2/29. `Common.lean` is shared by all
+      seven bases and is the thinnest. The file's own docstring says "an
+      un-gated law is not protected", so by its own standard 77.5% are
+      unprotected. Full coverage is a large mechanical job; the honest minimum is
+      to gate every law this session adds and to soften the docstring's claim to
+      match reality (a sample, justified) rather than silently overstate.
+- [ ] 6.5 **`set_option linter.unnecessarySimpa false` is file-wide** in
+      `Common.lean:22` and `Base64.lean:22` — a "make it green" switch on the
+      two largest surfaces. Whether enabling it surfaces real noise is
+      unverified; record it as known debt rather than flip it blind.
+- [ ] 6.6 **Four dead exported theorems**: `Base64.b64BlockUnapply_one`,
+      `Base64.b64BlockUnapply_two`, `Base64.b64Split_shape`,
+      `Base32.b32Split_shape` — declared, referenced only by their declarations.
+- [ ] 6.7 **`openspec/` is an empty untracked directory** in `../lean-basen`.
+      Git cannot track empty dirs, so this is local debris, and it is misleading
+      because the AGENTS.md note says the ledger lives in `lean-codec`.
+- [ ] 6.8 **No `CHANGELOG.md`** in `../lean-basen`, though `lean-codec` has one.
+      A library about to be archived should carry its release notes.
+- [ ] 6.9 **Naming inconsistency**: `b64_block_run_of_boundary` /
+      `b64_boundary_pin` / `decodeFull_b64Tail_of_encode` use snake_case prefixes
+      while the rest of the file is `b64BlockRun…` camelCase.
+- [ ] 6.10 **Toolchain skew (same in both repos, so not a divergence):**
+      `lean-toolchain` pins `leanprover/lean4:v4.30.0`, but the nixpkgs `lean`
+      provided by the dev shell reports **4.34.1**. Elan is present so `lake`
+      should honour `lean-toolchain`; whether the Nix build does is unverified.
+
+### Verified-good in the audit (do not disturb)
+
+- Axiom discipline clean: `#print axioms` on 26 theorems across all seven bases,
+  both `_char` coverages, the §8 fold layer and `Common` — all
+  `[propext, Quot.sound]`, several `[propext]`-only, zero `Classical.choice`.
+- The Base8/`Common` duplicate-lemma fix (5.8/§C3) is complete: **0** name
+  collisions between any base file and `Common.lean`'s 33 decls.
+- **0** deprecation warnings (the 30 in `Base16.lean` are gone); `lake build`,
+  `lake build bench` (45 jobs), `lake build Axioms` (24 jobs) all green.
+- `nix flake check` green; working tree clean.
+- `README.md` is now truthful — all four `#eval` outputs re-run and matched.
+- RFC 4648 §8 case-insensitive decoding does **not** weaken `Iso.law` (quotient
+  is in the object via `Codec.Normal`; `encodeHex` stays uppercase-only).
