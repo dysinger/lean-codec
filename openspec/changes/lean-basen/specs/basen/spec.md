@@ -127,8 +127,9 @@ entry points, not a parallel bespoke implementation.
   the padded composition) is applied to a `Bytes n` that is not a whole number of
   valid code words for that base
 - **THEN** the result is `none`. (The full rejection contract — bad alphabet
-  byte, illegal padding, wrong arity, trailing data after `=`, overflow — is the
-  separate `basen-rfc-conformance-theorems` change, not this one.)
+  byte, illegal padding, wrong arity, trailing data after `=`, overflow — was
+  landed by `basen-rfc-conformance-theorems` (archived 2026-10-27) and is already
+  part of the live `basen` spec; the requirements below state it.)
 
 #### Scenario: Trailing data after `=` is rejected by proof _and_ by the type
 
