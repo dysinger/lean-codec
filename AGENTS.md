@@ -13,19 +13,17 @@ Guidance for AI coding agents working in this repository.
 > That work happens in the sibling repo `../lean-basen` in that repo's own
 > `nix develop`, against the ledger here.
 >
-> **Current position, in one line:** one change open (`lean-basen`, in progress,
-> not archivable); **one** release blocker left — **§6.2, the base64 whole-input
-> lift** (`decodeFullB64 b64Zh = none`). §6.3b landed 2026-11-05. See `## Current
-state` for why, and the traps that have already cost sessions.
+> **Current position, in one line:** one change open (`lean-basen`); **no release
+> blockers left** — §6.1, §6.2 and §6.3b all landed and are gated (§6.2, the
+> base64 `Zh==`/`Zm9=` whole-input lift, landed 2026-11-05). The next task is the
+> **archive checklist**: re-run `../lean-basen`'s recipe, confirm this change's
+> spec delta is a **superset** of `openspec/specs/basen/spec.md`, then archive.
 >
-> **Next session is §6.2 and nothing else first.** The ledger's §6 section opens
-> with a fenced `NEXT SESSION` block giving the exact five steps. It is now a
-> 4-step proof at 4 bytes, and **`decodeFullB32_reject_MZ` in
-> `../lean-basen/BaseN/Base32.lean` is the worked, green, gated template** to
-> copy it from.
->
-> **Do not archive until §6.2 is closed.** `openspec archive` accepts an
-> incomplete change without complaint, so a green archive proves nothing.
+> **The archive is a checklist, not a proof task.** The ledger's §6 section opens
+> with a fenced `NEXT SESSION` block giving the four steps. What it cannot tell
+> you is that `openspec archive` **accepts an incomplete change without
+> complaint**, so a green archive is never evidence — confirm the ledger's boxes
+> are ticked separately.
 
 ## Current state
 
@@ -41,37 +39,38 @@ One change is open, `lean-basen`, and its code lives in the sibling repo
 `../lean-basen` in that repo's own `nix develop`. Read the ledger for its task
 list; this file does not restate it.
 
-### The one remaining archive blocker
+### Archive blockers: all closed
 
-Recorded in full in the ledger; stated here only so the _shape_ is not lost:
+§6.1 (proof gate), §6.2 (base64 `Zh==`/`Zm9=` whole-input rejection) and §6.3b
+(base32 `MZ======`) are all landed and gated. Nothing in the ledger's §6 now
+blocks the archive; the remaining §6 items (6.4 gate coverage, 6.5 lint debt,
+6.10 toolchain skew) are explicitly not blockers, so do not let them displace
+the archive.
 
-- **§6.2 — the base64 whole-input lift.** `decodeFullB64 b64Zh = none` (and the
-  `b64Zm9` twin). The three supporting lemmas are landed and gated, so this is
-  **only** the lift.
-
-**This file previously said §6.2 was "repeatedly blocked on `Suffix`/`splice`
-index bookkeeping in the `blocks = []` branch", and that was wrong.** Measured
-2026-11-05: for the 4-byte `Zh==` input, `decodeRepeat b64BlockElem …` yields
-**one** decomposition, `blocks = []`, `t.remaining = 4` — a base64 full block
-consumes exactly 4 bytes, so a 4-byte input cannot populate `blocks` at all.
-There is no `cons` branch to kill and no `splice` work. The `ZgAAAA`-shaped
-difficulty belonged to that 8-byte input, not to this one.
-
-**§6.3b (landed 2026-11-05) is the worked proof of that re-scoping:** it was
-the same 4-step shape at 8 bytes and it closed green in one session.
+**The one scoping lesson worth keeping, because it cost sessions.** §6.2 was for
+a month recorded as "repeatedly blocked on `Suffix`/`splice` index bookkeeping
+in the `blocks = []` branch" — and that was **wrong**. Measured: for the 4-byte
+`Zh==` input, `decodeRepeat b64BlockElem …` yields **one** decomposition,
+`blocks = []`, `t.remaining = 4`, because a base64 full block consumes exactly 4
+bytes and a 4-byte input cannot populate `blocks` at all. There was no `cons`
+branch to kill and no `splice` work; the `ZgAAAA`-shaped difficulty belonged to
+that 8-byte input. The landed proof keeps a two-line `omega` for the `cons`
+branch anyway — it must not depend on a `#eval` about one literal — and it
+closed in one session.
 
 ### Roadmap (shape only — the ledger has the detail)
 
-1. Close §6.2. Then re-read `openspec/specs/basen/spec.md`, confirm its delta is
-   a superset, then archive `lean-basen`. **`openspec archive` does not check
-   task completion** — a green archive is not evidence of anything, so verify
-   separately.
+1. Archive `lean-basen` (blockers closed; see above). Re-read
+   `openspec/specs/basen/spec.md`, confirm this change's delta is a superset,
+   then archive and re-run `openspec validate --all`. **`openspec archive` does
+   not check task completion** — a green archive is not evidence of anything, so
+   verify separately.
 2. Then the next format port (ordering is an owner decision; this file does not
    guess it).
 
 ### Traps that have actually cost sessions here
 
-- **`Suffix`/`splice` bookkeeping is _not_ where §6.2 dies — check the input
+- **`Suffix`/`splice` bookkeeping is _not_ where §6.2 died — check the input
   length before reaching for it.** The old version of this bullet asserted six
   sessions were lost to `splice` in the `blocks = []` branch. Measured
   2026-11-05, that branch is **trivial** for the actual 4-byte `Zh==` input
