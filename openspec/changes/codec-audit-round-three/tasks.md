@@ -11,76 +11,334 @@ One reviewer finding was refuted and is deliberately absent — see design D1.
 
 ---
 
+## Status at end of 2026-11-05 session 2 — **16/56**
+
+| section                          | state                                                               |
+| -------------------------------- | ------------------------------------------------------------------- |
+| §1.0 basen gate parity           | **done** — mechanism ported; 446 laws / 483 theorems partitioned    |
+| §1.1 `count` step                | **done** — `Rel_count_succ` + `countSuccConsumesByte` + bench check |
+| §1.2 `manyUpTo`                  | **done** — law + the `Classical.choice` split                       |
+| §1.3 `seq*`/`between`            | **done** — three `Rel` laws, docstrings fixed                       |
+| §1.4 `optional`/`maybe`/`choice` | **done** — `none` case, alias laws, `Rel_choice` limits             |
+| **§1.5 `sepBy`/`takeWhile`**     | **NEXT — unstarted**                                                |
+| §1.6–§1.10                       | not started                                                         |
+| §2.1–§2.5                        | not started (depends on §1)                                         |
+
+Gate state at this point: `lake build` green, **308** gated / 72 allowlisted / 380
+partitioned; `openspec validate --all` 10/10. `../lean-basen` green at 25 jobs
+(446 covered, 483 partitioned).
+
+**Do not count families, count tasks.** Each of §1.1–§1.4 cost several laws beyond
+the one the task names (`Rel_count_succ` needed `count_succ` plus two productivity
+witnesses; `manyUpTo` needed four laws to stay out of `Classical.choice`). §1.5 is
+the first family with a named model to mirror, so it should be cheaper.
+
+---
+
 ## 1. Law coverage: close the `def`-level hole
 
 ### 1.0 `../lean-basen` gate parity — do this FIRST
 
-- [ ] 1.0.1 Add `partitionInto`, `publicTheorems` and the two `run_cmd` checks to
+- [x] 1.0.1 Add `partitionInto`, `publicTheorems` and the two `run_cmd` checks to
       `../lean-basen/Axioms.lean`, mirroring `codec`'s
       (`Axioms.lean:120-136`, `:615-636`, `:653-683`). It currently has **zero**
       mechanism: `grep -cE 'run_cmd|Lean\.Elab|Environment|partitionInto|getEnv'
-  Axioms.lean` → `0`, and 437 theorems vs 440 pins agree only by discipline.
-- [ ] 1.0.2 Add a `generatedAuxAllowlist` for basen's own compiler auxiliaries,
+Axioms.lean` → `0`, and 437 theorems vs 440 pins agree only by discipline.
+
+      **Landed 2026-11-05.** Mechanism added at the end of
+      `../lean-basen/Axioms.lean` (`namespace BaseNAxioms`: `isGeneratedAux`,
+      `publicTheorems`, `partitionInto`, `gatedTheorems`, `exclusions`, plus the
+      `coverage` and `partition` `run_cmd` checks). One deliberate divergence from
+      codec's shape, forced by basen's tree: `coverage` reads `generatedAuxAllowlist`
+      as satisfied too, because the kept set includes the 9 non-suffixed auxiliaries.
+      Without that the two checks contradicted each other; `partition` is what
+      actually makes the "not a law" claim, so `coverage` need not repeat it.
+
+      **The header's "440" was stale, and the mechanism found it on its first run.**
+      Measured against the compiled environment: **483 public `BaseN` theorems**
+      total — 446 real laws + 37 suffixed compiler auxiliaries — of which **437**
+      were pinned. The 3 `Codec.*` pins are the dependency's laws, outside the
+      namespace: 437 + 3 = 440 conflated two different universes. The correct figure
+      for this file's own namespace is 437 pinned + 46 allowlisted = 483. Task 2.3.2
+      records the prose correction; this bullet records the measurement.
+
+- [x] 1.0.2 Add a `generatedAuxAllowlist` for basen's own compiler auxiliaries,
       by name with a reason, so the partition is closed rather than merely added.
-- [ ] 1.0.3 Verify load-bearing in **that** repo: add a throwaway public theorem,
+
+      **Landed.** 46 entries in four reason groups, each reason in place:
+      `brecOn.eq` (×2, the derived recursion equation of an inductive's
+      below/`brecOn` eliminator); `*.go` (×6, `where`-clause induction helpers,
+      public-named by Lean but a *step* of the enclosing proof); `Run.step` (×1, a
+      `Prop`-valued structure field projection — the `ConsumesByte elem` witness a
+      caller supplies); `inj` (×9) / `injEq` (×9) / `sizeOf_spec` (×11) / `eq_def`
+      (×8), the standard compiler auxiliaries. **The 6 `*.go` names are the trap**:
+      the suffix classifier does not match them (`.go` is not in the aux suffix
+      list), so they land on the *kept* side and only the partition check catches
+      them. That is the mechanism doing its job, and it is why an allowlist that
+      covered only the 37 suffixed names would have been silently wrong.
+
+- [x] 1.0.3 Verify load-bearing in **that** repo: add a throwaway public theorem,
       confirm `lake build` fails naming it, restore. Then add a stale pinned name
       and confirm the coverage check fails. Record both results in this file.
-- [ ] 1.0.4 `../lean-basen` gates: `lake build` (25 jobs), `lake build bench`
+
+      **Both verified 2026-11-05.**
+
+      *(a) Un-gated law.* Adding `theorem gateProbeThrowaway : 1 = 1 := rfl` **inside**
+      `namespace BaseN.Common` fails `lake build` with:
+
+      ```
+      error: Axioms.lean:2260:0: theorems not pinned by this gate (add a `#guard_msgs` block):
+        BaseN.Common.gateProbeThrowaway
+      error: Axioms.lean:2303:0: public theorems in NEITHER the pinned set nor the allowlist (un-gated: add a `#guard_msgs` block):
+        BaseN.Common.gateProbeThrowaway
+      ```
+
+      Both checks fire, naming the declaration — so a law cannot land by silence.
+      Restoration returns the build to green.
+
+      *(b) Stale pin.* Inserting `` `BaseN.Common.stalePinnedName `` into `gatedNames`
+      fails `coverage`:
+
+      ```
+      error: Axioms.lean:2261:0: pinned names with no matching theorem:
+        BaseN.Common.stalePinnedName
+      ```
+
+      **One trap found while doing this, recorded because it wastes a session.**
+      The first probe placed the theorem *after* `end BaseN.Common`, so it was named
+      `gateProbeThrowaway` — outside the `BaseN` prefix — and the gate correctly
+      stayed green while the build reported `Replayed Axioms`. Two lessons: a probe
+      must be **inside** the gated namespace or it is invisible, and a `lake build`
+      that says `Replayed` after you edited an imported module is reading a stale
+      `.olean`; delete `.lake/build/lib/lean/{BaseN/…,Axioms}.olean` before believing
+      a green result. Both were live here.
+
+- [x] 1.0.4 `../lean-basen` gates: `lake build` (25 jobs), `lake build bench`
       (45), `nix build '.#bench'` (detached, it runs the vectors).
-- [ ] 1.0.5 Fix `lean-codec/lakefile.lean:28`'s now-backwards comment: it says the
+
+      **Green 2026-11-05**, all three:
+
+      ```
+      lake build        → Build completed successfully (25 jobs).
+                          info: basen axiom gate: 446 public theorems covered (0 explicit exclusion(s))
+                          info: basen axiom gate: 483 public theorems partitioned, 437 pinned and 46 allowlisted
+      lake build bench  → Build completed successfully (45 jobs).
+      nix build '.#bench' → result -> /nix/store/3jpwsqjzlrjz8wnhasp2vyyaizpqkgc6-basen-bench-0.1.0
+      ```
+
+- [x] 1.0.5 Fix `lean-codec/lakefile.lean:28`'s now-backwards comment: it says the
       codec gate mirrors `../lean-basen/Axioms.lean` "which is where this shape is
       proven". Basen has the _shape_, not the mechanism. Record that codec
       strengthened what it inherited and basen now adopts it back — otherwise the
       next reader copies the weaker version.
 
+      **Landed.** The `Axioms` lib's docstring now has an explicit "On the direction
+      this pattern travelled" paragraph: basen originated the *shape*, codec's two
+      audit rounds added the *mechanism* (`publicTheorems`/`partitionInto` + the
+      `partition`/`gateCoverage` checks), and basen adopts the mechanism back in §1.0
+      of this change. The old parenthetical ("which is where this shape is proven") is
+      gone, since it read as though the weaker version were the reference.
+
 ### 1.1 `count`'s inductive step (root of five gaps)
 
-- [ ] 1.1.1 Prove the step law `Rel (count (n+1) p) xs s` in
+- [x] 1.1.1 Prove the step law `Rel (count (n+1) p) xs s` in
       `Codec/Combinators.lean`. `count`'s only law today is `Rel_count_zero`
       (`n = 0`); the step is where `Iso.cons` and `Codec.seq` do their work. This
       unblocks `manyUpTo`.
-- [ ] 1.1.2 If the step does not close, record it as **open** in place with the
+
+      **Landed.** `Rel_count_succ` (+ `count_succ`, the one-step unfolding) in
+      `Codec/Combinators.lean`. It is a *decomposition*, not an induction: the step
+      **is** `iso cons ∘ seq`, so `Rel_iso` + `Rel_seq` take it apart. Measured
+      `[propext]`-only.
+
+      **Two findings that cost the first attempts.**
+
+      1. **`unfold count` does not reduce `count` at a variable `n`.** `count` is a
+         `match` on `n`, so on a goal mentioning `count n p` the body stays opaque
+         and neither `Rel_iso` nor `Rel_seq` fires. Stating the recursion equation
+         (`count_succ`, `rfl` at `n + 1`) and rewriting with it is what works. This
+         is the same shape as `decodeRepeat_eq` being needed before
+         `decodeRepeat`'s recursion.
+      2. **`Rel_seq`'s argument order is the *left* factor first** —
+         `Rel_seq d₁ d₂ x₁ x₂` gives `Rel (seq d₁ d₂) (x₁, x₂)`. Passing
+         `(count n p) p` type-errors with a confusing "expected `List α`" message
+         because it is the *value* argument position that fails, not the codec one.
+
+      A companion law was needed and added in the same family: **`countSuccConsumesByte`**
+      (+ `seqCountConsumesByte`) — `count`'s productivity witness. It is stated at
+      `n+1` because `count 0 p` is `iso nil (pure ())`, which does **not** consume;
+      the general statement is false at `n = 0`. Both `[propext, Quot.sound]`-only.
+      Without it no `count`-shaped value can be handed to a repeated decoder, which
+      is why §1.1.3's bench lane could not be written before it existed.
+
+- [x] 1.1.2 If the step does not close, record it as **open** in place with the
       precise blocking lemma named — never claim the derived combinators are
       proven. (Design D3's pre-authorized fallback.)
-- [ ] 1.1.3 Add a bench-lane or `#eval` value check for the step at two concrete
+
+      **Not exercised — the step closed in one session**, so the fallback was never
+      needed. Kept ticked (rather than deleted) so the ledger shows the branch was
+      considered and not silently skipped.
+
+- [x] 1.1.3 Add a bench-lane or `#eval` value check for the step at two concrete
       `n`, so the behaviour is exercised as well as proved.
+
+      **Landed** as `benchCountStep` (`Bench.lean`), run from `main` beside the
+      scale-free seam lane so every invocation reaches it. It encodes and decodes
+      `count k Codec.byte` for `k = 1` and `k = 3` over its own vectors and asserts
+      the whole-buffer decode returns **exactly the singleton `[xs]`** — the list and
+      its length, so it is a statement about the step and not about whichever
+      candidate the search found first. Output in-session:
+
+      ```
+      count step [n=1]: round trip OK (the step law holds at a concrete n)
+      count step [n=3]: round trip OK (the step law holds at a concrete n)
+      ```
+
+      It goes through `decodeWhole` (the wired surface) rather than `decode`, so it
+      covers the step composed with the real decoder, not only the `Rel` predicate.
 
 ### 1.2 `manyUpTo` — currently no law at all
 
-- [ ] 1.2.1 Add the `List.range`/`map` membership lemma that does not exist: the
+- [x] 1.2.1 Add the `List.range`/`map` membership lemma that does not exist: the
       link from `choice ((List.range (n+1)).map (fun k => count k p))` to "some
       `k ≤ n`". Without it `Rel_choice` cannot reach `count`.
-- [ ] 1.2.2 Prove `Rel (manyUpTo n p)` in terms of `relRepeat` at a bounded length,
+
+      **Landed** as `mem_map_range_iff : d ∈ (List.range (n+1)).map f ↔ ∃ k ≤ n, f k = d`,
+      universe-polymorphic in `α` because `Codec α` lives in `Type 1` and a `Type`-bound
+      lemma would not unify at the use site. `[propext, Quot.sound]`-only.
+
+- [x] 1.2.2 Prove `Rel (manyUpTo n p)` in terms of `relRepeat` at a bounded length,
       so the value is tied to the repetition denotation rather than merely
       `#eval`-ed.
-- [ ] 1.2.3 Document the **ordering** consequence measured at
+
+      **Landed.** `Rel_manyUpTo :
+      Rel (manyUpTo n p) xs s ↔ ∃ k ≤ n, xs.length = k ∧ relRepeat (Rel p) xs m s`.
+      `[propext, Quot.sound]`-only.
+
+      **The `Classical.choice` trap this family hit — the most expensive finding of
+      §1 so far, and it is AGENTS.md's trap 1 exactly.** The obvious proof is an
+      induction on `k` over
+      `Rel (count k p) xs s ↔ xs.length = k ∧ relRepeat …`. It **compiles** and leaks:
+      `#print axioms` reports `[propext, Classical.choice, Quot.sound]`, with no
+      compiler error at all. The cause is that carrying `xs.length = k` into the
+      induction context makes every `cases xs` a *dependent* match on a list whose
+      equation sits in the context. Bisected by isolation: every ingredient
+      (`Rel_count_succ`, `Rel_count_zero`, `cases xs`, `simpa` on the length) was
+      measured `[propext]`-only on its own, and the leak appeared only when the
+      recursive call carried the length equation.
+
+      **The fix, recorded at the laws themselves:** never carry the equation into a
+      `match`. Four laws instead of one — `countToRelRepeat` (induction on `k`),
+      `countLength` (induction on `k`), `relRepeatToCount` (**recursion on the list**,
+      so the length is `xs.length` derived from the term), and their conjunction
+      `Rel_count_eq_relRepeat`. All `[propext]`-only.
+
+      The general lesson, worth carrying to §1.3/§1.4: when a law about `count` needs
+      a length fact, recurse on the **list** and let the length be `xs.length`; do not
+      recurse on the count with a `Nat` equation in scope.
+
+- [x] 1.2.3 Document the **ordering** consequence measured at
       `Combinators.lean:89`: results are shortest-first (`[(0,2),(1,1),(2,0)]`), so
       a first-result consumer gets the empty list. `decodeOne` over a `manyUpTo`
       therefore always yields `[]`. That is the failure mode `[D3]` describes for
       committed choice, reintroduced in a derived value — say so at the definition.
 
+      **Landed** in `manyUpTo`'s docstring, with the figure **re-measured this
+      session** rather than copied: `#eval (decode (manyUpTo 2 Codec.byte) two)` on a
+      2-byte input, mapped to `(length, remaining)`, prints exactly
+      `[(0, 2), (1, 1), (2, 0)]` — the ledger's anticipated value, confirmed. The
+      docstring states the consequence (a `decodeOne` consumer always gets `[]`),
+      that this is `[D3]`'s committed-choice failure mode in a derived value, and
+      that it is *not* a defect in `manyUpTo` (its denotation is the full union).
+
 ### 1.3 `seqRight` / `seqLeft` / `between` — zero theorems
 
-- [ ] 1.3.1 Prove the `Rel` characterization for each (`Combinators.lean:47,52,56`).
+- [x] 1.3.1 Prove the `Rel` characterization for each (`Combinators.lean:47,52,56`).
       These are `Iso` rewrites over `Codec.seq`; `between` is the paper's own §6.1
       combinator, so a porter reaches for it first and currently finds no proof.
-- [ ] 1.3.2 Fix `seqRight`'s docstring (`:47-49`): it states
+
+      **Landed:** `Rel_seqRight`, `Rel_seqLeft`, `Rel_between`, all
+      `[propext]`-only. No new induction — `seqRight`/`seqLeft` strip one `Iso` layer
+      off a `seq` (`Rel_iso` + `Rel_seq`), and `Rel_between` composes the two.
+
+      `Rel_between`'s statement makes the **nested** split explicit — `m₂ ≤ n - m₁`,
+      with the input as `splice h₁ s₁ (splice h₂ s₂ s₃)` — rather than flattening to
+      three additive lengths. That is the honest shape of `open *> (p <* close)`:
+      the second split lives inside the first's remainder, and flattening it would
+      need a `Nat` re-association the statement does not have to carry.
+
+      **A proof trap recorded because it is silent.** `seqRight`'s `Iso` is a
+      *composite* (`commute ≫ inverse unit`). Adding `Option.some.injEq` to the
+      `simp only` set does **not** fire on the resulting
+      `(some (y, u)).bind (fun b => some b.fst) = some x` shape, so the following
+      `subst` fails with "invalid equality proof" — and an earlier attempt that
+      omitted the `simp` line entirely compiled, leaving `sorryAx` that only
+      `#print axioms` reports. `injection … with hy; subst hy` is what closes it.
+      `seqLeft`'s shape *is* the one `simp` discharges, so the recipe does not
+      transfer between the two halves.
+
+- [x] 1.3.2 Fix `seqRight`'s docstring (`:47-49`): it states
       `commute ≫ inverse unit : Iso (Unit × α) α`, which is the wrong intermediate
       type. With no theorem stating an equality, the type is only ever checked at
       the definition site, where Lean fills it in — the exact error class that "a
       docstring type with no theorem" permits. Restate it against the proved law.
 
+      **Landed.** The docstring now gives the composite's actual type
+      (`Iso (Unit × α) α` for the whole `commute ≫ inverse unit`, with the inner
+      `p * q : Codec (Unit × α)` named separately), points at `Rel_seqRight` as what
+      pins it, and records that the old text wrote the composite as though its
+      *intermediate* were the final type. `seqLeft` and `between` got matching
+      docstrings, and `between`'s now states the associativity
+      (`open *> (p <* close)`, not `(open *> p) <* close`) that `Rel_between` proves.
+
 ### 1.4 `optional` / `choice` / `maybe` — partial or alias
 
-- [ ] 1.4.1 Complete `optional`'s `Rel` characterization: `Rel_optional_some` is
+- [x] 1.4.1 Complete `optional`'s `Rel` characterization: `Rel_optional_some` is
       one direction only; add the `none` case.
-- [ ] 1.4.2 Give `maybe` (`:67`, a bare alias for `optional`) a law naming it
+
+      **Landed** as `Rel_optional_none : Rel (optional p) none s ↔ n = 0`,
+      `[propext]`-only. With it `optional` has a **complete** characterization — an
+      `Option α` is `some x` or `none`, and each case has its law. `Rel_optional_some`'s
+      docstring now says so and names the companion.
+
+- [x] 1.4.2 Give `maybe` (`:67`, a bare alias for `optional`) a law naming it
       (`Rel_maybe_some` is a one-token proof), so the alias claim is checkable from
       the proof surface. Either that or delete it and stop listing it in the
       README inventory — an alias no theorem names has nothing to reproduce.
-- [ ] 1.4.3 Record what `Rel_choice` does and does not give (exists-in-list only).
+
+      **Kept and given two laws**, not deleted: `Rel_maybe_some` and
+      `Rel_maybe_none`, both `[propext]`-only and each a one-line restatement of the
+      matching `optional` law. Deletion was the other option the ledger allowed, but
+      README's `[S3]` inventory lists `maybe` as one of the bounded eight a porter
+      must reproduce — so the right fix was to make the alias claim checkable rather
+      than to remove the name from the surface. `maybe`'s own docstring now points at
+      the two laws, so a divergence from `optional` would have to break one.
+
+- [x] 1.4.3 Record what `Rel_choice` does and does not give (exists-in-list only).
+
+      **Landed** at `Rel_choice`'s docstring, in three named limits: it gives **no**
+      ordering or multiplicity information (`Rel` is a `Prop`, so the existential
+      discards which branch matched; `decode (choice [d, d]) x s` yields each result
+      **twice** while `Rel` carries it once — the same `[D3]` mismatch a set-union
+      model produces), **no** bound (the bound lives in `manyUpTo`'s `map`, not here),
+      and **no** productivity (`choice []` is `Codec.empty`, related by `Rel_empty`).
+      It also states what the law *is*: the bridge from a list of descriptions to one
+      `Codec`, and the only reason `manyUpTo` is statable.
 
 ### 1.5 The under-covered triples: `sepBy`, `takeWhile`
+
+**NEXT SESSION STARTS HERE.** §1.0–§1.4 are landed and gated (16/56); this is the
+first unstarted family. Locate the model laws **by name**, not by line number — this
+ledger and `AGENTS.md` both carried stale `:693`/`:646` figures within one session:
+
+```bash
+cd /Users/user/_/lean-codec
+grep -n 'theorem encodeChainl1_\|theorem encodeSepBy_\|theorem encodeTakeWhile_\|theorem encodeChainr1_' Codec/Combinators.lean
+```
+
+As of §1.4 the tree has `encodeChainl1_ne_none`, `encodeChainl1_of_decode`,
+`encodeChainr1_ne_none`, `encodeChainr1_of_decode`, `encodeSepBy_rel` (only),
+`encodeTakeWhile_rel` (only) — i.e. `sepBy`/`takeWhile` need the other two each.
 
 - [ ] 1.5.1 Add `encodeSepBy_of_decode` and `encodeSepBy_ne_none`, mirroring
       `encodeChainl1_of_decode` / `encodeChainl1_ne_none`.
