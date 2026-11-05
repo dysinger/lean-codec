@@ -727,7 +727,15 @@ The proof is the recorded `match`-in-`match` recipe (`tasks.md` 6.1a trap 2): th
 unfold is a `conv` on the LHS, then `simp only` to force the inner `match`, then
 `split` for the outer one; `injection` on the discriminant equation re-aligns the
 `split`-generated binders with the stated ones, after which the two sides are
-syntactically equal and `rfl` closes it. -/
+syntactically equal and `rfl` closes it.
+
+**The `first | … | skip` wrapper is a cross-toolchain guard, not decoration.**
+On Lean 4.34.1 the `conv`+`rw` leaves the goal open and the `simp only`/`split`/
+`injection` tail is required; on **4.35.0** the same `conv`+`rw` closes the goal
+outright, so the tail then fails with "No goals to be solved". The remaining
+proof is unchanged — `first` just picks it when there is still work and does
+nothing when there is not. Without the wrapper this law is green on one
+toolchain and red on the other, which is how the 4.35.0 bump surfaced. -/
 theorem decodeFullArraySearch_cons {α : Type} (d : Codec α) (h : ConsumesByte d)
     (a : Array UInt8) (k : Nat) (hk : k ≤ a.size) (acc : List α)
     (x : α) (c : Nat) (hmem : (x, c) ∈ decodeArray d a k ∧ k < c ∧ c ≤ a.size)
@@ -737,12 +745,14 @@ theorem decodeFullArraySearch_cons {α : Type} (d : Codec α) (h : ConsumesByte 
        | none => decodeFullArraySearch d h a k hk acc rest
        | some xs => some xs) := by
   conv => lhs; rw [decodeFullArraySearch.eq_def]
-  simp only
-  split
-  · simp at *
-  · rename_i heq
-    injection heq with h1 h2
-    simp_all
+  first
+    | (simp only
+       split
+       · simp at *
+       · rename_i heq
+         injection heq with h1 h2
+         simp_all)
+    | skip
 
 /-- **The search over the empty candidate list is `none`** — the packed mirror of
 `decodeFullStep_nil`. Note this case is *unreachable* at a live cursor under
