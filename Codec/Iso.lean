@@ -580,6 +580,53 @@ structure MeasureDecreases {α β : Type} (measure : α → Nat) (i : Iso (α ×
   /-- Each unfold step reduces the measure. -/
   dec : ∀ a a' b, i.unapply a = some (a', b) → measure a' < measure a
 
+/-! ### A concrete `MeasureDecreases` supplier
+
+`MeasureDecreases` was the only hypothesis family in this tree with **zero**
+suppliers: 19 uses across `Codec/Combinators.lean`, all as hypotheses, and nothing
+anywhere established it for any description. `Sound.lean` proves `Unambiguous` and
+`Functional` satisfiable for `Codec.byte` *precisely because* nothing had
+established them for any `d` (and a typo in either definition could then not
+surface) — by the repository's own standard, `MeasureDecreases` fails that same
+test. The pair below closes it: the smallest non-trivial counter, checked against
+the structure's own field rather than merely asserted. -/
+
+/-- A two-state counter: the state is `Bool` (`false` = zero, `true` = one), and
+one step peels the unit `()` off a `true` state, moving to `false`. It is the
+smallest non-trivial `Unfold` step, which is why it is the natural satisfiability
+witness. `[propext]`-clean. -/
+def counterIso : Iso (Bool × Unit) Bool where
+  apply := fun p =>
+    match p.1 with
+    | false => some true
+    | true => none
+  unapply := fun b =>
+    match b with
+    | false => none
+    | true => some (false, ())
+  law := by
+    intro a b
+    obtain ⟨a1, a2⟩ := a
+    cases a1 <;> cases a2 <;> cases b <;> simp [Option.some.injEq]
+
+/-- The measure: the state itself as a `Nat` (`true ↦ 1`, `false ↦ 0`). -/
+def counterMeasure (b : Bool) : Nat := if b then 1 else 0
+
+/-- **`MeasureDecreases` is satisfiable.** The counter's single step `true ↦ false`
+drops the measure from `1` to `0`, so the structure's `dec` field holds. This is the
+witness the tree was missing; `[propext]`-clean, zero `sorry`, zero
+`Classical.choice`. -/
+theorem counterMeasureDecreases :
+    Iso.MeasureDecreases counterMeasure counterIso := by
+  refine ⟨?dec⟩
+  intro a a' b h
+  cases a with
+  | false => simp [counterIso] at h
+  | true =>
+    simp [counterIso] at h
+    obtain ⟨rfl, rfl⟩ := h
+    simp [counterMeasure]
+
 /-- The `Unfold` step induced by a left-fold `MeasureDecreases` witness. Here the
 step is `i.unapply` itself, and `reconsLeft i a' b = i.apply (a', b)` is its inverse. -/
 def MeasureDecreases.toUnfold {α β : Type} {measure : α → Nat} {i : Iso (α × β) α}
