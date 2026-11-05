@@ -62,16 +62,16 @@
 
 ## 4. Coverage gaps
 
-- [ ] 4.1 Add `emptyConsumesByte` — `empty` is the only `Codec` constructor without a
+- [x] 4.1 Add `emptyConsumesByte` — `empty` is the only `Codec` constructor without a
       `ConsumesByte` witness, so a downstream `d | empty` codec still hand-proves
       productivity at that node, contradicting `Sound.lean:126-147`'s claim that
       `seqConsumesByte`/`isoConsumesByte` closed this
-- [ ] 4.2 Add a concrete `MeasureDecreases` supplier (a two-state counter codec; the
+- [x] 4.2 Add a concrete `MeasureDecreases` supplier (a two-state counter codec; the
       audit's reviewer did this in ~20 lines at `[propext, Quot.sound]`).
       `MeasureDecreases` is the only hypothesis family with zero suppliers while
       being satisfiable, and the repo's own standard (`Sound.lean:733-742`) says such
       a family gets a witness
-- [ ] 4.3 Confirm both new witnesses are `[propext, Quot.sound]`-only and that the
+- [x] 4.3 Confirm both new witnesses are `[propext, Quot.sound]`-only and that the
       gate from §1 covers them automatically
 
 ## 5. `README.md` corrections (every claim below was falsified against the code)
