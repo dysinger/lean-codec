@@ -2,46 +2,60 @@
 
 Guidance for AI coding agents working in this repository.
 
-> ## START HERE: no change is open. The next task is an owner decision.
+> ## START HERE: the next task is `openspec/changes/codec-audit-round-three/tasks.md`
 >
-> **`lean-basen` was archived 2026-11-05** into
-> `openspec/changes/archive/2026-11-05-lean-basen/`: 36/36 tasks, all four
-> `../lean-basen` gates green (`lake build`, `lake build bench`,
-> `nix build '.#bench'`, `nix flake check`), live `basen` spec updated (+3
-> added, 1 requirement modified, 17 -> 24 scenarios) and
-> `openspec validate --all` re-run green afterwards. `openspec list` reports
-> **no open change**.
+> **`codec-audit-round-three` is the open change.** Its `tasks.md` is the ledger and
+> the only direction — this file does not restate it. Read §1.0 first: it is
+> deliberately ordered ahead of everything else.
 >
-> **The next task (another format port) is an owner decision — this file does not
-> guess it.** When one is chosen, write it as a new change under
-> `openspec/changes/<name>/` and let _that_ `tasks.md` be the ledger. Do not
-> re-open `lean-basen`: its tasks file is archived history, not direction.
+> **First action of the session, always:**
 >
-> Everything below is the **stable** part — how to work here, what the gates are,
-> and the traps that have cost sessions. Status is computed from `openspec/`,
-> never recorded here.
+> ```bash
+> nix develop --command openspec list --json          # what is open, how far along
+> nix develop --command openspec status --change codec-audit-round-three --json
+> ```
+>
+> Then open that change's `tasks.md` and work top-down. Do not work from this file;
+> it holds the **stable** part — how to work here, what the gates are, and the traps
+> that have cost sessions. Status is computed from `openspec/`, never recorded here.
+>
+> **Round two is archived.** `2026-11-05-codec-audit-round-two` (42/42 tasks, its
+> three spec deltas synced into `openspec/specs/` and verified scenario-by-scenario)
+> is history. Round three's delta was authored against the _pre_-sync text, so when
+> it archives it will replace `codec/axiom-gate`'s requirement again — re-run
+> `openspec validate --all` **after** that archive and re-check that round two's
+> three partition scenarios survived.
 
 ## Current state
 
 **Do not record status here — compute it.** The ledger is the source of truth:
 
-| Question                       | Authoritative file                                                                               |
-| ------------------------------ | ------------------------------------------------------------------------------------------------ |
-| **What is the task right now** | `nix develop --command openspec list --json` — there is no ledger until a new change is authored |
-| Open changes + task counts     | `nix develop --command openspec list --json`                                                     |
-| Are the spec deltas sound      | `nix develop --command openspec validate --all`                                                  |
-| Archived history               | `openspec/changes/archive/<date>-<name>/tasks.md` (e.g. `2026-11-05-lean-basen`)                 |
+| Question                       | Authoritative file                                                               |
+| ------------------------------ | -------------------------------------------------------------------------------- |
+| **What is the task right now** | `openspec/changes/codec-audit-round-three/tasks.md` (§1.0 first)                 |
+| Open changes + task counts     | `nix develop --command openspec list --json`                                     |
+| Are the spec deltas sound      | `nix develop --command openspec validate --all`                                  |
+| Archived history               | `openspec/changes/archive/<date>-<name>/tasks.md` (e.g. `2026-11-05-lean-basen`) |
+| Lessons (not direction)        | `openspec/lean-notes.md`                                                         |
 
-**No change is open.** `lean-basen` was archived 2026-11-05; its code lives in
-the sibling repo `../lean-basen`, which is built in that repo's own
-`nix develop`. Nothing in this file restates its task list — that file is now
-archived history under `openspec/changes/archive/2026-11-05-lean-basen/`.
+**One change is open; round two is archived history.**
+
+- `codec-audit-round-three` — **0/56 tasks**, `in-progress`. Authored 2026-11-05 from
+  the third audit (three read-only reviewers; reports in `/tmp/r3-*.md`). §1 makes
+  law coverage structural and §2 fixes prose; §2's claims depend on §1's laws, so
+  the order is not negotiable.
+- `codec-audit-round-two` — **archived** 2026-11-05 as
+  `openspec/changes/archive/2026-11-05-codec-audit-round-two/` (42/42 tasks, all
+  gates green, three spec deltas synced and verified). Do not reopen it; read its
+  archived `tasks.md` as history.
 
 ### How `lean-basen` closed (history — the archived ledger has the detail)
 
 §6.1 (proof gate), §6.2 (base64 `Zh==`/`Zm9=` whole-input rejection) and §6.3b
 (base32 `MZ======`) all landed and gated, and the two post-audit items closed:
-**§6.4** gates **418/418** public theorems (was 91/404), and **§6.5** removed
+**§6.4** closed the gate's coverage of the then-current theorem set (91/404 ->
+all of it; the count has moved since — read `../lean-basen/Axioms.lean`'s header,
+not this file), and **§6.5** removed
 every `set_option linter.… false` rather than deferring it. **§6.10** closed:
 the ecosystem is on Lean 4.35.0. The `lean-toolchain` pins
 now match what builds (`v4.35.0`), the lockfiles are nixpkgs `1d06008`
@@ -75,14 +89,18 @@ that 8-byte input. The landed proof keeps a two-line `omega` for the `cons`
 branch anyway — it must not depend on a `#eval` about one literal — and it
 closed in one session.
 
-### Roadmap (shape only — an owner decision, not a ledger entry)
+### Where the work is going (a pointer, not a ledger)
 
-1. ~~Archive `lean-basen`.~~ **Done 2026-11-05.** `openspec archive` does not
-   check task completion, so completion was verified separately by reading the
-   archived `tasks.md` (36 ticked, 0 open) and all four `../lean-basen` gates.
-2. **The next format port.** Ordering is an owner decision; this file does not
-   guess it. When decided, author a new change under `openspec/changes/` — the
-   archived `lean-basen` ledger is the model for shape, not a template to resume.
+The roadmap **lives in `openspec/`**. Three audit rounds have landed and each one
+found a different layer: round one the gate's _existence_, round two the gate's
+_mechanism_, round three the gate's _universe_ (it covers theorems, not
+definitions, so a public `def` with no law is outside every check). Round three's
+`tasks.md` §1 closes that, and §2 is the prose.
+
+The next **format port** (another `lean-*` repo) is still an owner decision; this
+file does not guess it. When one is chosen, author it as a new change under
+`openspec/changes/` — the archived `lean-basen` ledger is the model for shape, not
+a template to resume.
 
 ### Traps that have actually cost sessions here
 
@@ -117,6 +135,44 @@ codec` — a `bad import` means a stale pin, never a wrong import.
   (`Codec.huniq_not_derivable` machine-checks that it does not follow from
   unambiguity + productivity). Do not reopen it as unfinished work.
 
+### Traps specific to the current ledger (round three)
+
+These cost time _this_ session and are the ones §1/§2 will run into. Read them
+before starting §1.
+
+- **A `def` with no law is invisible to every gate.** `Axioms.lean`'s universe is
+  `thmInfo` only, so a public `def` is in neither `gatedNames` nor
+  `generatedAuxAllowlist` — it is not "un-gated", it is _outside the partition_.
+  That is why `btake`, `maybe`, `manyUpTo`, `seqRight`, `seqLeft`, `between` shipped
+  with zero theorems while the gate was green. When you add a `def`, grep for a
+  theorem mentioning it before believing it has a law. §1.8 makes this a build
+  failure so it cannot recur.
+- **"Free theorem" claims in `Codec/Combinators.lean` are false at a variable `n`.**
+  The docstring says the derived combinators' characterizations are definitional
+  consequences and that `decode_spec`/`bidir`/`roundtrip` "hold unconditionally via
+  `Codec.Sound`". Those are **structural inductions on the `Codec` value**; the
+  `count n p` case has no `Rel` to rewrite through, so they do not close. Prove the
+  step law (§1.1) before repeating the claim anywhere.
+- **`List.ofFn` equality is not `rfl` across two different functions.** In the
+  base32 §3.5 work, `List.ofFn sb₁ = List.ofFn s₀` needed `congr 1; funext i;
+exact hsb_eq i.1 i.2`. `cases`/`decide` on the whole goal also works when the
+  inputs are literals.
+- **`Iso` projections of structure fields defeat `unfold`/`split`.** A structure
+  literal's `.apply` does not reduce under `split`; use
+  `simp only [<the def>] at h` to expose it first. This is why the `Unambiguous`
+  counterexample proofs use `simp only [uniqSeqBo, uniqSeqBt, Rel_alt, Rel_pure,
+Rel_iso] at hx hy` rather than unfolding.
+- **A `have := …` whose name collides with a definition shadows it.** `have := h …`
+  named it `this`; naming it `RelAligned` or `hcon` collided. Use a name that is
+  not a declaration.
+- **Do not trust a reviewer's arithmetic without re-deriving it.** Round three
+  reported `Axioms.lean`'s footprint table as wrong (197 vs 195); re-derived it was
+  correct — their parser truncated at the `?` in `attach_getElem?_corr`. Design D1
+  records this. A refuted finding is a result; relaying it unverified is the defect.
+- **`native_decide` is banned for laws and fine in the bench.** It appears only in
+  `Bench.lean` (a `packages` entry, not a `checks` one). Never introduce it into
+  `Codec/`.
+
 ### Rules about this file
 
 - **Direction lives in exactly two places: this file and `openspec/`.** No
@@ -127,10 +183,16 @@ codec` — a `bad import` means a stale pin, never a wrong import.
   in the change's `tasks.md` and `CHANGELOG.md` — including archived changes,
   whose own `tasks.md` under `openspec/changes/archive/` is the reference. Do not
   re-teach landed work here.
-- **Archive hazard.** `lean-basen` MODIFIES "The `basen` bases are `Codec`
-  values", and a MODIFIED block **replaces** the live requirement wholesale. Two
+- **Archive hazard.** A MODIFIED block **replaces** the live requirement wholesale,
+  so any live scenario the delta does not restate is dropped at sync time. Two
   changes modifying the same requirement must archive dependency-first, with the
-  order recorded in the later change's `tasks.md`.
+  order recorded in the later change's `tasks.md`. This has already fired twice:
+  `lean-basen` / "The `basen` bases are `Codec` values", and
+  `codec-audit-round-two` / `codec-audit-round-three` both rewriting
+  `codec/axiom-gate`'s partition requirement. **Check the live spec's scenario
+  count against the delta's before syncing** — `openspec validate` will not always
+  catch a narrowed set, and round three authored its delta against the pre-sync
+  text.
 
 ### Ecosystem shape (stable, not status)
 
