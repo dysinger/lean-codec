@@ -717,6 +717,63 @@ def MeasureDecreasesR.toUnfold {α β : Type} {measure : α → Nat} {i : Iso (�
 def reconsRight {α β : Type} (i : Iso (β × α) α) : α → β → Option α :=
   fun a' b => i.apply (b, a')
 
+/-! ### The right-fold witness: `MeasureDecreasesR` is satisfiable too
+
+`counterMeasureDecreases` supplies the **left** fold's obligation. The right fold's
+mirror (`MeasureDecreasesR`, above) had **no supplier** — `grep` found no theorem
+constructing one — so `Iso.foldr`'s law and every `chainr1` law
+(`decodeChainr1_spec`, `encodeChainr1_rel`, `_ne_none`, `_of_decode`,
+`_injective_of_unambiguous`) rested on a premise nothing in the tree provided. That
+asymmetry was created by `codec-audit-remediation`, which closed the left side and
+left the mirror; the pair below closes it.
+
+**The type trap, recorded so no cycle is spent rediscovering it.**
+`MeasureDecreasesR` wants `Iso (β × α) α`, i.e. here `Iso (Unit × Bool) Bool`. The
+obvious routes do not give that shape:
+
+* `Iso.inverse counterIso` is `Iso Bool (Bool × Unit)` — the *wrong* order;
+* `Iso.commute (α := Bool) (β := Unit)` is `Iso (Bool × Unit) (Unit × Bool)`, so
+  `(Iso.inverse Iso.commute).trans counterIso` *does* have the right type, but its
+  `unapply` goes through a `trans` `Option.bind`, which makes the `dec` proof read
+  through the bind rather than through the counter's own step.
+
+So the construction used here is **an explicit `Iso (Unit × Bool) Bool`**
+(`counterIsoR`), the literal mirror of `counterIso` with the unit moved to the left
+of the state pair. It is the design's second pre-authorized option ("or state the
+`Iso` explicitly"), chosen because it keeps the `dec` proof at the structure's own
+field — the same shape as the left witness — instead of a `bind` chain. -/
+
+/-- The two-state counter of `counterIso`, spelled for the right fold: the state is
+`Bool × Unit` on the **left**, so `unit ↦ ()` and the step still moves `true ↦ false`.
+`[propext]`-clean. -/
+def counterIsoR : Iso (Unit × Bool) Bool where
+  apply := fun p =>
+    match p.2 with
+    | false => some true
+    | true => none
+  unapply := fun x =>
+    match x with
+    | false => none
+    | true => some ((), false)
+  law := by
+    intro a c
+    obtain ⟨a1, a2⟩ := a
+    cases a1
+    cases a2 <;> cases c <;> simp [Option.some.injEq]
+
+/-- **`MeasureDecreasesR` is satisfiable.** The mirror of `counterMeasureDecreases`:
+the counter's single step `true ↦ false` drops the measure from `1` to `0`, and the
+`dec` field reads straight off the structure's own step. `[propext]`-clean, zero
+`sorry`, zero `Classical.choice`. With this in place both `foldl`'s and `foldr`'s
+laws are exercised against a real witness rather than an uninhabited premise. -/
+theorem counterMeasureDecreasesR :
+    Iso.MeasureDecreasesR counterMeasure counterIsoR := by
+  refine ⟨?dec⟩
+  intro a u a' hu
+  cases a <;> simp [counterIsoR] at hu
+  obtain ⟨rfl, rfl⟩ := hu
+  simp [counterMeasure]
+
 /-- Right fold of the step iso over a list (the `apply` direction of `foldr`).
 `foldrApply i a0 [b1, …, bn]` = `i (b1, i (b2, … i (bn, a0)))` — the rightmost
 element is folded first (innermost). This is the left fold `foldRec` of

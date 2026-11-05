@@ -27,10 +27,12 @@ mirror the `decodeFull_spec` template (`Codec.Decode`):
    `none` even when `decodeArray` has a result — e.g. the first `d₁` result is a
    dead end for `seq` — which is exactly why completeness needs a gate.)
 
-2. **Gated** — under `Functional d` (one value determines one count), the
-   `decodeArray_functional_count` lemma pins the consumed count; under
-   `Unambiguous d`, two `decodeArray` results that consume the same count agree
-   on the value (`decodeArray_unambiguous_value`, proved below).
+2. **Two conditional facts** — under `Functional d` (one value determines one
+   count), `decodeArray_functional_count` pins the consumed count *given the same
+   value*; under `Unambiguous d`, `decodeArray_unambiguous_value` pins the value
+   *given the same count*. Each takes the other's conclusion as a hypothesis, and
+   neither is a route to `decodeOne`'s completeness — they advertise no role they do
+   not fill (the "hypothesis that makes `decodeOne` complete" framing is gone).
 
 **Those two halves do NOT compose into "at most one result", and an earlier
 revision of this header said they did.** Measured counterexample: take a
@@ -238,12 +240,22 @@ theorem decodeArray_unambiguous_byte (a : Array UInt8) (i : Nat) :
     rw [h₁.1, h₂.1]
   · simp [hlt] at h₁
 
-/-- Under `Functional d`, one value determines one consumed count: two
-`decodeArray` results for the *same* value must consume the same count. Together
-with `decodeArray_unambiguous_value` (same count ⇒ same value, under
-`Unambiguous`), this pins `decodeArray d a i` to at most one result — the
-hypothesis that makes the committed `decodeOne` complete (not just sound).
-`[propext, Quot.sound]`-only. -/
+/-- Under `Functional d`, one value determines one consumed count: two `decodeArray`
+results for the *same* value must consume the same count.
+
+**What this establishes, and what it does not.** This is a *conditional* fact about
+one value: given `x₁ = x₂`, the counts agree. It is **not** a route to
+`decodeOne`'s completeness. The pair `decodeArray_functional_count` +
+`decodeArray_unambiguous_value` was once presented as "the hypothesis that makes the
+committed `decodeOne` complete"; it is not, because each lemma consumes the other's
+conclusion as a hypothesis (`x₁ = x₂` here, `c₁ = c₂` there) and the gap between
+them — two results with *different* values and *different* counts — is inhabited
+(the module header's `Rel d x "ab"` / `Rel d y "a"` example).
+
+The composition that does close is `decodeArray_unique` (below), which needs
+`RelAligned (Rel d)` as well and uses neither of these two lemmas. Completeness of
+`decodeOne` itself remains **open** (`decodeOne_mem` gives soundness only); see the
+module header. `[propext, Quot.sound]`-only. -/
 theorem decodeArray_functional_count {α : Type} (d : Codec α) (hd : Functional d)
     (a : Array UInt8) (i : Nat) :
     ∀ {x₁ x₂ : α} {c₁ c₂ : Nat},
@@ -286,8 +298,16 @@ theorem decodeArray_functional_count {α : Type} (d : Codec α) (hd : Functional
   rw [hrem]
 
 /-- Under `Unambiguous d`, two `decodeArray` results that consume the **same** count
-agree on the value. This is the second half of the pair-uniqueness gate for `decodeOne`
-(the first half, `decodeArray_functional_count`, pins the count under `Functional d`).
+agree on the value.
+
+**What this establishes, and what it does not.** Like its twin, this is a
+*conditional* fact: given `c₁ = c₂`, the values agree. It is **not** half of a proof
+that `decodeOne` is complete — `decodeArray_functional_count` needs this lemma's
+conclusion as its hypothesis and vice versa, and neither says anything about a pair
+of results that differ in *both* value and count. The composed law that closes the
+question is `decodeArray_unique` (below) under `Functional ∧ RelAligned`, which
+proves the result directly and uses neither lemma. `decodeOne`'s completeness is
+**open** (module header).
 
 The forward bridge: `(x₁, c) ∈ decodeArray d a i` transports (via `decodeArray_eq` +
 `decode_spec`) to `Rel d x₁ s₀₁` for a genuine consumed prefix `s₀₁`; the *same* count
@@ -362,6 +382,33 @@ theorem prepend_prefix_agree {n : Nat} (t₁ t₂ : Suffix n)
       s₀₁ k = s₀₂ ⟨k.val, Nat.lt_of_lt_of_le k.isLt hle⟩ :=
   splice_prefix_agree (Nat.sub_le n _) (Nat.sub_le n _) hle s₀₁ _ s₀₂ _ heq
 
+/-! ### Why `decodeArray_unique` needs `RelAligned`, not just `Unambiguous`
+
+The pair `Functional d ∧ RelAligned (Rel d)` is not a decorated form of "the leaves
+are unambiguous" — it is strictly stronger, and both halves are **load-bearing**
+because neither predicate is inherited by a `seq` composition.
+
+The witness is in `Codec/Sound.lean` and is fully proved there:
+`bo := alt (iso bIso byte) (pure false)` relates `true` to `single 0` and `false` to
+`emptyBytes` (so `bo` is `Unambiguous`), and `d2 := alt (pure ()) (iso unitIso byte)`
+relates `()` to strings of length `0` and `1` (so `d2` is `Unambiguous` too). Their
+composition `seq bo d2` relates **two distinct values to the one-byte input
+`single 0`** — `(true, ())` via the split `m = 1` and `(false, ())` via `m = 0`. Hence
+`uniqSeq_not_congruent : ¬ Unambiguous (seq bo d2)`.
+
+`RelAligned` is exactly the hypothesis that kills it: `bo` relates `false` to the
+empty string, which is a prefix of (hence prefix-aligned with) the `single 0` that
+`true` relates to, so `RelAligned (Rel bo)` would force `true = false`
+(`uniqSeq_not_relAligned` proves the composed form fails the same way). `Unambiguous`
+sees only the value at *one whole string*; `seq`'s split point is existentially
+quantified, so a value that consumes a byte and a value that consumes none slip past
+it.
+
+So `Functional ∧ RelAligned` is **the pair that closes**, and it is a hypothesis a
+caller must supply for the composition: it is not a consequence of the leaves being
+unique. Every uniqueness-gated law here — `encode_of_decode`,
+`encode_injective_of_unambiguous`, `decodeArray_unique`, `decodeFull_spec` — is
+accordingly **leaf-only** in this tree. -/
 theorem decodeArray_unique {α : Type} (d : Codec α)
     (hf : Functional d) (hal : RelAligned (Rel d))
     (a : Array UInt8) (i : Nat) :
