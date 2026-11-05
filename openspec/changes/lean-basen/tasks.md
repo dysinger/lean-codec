@@ -559,13 +559,41 @@ linter'`→ no hits).`Common`: `simpa using hb`→`simp at hb`(the linter's own
       verified by re-reading `lake build -v` (still `-lean4-4.34.1/bin/lean`)
       and re-running the gates (13 / 25 / 45 / 24 jobs, all green).
 
-      **Not an upgrade.** Upstream's current stable is 4.35.0 (2026-10-12) and
-      nixpkgs master now carries it, so 4.34.1 is one release / 18 days behind —
-      i.e. current, not stale. Moving to 4.35.0 was explicitly declined as an
-      unnecessary rebuild, and is a separate decision from this fix. The
-      remaining honest choice, if ever wanted, is to *delete* the file rather
-      than maintain a pin nothing reads; that is still an owner call, but it is
-      no longer an *inconsistency*.
+      **THEN UPGRADED TO 4.35.0 the same session, after measuring the cost.**
+      The owner's rule was "if we have to recompile, move to 4.35.0; if 4.34.1
+      is in the cache, leave it" — so cost was measured rather than assumed,
+      and it came out cheap on both axes:
+
+      - **The toolchain itself is a substitution, not a build.**
+        `cache.nixos.org` answers **HTTP 200** for the 4.35.0 output
+        (`qw8qrxx59…-lean4-4.35.0`, 674 MB nar), so no Lean source compile.
+      - **Our sources needed one line.** Compiling both libraries against
+        4.35.0 *before* touching any pin: `codec` broke in exactly one place,
+        `Codec/Packed.lean`'s `decodeFullArraySearch_cons`, where 4.35.0 now
+        closes the goal at the `conv`+`rw` that 4.34.1 left open (so the tail
+        failed with "No goals to be solved"); `basen` needed **no** changes at
+        all (25 / 45 / 24 jobs green as-is).
+
+      The fix is `first | (tail) | skip`, which is deliberately
+      **toolchain-portable** rather than a 4.35-only rewrite: the plain
+      deletion works on 4.35.0 but *fails* on 4.34.1 (verified both ways), and
+      `try`-wrapping was tested and is wrong in the other direction (`try simp
+      only` does not admit the `split` that 4.34.1 needs). So the law is green
+      on both, and the docstring says why the wrapper is load-bearing rather
+      than decorative.
+
+      Pins after the bump: `lean-toolchain` `v4.35.0` in both repos,
+      `flake.lock` nixpkgs `1d06008` (2026-11-03), `codec` input `3277d48`.
+      Also picked up `openspec` 1.13.2 → 1.14.3 (validate still 8/8).
+
+      **One false alarm worth recording**, because it cost a detour: after the
+      bump, `lake build bench` **segfaulted** (exit 139) in `lake` with
+      `lean::exception: unsupported IRType`, reproducibly. It was **not** the
+      upgrade — it was stale `.lake` artifacts from the 4.34 build being mixed
+      with 4.35 objects. `rm -rf .lake` and the same command is green (28 jobs).
+      Lesson: after a toolchain bump, clean the build dir before diagnosing a
+      crash; and a `lake` segfault that prints nothing at all is a signal to
+      suspect build state, not the lakefile.
 
       Original finding: `lake` does **not** honour the pin in either
       build path: `lake build -v` shows the compiler is
