@@ -47,11 +47,22 @@ list; this file does not restate it.
 also closed: **§6.4** now gates **418/418** public theorems (was 91/404), and
 **§6.5** removed every `set_option linter.… false` rather than deferring it.
 
-**§6.10 is not work — it is a question for the owner.** Verified: `lean-toolchain`
-pins `v4.30.0` but **nothing honours it** (`lake build -v` shows
-`…-lean4-4.34.1/bin/lean`; `default.nix` takes nixpkgs `lean4` and never reads
-the file). Bumping the pin to 4.34.1 and pinning the Nix build _down_ to 4.30.0
-are both defensible and are different repairs, so it is recorded, not guessed.
+**§6.10 is closed: the ecosystem is on Lean 4.35.0.** The `lean-toolchain` pins
+now match what builds (`v4.35.0`), the lockfiles are nixpkgs `1d06008`
+(2026-11-03), and `basen` tracks `codec` `3277d48`. The bump cost **one line**
+in `Codec/Packed.lean` — `basen` needed no source changes — because the
+toolchain itself was a cache substitution. Two traps from that bump:
+
+- **A single law was toolchain-dependent.** `Codec/Packed.lean`'s
+  `decodeFullArraySearch_cons`: 4.35.0 closes the goal at the `conv`+`rw` that
+  4.34.1 left open, so the tail fails with "No goals to be solved". The fix is a
+  `first | (tail) | skip` wrapper — deliberately portable, since the plain
+  deletion is green on 4.35.0 but red on 4.34.1, and `try`-wrapping fails the
+  other way.
+- **A `lake build` segfault after a bump means stale build state.** Right after
+  the bump, `lake build bench` aborted with `unsupported IRType` (exit 139);
+  `rm -rf .lake` and the same command is green. So before diagnosing a crash as
+  a toolchain or lakefile problem, clean the build dir.
 
 **The one scoping lesson worth keeping, because it cost sessions.** §6.2 was for
 a month recorded as "repeatedly blocked on `Suffix`/`splice` index bookkeeping
