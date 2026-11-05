@@ -179,10 +179,24 @@ Base16.hexBlockUnapply 102 = some [54, 55]`.
       both `roundtrip` laws still are, and the AGENTS.md base32/64 note now uses
       the `Of` names so a future edit does not reintroduce the bare ones.
 
-## Status (re-anchored 2026-11-04): pre-archive audit found three blockers
+## Status (2026-11-05): ALL TASKS CLOSED — the change is archivable
 
-The substantive work (seven `Codec`-value bases + facade + bench + gate) is **done**
-and landed. All seven mechanical polish items (5.2–5.13) are closed. A
+**36/36 tasks are ticked.** The substantive work (seven `Codec`-value bases +
+facade + bench + gate) is done and landed; all polish items (5.2–5.13) are
+closed; **all three release blockers are closed**; and the two follow-up audit
+items are closed as well (§6.4 the axiom gate now covers 418/418 public
+theorems, §6.5 every lint suppression is gone rather than deferred). §6.10 is
+verified and deliberately recorded rather than repaired — it is an owner
+decision (which of two opposite repairs), not outstanding work.
+
+**What remains is the archive itself, and nothing else.** `openspec archive`
+does not check task completion, so confirm the boxes above before archiving
+rather than trusting a green archive. Order: re-run `../lean-basen`'s recipe →
+confirm this change's delta is a **superset** of `openspec/specs/basen/spec.md`
+→ `openspec validate --all` → archive → `openspec validate --all` again (this
+change MODIFIES "The `basen` bases are `Codec` values").
+
+A
 pre-archive hypercritical audit (2026-11-04) then found **three release blockers**,
 recorded below as §6. **All three are now closed** (6.1 the proof gate, 6.3b the
 base32 `MZ======` rejection, 6.2 the base64 `Zh==`/`Zm9=` whole-input
@@ -383,18 +397,61 @@ Three findings block the archive. Each was re-verified by hand here before fixin
       whole-input and gated. Every claim in `9d5074e` and `3dfc249` is now backed by
       a theorem.
 
-- [ ] 6.4 **`Axioms.lean` gate covers 91 of 404 theorems (22.5%).** Per module:
-      Base2 16/31, Base4 12/31, Base8 12/31, Base10 12/31, Base16 24/60,
-      Base32 49/97, Base64 49/94, Common 2/29. `Common.lean` is shared by all
-      seven bases and is the thinnest. The file's own docstring says "an
-      un-gated law is not protected", so by its own standard 77.5% are
-      unprotected. Full coverage is a large mechanical job; the honest minimum is
-      to gate every law this session adds and to soften the docstring's claim to
-      match reality (a sample, justified) rather than silently overstate.
-- [ ] 6.5 **`set_option linter.unnecessarySimpa false` is file-wide** in
-      `Common.lean:22` and `Base64.lean:22` — a "make it green" switch on the
-      two largest surfaces. Whether enabling it surfaces real noise is
-      unverified; record it as known debt rather than flip it blind.
+- [x] 6.4 **`Axioms.lean` gate covers 91 of 404 theorems (22.5%).** — **RESOLVED
+      (complete coverage, `cc89a3f`).** All **418** public `theorem`s across
+      `Base2`/`Base4`/`Base8`/`Base10`/`Base16`/`Base32`/`Base64`/`Common` are now
+      pinned by `#guard_msgs`; measured `grep`-for-`grep`, **zero** ungated.
+      Distribution: 367 `[propext, Quot.sound]`, **42 `[propext]`-only**, **12
+      axiom-free**, `Classical.choice` nowhere.
+
+  **Measured before writing anything, and the answer was the reassuring one.**
+  All 315 then-ungated theorems were `#print axioms`'d in one probe _first_:
+  272 + 32 + 11, all clean. So the gap was **coverage debt, not a discipline
+  failure** — no proof needed repair, and the estimation in this item ("a large
+  mechanical job") was right about the size but wrong about the risk. Worth
+  stating because the same probe is what would have surfaced a leak that had
+  landed un-gated, which is exactly the failure this block exists to prevent.
+
+  **Verified load-bearing by a real leak, not a stub.** Injecting
+  `Classical.choice` into `Common.Productive_iso` trips **three** separate
+  `#guard_msgs` guards (that law plus two downstream consumers), so the gate
+  fails transitively and a leak cannot land silently. This is a stronger check
+  than the usual `sorry` stub: it exercises the axiom half, not the
+  completeness half.
+
+  Original finding: Per module:
+  Base2 16/31, Base4 12/31, Base8 12/31, Base10 12/31, Base16 24/60,
+  Base32 49/97, Base64 49/94, Common 2/29. `Common.lean` is shared by all
+  seven bases and is the thinnest. The file's own docstring says "an
+  un-gated law is not protected", so by its own standard 77.5% are
+  unprotected. Full coverage is a large mechanical job; the honest minimum is
+  to gate every law this session adds and to soften the docstring's claim to
+  match reality (a sample, justified) rather than silently overstate.
+
+- [x] 6.5 **`set_option linter.unnecessarySimpa false` is file-wide** in
+      `Common.lean:22` and `Base64.lean:22` — **RESOLVED (`a686a7f`), and the
+      "unverified" was resolved by measuring.** All three switches on the
+      surface were turned off to see what they hid: **1** `unnecessarySimpa` hit
+      in `Common.lean`, **2** in `Base64.lean`, and (a third switch not named in
+      this item) **21** unused-`simp` arguments in `Bench.lean`'s six vector
+      blocks. The noise was tiny and entirely real — every one a genuine
+      redundancy, not a linter false positive.
+
+      All 24 are now **fixed rather than suppressed**, and every
+      `set_option linter.… false` in the repo is gone (`grep -rn 'set_option
+
+linter'`→ no hits).`Common`: `simpa using hb`→`simp at hb`(the linter's own
+      hint).`Base64`: two `simpa [arg] using X`→ bare`simp`(the linter
+      reported the arg unused, i.e.`simp`alone closes it).`Bench`: six
+      `simp only` sets minimised to the four lemmas that are load-bearing.
+
+      **The bench lane was re-verified after minimising**, because tightening a
+      simp set is exactly the edit that can silently turn a value check into a
+      tautology: corrupting one expected byte (`0x76` → `0x77` in the `Zm9v`
+      vector) still fails with `rfl` failed. So the check is still live.
+
+      Original finding:
+
 - [x] 6.6 **RESOLVED by gating, not deleting.** Four laws were referenced only
       by their own declarations: `Base64.b64BlockUnapply_one`,
       `Base64.b64BlockUnapply_two`, `Base64.b64Split_shape`,
@@ -491,10 +548,27 @@ Three findings block the archive. Each was re-verified by hand here before fixin
       `not_rel_b64TailElem_of_apply_none`. Then gate both in `Axioms.lean`.
       Correct this commit message's claim only once the theorem exists.
 
-- [ ] 6.10 **Toolchain skew (same in both repos, so not a divergence):**
+- [x] 6.10 **Toolchain skew (same in both repos, so not a divergence):**
       `lean-toolchain` pins `leanprover/lean4:v4.30.0`, but the nixpkgs `lean`
-      provided by the dev shell reports **4.34.1**. Elan is present so `lake`
-      should honour `lean-toolchain`; whether the Nix build does is unverified.
+      provided by the dev shell reports **4.34.1**. — **VERIFIED, and the answer
+      is the unused-pin one.** `lake` does **not** honour the pin in either
+      build path: `lake build -v` shows the compiler is
+      `/nix/store/…-lean4-4.34.1/bin/lean`, and `default.nix:64` takes
+      `nativeBuildInputs = [ lean4 ]` (nixpkgs) with no reference to
+      `lean-toolchain` anywhere. Elan _does_ have `v4.30.0` installed, but the
+      dev shell's lean shadows it earlier on PATH, so nothing ever runs 4.30.0.
+      Both repos are identical here, so this is a **shared pre-existing quirk**,
+      not a divergence between them.
+
+      **Left unresolved deliberately: changing the pin is an owner decision, not
+      a repair.** The honest readings are (a) bump both `lean-toolchain`s to
+      `v4.34.1` so the pin matches what actually builds, or (b) pin the Nix build
+      to 4.30.0 to match the file. (a) is a doc-truth fix, (b) is a toolchain
+      downgrade across two repos — different amounts of work and different risks,
+      and nothing in the ledger or either `README` states which was intended. So
+      it is recorded rather than guessed. What *is* now known, and was not
+      before: the pin has **no** build-path effect today, which is the fact the
+      next reader needs.
 
 ### Verified-good in the audit (do not disturb)
 
