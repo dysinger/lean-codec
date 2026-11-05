@@ -135,16 +135,40 @@ def blitBytes (dst : ByteArray) (dstOff : USize) (src : ByteArray) (srcOff : USi
       ++ src.data.extract sc (sc + lc)
       ++ dst.data.extract (dc + lc) n)
 
+/-- A constructive byte scan over an `Array UInt8`: the first index `≥ k` at which
+the array holds `b`, or `none`. Total, non-dependent, and recursion by a `Nat`
+measure — it reads `a[k]?`, so no `DecidableEq` decision is consulted and the whole
+family below (`findFrom_sound`, `_least`, `_min`, `_complete`, `_finds`) is
+`[propext, Quot.sound]`-only.
+
+This is `findByte`'s body. The earlier body was `Array.findIdx?`, whose `DecidableEq
+UInt8` decision is propositional rather than definitional and so reached
+`Classical.choice`; `findByte_spec` then reported
+`[propext, Classical.choice, Quot.sound]` while its docstring claimed otherwise.
+The scan is written out explicitly so the footprint is a property of the code. -/
+def findFrom (a : Array UInt8) (b : UInt8) (k : Nat) : Option Nat :=
+  match h : a[k]? with
+  | some x => if x = b then some k else findFrom a b (k + 1)
+  | none => none
+termination_by a.size - k
+decreasing_by
+  simp_wf
+  have hk : k < a.size := (Array.getElem?_eq_some_iff.mp h).1
+  exact Nat.sub_succ_lt_self a.size k hk
+
 /--
 The Layer-2 named trust seam: a span `memchr` scan. `findByte a off b` returns
 the first index `i ≥ off.toNat` (as a `USize`) at which `a` holds the byte `b`,
 or `none` when there is no such index.
 
-The Lean body below is the *specification* — `Array.findIdx?` over the
-`Array.extract` of the suffix from `off` (reducible, so `findByte_spec` closes by
-`rfl`). The `@[extern "codec_findByte"]` attribute makes the running C call the
-matching `codec_findByte` symbol (a single `memchr`); that C is trusted, not
-proven, and is excluded from the `#print axioms` gate.
+The Lean body below is the *specification* — a constructive `Nat`-recursion
+(`findFrom`) over the backing `data` from `off`, so no `Decidable` instance with a
+classical route is consulted and every law about it is `[propext, Quot.sound]`
+-only (it used to be `Array.findIdx?`, which pulled `Classical.choice` in through
+`DecidableEq UInt8` — the leak this body was rewritten to remove). The `@[extern
+"codec_findByte"]` attribute makes the running C call the matching `codec_findByte`
+symbol (a single `memchr`); that C is trusted, not proven, and is excluded from the
+`#print axioms` gate.
 
 **Arithmetic side condition (the C relies on it).** The body returns
 `some (off + i.toUSize)` where `+` is `USize` addition, i.e. `Nat` addition
@@ -162,10 +186,11 @@ discharging it in full needs a `System.Platform.numBits` premise, which
 `AGENTS.md` forbids because it would leave the `[propext, Quot.sound]`-only gate.
 A caller that could wrap is a caller whose `ByteArray` does not fit in the
 machine. -/
+
 @[extern "codec_findByte"]
 def findByte (a : ByteArray) (off : USize) (b : UInt8) : Option USize :=
-  match Array.findIdx? (fun x => x == b) (a.data.extract off.toNat a.data.size) with
-  | some i => some (off + i.toUSize)
+  match findFrom a.data b off.toNat with
+  | some i => some i.toUSize
   | none => none
 
 /-- The `byteSlice` refinement is a definitional identity: `byteSlice a i` is the
@@ -203,20 +228,128 @@ theorem blitBytes_spec (dst : ByteArray) (dstOff : USize) (src : ByteArray) (src
               dst.data.size) := by
   rfl
 
-/-- The `findByte` refinement is a definitional identity: `findByte a off b` is
-exactly the `Array.findIdx?` scan of the suffix from `off`, re-offset by `off`.
-`rfl`-clean.
+theorem findFrom_sound (a : Array UInt8) (b : UInt8) :
+    ∀ k j, findFrom a b k = some j → ∃ (h : j < a.size), a[j]'h = b := by
+  intro k
+  induction k using findFrom.induct (a := a) (b := b) with
+  | case1 k heq =>
+    intro j hj
+    rw [findFrom.eq_1, heq] at hj
+    simp only at hj
+    obtain ⟨hw, hval⟩ := Array.getElem?_eq_some_iff.mp heq
+    injection hj with h
+    subst h
+    exact ⟨hw, hval.symm ▸ rfl⟩
+  | case2 k x heq hnb ih =>
+    intro j hj
+    rw [findFrom.eq_1, heq] at hj
+    simp only [ite_eq_right hnb] at hj
+    exact ih j hj
+  | case3 k heq =>
+    intro j hj
+    rw [findFrom.eq_1, heq] at hj
+    simp only at hj
+    cases hj
 
-**Axiom footprint: `[propext]`** — deliberately *not* uniform with its
-`byteSlice_spec`/`blitBytes_spec` siblings, which report none. The scan goes
-through `Array.findIdx?`, whose `DecidableEq UInt8` instance is a propositional
-(not definitional) decision, so `propext` is pulled in. `[propext]` is inside the
-`[propext, Quot.sound]`-only gate; the asymmetry is recorded here so it is not
-mistaken for drift. No `Classical.choice`, zero `sorry`. -/
+theorem findFrom_least (a : Array UInt8) (b : UInt8) :
+    ∀ k j, findFrom a b k = some j → k ≤ j := by
+  intro k
+  induction k using findFrom.induct (a := a) (b := b) with
+  | case1 k heq =>
+    intro j hj
+    rw [findFrom.eq_1, heq] at hj
+    simp only at hj
+    injection hj with h
+    omega
+  | case2 k x heq hnb ih =>
+    intro j hj
+    rw [findFrom.eq_1, heq] at hj
+    simp only [ite_eq_right hnb] at hj
+    have := ih j hj
+    omega
+  | case3 k heq =>
+    intro j hj
+    rw [findFrom.eq_1, heq] at hj
+    simp only at hj
+    cases hj
+
+theorem findFrom_min (a : Array UInt8) (b : UInt8) :
+    ∀ k j, findFrom a b k = some j → ∀ l, k ≤ l → l < j → a[l]? ≠ some b := by
+  intro k
+  induction k using findFrom.induct (a := a) (b := b) with
+  | case1 k heq =>
+    intro j hj l hkl hlj
+    rw [findFrom.eq_1, heq] at hj
+    simp only at hj
+    injection hj with h
+    subst h
+    omega
+  | case2 k x heq hnb ih =>
+    intro j hj l hkl hlj
+    rw [findFrom.eq_1, heq] at hj
+    simp only [ite_eq_right hnb] at hj
+    by_cases hlk : l = k
+    · subst hlk
+      rw [heq]
+      intro hc
+      exact hnb (Option.some.inj hc)
+    · exact ih j hj l (by omega) hlj
+  | case3 k heq =>
+    intro j hj
+    rw [findFrom.eq_1, heq] at hj
+    simp only at hj
+    cases hj
+
+theorem findFrom_complete (a : Array UInt8) (b : UInt8) :
+    ∀ k, findFrom a b k = none → ∀ j, k ≤ j → a[j]? ≠ some b := by
+  intro k
+  induction k using findFrom.induct (a := a) (b := b) with
+  | case1 k heq =>
+    intro hnone
+    rw [findFrom.eq_1, heq] at hnone
+    simp only at hnone
+    cases hnone
+  | case2 k x heq hnb ih =>
+    intro hnone j hkj
+    rw [findFrom.eq_1, heq] at hnone
+    simp only [ite_eq_right hnb] at hnone
+    by_cases hjk : j = k
+    · subst hjk
+      rw [heq]
+      intro hc
+      exact hnb (Option.some.inj hc)
+    · exact ih hnone j (by omega)
+  | case3 k heq =>
+    intro _ j hkj hjb
+    have hge := Array.getElem?_eq_none_iff.mp heq
+    obtain ⟨hjs, -⟩ := Array.getElem?_eq_some_iff.mp hjb
+    omega
+
+theorem findFrom_finds (a : Array UInt8) (b : UInt8) (k : Nat)
+    (h : ∃ j, k ≤ j ∧ a[j]? = some b) : ∃ i, findFrom a b k = some i := by
+  apply Option.ne_none_iff_exists'.mp
+  intro hnone
+  obtain ⟨j, hkj, hjb⟩ := h
+  exact findFrom_complete a b k hnone j hkj hjb
+
+/-- The `findByte` refinement is a definitional identity: `findByte a off b` is the
+constructive scan `findFrom` of `a.data` from `off`.
+
+**Axiom footprint: `[propext]`** — it reduces to `findFrom`'s unfolding, which
+consults `getElem?` (a `propositional decision over the array bound), so `propext`
+is pulled in while `Quot.sound` is not. That is inside the `[propext, Quot.sound]`
+-only gate, and **no `Classical.choice` appears** — the point of the rewrite. The
+earlier body (`Array.findIdx?`) reported `[propext, Classical.choice, Quot.sound]`
+while this docstring claimed `[propext]`; the measurement now matches the prose.
+
+**Honest limit, unchanged by the rewrite.** `#print axioms` sees the Lean body,
+never `Codec/ByteSlice.c`. Making this law witness-clean does **not** make the C
+proven: the Layer-2 trust contract stands, and "no `Classical.choice`" is still not
+"no trust". -/
 theorem findByte_spec (a : ByteArray) (off : USize) (b : UInt8) :
     findByte a off b =
-      match Array.findIdx? (fun x => x == b) (a.data.extract off.toNat a.data.size) with
-      | some i => some (off + i.toUSize)
+      match findFrom a.data b off.toNat with
+      | some i => some i.toUSize
       | none => none := by
   rfl
 
