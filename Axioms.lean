@@ -64,11 +64,11 @@ nix develop --command lake env lean scripts/gen-axioms.lean
 
 ## Current state
 
-**364** public theorems are covered, by a partition with no third route:
+**382** public theorems are covered, by a partition with no third route:
 
 | side | count | what it is |
 | --- | --- | --- |
-| gated (`gatedNames`) | **292** | footprint pinned by `#print axioms` |
+| gated (`gatedNames`) | **310** | footprint pinned by `#print axioms` |
 | allowlisted (`generatedAuxAllowlist`) | **72** | not a law; reason recorded in place |
 | un-gated and unlisted | **0** | a build failure, by construction |
 
@@ -76,13 +76,21 @@ Gated footprint distribution:
 
 | footprint | count |
 | --- | --- |
-| `[propext, Quot.sound]` | 197 |
-| `[propext]` | 61 |
+| `[propext, Quot.sound]` | 201 |
+| `[propext]` | 74 |
 | `[Quot.sound]` | 4 |
-| axiom-free | 30 |
+| axiom-free | 31 |
 | `[propext, Classical.choice, Quot.sound]` | **0** |
 
-`Codec.Nat.eq_irrel` is one of the axiom-free 30, and it is in the gated set only
+**These numbers are asserted, not transcribed** (`headerNumbers`, at the end of this
+file): a stale table is a build failure. That is not decoration — this table said
+`364 / 292` and `197 / 61 / 4 / 30` after the gated set had already reached
+`382 / 310` and `201 / 74 / 4 / 31`, because `partition`/`gateCoverage` compare set
+*membership* and never read the prose. `codec-audit-round-three` §1.9 tracks
+generating the distribution from the compiler instead of restating it; until then the
+assertion keeps it honest.
+
+`Codec.Nat.eq_irrel` is one of the axiom-free 31, and it is in the gated set only
 since `codec-audit-round-two`: the suffix classifier had been dropping it as an
 `eq_irrel`-shaped auxiliary, which is what motivated the partition.
 
@@ -564,6 +572,8 @@ def gatedNames : List Lean.Name := [
   ,`Codec.relRepeat_suffix_inj
   ,`Codec.relRepeat_unbounded_of_empty
   ,`Codec.relRepeat_unique_same_length
+  ,`Codec.relUnambAlignedWitness_unamb
+  ,`Codec.relUnambiguous_not_implies_relAligned
   ,`Codec.relUnambiguous_of_relAligned
   ,`Codec.rel_byte_cast
   ,`Codec.remaining_at_cursor
@@ -693,6 +703,39 @@ run_cmd do
         m!"{String.join (exclusionOverlap.toList.map fun n => s!"  {Name.toString n}\n")}"
     throwError msg
   logInfo m!"axiom gate: {pub.size} public theorems partitioned, {gatedNames.length} gated and {CodecAxioms.generatedAuxAllowlist.size} allowlisted"
+
+/-! **Header check**, run on every `lake build`. The "Current state" tables at the top
+of this file are prose, and `partition`/`gateCoverage` compare set *membership* — so a
+regeneration leaves them stale silently. It happened: the tables read
+`364 / 292` and `197 / 61 / 4 / 30` while the tree was already at
+`382 / 310` and `201 / 74 / 4 / 31`. This check makes the numbers **asserted**:
+a mismatch fails the build naming both sides.
+
+Keep these constants in lockstep with the tables above. `codec-audit-round-three`
+§1.9 tracks replacing the constants with compiler-emitted output; until then this is
+what keeps the transcription honest. -/
+open Lean Elab Command in
+run_cmd do
+  let env ← getEnv
+  let pub := CodecAxioms.publicTheorems env
+  let gated := gatedNames.length
+  let allow := CodecAxioms.generatedAuxAllowlist.size
+  -- Lockstep with "Current state" above.
+  let expectedPub := 382
+  let expectedGated := 310
+  let expectedAllow := 72
+  let mut bad : Array String := #[]
+  if pub.size != expectedPub then
+    bad := bad.push s!"public theorems: table says {expectedPub}, environment has {pub.size}"
+  if gated != expectedGated then
+    bad := bad.push s!"gated: table says {expectedGated}, gatedNames has {gated}"
+  if allow != expectedAllow then
+    bad := bad.push s!"allowlisted: table says {expectedAllow}, generatedAuxAllowlist has {allow}"
+  if gated + allow != pub.size then
+    bad := bad.push s!"table does not add up: {gated} + {allow} != {pub.size}"
+  if !bad.isEmpty then
+    throwError m!"the \"Current state\" table is stale (update it and expected* here):\n{String.join (bad.toList.map fun s => s!"  {s}\n")}"
+  logInfo m!"axiom gate: header numbers verified ({expectedPub} = {expectedGated} + {expectedAllow})"
 
 end CodecAxioms
 
@@ -1483,6 +1526,12 @@ why it was fixed instead of documented.
 /-- info: 'Codec.relRepeat_unique_same_length' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.relRepeat_unique_same_length
+/-- info: 'Codec.relUnambAlignedWitness_unamb' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Codec.relUnambAlignedWitness_unamb
+/-- info: 'Codec.relUnambiguous_not_implies_relAligned' does not depend on any axioms -/
+#guard_msgs in
+#print axioms Codec.relUnambiguous_not_implies_relAligned
 /-- info: 'Codec.relUnambiguous_of_relAligned' does not depend on any axioms -/
 #guard_msgs in
 #print axioms Codec.relUnambiguous_of_relAligned
