@@ -30,9 +30,38 @@ mirror the `decodeFull_spec` template (`Codec.Decode`):
 2. **Gated** — under `Functional d` (one value determines one count), the
    `decodeArray_functional_count` lemma pins the consumed count; under
    `Unambiguous d`, two `decodeArray` results that consume the same count agree
-   on the value (`decodeArray_unambiguous_value`, proved below). Together these
-   pin `decodeArray d a i` to at most one result, and the committed decoder then
-   *equals* the unique result, with nothing silently discarded.
+   on the value (`decodeArray_unambiguous_value`, proved below).
+
+**Those two halves do NOT compose into "at most one result", and an earlier
+revision of this header said they did.** Measured counterexample: take a
+hypothetical `d` with `Rel d x "ab"` and `Rel d y "a"`. `Unambiguous d` holds
+vacuously (it only compares *equal-length* strings) and `Functional d` holds (each
+value sits at exactly one string), yet `decodeArray` yields **two** results,
+`(x, 2)` and `(y, 1)`. `decodeArray_functional_count` takes `x₁ = x₂` as a
+hypothesis and `decodeArray_unambiguous_value` takes `c₁ = c₂`, so each consumes the
+other's conclusion across the count gap that this example inhabits.
+
+The statement that is actually true — and is now proved, not promised — needs a
+**third** hypothesis: `RelAligned (Rel d)`, i.e. that values are identified by
+their shared byte prefix across lengths. That is exactly what the counterexample
+violates (`y`'s `"a"` is a prefix of `x`'s `"ab"` but `y ≠ x`).
+
+3. **Composed uniqueness** — `decodeArray_unique` (below): under `Functional d`
+   **and** `RelAligned (Rel d)`, `decodeArray d a i` has at most one result. The
+   proof aligns the two consumed prefixes (`prepend_prefix_agree`, a `Suffix`-level
+   `splice_prefix_agree`), uses `RelAligned` to identify the values, and then
+   `Functional` to identify the counts. `[propext, Quot.sound]`-only.
+   `decodeArray_unique_byte` is the instance at `Codec.byte`, discharging both
+   hypotheses with `functional_byte`/`relAligned_byte`, so the law is
+   demonstrably non-vacuous.
+
+**What is still not proved, stated rather than implied.** The committed decoder's
+*completeness* — that `decodeOne d a i` succeeds whenever `decodeArray d a i` is
+non-empty, hence `decodeOne` *equals* the unique result — is **not** proved here.
+`decodeOne_mem` gives soundness unconditionally; the composition above gives the
+uniqueness half the gate needs. The remaining step is the `seq` commitment (the
+first `d₁` result may be a dead end), which is exactly the case the gating contract
+is about and which is recorded as open rather than advertised as done.
 
 The unconditional `decode (d₁ | d₂) s = decode d₁ s ++ decode d₂ s` law is **not
 touched** — `decode`/`decodeArray` remain the full backtracking union; `decodeOne`
@@ -165,13 +194,19 @@ theorem decodeOne_mem {α : Type} (d : Codec α) (a : Array UInt8) (i c : Nat) (
         · simp [hp] at h
       · simp [hlt] at h
 
-/-- **`Functional` and `Unambiguous` are establishable for a concrete `d`.** Both
-were used only as hypotheses, and nothing in the tree established either for any
-description, so a typo in either definition — quantifying over the wrong `s`,
-say — could not surface. These two base instances (`Codec.byte`, the leaf every
-downstream format starts from) are the smoke test; `Codec.Sound.unambiguous_byte`
-and `functional_byte` give the `Rel`-level proof and these the `decodeArray`-level
-one the committed decoder actually gates on.
+/-- **The `decodeArray`-level mirror of `Functional`, at `Codec.byte`.** Two
+`decodeArray byte a i` results that agree on the **value** agree on the count.
+
+**What this is, and what it is not.** It is *not* an instance of the `Functional`
+definition (`Codec.Sound.Functional`), and it must not be read as one:
+`Functional d` is `∀ x s₁ s₂, Rel d x s₁ → Rel d x s₂ → (⟨n₁, s₁⟩ = ⟨n₂, s₂⟩)`, a
+statement about the **step relation** at *variable* length with a *fixed* value.
+The theorem below is the **mirror shape**: it fixes the value `x₁ = x₂` and
+compares the **consumed counts** of two packed results — quantifier order and the
+object compared are both different, which is why it cannot discharge a `Functional`
+hypothesis anywhere. The actual `Functional Codec.byte` instance is
+`Codec.Sound.functional_byte`; this one is the packed-side companion the committed
+decoder gates on.
 
 Proof shape: mirror `decodeOne_mem`'s `byte` case, so the `if`-guard reaches the
 `decodeArray` membership. Axiom-free. -/
@@ -187,8 +222,11 @@ theorem decodeArray_functional_byte (a : Array UInt8) (i : Nat) :
     rw [h₁.2, h₂.2]
   · simp [hlt] at h₁
 
-/-- Under `Unambiguous`, two same-count `decodeArray` results agree — established
-for `Codec.byte`, the companion of `decodeArray_functional_byte`. Axiom-free. -/
+/-- The same-value/same-count mirror of `decodeArray_functional_byte` for the
+unambiguity half: two `decodeArray byte a i` results that agree on the **count**
+agree on the value. Like its companion this is the **mirror shape**, not
+`Unambiguous Codec.byte` — that instance is `Codec.Sound.unambiguous_byte`, which
+compares two `Rel` steps at one length. Axiom-free. -/
 theorem decodeArray_unambiguous_byte (a : Array UInt8) (i : Nat) :
     ∀ {x₁ x₂ : UInt8} {c : Nat},
       (x₁, c) ∈ decodeArray Codec.byte a i →
@@ -310,5 +348,70 @@ theorem decodeArray_unambiguous_value {α : Type} (d : Codec α) (hd : Unambiguo
   rw [hs₀] at hrel₁
   have hxv : x₁' = x₂' := hd s₀₂ hrel₁ hrel₂
   rw [← hx₁', ← hx₂', hxv]
+
+/-- **Prefix agreement across two `Suffix.prepend`s at different lengths.** If two
+prepends of the same length-`n` string agree, the shorter prefix agrees pointwise
+with the longer one's first bytes — the `Suffix`-level twin of
+`splice_prefix_agree`, which is exactly what the composed uniqueness law needs to
+compare two results that consumed *different* amounts. `[propext, Quot.sound]`-only. -/
+theorem prepend_prefix_agree {n : Nat} (t₁ t₂ : Suffix n)
+    (s₀₁ : Bytes (n - t₁.remaining)) (s₀₂ : Bytes (n - t₂.remaining))
+    (heq : t₁.prepend s₀₁ = t₂.prepend s₀₂)
+    (hle : n - t₁.remaining ≤ n - t₂.remaining) :
+    ∀ (k : Fin (n - t₁.remaining)),
+      s₀₁ k = s₀₂ ⟨k.val, Nat.lt_of_lt_of_le k.isLt hle⟩ :=
+  splice_prefix_agree (Nat.sub_le n _) (Nat.sub_le n _) hle s₀₁ _ s₀₂ _ heq
+
+theorem decodeArray_unique {α : Type} (d : Codec α)
+    (hf : Functional d) (hal : RelAligned (Rel d))
+    (a : Array UInt8) (i : Nat) :
+    ∀ {x₁ x₂ : α} {c₁ c₂ : Nat},
+      (x₁, c₁) ∈ decodeArray d a i → (x₂, c₂) ∈ decodeArray d a i →
+      x₁ = x₂ ∧ c₁ = c₂ := by
+  intro x₁ x₂ c₁ c₂ h₁ h₂
+  rw [decodeArray_eq d a i] at h₁ h₂
+  rw [List.mem_map] at h₁ h₂
+  rcases h₁ with ⟨⟨x₁', t₁⟩, hp₁, he₁⟩
+  rcases h₂ with ⟨⟨x₂', t₂⟩, hp₂, he₂⟩
+  simp only at he₁ he₂
+  obtain ⟨hx₁, hc₁⟩ := Prod.mk.inj he₁
+  obtain ⟨hx₂, hc₂⟩ := Prod.mk.inj he₂
+  rcases (decode_spec d x₁' (bdrop i (arrayToBytes a)) t₁).1 hp₁ with ⟨s₀₁, hpre₁, hrel₁⟩
+  rcases (decode_spec d x₂' (bdrop i (arrayToBytes a)) t₂).1 hp₂ with ⟨s₀₂, hpre₂, hrel₂⟩
+  have hpre : t₁.prepend s₀₁ = t₂.prepend s₀₂ := hpre₁.symm.trans hpre₂
+  -- `consumedAbs` pins the prefix lengths to the counts
+  have hlen₁ : a.size - i - t₁.remaining = c₁ - i := by unfold consumedAbs at hc₁; omega
+  have hlen₂ : a.size - i - t₂.remaining = c₂ - i := by unfold consumedAbs at hc₂; omega
+  -- get x₁' = x₂' by aligning on whichever prefix is shorter
+  have hxx : x₁' = x₂' := by
+    rcases Nat.le_total (t₁.remaining) (t₂.remaining) with hrem | hrem
+    -- larger `remaining` ⇒ shorter prefix, so `t₂`'s prefix is the shorter one here
+    · have hle : a.size - i - t₂.remaining ≤ a.size - i - t₁.remaining :=
+        Nat.sub_le_sub_left hrem _
+      have key : x₂' = x₁' :=
+        hal (a := x₂') (b := x₁') s₀₂ s₀₁ hle hrel₂ hrel₁ (prepend_prefix_agree t₂ t₁ s₀₂ s₀₁ hpre.symm hle)
+      exact key.symm
+    · have hle : a.size - i - t₁.remaining ≤ a.size - i - t₂.remaining :=
+        Nat.sub_le_sub_left hrem _
+      exact hal (a := x₁') (b := x₂') s₀₁ s₀₂ hle hrel₁ hrel₂ (prepend_prefix_agree t₁ t₂ s₀₁ s₀₂ hpre hle)
+  refine ⟨?_, ?_⟩
+  · exact hx₁.symm.trans (hxx.trans hx₂)
+  have hl : a.size - i - t₁.remaining = a.size - i - t₂.remaining :=
+    (Sigma.mk.inj (hf x₁' s₀₁ s₀₂ hrel₁ (hxx ▸ hrel₂))).1
+  have hi₁ : i ≤ c₁ := by unfold consumedAbs at hc₁; omega
+  have hi₂ : i ≤ c₂ := by unfold consumedAbs at hc₂; omega
+  omega
+
+/-- The composed uniqueness law, at `Codec.byte`: `decodeArray byte a i` has at most
+one result. The concrete instance `decodeArray_unique` below is the general form;
+this one is stated separately because it discharges **both** hypotheses with the
+base instances `functional_byte`/`relAligned_byte` already proved, so the composed
+law is demonstrated non-vacuously for the leaf every downstream format starts from.
+`[propext, Quot.sound]`-only. -/
+theorem decodeArray_unique_byte (a : Array UInt8) (i : Nat) :
+    ∀ {x₁ x₂ : UInt8} {c₁ c₂ : Nat},
+      (x₁, c₁) ∈ decodeArray Codec.byte a i → (x₂, c₂) ∈ decodeArray Codec.byte a i →
+      x₁ = x₂ ∧ c₁ = c₂ :=
+  decodeArray_unique Codec.byte functional_byte relAligned_byte a i
 
 end Codec
