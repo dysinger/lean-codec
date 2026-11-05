@@ -13,11 +13,12 @@ Guidance for AI coding agents working in this repository.
 > That work happens in the sibling repo `../lean-basen` in that repo's own
 > `nix develop`, against the ledger here.
 >
-> **Current position, in one line:** one change open (`lean-basen`); **no release
-> blockers left** — §6.1, §6.2 and §6.3b all landed and are gated (§6.2, the
-> base64 `Zh==`/`Zm9=` whole-input lift, landed 2026-11-05). The next task is the
-> **archive checklist**: re-run `../lean-basen`'s recipe, confirm this change's
-> spec delta is a **superset** of `openspec/specs/basen/spec.md`, then archive.
+> **Current position, in one line:** one change open (`lean-basen`) and it is
+> **archivable** — **36/36 tasks complete**, all three release blockers closed,
+> and the two follow-up audit items (§6.4 axiom-gate coverage, §6.5 lint
+> suppressions) closed as well. §6.10 (toolchain pin) is verified and recorded as
+> an _owner decision_, not outstanding work. **The only remaining step is the
+> archive.**
 >
 > **The archive is a checklist, not a proof task.** The ledger's §6 section opens
 > with a fenced `NEXT SESSION` block giving the four steps. What it cannot tell
@@ -42,10 +43,15 @@ list; this file does not restate it.
 ### Archive blockers: all closed
 
 §6.1 (proof gate), §6.2 (base64 `Zh==`/`Zm9=` whole-input rejection) and §6.3b
-(base32 `MZ======`) are all landed and gated. Nothing in the ledger's §6 now
-blocks the archive; the remaining §6 items (6.4 gate coverage, 6.5 lint debt,
-6.10 toolchain skew) are explicitly not blockers, so do not let them displace
-the archive.
+(base32 `MZ======`) are all landed and gated, and the two post-audit items are
+also closed: **§6.4** now gates **418/418** public theorems (was 91/404), and
+**§6.5** removed every `set_option linter.… false` rather than deferring it.
+
+**§6.10 is not work — it is a question for the owner.** Verified: `lean-toolchain`
+pins `v4.30.0` but **nothing honours it** (`lake build -v` shows
+`…-lean4-4.34.1/bin/lean`; `default.nix` takes nixpkgs `lean4` and never reads
+the file). Bumping the pin to 4.34.1 and pinning the Nix build _down_ to 4.30.0
+are both defensible and are different repairs, so it is recorded, not guessed.
 
 **The one scoping lesson worth keeping, because it cost sessions.** §6.2 was for
 a month recorded as "repeatedly blocked on `Suffix`/`splice` index bookkeeping
