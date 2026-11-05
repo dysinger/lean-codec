@@ -141,6 +141,74 @@ theorem Rel_count_zero {α : Type} (p : Codec α) (xs : List α) {n : Nat} (s : 
     subst n
     exact ⟨(), rfl, (Rel_pure () () (s := s)).2 ⟨rfl, rfl⟩⟩
 
+/-- The one-step unfolding of `count (n+1) p`. Separate from `Rel_count_succ` because
+`count` is a `match` on `n`: `unfold count` on a goal mentions `count` at a *variable*
+`n`, which the elaborator will not reduce, so the body stays opaque and neither
+`Rel_iso` nor `Rel_seq` can fire. Stating the equation for `n+1` gives the recursive
+equation `whnf` already knows, and there the reduction is `rfl`. -/
+theorem count_succ {α : Type} (p : Codec α) (n : Nat) :
+    count (n + 1) p = Codec.iso (Iso.cons) (Codec.seq p (count n p)) := rfl
+
+/-- **`count`'s inductive step** — the law that makes `count` describable at every
+`n`, not only at `n = 0`.
+
+`Rel_count_zero` pins the base case; this is the step, and it is where `Iso.cons`
+and `Codec.seq` actually do their work: a list of `n+1` values relates to `s` iff `s`
+splits into a prefix relating the head through `p` and a remainder relating the tail
+through `count n p`. It is the missing premise for every law about a derived
+combinator built on `count` — `manyUpTo` most of all — and its absence was why
+`Combinators.lean`'s "free theorems" claim was false at a variable `n`.
+
+Both directions are a decomposition, not an induction: the step *is* `iso cons ∘ seq`,
+so `Rel_iso` and `Rel_seq` take it apart. `[propext]`-only. -/
+theorem Rel_count_succ {α : Type} (p : Codec α) (n : Nat) (xs : List α) {m : Nat}
+    (s : Bytes m) :
+    Rel (count (n + 1) p) xs s ↔
+      ∃ (x : α) (rest : List α) (k : Nat) (hk : k ≤ m) (s₁ : Bytes k)
+        (s₂ : Bytes (m - k)),
+        s = splice hk s₁ s₂ ∧ xs = x :: rest ∧ Rel p x s₁ ∧ Rel (count n p) rest s₂ := by
+  rw [count_succ, Rel_iso]
+  constructor
+  · rintro ⟨a, happly, hseq⟩
+    rw [Rel_seq] at hseq
+    rcases hseq with ⟨k, hk, s₁, s₂, hs, hp, hc⟩
+    rcases a with ⟨x, rest⟩
+    simp only [Iso.cons] at happly
+    injection happly with hxs
+    subst hxs
+    exact ⟨x, rest, k, hk, s₁, s₂, hs, rfl, hp, hc⟩
+  · rintro ⟨x, rest, k, hk, s₁, s₂, hs, rfl, hp, hc⟩
+    refine ⟨(x, rest), rfl, ?_⟩
+    exact (Rel_seq p (count n p) x rest (s := s)).2 ⟨k, hk, s₁, s₂, hs, hp, hc⟩
+
+/-- `seq p (count n p)` consumes whenever `p` does: the **left** factor is the one
+that has to consume, so the right factor may be `count 0 p`, which does not.
+
+This is the intermediate that makes the step's productivity provable, and it is
+why `count` needs two witnesses rather than one — see `countSuccConsumesByte`. -/
+theorem seqCountConsumesByte {α : Type} (p : Codec α) (hp : ConsumesByte p) (n : Nat) :
+    ConsumesByte (Codec.seq p (count n p)) := by
+  intro x m s t hmem
+  obtain ⟨t₁, t₂, hd₁, -, htrans⟩ := (decode_seq_mem p (count n p) x s t).1 hmem
+  have htr : t.remaining = t₂.remaining := congrArg Suffix.remaining htrans
+  have h₁ : t₁.remaining < m := hp x.1 s t₁ hd₁
+  have h₂ : t₂.remaining ≤ t₁.remaining := t₂.hle
+  omega
+
+/-- **`count` consumes at every `n+1`** — the productivity witness the `count`-shaped
+decoders need, and the companion of `Rel_count_succ`.
+
+Stated at `n+1` and deliberately **not** at `n`: `count 0 p` is
+`iso nil (pure ())`, whose decode leaves the buffer untouched, so it is *not*
+consuming and the general statement is false at `n = 0`. That is information rather
+than a gap — it is the same exception `pure` marks among the constructors, and it is
+what a caller composing `count` must know (start at `1`, or accept that the empty
+count consumes nothing). -/
+theorem countSuccConsumesByte {α : Type} (p : Codec α) (hp : ConsumesByte p) (n : Nat) :
+    ConsumesByte (count (n + 1) p) := by
+  rw [count_succ]
+  exact isoConsumesByte Iso.cons (Codec.seq p (count n p)) (seqCountConsumesByte p hp n)
+
 /-- `choice ps` relates iff some description in `ps` relates. -/
 theorem Rel_choice {α : Type} (ps : List (Codec α)) (x : α) {n : Nat} (s : Bytes n) :
     Rel (choice ps) x s ↔ ∃ d ∈ ps, Rel d x s := by
