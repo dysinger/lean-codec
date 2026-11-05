@@ -167,6 +167,17 @@ theorem satisfyConsumesByte (p : UInt8 → Bool) : ConsumesByte (Codec.satisfy p
       omega
     · simp [hb] at hmem
 
+/-- **`empty` consumes.** `empty` decodes to the empty list, so it has no result to
+bound — the witness is vacuous, but it is the one `Codec` constructor that had
+none. Its absence contradicted the claim made in `Codec.Sound`'s `ConsumesByte`
+section (`seqConsumesByte`/`isoConsumesByte` are presented as the fix for "every
+composed codec proved productivity by hand"): a downstream `d | empty`-shaped
+codec still had to hand-prove productivity at that node. `[propext, Quot.sound]`
+-only, zero `sorry`. -/
+theorem emptyConsumesByte {α : Type} : ConsumesByte (Codec.empty : Codec α) := by
+  intro x n s t hmem
+  simp [decode] at hmem
+
 /-- **`|` of two consumers consumes.** The `alt` case of `ConsumesByte`: an `alt`
 decodes by concatenation (`decode (d₁ | d₂) s = decode d₁ s ++ decode d₂ s`), so a
 membership in the union is a membership in one side, and that side's witness

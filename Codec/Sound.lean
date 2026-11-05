@@ -142,7 +142,12 @@ because the `seq` case reuses `decode_seq_mem`, which is defined above and is th
 membership lemma for `seq`. `Codec/Decode.lean` cannot import `Codec/Sound.lean`
 without a cycle.
 
-Both are `[propext, Quot.sound]`-only, zero `sorry`, zero `Classical.choice`. -/
+Both are `[propext, Quot.sound]`-only, zero `sorry`, zero `Classical.choice`.
+
+With `Codec.emptyConsumesByte` (`Codec/Decode.lean`) every `Codec` constructor now
+has a witness — `byte`/`satisfy` at the leaves, `alt`/`empty` in `Codec/Decode`,
+`seq`/`iso` here — so the "prove productivity by hand" step is gone at every node,
+not just the composed ones. -/
 
 /-- **`seq` of two consumers consumes.** The composition case: `seq d₁ d₂` threads
 two suffixes, so the second step's remaining length is bounded by the first's,
