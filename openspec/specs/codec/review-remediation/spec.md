@@ -53,9 +53,19 @@ exclusion — a measured footprint plus a reason — never as a claim of cleanli
 
 #### Scenario: A claim of "proved" names a declaration that exists
 
-- **WHEN** a docstring cites a theorem by name as authority for a claim
+- **WHEN** a docstring or a `README.md` section cites a declaration by name as
+  authority for a claim (including in a departure/invariant anchor such as `[S3]`)
 - **THEN** that name resolves to a real declaration in the same repository, so no
-  docstring asserts a fact "proved as `X`" while `X` was never written.
+  text asserts a fact "proved as `X`" while `X` was never written and no anchor
+  names a symbol that does not exist.
+
+#### Scenario: A guaranteed behaviour names the theorem that guarantees it
+
+- **WHEN** prose states that an input class is rejected, canonical, or otherwise
+  guaranteed a property (for example that non-canonical encodings are refused)
+- **THEN** that guarantee is stated by a theorem, or is explicitly described as
+  unchecked; prose SHALL NOT claim a behaviour is guaranteed when only the
+  mechanism that happens to produce it is present and no law pins it.
 
 ### Requirement: A proof ergonomics rule SHALL be recorded where it is consulted, once
 
