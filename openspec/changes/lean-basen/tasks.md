@@ -184,13 +184,41 @@ Base16.hexBlockUnapply 102 = some [54, 55]`.
 The substantive work (seven `Codec`-value bases + facade + bench + gate) is **done**
 and landed. All seven mechanical polish items (5.2–5.13) are closed. A
 pre-archive hypercritical audit (2026-11-04) then found **three release blockers**,
-recorded below as §6. They are fixed in this session before archiving.
+recorded below as §6. **Two are now closed** (6.1 the proof gate, 6.3b the
+base32 `MZ======` rejection); **§6.2 is the one remaining blocker.**
 
 ## 6. Pre-archive audit findings (2026-11-04) — release blockers
 
 A subagent reviewer compared `../lean-basen` against `../lean-codec` across four
 axes (project uniformity, theorem coverage, code quality, archive readiness).
 Three findings block the archive. Each was re-verified by hand here before fixing.
+
+> ### NEXT SESSION: do §6.2, and nothing else first
+>
+> **§6.3b is closed (2026-11-05).** One archive blocker is left: **§6.2's
+> whole-input lift**, `decodeFullB64 b64Zh = none`. It was re-scoped that same
+> session after measuring that its recorded obstacle did not exist — see the
+> re-scope note inside §6.2. It is now the **same 4-step shape as
+> `decodeFullB32_reject_MZ`, at 4 bytes instead of 8.**
+>
+> Concretely, next session:
+>
+> 1. Open `../lean-basen` in **its own** `nix develop` (not this repo's).
+> 2. Read `decodeFullB32_reject_MZ` in `BaseN/Base32.lean` — it is the worked
+>    template, and it is green and gated.
+> 3. Prove `decodeFullB64_reject_b64Zh : decodeFullB64 b64Zh = none`, then the
+>    `b64Zm9` twin (`decodeFullB64_reject_b64Zm9`), by the same recipe.
+> 4. Gate both in `Axioms.lean`; verify the gate is load-bearing by stubbing to
+>    `sorry` and confirming `lake build` fails naming the declaration.
+> 5. Close §6.3a (the commit-message claim) once the base64 theorems exist, and
+>    tick §6.2.
+>
+> **Only then** is the change archivable. Before archiving, re-read
+> `AGENTS.md`'s archive-hazard note: `lean-basen` MODIFIES "The `basen` bases are
+> `Codec` values", so check `openspec validate --all` after the archive too.
+>
+> §6.4 / §6.5 / §6.10 are **not** archive blockers (they are coverage, lint debt
+> and a toolchain-skew question respectively) — do not let them displace §6.2.
 
 - [x] 6.1 **THE PROOF GATE IS NOT ENFORCED — `lakefile.lean` has no
       `moreLeanArgs`.** `lean-codec/lakefile.lean:20` sets
@@ -255,18 +283,39 @@ Three findings block the archive. Each was re-verified by hand here before fixin
         `[propext, Quot.sound]`).
 
       **Still open — the whole-input lift.** `decodeFullB64 b64Zh = none`
-      remains unproved. The remaining obligation is exactly:
-      `decodeFullB64_some` gives `⟨blocks, t, tails⟩` with the tail decoding
-      successfully; one must show `blocks = []` (a 4-char *full* block cannot
-      contain the pads at slots 2/3, since a full-block element is
-      alphabet-only) and then apply `not_rel_b64TailElem_of_apply_none`. The
-      proof shape mirrors `decodeFullB64_reject_ZgAAAA`: `cases blocks` at the
-      `relRepeat_cons`/`relRepeat_nil` split, with
-      `Rel_b64BlockElem_canonical` killing the `cons` branch. Start by reading
-      that theorem, not by re-deriving it.
+      remains unproved.
 
-      **Do not restart from B.** The spike settled it; the cost is in
-      characterising `b64BlockDecodeLenient`, not in the §3.5 statement.
+      **RE-SCOPED 2026-11-05 (after §6.3b landed) — the recorded obstacle was
+      wrong, and the item is now much smaller than this note used to say.**
+      The previous text here claimed the lift was "repeatedly blocked on
+      `Suffix`/`splice` index bookkeeping in the `blocks = []` branch".
+      **Measured, not assumed:** for the 4-byte `Zh==` input,
+      `decodeRepeat b64BlockElem b64BlockConsumesByte 4 s` yields exactly
+      **one** decomposition — `[(0, 4)]`, i.e. `blocks = []`, `t.remaining = 4`
+      (verified by `#eval` this session). A base64 full block consumes exactly
+      4 bytes, so a 4-byte input **cannot** populate `blocks` and leave a
+      non-empty tail. There is therefore **no** `cons` branch to kill, no
+      `relRepeat_cons` split, no `splice` and no index transport — the entire
+      `ZgAAAA`-shaped difficulty is absent because that input was 8 bytes and
+      this one is 4.
+
+      **The remaining obligation is therefore exactly three steps:**
+      1. `cases h : decodeFullB64 b64Zh`; `decodeFullB64_some` gives
+         `⟨blocks, t, tail, hmem, htail, _, _⟩`;
+      2. `decodeRepeat` on 4 bytes gives `blocks = []`, `t.remaining = 4`
+         (`decodeRepeat_nil_mem_eq_id` gives `t = Suffix.id 4 b64Zh`), so the
+         tail run is one element consuming all 4 bytes;
+      3. `not_rel_b64TailElem_of_apply_none` against the literal block — the
+         step needs `List.ofFn sb₁ = [0x5A, 0x68, 0x3D, 0x3D]`, proved by the
+         **same `List.ext_getElem` + `∀ k (hk : k < 4), sb₁ ⟨k,hk⟩ = s₀ ⟨k,hk⟩`**
+         recipe that closed §6.3b (see that item); then `False.elim`.
+
+      **§6.3b is the worked template for exactly this** — `decodeFullB32_reject_MZ`
+      is the same 4-step shape at 8 bytes, and it landed green with the
+      `List.ext_getElem` helper. Start from it, not from `ZgAAAA`.
+
+      **Do not restart from B.** The spike settled the *approach*; only the
+      scoping note above was stale.
 
 - [~] 6.3a **Base64 commit message claims a theorem that did not exist.** —
   **PARTLY RESOLVED (block-level proved, whole-input open).** Commit `9d5074e` implied `b64Zh`/`b64Zm9` rejection
