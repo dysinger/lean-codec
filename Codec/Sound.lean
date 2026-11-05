@@ -144,10 +144,14 @@ without a cycle.
 
 Both are `[propext, Quot.sound]`-only, zero `sorry`, zero `Classical.choice`.
 
-With `Codec.emptyConsumesByte` (`Codec/Decode.lean`) every `Codec` constructor now
-has a witness — `byte`/`satisfy` at the leaves, `alt`/`empty` in `Codec/Decode`,
-`seq`/`iso` here — so the "prove productivity by hand" step is gone at every node,
-not just the composed ones. -/
+With `Codec.emptyConsumesByte` (`Codec/Decode.lean`) every **consuming** `Codec`
+constructor now has a `ConsumesByte` witness — `byte`/`satisfy` at the leaves,
+`alt`/`empty` in `Codec/Decode`, `seq`/`iso` here — so the "prove productivity by
+hand" step is gone at every node, not just the composed ones. The qualifier is
+load-bearing: `pure` is also a constructor (`Codec/Codec.lean`) and it does **not**
+consume, because it cannot (`not_productive_pure`, below). The omission is
+information, not a gap — the two facts together say exactly which constructors are
+productive by construction and that `pure` is the one exception by necessity. -/
 
 /-- **`seq` of two consumers consumes.** The composition case: `seq d₁ d₂` threads
 two suffixes, so the second step's remaining length is bounded by the first's,
@@ -678,6 +682,190 @@ def Functional {α : Type} (d : Codec α) : Prop :=
   ∀ x {n₁ n₂ : Nat} (s₁ : Bytes n₁) (s₂ : Bytes n₂),
     Rel d x s₁ → Rel d x s₂ → (⟨n₁, s₁⟩ : Sigma fun n => Bytes n) = ⟨n₂, s₂⟩
 
+/-! ### `Unambiguous` is not a congruence for `seq` — proved, not assumed
+
+The `_byte` suppliers below establish that each predicate is **satisfiable**, not that
+it is **inherited**. `seq` is exactly where that matters, and the closure lemma one
+would reach for —
+
+```
+Unambiguous d₁ → Unambiguous d₂ → Unambiguous (seq d₁ d₂)      -- FALSE
+```
+
+— is false. The witness is below and is fully proved (`[propext, Quot.sound]`-only,
+zero `sorry`), so the negative result is a result rather than an omission.
+
+The root cause is that `seq`'s split point is **existentially quantified**: two
+results may agree on the string and disagree on where it was cut. `Unambiguous` sees
+only the value at a whole string, so a value that consumes a byte and a value that
+consumes none are both "unambiguous" in their own right.
+
+Concretely: `bo := alt (iso bIso byte) (pure false)` relates `true` to the one-byte
+string `single 0` and `false` to the empty string — one value per string, so `bo` is
+`Unambiguous`. Take `whole := seq bo d2` with `d2 := alt (pure ()) (iso unitIso byte)`,
+which relates `()` to strings of length 0 **and** 1. Then at the single input
+`single 0`:
+
+* split `m = 1`: `bo` gives `true`, `d2` takes the empty rest → `(true, ())`;
+* split `m = 0`: `bo` gives `false`, `d2` takes the whole byte → `(false, ())`.
+
+Two distinct values, one one-byte input. `Unambiguous whole` is refuted
+(`uniqSeq_not_congruent`), and so is `RelAligned (Rel whole)`
+(`uniqSeq_not_relAligned`) — for the same witness, since both values sit on the very
+same string.
+
+**The obligation is satisfiability, not congruence.** `Functional ∧ RelAligned` is
+what `decodeArray_unique` (`Codec/DecodeOne.lean`) actually consumes, and no composed
+codec inherits a leaf's uniqueness. Every uniqueness-gated law in this tree
+(`encode_of_decode`, `encode_injective_of_unambiguous`, `decodeArray_unique`,
+`decodeFull_spec`) is therefore a **leaf-only** law. -/
+
+/-- The leaf iso of the counterexample: `0 ↦ true`, every other byte rejected. -/
+def uniqSeqIso : Iso UInt8 Bool where
+  apply := fun a => if a = 0 then some true else none
+  unapply := fun b => match b with | true => some 0 | false => none
+  law := by
+    intro a b
+    constructor
+    · intro h
+      split at h
+      · rename_i ha
+        simp only [Option.some.injEq] at h
+        subst h
+        simp [ha]
+      · simp at h
+    · intro h
+      cases b with
+      | false => simp at h
+      | true =>
+          simp only [Option.some.injEq] at h
+          subst h
+          simp
+
+/-- A `Unit` codec whose only accepted string is the one byte `0`. -/
+def uniqSeqUnitIso : Iso UInt8 Unit where
+  apply := fun a => if a = 0 then some () else none
+  unapply := fun _ => some 0
+  law := by
+    intro a b
+    cases b
+    constructor
+    · intro h
+      split at h
+      · rename_i ha
+        simp [ha]
+      · simp at h
+    · intro h
+      have ha : a = 0 := (Option.some.inj h).symm
+      simp [ha]
+
+/-- The leaf codec `iso uniqSeqIso byte`: relates `true` to exactly the byte `0`. -/
+def uniqSeqBt : Codec Bool := iso uniqSeqIso Codec.byte
+
+/-- **Unambiguous**: relates `true` to `single 0` and `false` to `emptyBytes`. -/
+def uniqSeqBo : Codec Bool := alt uniqSeqBt (pure false)
+
+/-- **Unambiguous**: relates `()` to strings of length `0` *and* of length `1`. -/
+def uniqSeqD2 : Codec Unit := alt (pure ()) (iso uniqSeqUnitIso Codec.byte)
+
+/-- The composition whose `Unambiguous` claim fails. -/
+def uniqSeqWhole : Codec (Bool × Unit) := seq uniqSeqBo uniqSeqD2
+
+/-- The one-byte input both values are related to. -/
+def uniqSeqInput : Bytes 1 := single (0 : UInt8)
+
+theorem uniqSeqBo_unambiguous : Unambiguous uniqSeqBo := by
+  intro x y n s hx hy
+  simp only [uniqSeqBo, uniqSeqBt, Rel_alt, Rel_pure, Rel_iso] at hx hy
+  rcases hx with ⟨a, ha, hb⟩ | ⟨ha, hn⟩
+  · rcases hy with ⟨b, hb', hc⟩ | ⟨hb', hn⟩
+    · obtain ⟨_, hlen⟩ := hb
+      obtain ⟨_, hlen'⟩ := hc
+      have hxa : x = true := by
+        simp only [uniqSeqIso] at ha
+        split at ha
+        · simp only [Option.some.injEq] at ha
+          exact ha.symm
+        · simp at ha
+      have hya : y = true := by
+        simp only [uniqSeqIso] at hb'
+        split at hb'
+        · simp only [Option.some.injEq] at hb'
+          exact hb'.symm
+        · simp at hb'
+      rw [hxa, hya]
+    · obtain ⟨e, _⟩ := hb
+      omega
+  · rcases hy with ⟨b, hb', hc⟩ | ⟨hb', hn'⟩
+    · obtain ⟨e, _⟩ := hc
+      omega
+    · rw [ha, hb']
+
+theorem uniqSeqD2_unambiguous : Unambiguous uniqSeqD2 := by
+  intro x y n s hx hy
+  simp only [uniqSeqD2, Rel_alt, Rel_pure, Rel_iso] at hx hy
+  rcases hx with ⟨-, hn⟩ | ⟨a, -, hb⟩
+  · rcases hy with ⟨-, hn'⟩ | ⟨b, -, hb⟩
+    · cases x; cases y; rfl
+    · obtain ⟨e, _⟩ := hb
+      omega
+  · rcases hy with ⟨-, hn'⟩ | ⟨b, -, hb⟩
+    · obtain ⟨e, _⟩ := hb
+      omega
+    · cases x; cases y; rfl
+
+theorem uniqSeqBo_true : Rel uniqSeqBo true uniqSeqInput := by
+  simp only [uniqSeqBo, uniqSeqBt, Rel_alt, Rel_iso]
+  refine Or.inl ⟨0, ?_, ?_⟩
+  · simp [uniqSeqIso]
+  · rw [Rel_byte]
+    exact ⟨rfl, rfl⟩
+
+theorem uniqSeqBo_false : Rel uniqSeqBo false emptyBytes := by
+  simp only [uniqSeqBo, Rel_alt]
+  exact Or.inr (by rw [Rel_pure]; exact ⟨rfl, rfl⟩)
+
+theorem uniqSeqD2_zero : Rel uniqSeqD2 () emptyBytes := by
+  simp only [uniqSeqD2, Rel_alt]
+  exact Or.inl (by rw [Rel_pure]; exact ⟨rfl, rfl⟩)
+
+theorem uniqSeqD2_one : Rel uniqSeqD2 () uniqSeqInput := by
+  simp only [uniqSeqD2, Rel_alt]
+  refine Or.inr ⟨0, by simp [uniqSeqUnitIso], ?_⟩
+  rw [Rel_byte]
+  exact ⟨rfl, rfl⟩
+
+/-- The `true` branch: `bo` consumes the byte, `d2` takes the empty rest. -/
+theorem uniqSeqWhole_true : Rel uniqSeqWhole (true, ()) uniqSeqInput := by
+  unfold uniqSeqWhole
+  rw [Rel_seq]
+  refine ⟨1, Nat.le_refl 1, uniqSeqInput, ?_, ?_, uniqSeqBo_true, ?_⟩
+  · exact cast (congrArg Bytes (by decide : 1 - 1 = 0)).symm emptyBytes
+  · decide
+  · exact uniqSeqD2_zero
+
+/-- The `false` branch: `bo` consumes nothing, `d2` takes the whole byte. -/
+theorem uniqSeqWhole_false : Rel uniqSeqWhole (false, ()) uniqSeqInput := by
+  unfold uniqSeqWhole
+  rw [Rel_seq]
+  refine ⟨0, Nat.zero_le 1, emptyBytes, ?_, ?_, uniqSeqBo_false, ?_⟩
+  · exact cast (congrArg Bytes (by decide : 1 - 0 = 1)).symm uniqSeqInput
+  · decide
+  · exact uniqSeqD2_one
+
+/-- **`Unambiguous` does not compose under `seq`.** Both halves are unambiguous, yet
+`seq bo d2` relates two distinct values to the one-byte input `single 0`. -/
+theorem uniqSeq_not_congruent : ¬ Unambiguous uniqSeqWhole := by
+  intro hunamb
+  have hbad := hunamb uniqSeqInput uniqSeqWhole_true uniqSeqWhole_false
+  exact absurd hbad (by simp)
+
+/-- The counterexample stated as the production it refutes: both halves unambiguous,
+the composition not. -/
+theorem uniqSeq_unambiguous_not_congruent :
+    Unambiguous uniqSeqBo ∧ Unambiguous uniqSeqD2 ∧ ¬ Unambiguous uniqSeqWhole :=
+  ⟨uniqSeqBo_unambiguous, uniqSeqD2_unambiguous, uniqSeq_not_congruent⟩
+
 /-- **Encoder completeness**: every value in the denotation encodes successfully. -/
 theorem encode_ne_none {α : Type} (d : Codec α) (x : α) {n : Nat} (s : Bytes n) :
     Rel d x s → encode d x ≠ none := by
@@ -740,6 +928,26 @@ theorem encode_ne_none {α : Type} (d : Codec α) (x : α) {n : Nat} (s : Bytes 
       rcases hrel with ⟨hp, h, hs⟩
       subst h
       simp [hp]
+
+/-! ### The `_byte` suppliers establish SATISFIABILITY, never INHERITANCE
+
+Every theorem in this block (`unambiguous_byte`, `functional_byte`, `lengthDet_byte`,
+`lengthConst_byte`, `relAligned_byte`, `huniq_byte`) says the same kind of thing: the
+predicate is **inhabited** at `Codec.byte`, so the definitions are not vacuously
+true and a typo in one of them (quantifying over the wrong `s`, say) would show up.
+
+They say **nothing** about composition, and must not be read as licence to assume a
+composed codec inherits its leaves' uniqueness. It does not: `seq` is where the
+split point is existentially quantified, and `uniqSeq_not_congruent` /
+`uniqSeq_not_relAligned` above prove that both `Unambiguous` and `RelAligned` fail to
+compose there while every leaf is unambiguous.
+
+The consequence, stated plainly: **every uniqueness-gated law in this tree is
+leaf-only.** `encode_of_decode`, `encode_injective_of_unambiguous`,
+`decodeArray_unique` and `decodeFull_spec` are proved under a hypothesis that must be
+*discharged for each concrete carrier*, and the discharges in this file are all at
+`Codec.byte`. A downstream format that composes must supply `Functional ∧
+RelAligned` (or `huniq`) for its own description — the leaves do not donate it. -/
 
 /-- `Unambiguous` is **satisfiable**, not decorative: `byte` relates every value to
 exactly one byte string (`Rel_byte`). This is a base instance the definition needs
@@ -925,6 +1133,19 @@ def RelAligned {α : Type} (R : α → {m : Nat} → Bytes m → Prop) : Prop :=
   ∀ ⦃a b : α⦄ {m₁ m₂ : Nat} (t₁ : Bytes m₁) (t₂ : Bytes m₂) (hle : m₁ ≤ m₂),
     R a t₁ → R b t₂ →
     (∀ (i : Fin m₁), t₁ i = t₂ ⟨i.val, Nat.lt_of_lt_of_le i.isLt hle⟩) → a = b
+
+/-- **`RelAligned` does not compose under `seq` either.** The `Unambiguous`/`seq`
+counterexample above is also a witness against `RelAligned`: the two values
+`(true, ())` and `(false, ())` are related to the *same* one-byte string, so the
+alignment hypothesis instantiates at `hle := refl` with equal prefixes and demands
+they be equal. So neither uniqueness-family predicate is inherited by a `seq`
+composition — `Functional ∧ RelAligned` is a *hypothesis you supply*, never one you
+get for free from the leaves. -/
+theorem uniqSeq_not_relAligned : ¬ RelAligned (Rel uniqSeqWhole) := by
+  intro balanced
+  have hbad := balanced uniqSeqInput uniqSeqInput (Nat.le_refl 1) uniqSeqWhole_true
+    uniqSeqWhole_false (fun _ => rfl)
+  exact absurd hbad (by simp)
 
 /-- **`RelAligned` implies `relUnambiguous`**: at one fixed length a value is
 identified by its own bytes, so two values related to the same `s` are equal — the
