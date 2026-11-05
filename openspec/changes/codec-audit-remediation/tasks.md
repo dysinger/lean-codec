@@ -21,20 +21,20 @@
 
 ## 2. `findByte` axiom leak (P0)
 
-- [ ] 2.1 Reimplement `Codec.findByte` (`Codec/ByteSlice.lean`) constructively —
+- [x] 2.1 Reimplement `Codec.findByte` (`Codec/ByteSlice.lean`) constructively —
       explicit `Nat`/`USize` recursion over the array instead of
       `Array.findIdx?` — so no `Decidable` instance with a classical route is
       consulted. `Codec/ByteSlice.c` is unchanged: the C contract is still
       `memchr`-shaped, and this is a Lean-body change only
-- [ ] 2.2 Remove the §1.3 exclusion once `findByte_spec` measures
+- [x] 2.2 Remove the §1.3 exclusion once `findByte_spec` measures
       `[propext, Quot.sound]` (or `[propext]`, matching its siblings)
-- [ ] 2.3 Update `findByte_spec`'s docstring to the **measured** footprint, and keep
+- [x] 2.3 Update `findByte_spec`'s docstring to the **measured** footprint, and keep
       the honest limit: `#print axioms` sees the Lean body, never the C
-- [ ] 2.4 Update `README.md`'s Performance-section sentence that repeats the wrong
+- [x] 2.4 Update `README.md`'s Performance-section sentence that repeats the wrong
       `[propext]` claim, so prose and measurement agree
-- [ ] 2.5 Verify the emitted IR still calls the C symbol rather than the Lean body
+- [x] 2.5 Verify the emitted IR still calls the C symbol rather than the Lean body
       (`.lake/build/ir/Codec/ByteSlice.c`), so the seam was not silently unwired
-- [ ] 2.6 If 2.1 turns out to cost an unreasonable proof, fall back to design D2(A):
+- [x] 2.6 If 2.1 turns out to cost an unreasonable proof, fall back to design D2(A):
       keep `findIdx?`, state the exclusion with its measured footprint, and describe
       it as **excluded**, never clean. Record which branch was taken
 
