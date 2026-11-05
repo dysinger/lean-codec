@@ -43,18 +43,114 @@ namespace Codec
 open Iso
 
 /-- `p *> q` parses/prints `p` then `q`, keeping only `q` (ignoring `p`'s `()`).
-`p * q : Codec (Unit × α)`, mapped by `commute ≫ inverse unit : Iso (Unit × α) α`. -/
+
+The inner description is `p * q : Codec (Unit × α)`; the `Iso` that maps it is the
+composite `Iso.commute ≫ Iso.inverse Iso.unit`, whose **type is
+`Iso (Unit × α) α`**. An earlier revision of this docstring said
+`Iso (Unit × α) α` but wrote the composite as if its intermediate were the final
+type; the type is now pinned by `Rel_seqRight` below rather than by the definition
+site alone (where Lean silently fills any type in, so a wrong one cannot surface). -/
 def seqRight {α : Type} (p : Codec Unit) (q : Codec α) : Codec α :=
   Codec.iso (Iso.commute ≫ Iso.inverse (Iso.unit)) (Codec.seq p q)
 
 /-- `p <* q` parses/prints `p` then `q`, keeping only `p` (ignoring `q`'s `()`).
-`p * q : Codec (α × Unit)`, mapped by `inverse unit : Iso (α × Unit) α`. -/
+The inner description is `p * q : Codec (α × Unit)`, mapped by
+`Iso.inverse Iso.unit : Iso (α × Unit) α`. -/
 def seqLeft {α : Type} (p : Codec α) (q : Codec Unit) : Codec α :=
   Codec.iso (Iso.inverse (Iso.unit)) (Codec.seq p q)
 
-/-- `between open close p` is `open *> p <* close`. -/
+/-- `between open close p` is `open *> p <* close` — the paper's own §6.1
+combinator, so it is the one a porter reaches for first.
+
+Note the associativity: `open *> (p <* close)`, not `(open *> p) <* close`. Both
+read the same on the concrete syntax, and `Rel_between` below states the resulting
+decomposition so the choice is checkable rather than implicit. -/
 def between {α : Type} (l r : Codec Unit) (p : Codec α) : Codec α :=
   seqRight l (seqLeft p r)
+
+/-! ## `Rel` characterizations for the three `seq`-shaped combinators
+
+These are `Iso` rewrites over `Codec.seq` rather than new inductions: `seqRight` and
+`seqLeft` each strip one `Iso` layer off a `seq`, so `Rel_iso` + `Rel_seq` take them
+apart, and `between` composes the two. All three are `[propext]`-only.
+
+Why they matter: `between` is the paper's §6.1 combinator and `*>`/`<*` are its two
+halves, so a porter following the paper reaches for these first. Before this family
+landed, all three had **zero** theorems — the definitions were only ever checked at
+their own definition sites, which is exactly where a docstring type can be wrong
+without anything failing.
+
+**A proof note worth keeping.** `seqRight`'s `Iso` is a *composite*
+(`commute ≫ inverse unit`), and `simp only [Iso.trans, Iso.commute, Iso.inverse,
+Iso.unit]` leaves the equation in the shape
+`(some (y, u)).bind (fun b => some b.fst) = some x`. Case-splitting it with
+`injection`/`subst` on the outer `Option.some` is what closes it; adding
+`Option.some.injEq` to the same `simp` set does **not** fire on this shape and
+silently leaves `sorryAx` after the following `subst` (`#print axioms` catches it,
+the compiler does not). `seqLeft`'s shape is the one that `simp` does discharge. -/
+
+theorem Rel_seqRight {α : Type} (p : Codec Unit) (q : Codec α) (x : α) {n : Nat}
+    (s : Bytes n) :
+    Rel (seqRight p q) x s ↔
+      ∃ (m : Nat) (hm : m ≤ n) (s₁ : Bytes m) (s₂ : Bytes (n - m)),
+        s = splice hm s₁ s₂ ∧ Rel p () s₁ ∧ Rel q x s₂ := by
+  unfold seqRight
+  rw [Rel_iso]
+  constructor
+  · rintro ⟨a, happ, hseq⟩
+    rcases a with ⟨u, y⟩
+    simp only [Iso.trans, Iso.commute, Iso.inverse, Iso.unit] at happ
+    injection happ with hy
+    subst hy
+    rw [Rel_seq] at hseq
+    exact hseq
+  · rintro ⟨m, hm, s₁, s₂, hs, hp, hq⟩
+    refine ⟨((), x), rfl, ?_⟩
+    rw [Rel_seq]
+    exact ⟨m, hm, s₁, s₂, hs, hp, hq⟩
+
+theorem Rel_seqLeft {α : Type} (p : Codec α) (q : Codec Unit) (x : α) {n : Nat}
+    (s : Bytes n) :
+    Rel (seqLeft p q) x s ↔
+      ∃ (m : Nat) (hm : m ≤ n) (s₁ : Bytes m) (s₂ : Bytes (n - m)),
+        s = splice hm s₁ s₂ ∧ Rel p x s₁ ∧ Rel q () s₂ := by
+  unfold seqLeft
+  rw [Rel_iso]
+  constructor
+  · rintro ⟨a, happ, hseq⟩
+    rcases a with ⟨y, u⟩
+    simp only [Iso.inverse, Iso.unit] at happ
+    injection happ with hy
+    subst hy
+    rw [Rel_seq] at hseq
+    exact hseq
+  · rintro ⟨m, hm, s₁, s₂, hs, hp, hq⟩
+    refine ⟨(x, ()), rfl, ?_⟩
+    rw [Rel_seq]
+    exact ⟨m, hm, s₁, s₂, hs, hp, hq⟩
+
+/-- `between l r p` decomposes into three consecutive pieces: `l`, then `p`, then
+`r`, with the split lengths **nested** (`s₂` starts at `m₂ ≤ n - m₁`) because the
+second split is inside the first's remainder. Proved by composing `Rel_seqRight`
+with `Rel_seqLeft`; no induction. `[propext]`-only. -/
+theorem Rel_between {α : Type} (l r : Codec Unit) (p : Codec α) (x : α) {n : Nat}
+    (s : Bytes n) :
+    Rel (between l r p) x s ↔
+      ∃ (m₁ m₂ : Nat) (h₁ : m₁ ≤ n) (h₂ : m₂ ≤ n - m₁)
+        (s₁ : Bytes m₁) (s₂ : Bytes m₂) (s₃ : Bytes (n - m₁ - m₂)),
+        s = splice h₁ s₁ (splice h₂ s₂ s₃) ∧
+        Rel l () s₁ ∧ Rel p x s₂ ∧ Rel r () s₃ := by
+  unfold between
+  rw [Rel_seqRight]
+  constructor
+  · rintro ⟨m, hm, s₁, s₂, hs, hl, hin⟩
+    rw [Rel_seqLeft] at hin
+    rcases hin with ⟨m', hm', p₁, p₂, hcast, hpp, hrr⟩
+    exact ⟨m, m', hm, hm', s₁, p₁, p₂, by rw [hs, hcast], hl, hpp, hrr⟩
+  · rintro ⟨m₁, m₂, h₁, h₂, s₁, s₂, s₃, hs, hl, hp, hr⟩
+    refine ⟨m₁, h₁, s₁, splice h₂ s₂ s₃, hs, hl, ?_⟩
+    rw [Rel_seqLeft]
+    exact ⟨m₂, h₂, s₂, s₃, rfl, hp, hr⟩
 
 /-! ## Sum and optional combinators (not in the paper; `codec` additions) -/
 
