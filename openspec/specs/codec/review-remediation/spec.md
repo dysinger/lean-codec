@@ -20,6 +20,16 @@ The gate's axiom check SHALL be runnable inside this repository. A documented
 `#print axioms` example SHALL name a `lean-codec` declaration and be executable
 here, not only in a downstream repository.
 
+The **axiom half** of this gate SHALL be enforced on every build, not merely
+runnable by hand. `#print axioms` being available to a reader does not satisfy this
+requirement: a law whose footprint drifted to include `Classical.choice` would go
+unnoticed until someone chose to check it. The repository SHALL therefore gate the
+footprint of every public theorem automatically (see the `codec/axiom-gate`
+capability), and SHALL NOT describe a law's axiom footprint in prose unless that
+prose matches what the gate measures. Where a law is knowingly excluded from the
+`[propext, Quot.sound]`-only discipline, the exclusion SHALL be recorded as an
+exclusion — a measured footprint plus a reason — never as a claim of cleanliness.
+
 #### Scenario: A stubbed theorem fails the build
 
 - **WHEN** any theorem in `Codec/` or `Codec.lean` is replaced by `sorry`
@@ -33,6 +43,19 @@ here, not only in a downstream repository.
 - **THEN** the commands reference a `lean-codec` declaration
   (`#print axioms Codec.roundtrip`) and the repository's own toolchain, and they
   succeed from a clean checkout.
+
+#### Scenario: A documented axiom footprint matches the measurement
+
+- **WHEN** a law's docstring or `README.md` states an axiom footprint
+- **THEN** that statement matches what `#print axioms` actually reports for it, so a
+  law carrying `Classical.choice` is never described as `[propext]`-only, and a law
+  excluded from the discipline is described as excluded rather than clean.
+
+#### Scenario: A claim of "proved" names a declaration that exists
+
+- **WHEN** a docstring cites a theorem by name as authority for a claim
+- **THEN** that name resolves to a real declaration in the same repository, so no
+  docstring asserts a fact "proved as `X`" while `X` was never written.
 
 ### Requirement: A proof ergonomics rule SHALL be recorded where it is consulted, once
 
