@@ -253,7 +253,7 @@ archive.
       `decodeFull` agrees with `decodeRepeat` at empty remainder —
       `decodeFull p h n s = some xs ↔ (xs, Suffix.empty n) ∈ decodeRepeat p h n s`
       (and the `none`-case corollary `decodeFull p h n s = none ↔
-    (xs, Suffix.empty n) ∉ decodeRepeat p h n s` for all `xs`). Re-derive the
+(xs, Suffix.empty n) ∉ decodeRepeat p h n s` for all `xs`). Re-derive the
       dropped `decodeFullStep_*` lemmas over the `Suffix` carrier as needed.
       This replaces the docstring's unproved biconditional claim with a theorem
       and removes the one real "fully covered by theorems" gap (reviewer MAJOR-1).

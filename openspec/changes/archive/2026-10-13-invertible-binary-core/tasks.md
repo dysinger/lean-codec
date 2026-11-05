@@ -238,7 +238,7 @@ post-core deliverables (the paper's §4.4 open problem and the §7 transport tar
       `unfoldBy_sound`/`unfoldBy_of_fold` pair; `foldl`/`foldr` are now thin instantiations
       (`MeasureDecreases.toUnfold`/`MeasureDecreasesR.toUnfold` + `reconsLeft`/`reconsRight`),
       with `foldr`'s operand order recovered by the single `foldr f x bs =
-    foldl (fun a b => f b a) x bs.reverse` identity (`map_fst_reverse_eq_some`). Public
+foldl (fun a b => f b a) x bs.reverse` identity (`map_fst_reverse_eq_some`). Public
       `foldl`/`foldr`/`MeasureDecreases`/`MeasureDecreasesR` signatures unchanged, so
       `Combinators.lean` and the chain laws are untouched; axioms `[propext, Quot.sound]`
       preserved (`unfoldBy` itself is axiom-free); (c) dead code — **done**
