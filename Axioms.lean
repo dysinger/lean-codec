@@ -336,6 +336,9 @@ def gatedNames : List Lean.Name := [
   ,`Codec.Rel_empty
   ,`Codec.Rel_iso
   ,`Codec.Rel_manyUpTo
+  ,`Codec.Rel_maybe_none
+  ,`Codec.Rel_maybe_some
+  ,`Codec.Rel_optional_none
   ,`Codec.Rel_optional_some
   ,`Codec.Rel_pure
   ,`Codec.Rel_satisfy
@@ -796,6 +799,15 @@ why it was fixed instead of documented.
 /-- info: 'Codec.Rel_manyUpTo' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.Rel_manyUpTo
+/-- info: 'Codec.Rel_maybe_none' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Codec.Rel_maybe_none
+/-- info: 'Codec.Rel_maybe_some' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Codec.Rel_maybe_some
+/-- info: 'Codec.Rel_optional_none' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Codec.Rel_optional_none
 /-- info: 'Codec.Rel_optional_some' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Codec.Rel_optional_some
