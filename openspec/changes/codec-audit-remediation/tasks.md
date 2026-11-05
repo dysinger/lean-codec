@@ -76,25 +76,25 @@
 
 ## 5. `README.md` corrections (every claim below was falsified against the code)
 
-- [ ] 5.1 `[S3]`: add the shipped `takeWhile` triple
+- [x] 5.1 `[S3]`: add the shipped `takeWhile` triple
       (`relTakeWhile`/`decodeTakeWhile`/`encodeTakeWhile`,
       `Codec/Combinators.lean:774-810`) to the inventory of what core ships, noting
       it is `UInt8`-specialised and that no named format is defined in core
-- [ ] 5.2 `[S4]`: correct the dual's types to the code —
+- [x] 5.2 `[S4]`: correct the dual's types to the code —
       `foldl : Iso (α × β) α → Iso (α × List β) α`,
       `foldr : Iso (β × α) α → Iso (α × List β) α`. The README's `Iso ([α], β) β` is
       not the code, so the stated reason for type-incoherence must be restated in
       terms of the step's argument order
-- [ ] 5.3 `packedCands`: two tables give `k=1` as both 86 ns and 75 ns (and `k=2` as
+- [x] 5.3 `packedCands`: two tables give `k=1` as both 86 ns and 75 ns (and `k=2` as
       106 and 95) for the same lane. Keep one, or label each with its run conditions;
       recompute the stated per-candidate delta from the surviving figures
-- [ ] 5.4 `[D4]` lay-terms paragraph: it reinstates the "`unapply` cannot choose"
+- [x] 5.4 `[D4]` lay-terms paragraph: it reinstates the "`unapply` cannot choose"
       diagnosis that the `[D4]` block above it explicitly disavows. Correct it to the
       `↔`-quantified-over-every-`a` form
-- [ ] 5.5 `[D7]`: `chainl1` needs four things, not three — `MeasureDecreases` is a
+- [x] 5.5 `[D7]`: `chainl1` needs four things, not three — `MeasureDecreases` is a
       separate argument from `Iso.foldl`
-- [ ] 5.6 Scope: replace the stale `lean-binary` with `lean-basen`
-- [ ] 5.7 Re-read the whole README against the audit's list and confirm no other
+- [x] 5.6 Scope: replace the stale `lean-binary` with `lean-basen`
+- [x] 5.7 Re-read the whole README against the audit's list and confirm no other
       contradicting figures remain — the README's own rule is that an internal
       inconsistency between two numbers is a legitimate defect
 
