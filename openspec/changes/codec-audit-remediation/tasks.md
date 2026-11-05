@@ -40,23 +40,23 @@
 
 ## 3. Docstrings that assert what is not true
 
-- [ ] 3.1 `Codec/Sound.lean:910` cites `relUnambiguous_of_relAligned` as proved; it
+- [x] 3.1 `Codec/Sound.lean:910` cites `relUnambiguous_of_relAligned` as proved; it
       does not exist. Write the lemma if it is true; if it is **false**, prove the
       refutation and correct the docstring (design D4). Never leave the citation
       dangling either way
-- [ ] 3.2 `Codec/DecodeOne.lean` header promises the committed decoder "equals the
+- [x] 3.2 `Codec/DecodeOne.lean` header promises the committed decoder "equals the
       unique result" — unproved, and the two ingredient lemmas take each other's
       conclusions as hypotheses. State and prove the composition under
       `Functional d ∧ Unambiguous d`; at minimum prove the `Codec.byte` instance
       (design D3's `decodeOne_byte_eq`, ~6 lines) and a general gated form where
       reachable
-- [ ] 3.3 If the general composition in 3.2 is not reachable, correct the module
+- [x] 3.3 If the general composition in 3.2 is not reachable, correct the module
       header to claim only what is proved (soundness + the two halves) and record the
       general form as open. Do not keep advertising an unproved theorem
-- [ ] 3.4 `Codec/DecodeOne.lean:168` presents `decodeArray_functional_byte` as a
+- [x] 3.4 `Codec/DecodeOne.lean:168` presents `decodeArray_functional_byte` as a
       `decodeArray`-level `Functional` instance; it is the mirror shape (fixed length
       index, variable values). Restate the docstring, or add the genuine instance
-- [ ] 3.5 Re-grep every docstring that says "proved as `X`" / "see `X`" and confirm
+- [x] 3.5 Re-grep every docstring that says "proved as `X`" / "see `X`" and confirm
       each named declaration resolves — the audit found three in this family, and the
       cheap check is one pass over the tree
 
