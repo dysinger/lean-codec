@@ -590,7 +590,7 @@ an in-tree caller**: there is no concrete codec here to call them, by design. Th
 consumers are the downstream repos. `[S3]` means this package cannot demonstrate
 them by example — that is the rule working as intended, not a gap to be closed here.
 
-## Scope## Scope
+## Scope
 
 - **`codec`** (this package): the pure framework — `Iso`, `Codec`, `Rel`, the two
   interpreters (the single `Bytes n` substrate), and the laws. **No
