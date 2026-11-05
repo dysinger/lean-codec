@@ -329,6 +329,7 @@ def gatedNames : List Lean.Name := [
   ,`Codec.Rel_cast
   ,`Codec.Rel_cast_symm
   ,`Codec.Rel_choice
+  ,`Codec.Rel_count_succ
   ,`Codec.Rel_count_zero
   ,`Codec.Rel_empty
   ,`Codec.Rel_iso
@@ -388,6 +389,8 @@ def gatedNames : List Lean.Name := [
   ,`Codec.consumedAbs_drop_one
   ,`Codec.consumedAbs_id
   ,`Codec.consumedAbs_remaining
+  ,`Codec.countSuccConsumesByte
+  ,`Codec.count_succ
   ,`Codec.cursor_bridge
   ,`Codec.decodeArray_bounded
   ,`Codec.decodeArray_bounded_upper
@@ -560,6 +563,7 @@ def gatedNames : List Lean.Name := [
   ,`Codec.search_nil_left
   ,`Codec.search_nil_right
   ,`Codec.seqConsumesByte
+  ,`Codec.seqCountConsumesByte
   ,`Codec.spec_at_advance
   ,`Codec.splice_add
   ,`Codec.splice_apply
@@ -762,6 +766,9 @@ why it was fixed instead of documented.
 /-- info: 'Codec.Rel_choice' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Codec.Rel_choice
+/-- info: 'Codec.Rel_count_succ' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Codec.Rel_count_succ
 /-- info: 'Codec.Rel_count_zero' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Codec.Rel_count_zero
@@ -939,6 +946,12 @@ why it was fixed instead of documented.
 /-- info: 'Codec.consumedAbs_remaining' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.consumedAbs_remaining
+/-- info: 'Codec.countSuccConsumesByte' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.countSuccConsumesByte
+/-- info: 'Codec.count_succ' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Codec.count_succ
 /-- info: 'Codec.cursor_bridge' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.cursor_bridge
@@ -1455,6 +1468,9 @@ why it was fixed instead of documented.
 /-- info: 'Codec.seqConsumesByte' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.seqConsumesByte
+/-- info: 'Codec.seqCountConsumesByte' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.seqCountConsumesByte
 /-- info: 'Codec.spec_at_advance' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.spec_at_advance
