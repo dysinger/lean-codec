@@ -907,7 +907,8 @@ lets the uniqueness induction compare the two decompositions' first steps when t
 lengths may differ. Satisfied by `byte` (`relUnambiguous` at `Bytes 1`).
 
 **Strength ordering, stated as theorems rather than prose.** `RelAligned R →
-relUnambiguous R` (proved as `relUnambiguous_of_relAligned`); the converse is what
+relUnambiguous R` (proved as `relUnambiguous_of_relAligned`, immediately below); the
+converse is what
 "at equal lengths it is exactly unambiguity" says, so `RelAligned` is *not
 strictly* stronger than `relUnambiguous` — there is no relation that is unambiguous
 and not aligned, and no such witness is worth hunting for. It is however strictly
@@ -919,6 +920,17 @@ def RelAligned {α : Type} (R : α → {m : Nat} → Bytes m → Prop) : Prop :=
   ∀ ⦃a b : α⦄ {m₁ m₂ : Nat} (t₁ : Bytes m₁) (t₂ : Bytes m₂) (hle : m₁ ≤ m₂),
     R a t₁ → R b t₂ →
     (∀ (i : Fin m₁), t₁ i = t₂ ⟨i.val, Nat.lt_of_lt_of_le i.isLt hle⟩) → a = b
+
+/-- **`RelAligned` implies `relUnambiguous`**: at one fixed length a value is
+identified by its own bytes, so two values related to the same `s` are equal — the
+`t₁ = t₂` case of alignment, where the shared-prefix premise is `rfl` at every
+index. This is the lemma `RelAligned`'s docstring cites as proved; it used to cite
+it while it did not exist (`codec-audit-remediation` 3.1, design D4).
+`[propext, Quot.sound]`-only. -/
+theorem relUnambiguous_of_relAligned {α : Type} {R : α → {m : Nat} → Bytes m → Prop}
+    (hal : RelAligned R) : relUnambiguous R := by
+  intro a b n s hra hrb
+  exact hal s s (Nat.le_refl n) hra hrb (fun _ => rfl)
 
 /-- Two splices of one string at lengths `m₁ ≤ m₂` agree on their `m₁`-prefix, read
 index-by-index. `[propext, Quot.sound]`-only. -/
