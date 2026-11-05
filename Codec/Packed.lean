@@ -723,19 +723,21 @@ theorem packedCands_consumes {α : Type} (d : Codec α) (_h : ConsumesByte d)
 re-rooted recursion at the advanced cursor and takes the first full consumption, or
 continues with the rest of the list. The packed mirror of `decodeFullStep_cons`.
 
-The proof is the recorded `match`-in-`match` recipe (`tasks.md` 6.1a trap 2): the
-unfold is a `conv` on the LHS, then `simp only` to force the inner `match`, then
-`split` for the outer one; `injection` on the discriminant equation re-aligns the
-`split`-generated binders with the stated ones, after which the two sides are
-syntactically equal and `rfl` closes it.
+The proof is a single `conv` on the LHS that rewrites the definition's own
+equation: on Lean **4.35.0** that closes the goal outright.
 
-**The `first | … | skip` wrapper is a cross-toolchain guard, not decoration.**
-On Lean 4.34.1 the `conv`+`rw` leaves the goal open and the `simp only`/`split`/
-`injection` tail is required; on **4.35.0** the same `conv`+`rw` closes the goal
-outright, so the tail then fails with "No goals to be solved". The remaining
-proof is unchanged — `first` just picks it when there is still work and does
-nothing when there is not. Without the wrapper this law is green on one
-toolchain and red on the other, which is how the 4.35.0 bump surfaced. -/
+Until the 4.35.0 bump this needed a `match`-in-`match` recipe after the `conv`
+(`simp only` to force the inner `match`, `split` for the outer one, then
+`injection` on the discriminant equation to re-align `split`'s binders with the
+stated ones — `tasks.md` 6.1a trap 2). 4.35.0 made the `rw` aggressive enough
+that it discharges the whole goal, so that tail became dead and was removed.
+While both toolchains were supported it was wrapped in `first | (tail) | skip`;
+the ecosystem is now pinned to 4.35.0, so the guard is gone too.
+
+**This is not vacuous, and the check for that is cheap.** A one-line proof can
+easily mean the goal closed for the wrong reason, so mutating an arm of the
+statement (`none => decodeFullArraySearch … rest` → `none => some []`) was
+verified to break it with `unsolved goals`. The law still says what it said. -/
 theorem decodeFullArraySearch_cons {α : Type} (d : Codec α) (h : ConsumesByte d)
     (a : Array UInt8) (k : Nat) (hk : k ≤ a.size) (acc : List α)
     (x : α) (c : Nat) (hmem : (x, c) ∈ decodeArray d a k ∧ k < c ∧ c ≤ a.size)
@@ -745,14 +747,6 @@ theorem decodeFullArraySearch_cons {α : Type} (d : Codec α) (h : ConsumesByte 
        | none => decodeFullArraySearch d h a k hk acc rest
        | some xs => some xs) := by
   conv => lhs; rw [decodeFullArraySearch.eq_def]
-  first
-    | (simp only
-       split
-       · simp at *
-       · rename_i heq
-         injection heq with h1 h2
-         simp_all)
-    | skip
 
 /-- **The search over the empty candidate list is `none`** — the packed mirror of
 `decodeFullStep_nil`. Note this case is *unreachable* at a live cursor under
