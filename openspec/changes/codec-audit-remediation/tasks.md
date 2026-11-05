@@ -100,9 +100,9 @@
 
 ## 6. Gates
 
-- [ ] 6.1 `nix develop --command lake build` — zero `sorry`, zero warnings, gate green
-- [ ] 6.2 `nix develop --command lake build bench` — bench still compiles and links
-- [ ] 6.3 `nix develop --command openspec validate --all`
-- [ ] 6.4 `nix flake check` (detached with `nohup`, never foregrounded)
-- [ ] 6.5 Commit per task family (gate / findByte / docstrings / coverage / README),
+- [x] 6.1 `nix develop --command lake build` — zero `sorry`, zero warnings, gate green
+- [x] 6.2 `nix develop --command lake build bench` — bench still compiles and links
+- [x] 6.3 `nix develop --command openspec validate --all`
+- [x] 6.4 `nix flake check` (detached with `nohup`, never foregrounded)
+- [x] 6.5 Commit per task family (gate / findByte / docstrings / coverage / README),
       individual files only, printing `git diff --cached --name-only` before each
