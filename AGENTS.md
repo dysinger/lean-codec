@@ -19,6 +19,14 @@ Guidance for AI coding agents working in this repository.
 > it holds the **stable** part — how to work here, what the gates are, and the traps
 > that have cost sessions. Status is computed from `openspec/`, never recorded here.
 >
+> **Where the next session starts, exactly.** §1.0–§1.4 are landed and gated
+> (16/56). Begin at **`tasks.md` §1.5** — the `sepBy`/`takeWhile` decode→encode
+> halves (`encodeSepBy_of_decode`, `encodeSepBy_ne_none`, and the `takeWhile`
+> twins), mirroring the already-proved `encodeChainl1_of_decode` /
+> `encodeChainl1_ne_none` in `Codec/Combinators.lean`. Locate them by name
+> (`grep -n 'theorem encodeChainl1_' Codec/Combinators.lean`), never by line number:
+> this file and the ledger both carried stale `:693,/646` figures within one session.
+>
 > **Round two is archived.** `2026-11-05-codec-audit-round-two` (42/42 tasks, its
 > three spec deltas synced into `openspec/specs/` and verified scenario-by-scenario)
 > is history. Round three's delta was authored against the _pre_-sync text, so when
@@ -40,10 +48,13 @@ Guidance for AI coding agents working in this repository.
 
 **One change is open; round two is archived history.**
 
-- `codec-audit-round-three` — **0/56 tasks**, `in-progress`. Authored 2026-11-05 from
+- `codec-audit-round-three` — **16/56 tasks**, `in-progress`. Authored 2026-11-05 from
   the third audit (three read-only reviewers; reports in `/tmp/r3-*.md`). §1 makes
   law coverage structural and §2 fixes prose; §2's claims depend on §1's laws, so
-  the order is not negotiable.
+  the order is not negotiable. **Read its `tasks.md` for the next task — not this
+  file.** Done so far: §1.0 (basen gate parity), §1.1 (`count` step), §1.2
+  (`manyUpTo`), §1.3 (`seq*`/`between`), §1.4 (`optional`/`maybe`/`choice`).
+  **Next: §1.5.**
 - `codec-audit-round-two` — **archived** 2026-11-05 as
   `openspec/changes/archive/2026-11-05-codec-audit-round-two/` (42/42 tasks, all
   gates green, three spec deltas synced and verified). Do not reopen it; read its
@@ -140,6 +151,28 @@ codec` — a `bad import` means a stale pin, never a wrong import.
 These cost time _this_ session and are the ones §1/§2 will run into. Read them
 before starting §1.
 
+- **The `Classical.choice` leak in §1.2 is the trap to carry into §1.5+ — carry a
+  `Nat` equation into an induction and a proof _compiles clean and leaks_.**
+  Proving `Rel (count k p) xs s ↔ xs.length = k ∧ …` by induction on `k` with
+  `xs.length = k` in context makes every `cases xs` a dependent match; the result is
+  `[propext, Classical.choice, Quot.sound]` with **no compiler error**, only
+  `#print axioms` shows it. Bisected: every ingredient was `[propext]`-only alone and
+  the leak appeared only when the recursive call carried the equation. **The fix:
+  recurse on the _list_ and let the length be `xs.length` derived from the term**
+  (`relRepeatToCount`). Applies to every `count`/length-shaped law still to come.
+- **A `simp only` set that does not fire leaves `sorryAx`, not an error.** For
+  `seqRight`'s composite `Iso`, `Option.some.injEq` does not match the
+  `(some (y,u)).bind … = some x` shape, and an attempt that dropped the `simp`
+  entirely still compiled. `injection … with h; subst h` is what closes it.
+  `seqLeft`'s shape _is_ `simp`-dischargeable, so the recipe does not transfer
+  between the two halves of the same family. Always `#print axioms` a new law family.
+- **`unfold <def>` does not reduce a `match`-`def` at a variable argument.**
+  `count` (matches on `n`) and `relRepeat` (matches on the list) both stay opaque, so
+  `Rel_iso`/`Rel_seq`/`relRepeat_cons` cannot fire. State the recursion equation as
+  its own `rfl` lemma (`count_succ`) or `cases` on the matched argument first.
+- **The gate catches your own new laws, by design — regenerate, do not investigate.**
+  Every law added in §1 fails `lake build` with `not pinned by this gate` until
+  `scripts/gen-axioms.lean` is run. That is §1.1 doing its job, not a regression.
 - **A `def` with no law is invisible to every gate.** `Axioms.lean`'s universe is
   `thmInfo` only, so a public `def` is in neither `gatedNames` nor
   `generatedAuxAllowlist` — it is not "un-gated", it is _outside the partition_.
@@ -235,7 +268,7 @@ different `checks` sets — never run one tree's recipe in the other.
 ### In `lean-codec` (this repo)
 
 ```bash
-nix develop --command lake build            # 13 jobs, zero warnings; FAILS on `sorry`
+nix develop --command lake build            # 15 jobs, zero warnings; FAILS on `sorry`
 nix develop --command lake build bench      # the bench lane (links Codec/ByteSlice.c)
 nix develop --command openspec validate --all   # after ANY spec or task edit
 ```
@@ -288,6 +321,21 @@ gates; a `Classical.choice` regression fails the build. To check one law by hand
 printf 'import BaseN\n#print axioms BaseN.Base64.decodeFullB64_reject_arity\n' > /tmp/c.lean
 nix develop --command lake env lean /tmp/c.lean    # expect [propext, Quot.sound]
 ```
+
+**Since §1.0 it also has a _mechanism_, not just blocks.** `lake build` now prints
+two lines and fails if either disagrees with the environment:
+
+```
+info: basen axiom gate: 446 public theorems covered (0 explicit exclusion(s))
+info: basen axiom gate: 483 public theorems partitioned, 437 pinned and 46 allowlisted
+```
+
+So a new `BaseN` law fails the build until it is pinned, and a stale pin fails too.
+Two traps, both hit in §1.0: a probe theorem must be **inside** `namespace BaseN.*`
+or it is outside the gated universe and the gate stays green; and a `lake build`
+that reports `Replayed Axioms` after you edited an imported module is reading a
+stale `.olean` — delete `.lake/build/lib/lean/{BaseN/…,Axioms}.olean` before
+believing a green result.
 
 ### The rail for a cross-repo import failure
 
