@@ -159,7 +159,11 @@ theorem Rel_between {α : Type} (l r : Codec Unit) (p : Codec α) (x : α) {n : 
 def optional {α : Type} [DecidableEq α] (p : Codec α) : Codec (Option α) :=
   Codec.alt (Codec.iso (Iso.optionSome) p) (Codec.pure none)
 
-/-- `maybe p` is an alias for `optional p`. -/
+/-- `maybe p` is an alias for `optional p`.
+
+The claim is checkable rather than asserted: `Rel_maybe_some` and `Rel_maybe_none`
+restate `optional`'s two laws at `maybe`, so a divergence between the alias and the
+thing it aliases would have to break one of them. -/
 def maybe {α : Type} [DecidableEq α] (p : Codec α) : Codec (Option α) :=
   optional p
 
@@ -204,8 +208,12 @@ of the primitives' `Rel_*` lemmas — no new induction, no gate. These
 representative lemmas pin down that claim; the full laws (`decode_spec`, `bidir`,
 `roundtrip`) hold unconditionally via `Codec.Sound`. -/
 
-/-- `optional p` relates `Option.some x` iff `p` relates `x` (the `none` case
-is `pure none`). -/
+/-- `optional p` relates `Option.some x` iff `p` relates `x`.
+
+Together with `Rel_optional_none` below this is a **complete** characterization of
+`optional`: an `Option α` value is either `some x` or `none`, and each case has its
+law. An earlier revision had only the `some` direction, which left `none` reachable
+only through the definition. -/
 theorem Rel_optional_some {α : Type} [DecidableEq α] (p : Codec α) (x : α)
     {n : Nat} (s : Bytes n) :
     Rel (optional p) (Option.some x) s ↔ Rel p x s := by
@@ -227,6 +235,47 @@ theorem Rel_optional_some {α : Type} [DecidableEq α] (p : Codec α) (x : α)
     left
     rw [Rel_iso]
     exact ⟨x, rfl, hp⟩
+
+/-- `optional p` relates `none` iff the input is empty — the `none` half of the
+characterization, reached through `pure none`.
+
+This is the case the audit found missing (`Rel_optional_some` was one direction
+only). It matters because `none` is *reachable*: a consumer decoding `optional p`
+needs to know that the empty input yields `none` and no other input does. -/
+theorem Rel_optional_none {α : Type} [DecidableEq α] (p : Codec α) {n : Nat}
+    (s : Bytes n) :
+    Rel (optional p) none s ↔ n = 0 := by
+  unfold optional
+  rw [Rel_alt]
+  constructor
+  · rintro (h | h)
+    · rw [Rel_iso] at h
+      rcases h with ⟨a, hsome, -⟩
+      cases hsome
+    · rw [Rel_pure] at h
+      exact h.2
+  · intro hn
+    right
+    exact (Rel_pure none none (s := s)).2 ⟨rfl, hn⟩
+
+/-- `maybe p` relates `Option.some x` iff `p` relates `x`.
+
+`maybe` is a bare alias for `optional`, so this is a one-line proof — **and that is
+the point**. An alias no theorem names has nothing a porter can reproduce: the
+README lists `maybe` in `[S3]`'s bounded-eight inventory, so the claim that it is
+`optional` has to be checkable from the proof surface rather than from a comment. -/
+theorem Rel_maybe_some {α : Type} [DecidableEq α] (p : Codec α) (x : α) {n : Nat}
+    (s : Bytes n) :
+    Rel (maybe p) (Option.some x) s ↔ Rel p x s := by
+  unfold maybe
+  exact Rel_optional_some p x s
+
+/-- `maybe p` relates `none` iff the input is empty — the `none` half for the alias. -/
+theorem Rel_maybe_none {α : Type} [DecidableEq α] (p : Codec α) {n : Nat}
+    (s : Bytes n) :
+    Rel (maybe p) none s ↔ n = 0 := by
+  unfold maybe
+  exact Rel_optional_none p s
 
 /-- `count 0 p` relates only the empty list to the empty bytes. -/
 theorem Rel_count_zero {α : Type} (p : Codec α) (xs : List α) {n : Nat} (s : Bytes n) :
@@ -317,7 +366,26 @@ theorem countSuccConsumesByte {α : Type} (p : Codec α) (hp : ConsumesByte p) (
   rw [count_succ]
   exact isoConsumesByte Iso.cons (Codec.seq p (count n p)) (seqCountConsumesByte p hp n)
 
-/-- `choice ps` relates iff some description in `ps` relates. -/
+/-- `choice ps` relates iff **some** description in `ps` relates.
+
+**What this gives, stated precisely so it is not over-read.** It is an
+*exists-in-list* characterization and nothing more:
+
+* it gives **no** ordering or multiplicity information. `Rel` is a `Prop`, so the
+  existential throws away which branch matched and how many did. `decode` does not
+  throw that away — `alt`'s decode is list concatenation, so the *order* of `ps`
+  determines the order of `decode`'s results, and `decode (choice [d, d]) x s`
+  yields each result **twice** while `Rel (choice [d, d])` carries it once. A porter
+  modelling `choice` as set union will match on `Rel` and diverge from `decode` on
+  multiplicity — the same mismatch `[D3]` records for `alt` itself;
+* it gives **no** bound. Combined with `mem_map_range_iff` it reaches a bounded
+  index (that is how `Rel_manyUpTo` works), but the bound lives in the `map`, not in
+  `Rel_choice`;
+* it gives **no** productivity or termination. `choice []` is `Codec.empty`, which
+  relates nothing — that is `Rel_empty`, not a consequence of this law.
+
+What it *is*: the bridge from a list of descriptions to a single `Codec`, and the
+only reason `manyUpTo` is statable at all. -/
 theorem Rel_choice {α : Type} (ps : List (Codec α)) (x : α) {n : Nat} (s : Bytes n) :
     Rel (choice ps) x s ↔ ∃ d ∈ ps, Rel d x s := by
   induction ps generalizing x s with
