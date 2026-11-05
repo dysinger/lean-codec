@@ -39,7 +39,7 @@ for why this cannot be imported. -/
 def localIsGeneratedAux (n : Name) : Bool :=
   let s := n.components.getLast!.toString
   s == "eq_def" || s == "inj" || s == "injEq" || s == "sizeOf_spec" ||
-    s == "congr_simp" || s == "dec" || s == "eq_irrel"
+    s == "congr_simp" || s == "dec" || s == "eq_irrel" || s == "induct"
 
 /-- Mirror of `CodecAxioms.gatedTheorems` in `Axioms.lean`. -/
 def localGatedTheorems (env : Environment) : Array Name := Id.run do

@@ -48,18 +48,22 @@ nix develop --command lake env lean scripts/gen-axioms.lean
 
 ## Current state
 
-**268** public theorems are gated. Footprint distribution:
+**273** public theorems are gated. Footprint distribution:
 
 | footprint | count |
 | --- | --- |
-| `[propext, Quot.sound]` | 181 |
-| `[propext]` | 54 |
+| `[propext, Quot.sound]` | 186 |
+| `[propext]` | 55 |
 | `[Quot.sound]` | 4 |
 | axiom-free | 28 |
-| `[propext, Classical.choice, Quot.sound]` | **1 — the exclusion below** |
+| `[propext, Classical.choice, Quot.sound]` | **0** |
 
-`Classical.choice` appears in exactly one law, and it is listed by name with its
-reason rather than silently omitted — see "Explicit exclusion" at the end.
+`Classical.choice` appears in **no** law. The one law that used to carry it —
+`Codec.findByte_spec`, which reached classical logic through `Array.findIdx?`'s
+`DecidableEq UInt8` — was rewritten onto a constructive `Nat`-recursion
+(`Codec.findFrom`) and now reports `[propext]`. The gate's first run recorded that
+leak as an explicit exclusion (`codec-audit-remediation` task 1.3); task 2 removed
+the leak and the exclusion with it. **The excluded set is empty.**
 -/
 
 namespace CodecAxioms
@@ -68,11 +72,15 @@ open Lean Elab Command
 
 /-- Non-authorial theorem names the compiler emits for every structure or `def`.
 None is a law a human wrote, and every one's footprint is derived from declarations
-that are themselves gated. -/
+that are themselves gated.
+
+`induct` is the `@[elab_as_elim]` principle Lean derives for a recursive `def` from
+its `termination_by` / structural recursion (here `findFrom.induct`); it is a proof
+of the recursion, not a law. -/
 def isGeneratedAux (n : Name) : Bool :=
   let s := n.components.getLast!.toString
   s == "eq_def" || s == "inj" || s == "injEq" || s == "sizeOf_spec" ||
-    s == "congr_simp" || s == "dec" || s == "eq_irrel"
+    s == "congr_simp" || s == "dec" || s == "eq_irrel" || s == "induct"
 
 /-- The gated set: every public theorem in the `Codec`/`Iso` namespaces, minus the
 compiler-generated auxiliaries, sorted. This is the **single** definition of "which
@@ -95,8 +103,14 @@ def gatedTheorems (env : Environment) : Array Name := Id.run do
 /-- Declarations knowingly excluded from the `[propext, Quot.sound]`-only discipline,
 by name. Each must also appear in the "Explicit exclusion" section at the end of
 this file, with its measured footprint and the reason. An exclusion is a decision on
-the record — never a silent omission, and never described in prose as clean. -/
-def exclusions : Array Name := #[`Codec.findByte_spec]
+the record — never a silent omission, and never described in prose as clean.
+
+**Currently empty.** The single law that needed an exclusion — `Codec.findByte_spec`
+— was made clean rather than excluded (`codec-audit-remediation` design D2, option
+B), so there is no entry. The mechanism is kept because the exclusion list is what
+makes an exclusion *visible* in the diff; deleting it would make the next one a
+silent addition to `isGeneratedAux` instead. -/
+def exclusions : Array Name := #[]
 
 -- BEGIN GENERATED gatedNames
 /-- The names this file actually pins a `#guard_msgs` block for. GENERATED — written
@@ -272,6 +286,11 @@ def gatedNames : List Lean.Name := [
   ,`Codec.fill_surj
   ,`Codec.filterMap_eq_map_of_forall
   ,`Codec.findByte_spec
+  ,`Codec.findFrom_complete
+  ,`Codec.findFrom_finds
+  ,`Codec.findFrom_least
+  ,`Codec.findFrom_min
+  ,`Codec.findFrom_sound
   ,`Codec.foldl_push_append
   ,`Codec.foldl_push_data
   ,`Codec.functional_byte
@@ -412,19 +431,26 @@ fix a law in `Codec/`, then regenerate. -/
 
 /-! ## Explicit exclusion
 
-The single law outside the `[propext, Quot.sound]`-only discipline, listed by name
-with its **measured** footprint and the reason. Per the `codec/axiom-gate` spec, an
-excluded law is described as *excluded*, never as clean; `Codec.findByte_spec`'s
-docstring states the measurement rather than an aspiration.
+**There are no exclusions.** Every gated law is inside the `[propext, Quot.sound]`
+-only discipline; `CodecAxioms.exclusions` is empty and `gateCoverage` reports zero
+exclusions on every build.
+
+The history is worth keeping because it is the shape an exclusion must take. The
+gate's first run found exactly one law outside the discipline:
 
 `Codec.findByte_spec` — `[propext, Classical.choice, Quot.sound]`. `findByte`'s body
-scans with `Array.findIdx?`, whose `DecidableEq UInt8` decision is propositional
-rather than definitional and so reaches classical logic. This is **not** a Layer-2
-C-trust exclusion (the C is invisible to `#print axioms` either way); it is an
-avoidable decision-procedure leak in the Lean body. Task 2 of the
-`codec-audit-remediation` change reimplements the scan constructively and removes
-this entry; until then the gate pins today's true state so the leak is visible in
-the diff rather than absent from it.
+then scanned with `Array.findIdx?`, whose `DecidableEq UInt8` decision is
+propositional rather than definitional and so reached classical logic. It was
+recorded here **by name with its measured footprint and this reason**, and marked
+*excluded*, never clean — the `codec/axiom-gate` rule. Task 2 of
+`codec-audit-remediation` then removed the cause rather than living with it: the
+scan is now the constructive `Nat`-recursion `Codec.findFrom`, and the law reports
+`[propext]`. The exclusion entry was deleted in the same commit that made the
+measurement clean, so the two can never disagree.
+
+It was **not** a Layer-2 C-trust exclusion (the C is invisible to `#print axioms`
+either way) — it was an avoidable decision-procedure leak in the Lean body, which is
+why it was fixed instead of documented.
 -/
 
 -- BEGIN GENERATED body
@@ -933,9 +959,24 @@ the diff rather than absent from it.
 /-- info: 'Codec.filterMap_eq_map_of_forall' does not depend on any axioms -/
 #guard_msgs in
 #print axioms Codec.filterMap_eq_map_of_forall
-/-- info: 'Codec.findByte_spec' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+/-- info: 'Codec.findByte_spec' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Codec.findByte_spec
+/-- info: 'Codec.findFrom_complete' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.findFrom_complete
+/-- info: 'Codec.findFrom_finds' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.findFrom_finds
+/-- info: 'Codec.findFrom_least' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.findFrom_least
+/-- info: 'Codec.findFrom_min' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.findFrom_min
+/-- info: 'Codec.findFrom_sound' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.findFrom_sound
 /-- info: 'Codec.foldl_push_append' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.foldl_push_append
