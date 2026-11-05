@@ -19,6 +19,23 @@ lean_lib codec where
   that compiles the library, including `checks.lean`. -/
   moreLeanArgs := #["-DwarningAsError=true"]
 
+/-- The axiom gate, made real — the other half of the proof gate above.
+
+`-DwarningAsError` catches `sorry`; nothing else in a plain build collects **axioms**,
+so a law that silently drifted to depend on `Classical.choice` would go unnoticed
+until a reader chose to check it. `Axioms.lean` pins every public theorem's exact
+`#print axioms` output with `#guard_msgs`, so a footprint regression is a build
+error. It is a `@[default_target]` lib (mirroring `../lean-basen/Axioms.lean`, which
+is where this shape is proven in this ecosystem) because that is what makes the gate
+ride on `lake build` instead of on someone remembering to run it.
+
+The `warningAsError` flag is set for the same reason as on `codec`: the gate must
+not be satisfiable by an unproven law, so a `sorry` reaching it has to fail too. -/
+@[default_target]
+lean_lib Axioms where
+  roots := #[`Axioms]
+  moreLeanArgs := #["-DwarningAsError=true"]
+
 /-- Compile the Layer-2 trust seam C (`Codec/ByteSlice.c`) into an object file.
 The `@[extern "codec_byteSlice"]` primitive is linked only into the `bench`
 executable (the packed path that consumes it), never into the proven library. -/
