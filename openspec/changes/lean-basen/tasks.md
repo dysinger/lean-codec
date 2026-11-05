@@ -210,29 +210,33 @@ A subagent reviewer compared `../lean-basen` against `../lean-codec` across four
 axes (project uniformity, theorem coverage, code quality, archive readiness).
 Three findings block the archive. Each was re-verified by hand here before fixing.
 
-> ### NEXT SESSION: the blockers are closed — verify, then archive
+> ### NEXT SESSION: archive `lean-basen`. That is the whole task.
 >
-> **§6.2 landed 2026-11-05.** All three audit blockers (6.1, 6.2, 6.3b) are
-> closed and gated, so **nothing here blocks the archive**. What remains is the
-> archive itself, and it is a _checklist_, not a proof task:
+> **Everything is closed** as of 2026-11-05: 36/36 tasks, all three release
+> blockers (6.1, 6.2, 6.3b) **and** both follow-up audit items (**6.4** the axiom
+> gate at complete 418/418 coverage, **6.5** every lint suppression removed) and
+> **6.10** (toolchain — the ecosystem is now on **Lean 4.35.0**). What remains is
+> the archive, and it is a _checklist_, not a proof task:
 >
 > 1. Open `../lean-basen` in **its own** `nix develop` (not this repo's) and
 >    re-run its recipe: `lake build` (zero `sorry`/warnings), `lake build bench`,
->    `nix build '.#bench'`, `nix flake check`.
+>    `nix build '.#bench'`, `nix flake check`. Expect 25 / 45 / exit 0 / exit 0.
 > 2. Re-read `openspec/specs/basen/spec.md` against this change's delta and
->    confirm the delta is a **superset** — the archive replaces the live
->    requirement wholesale, so a dropped scenario is silently lost.
-> 3. `openspec validate --all` here, then archive, then `openspec validate --all`
->    again (AGENTS.md's archive-hazard note: this change MODIFIES "The `basen`
->    bases are `Codec` values").
-> 4. **`openspec archive` does not check task completion** — confirm the ledger
->    shows 6.1/6.2/6.3a/6.3b ticked _before_ archiving, not because a green
->    archive said so.
+>    confirm the delta is a **superset**. **Already verified 2026-11-05** — the
+>    live spec has 17 scenarios across 7 requirements; this delta MODIFIES exactly
+>    **one** ("The `basen` bases are `Codec` values") and that block carries
+>    **both** of that requirement's live scenarios plus 2 new ones; the other 6
+>    requirements are untouched. Re-confirm, do not re-derive.
+> 3. `openspec validate --all` here, then `openspec archive lean-basen`, then
+>    `openspec validate --all` again (AGENTS.md's archive-hazard note: this
+>    change MODIFIES a live requirement, and a MODIFIED block replaces it
+>    wholesale).
+> 4. **`openspec archive` does not check task completion** — confirm by reading
+>    that all 36 boxes are ticked _before_ archiving, not because a green archive
+>    said so.
 >
-> §6.4 / §6.5 / §6.10 are **not** archive blockers (they are coverage, lint debt
-> and a toolchain-skew question respectively). §6.4 in particular is large
-> mechanical work; do not let it delay the archive, and do not let a green
-> archive be read as covering it.
+> **After the archive no change is open**, and the next task (another format
+> port) is an **owner decision** — do not guess it from this ledger.
 
 - [x] 6.1 **THE PROOF GATE IS NOT ENFORCED — `lakefile.lean` has no
       `moreLeanArgs`.** `lean-codec/lakefile.lean:20` sets
