@@ -25,9 +25,20 @@ lean_lib codec where
 so a law that silently drifted to depend on `Classical.choice` would go unnoticed
 until a reader chose to check it. `Axioms.lean` pins every public theorem's exact
 `#print axioms` output with `#guard_msgs`, so a footprint regression is a build
-error. It is a `@[default_target]` lib (mirroring `../lean-basen/Axioms.lean`, which
-is where this shape is proven in this ecosystem) because that is what makes the gate
-ride on `lake build` instead of on someone remembering to run it.
+error. It is a `@[default_target]` lib because that is what makes the gate ride on
+`lake build` instead of on someone remembering to run it.
+
+**On the direction this pattern travelled.** `../lean-basen` originated the *shape*
+(a `@[default_target]` `Axioms` lib), and this file inherited it. The *mechanism* is
+the other way round: `lean-codec`'s two audit rounds added the environment walk
+(`publicTheorems` / `partitionInto`) plus the `partition` and `gateCoverage`
+`run_cmd` checks, which make an un-gated law a **build failure** instead of a gap a
+maintainer has to notice. `../lean-basen` carried 440 hand-written `#guard_msgs`
+blocks with no `run_cmd` and no partition until `codec-audit-round-three` §1.0
+ported this mechanism back to it. An earlier revision of this comment said basen
+"is where this shape is proven in this ecosystem", which read as though the
+weaker version were the reference — it is not. Copy the mechanism, not just the
+lib shape.
 
 The `warningAsError` flag is set for the same reason as on `codec`: the gate must
 not be satisfiable by an unproven law, so a `sorry` reaching it has to fail too. -/
