@@ -1119,20 +1119,85 @@ that a value cannot be distinguished by bytes beyond its own step length. It is 
 lets the uniqueness induction compare the two decompositions' first steps when their
 lengths may differ. Satisfied by `byte` (`relUnambiguous` at `Bytes 1`).
 
-**Strength ordering, stated as theorems rather than prose.** `RelAligned R →
-relUnambiguous R` (proved as `relUnambiguous_of_relAligned`, immediately below); the
-converse is what
-"at equal lengths it is exactly unambiguity" says, so `RelAligned` is *not
-strictly* stronger than `relUnambiguous` — there is no relation that is unambiguous
-and not aligned, and no such witness is worth hunting for. It is however strictly
-stronger than `LengthDet` in the useful direction: `LengthDet R → RelAligned R`
-needs a `DecidableEq α`, i.e. a classical axiom, and is therefore **deliberately
-not** proved in this tree. The usable chain is `LengthConst → LengthDet`, proved as
-`lengthDet_of_lengthConst` (`codec-review-remediation` 2.6). -/
+**The relationship to `relUnambiguous` is *incomparability*, and it is measured.**
+`RelAligned R → relUnambiguous R` holds (proved as `relUnambiguous_of_relAligned`,
+immediately below). The converse is **false**, and an earlier revision of this
+docstring asserted it — "there is no relation that is unambiguous and not aligned,
+and no such witness is worth hunting for" — which was wrong. `relUnambiguous`
+quantifies over *one* length; `RelAligned` compares a shorter string against a longer
+one with a shared prefix, so unambiguity at a fixed length says nothing across
+lengths. The witness is `relUnambiguous_not_implies_relAligned`, below: let
+`S a t := (a = true ∧ m = 1) ∨ (a = false ∧ m = 2)`. Then `true` relates only at
+length 1 and `false` only at length 2, so the length pins the value and
+`relUnambiguous S` holds (`[propext, Quot.sound]`-only), while `RelAligned S` demands
+a length-1 and a length-2 string with a shared prefix relate equal values, which is
+false (`[propext]`-only). Neither predicate implies the other.
+
+**Why this matters rather than being pedantic.** The withdrawn sentence carried
+advice: "prove `relUnambiguous`, it is enough". It is not —
+`decodeArray_unique` needs `RelAligned` **and** `Functional`, and `relUnambiguous`
+supplies neither, so a caller following that advice would prove a hypothesis the law
+does not use and lack one it needs. State what the law requires.
+
+**`LengthDet` is a third, separate family.** `LengthDet R → RelAligned R` is
+plausible but unproved here; an earlier revision attributed that to needing a
+`DecidableEq α` / classical axiom, which is a claim about a proof route the authors
+tried, not a fact about the implication, and no theorem supports either half. It is
+**open**, and recorded as open rather than as "deliberately not proved". The usable
+proved chain is `LengthConst → LengthDet`, as `lengthDet_of_lengthConst`
+(`codec-review-remediation` 2.6). -/
 def RelAligned {α : Type} (R : α → {m : Nat} → Bytes m → Prop) : Prop :=
   ∀ ⦃a b : α⦄ {m₁ m₂ : Nat} (t₁ : Bytes m₁) (t₂ : Bytes m₂) (hle : m₁ ≤ m₂),
     R a t₁ → R b t₂ →
     (∀ (i : Fin m₁), t₁ i = t₂ ⟨i.val, Nat.lt_of_lt_of_le i.isLt hle⟩) → a = b
+
+/-! ### `relUnambiguous` and `RelAligned` are incomparable
+
+The witness the docstring above refers to. `S` relates `true` only at length 1 and
+`false` only at length 2, so at any *fixed* length there is at most one value
+(`relUnambiguous`), yet a length-1 string is a prefix of the length-2 string and the
+aligned values differ (`¬ RelAligned`).
+
+This is a theorem rather than a paragraph because the withdrawal of the old claim
+needs a counterexample on the record: "unambiguous implies aligned" was asserted for
+several revisions, and advice built on it ("prove `relUnambiguous`, it is enough")
+is unsound for `decodeArray_unique`, which needs `RelAligned` **and** `Functional`.
+
+Measured: `relUnambiguous S` is `[propext, Quot.sound]`-only; `¬ RelAligned S` is
+axiom-free. -/
+
+/-- Design D4's witness relation: `true` at length 1, `false` at length 2, nothing
+else. `Sw` mirrors the design doc's `S`, renamed to avoid colliding with any local
+`S`. -/
+def relUnambAlignedWitness (a : Bool) : {m : Nat} → Bytes m → Prop
+  | 1, _ => a = true
+  | 2, _ => a = false
+  | _, _ => False
+
+/-- `relUnambiguous` holds for the witness: within one length, at most one value
+relates, because the length *selects* the value. -/
+theorem relUnambAlignedWitness_unamb : relUnambiguous relUnambAlignedWitness := by
+  intro a b n s ha hb
+  match n, s, ha, hb with
+  | 1, _, ha, hb => exact ha.trans hb.symm
+  | 2, _, ha, hb => exact ha.trans hb.symm
+  | 0, _, h, _ => exact absurd h (by simp [relUnambAlignedWitness])
+  | _ + 3, _, h, _ => exact absurd h (by simp [relUnambAlignedWitness])
+
+/-- **`relUnambiguous` does not imply `RelAligned`** — the predicates are
+*incomparable* (the other direction is `relUnambiguous_of_relAligned`). -/
+theorem relUnambiguous_not_implies_relAligned : ¬ RelAligned relUnambAlignedWitness := by
+  intro h
+  have hlen : (1 : Nat) ≤ 2 := by decide
+  have ha : relUnambAlignedWitness true (m := 1) (fun _ => (0x41 : UInt8)) := rfl
+  have hb : relUnambAlignedWitness false (m := 2) (fun _ => (0x41 : UInt8)) := rfl
+  -- The shared 1-byte prefix: both strings are all-`0x41`, so any prefix agrees.
+  have hpre : ∀ (i : Fin 1), (fun _ : Fin 1 => (0x41 : UInt8)) i =
+      (fun _ : Fin 2 => (0x41 : UInt8)) ⟨i.val, Nat.lt_of_lt_of_le i.isLt hlen⟩ :=
+    fun _ => rfl
+  have := h (a := true) (b := false) (m₁ := 1) (m₂ := 2)
+    (fun _ : Fin 1 => (0x41 : UInt8)) (fun _ : Fin 2 => (0x41 : UInt8)) hlen ha hb hpre
+  exact absurd this (by decide)
 
 /-- **`RelAligned` does not compose under `seq` either.** The `Unambiguous`/`seq`
 counterexample above is also a witness against `RelAligned`: the two values
