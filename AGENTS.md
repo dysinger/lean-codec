@@ -2,29 +2,44 @@
 
 Guidance for AI coding agents working in this repository.
 
-> ## START HERE: one task, and the ledger says which
+> ## START HERE: one task left — archive `lean-basen`. The ledger has the detail.
 >
 > **The ledger is the single source of truth for what to do next:**
 > **[`openspec/changes/lean-basen/tasks.md`](openspec/changes/lean-basen/tasks.md)**.
-> Open it first; take the highest-numbered open item. This file deliberately does
-> not restate the task list, because a copy here is stale the moment the ledger
-> moves — which is exactly what happened to the version this replaced.
+> Its §6 opens with a fenced `NEXT SESSION` block with the exact steps. This file
+> deliberately does not restate the task list, because a copy here is stale the
+> moment the ledger moves — which is exactly what happened to the version this
+> replaced.
 >
 > That work happens in the sibling repo `../lean-basen` in that repo's own
 > `nix develop`, against the ledger here.
 >
-> **Current position, in one line:** one change open (`lean-basen`) and it is
-> **archivable** — **36/36 tasks complete**, all three release blockers closed,
-> and the two follow-up audit items (§6.4 axiom-gate coverage, §6.5 lint
-> suppressions) closed as well. §6.10 (toolchain pin) is verified and recorded as
-> an _owner decision_, not outstanding work. **The only remaining step is the
-> archive.**
+> **Current position, in one line:** one change open (`lean-basen`), **36/36
+> tasks complete**, status `complete`, **archivable**. All three release blockers
+> (§6.1, §6.2, §6.3b) and both follow-up audit items (§6.4, §6.5) are closed;
+> §6.10 (toolchain) is closed too — the ecosystem is on Lean 4.35.0. Nothing is
+> outstanding except the archive itself.
 >
-> **The archive is a checklist, not a proof task.** The ledger's §6 section opens
-> with a fenced `NEXT SESSION` block giving the four steps. What it cannot tell
-> you is that `openspec archive` **accepts an incomplete change without
-> complaint**, so a green archive is never evidence — confirm the ledger's boxes
-> are ticked separately.
+> ### What to do next session, exactly
+>
+> **Archive `lean-basen`. That is the whole task.** In order:
+>
+> 1. In `../lean-basen`, own `nix develop`: `lake build`, `lake build bench`,
+>    `nix build '.#bench'`, `nix flake check` — all four green.
+> 2. Re-read `openspec/specs/basen/spec.md` and confirm this change's delta is a
+>    **superset**. **Already checked 2026-11-05** (re-confirm, don't re-derive):
+>    the live spec has 17 scenarios across 7 requirements; the delta MODIFIES
+>    exactly **one** of them ("The `basen` bases are `Codec` values"), and that
+>    block carries **both** of that requirement's live scenarios plus 2 more.
+>    The other 6 requirements are not touched at all.
+> 3. `openspec validate --all` → `openspec archive lean-basen` → `openspec
+validate --all` again (this change MODIFIES a live requirement).
+> 4. **Confirm the 36 boxes are ticked by reading the ledger** — `openspec
+archive` **accepts an incomplete change without complaint**, so a green
+>    archive is never evidence of anything.
+>
+> After the archive, **no change is open**, and the next task (another format
+> port) is an **owner decision** — this file must not guess it.
 
 ## Current state
 
@@ -140,6 +155,18 @@ Each verified format/protocol is its own git repo, initialized from
 `BaseN`; `lean-vbin` → `vbin`; …), depending on `codec` **by flake input +
 `require codec from git` injection — never vendored**, and inheriting the
 single-`Bytes n`-substrate and `[propext, Quot.sound]`-only discipline.
+
+**Toolchain: the Lean 4 repos are on 4.35.0** (2026-11-05): `lean-codec`,
+`lean-basen` and `lean-nix-flake-template` all pin `lean-toolchain`
+`v4.35.0` and nixpkgs `1d06008`. Keep them in step — `lean-basen` fetches
+`codec` by rev, so a `codec` bump means `nix flake update codec` +
+`lake update codec` there. **`../workflow` is deliberately excluded**: it pins a
+`cauli/lean4` fork at sha `62b6a229` (base 4.33) so its emitted C matches the
+published WASM link kit, and `flake.nix` says explicitly "Do NOT move this pin".
+Do not bump it as part of an ecosystem-wide bump. Two traps from the last one:
+`lean-toolchain` is **inert** in these repos (nothing reads it — check
+`lake build -v`), and a `lake build` segfault right after a bump means stale
+`.lake` artifacts, so `rm -rf .lake` before diagnosing.
 
 In `../lean-basen`, `codec` is a flake input threaded into `default.nix`, which
 rewrites `require codec from git …` → a local `require codec from "./codec-src"`
