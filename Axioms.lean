@@ -48,14 +48,14 @@ nix develop --command lake env lean scripts/gen-axioms.lean
 
 ## Current state
 
-**273** public theorems are gated. Footprint distribution:
+**279** public theorems are gated. Footprint distribution:
 
 | footprint | count |
 | --- | --- |
-| `[propext, Quot.sound]` | 186 |
-| `[propext]` | 55 |
+| `[propext, Quot.sound]` | 190 |
+| `[propext]` | 56 |
 | `[Quot.sound]` | 4 |
-| axiom-free | 28 |
+| axiom-free | 29 |
 | `[propext, Classical.choice, Quot.sound]` | **0** |
 
 `Classical.choice` appears in **no** law. The one law that used to carry it —
@@ -254,6 +254,7 @@ def gatedNames : List Lean.Name := [
   ,`Codec.drop_trans_eq
   ,`Codec.drop_zero_eq_id
   ,`Codec.emptyBytes_unique
+  ,`Codec.emptyConsumesByte
   ,`Codec.encodeArrayFold_toList
   ,`Codec.encodeArray_eq
   ,`Codec.encodeByteArrayBytes_eq
@@ -383,6 +384,7 @@ def gatedNames : List Lean.Name := [
   ,`Codec.uniqCounterexample_unambiguous
   ,`Iso.apply_eq_some_of_unapply
   ,`Iso.bind_eq_some
+  ,`Iso.counterMeasureDecreases
   ,`Iso.dropLast_append_last
   ,`Iso.foldRec_append
   ,`Iso.ite_some_eq_some
@@ -870,6 +872,9 @@ why it was fixed instead of documented.
 /-- info: 'Codec.emptyBytes_unique' depends on axioms: [Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.emptyBytes_unique
+/-- info: 'Codec.emptyConsumesByte' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.emptyConsumesByte
 /-- info: 'Codec.encodeArrayFold_toList' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.encodeArrayFold_toList
@@ -1257,6 +1262,9 @@ why it was fixed instead of documented.
 /-- info: 'Iso.bind_eq_some' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Iso.bind_eq_some
+/-- info: 'Iso.counterMeasureDecreases' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Iso.counterMeasureDecreases
 /-- info: 'Iso.dropLast_append_last' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Iso.dropLast_append_last
