@@ -2,21 +2,21 @@
 
 ## 1. Axiom gate (root cause — do this first)
 
-- [ ] 1.1 Add `Axioms.lean` as a `@[default_target]` `lean_lib` in
+- [x] 1.1 Add `Axioms.lean` as a `@[default_target]` `lean_lib` in
       `lakefile.lean`, mirroring `../lean-basen/Axioms.lean`: a `#guard_msgs` (or
       `#print axioms` + guard equivalent) block covering every public theorem, so
       `lake build` fails on a footprint outside `[propext, Quot.sound]`
-- [ ] 1.2 Enumerate the theorem set programmatically rather than hand-listing it, so
+- [x] 1.2 Enumerate the theorem set programmatically rather than hand-listing it, so
       a newly added theorem is gated by default and cannot be silently omitted;
       record the enumeration mechanism in `Axioms.lean`'s module docstring
-- [ ] 1.3 Record the single current exclusion — `findByte_spec` with its measured
+- [x] 1.3 Record the single current exclusion — `findByte_spec` with its measured
       `[propext, Classical.choice, Quot.sound]` — **by name, with a reason**, so the
       gate's first green run documents today's true state (this exclusion is removed
       by §2.2)
-- [ ] 1.4 Verify the gate is load-bearing: perturb one theorem's footprint (swap a
+- [x] 1.4 Verify the gate is load-bearing: perturb one theorem's footprint (swap a
       cited definition for one reaching classical logic) and confirm `lake build`
       fails naming the declaration; restore
-- [ ] 1.5 Confirm `lake build` still exits 0 on the unmodified tree and that the gate
+- [x] 1.5 Confirm `lake build` still exits 0 on the unmodified tree and that the gate
       adds no new warnings (`-DwarningAsError` still applies to it)
 
 ## 2. `findByte` axiom leak (P0)
