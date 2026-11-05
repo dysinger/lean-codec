@@ -14,12 +14,17 @@ Guidance for AI coding agents working in this repository.
 > `nix develop`, against the ledger here.
 >
 > **Current position, in one line:** one change open (`lean-basen`, in progress,
-> not archivable); two release blockers left, both §6 rejection theorems. Work
-> **§6.3b before §6.2** — §6.3b is the simpler base32 twin and is not entangled
-> with §6.2's `Suffix`/`splice` problem. See `## Current state` for why, and the
-> traps that have already cost sessions.
+> not archivable); **one** release blocker left — **§6.2, the base64 whole-input
+> lift** (`decodeFullB64 b64Zh = none`). §6.3b landed 2026-11-05. See `## Current
+state` for why, and the traps that have already cost sessions.
 >
-> **Do not archive until both are closed.** `openspec archive` accepts an
+> **Next session is §6.2 and nothing else first.** The ledger's §6 section opens
+> with a fenced `NEXT SESSION` block giving the exact five steps. It is now a
+> 4-step proof at 4 bytes, and **`decodeFullB32_reject_MZ` in
+> `../lean-basen/BaseN/Base32.lean` is the worked, green, gated template** to
+> copy it from.
+>
+> **Do not archive until §6.2 is closed.** `openspec archive` accepts an
 > incomplete change without complaint, so a green archive proves nothing.
 
 ## Current state
@@ -36,47 +41,60 @@ One change is open, `lean-basen`, and its code lives in the sibling repo
 `../lean-basen` in that repo's own `nix develop`. Read the ledger for its task
 list; this file does not restate it.
 
-### The two remaining archive blockers (and why there are two, not one)
+### The one remaining archive blocker
 
-Both are §6 items in the ledger, recorded there in full. Stated here only so the
-_shape_ of the problem is not lost:
+Recorded in full in the ledger; stated here only so the _shape_ is not lost:
 
-- **§6.2 — the base64 whole-input lift.** `decodeFullB64 b64Zh = none`. Three
-  supporting lemmas are landed and gated; the lift itself is repeatedly blocked on
-  `Suffix`/`splice` index bookkeeping in the `blocks = []` branch. **The approach
-  is settled** (do not revisit it); the difficulty is purely transport plumbing.
-- **§6.3b — the base32 twin.** `MZ======` is named in a commit message with no
-  theorem behind it (`grep MZ BaseN/Base32.lean` → zero hits).
+- **§6.2 — the base64 whole-input lift.** `decodeFullB64 b64Zh = none` (and the
+  `b64Zm9` twin). The three supporting lemmas are landed and gated, so this is
+  **only** the lift.
 
-**Work §6.3b before §6.2.** It is structurally simpler (one 1-byte tail shape),
-reuses the base64 recipe and lemmas that already exist, and is **not entangled**
-with §6.2's `splice` problem. It closes one of two blockers without touching the
-hard one.
+**This file previously said §6.2 was "repeatedly blocked on `Suffix`/`splice`
+index bookkeeping in the `blocks = []` branch", and that was wrong.** Measured
+2026-11-05: for the 4-byte `Zh==` input, `decodeRepeat b64BlockElem …` yields
+**one** decomposition, `blocks = []`, `t.remaining = 4` — a base64 full block
+consumes exactly 4 bytes, so a 4-byte input cannot populate `blocks` at all.
+There is no `cons` branch to kill and no `splice` work. The `ZgAAAA`-shaped
+difficulty belonged to that 8-byte input, not to this one.
+
+**§6.3b (landed 2026-11-05) is the worked proof of that re-scoping:** it was
+the same 4-step shape at 8 bytes and it closed green in one session.
 
 ### Roadmap (shape only — the ledger has the detail)
 
-1. Close §6.3b, then §6.2. Both are rejection theorems, not new subsystems.
-2. Re-read `openspec/specs/basen/spec.md`, confirm §6.2's delta is a superset,
-   then archive `lean-basen`. **`openspec archive` does not check task completion**
-   — a green archive is not evidence of anything, so verify separately.
-3. Then the next format port (ordering is an owner decision; this file does not
+1. Close §6.2. Then re-read `openspec/specs/basen/spec.md`, confirm its delta is
+   a superset, then archive `lean-basen`. **`openspec archive` does not check
+   task completion** — a green archive is not evidence of anything, so verify
+   separately.
+2. Then the next format port (ordering is an owner decision; this file does not
    guess it).
 
 ### Traps that have actually cost sessions here
 
-- **`Suffix`/`splice` bookkeeping is where §6.2 dies.** Before touching it, read
-  `Codec`'s own `Suffix`/`splice` API and its existing read-through lemmas
-  directly. Six sessions were lost re-deriving them from
-  `decodeFullB64_reject_ZgAAAA` rather than reading them.
+- **`Suffix`/`splice` bookkeeping is _not_ where §6.2 dies — check the input
+  length before reaching for it.** The old version of this bullet asserted six
+  sessions were lost to `splice` in the `blocks = []` branch. Measured
+  2026-11-05, that branch is **trivial** for the actual 4-byte `Zh==` input
+  (`decodeRepeat` returns exactly one decomposition, `blocks = []`), because a
+  full base64 block is 4 bytes. Reach for `Suffix`/`splice` API reading only if
+  a `#eval` of the decomposition shows a non-empty `blocks`; do not assume it.
 - **`decodeFull` is not `decodeFullB64`.** The fixed-width bases use the `Run`
   combinator (unfolds with `WellFounded.fix_eq` + `decodeFullStep.eq_def` +
   `simp`); the padded bases use a `filterMap` composition that same recipe gets
   **stuck** on. Use `cases h : decodeFullB64 s` + `decodeFullB64_some` instead —
   the library never unfolds that recursion, and none of its own rejection
   theorems do either.
-- **A §3.5 pad-bit rejection is a `decide`, not an induction.** The check is
-  already `b64BlockApply`'s own guard, so the block-level law is `unfold` +
-  minimal `simp only` + `split` + `decide`. Only the lift is work.
+- **A §3.5 pad-bit rejection is a `decide`, not an induction** — but the recipe
+  does **not** transfer verbatim between bases. For base32,
+  `b32BlockDecodeLenient` matches an **8-binder** list, and both `split` (its
+  internal simp) and `simp_all` blow the simp step limit; `unfold … ; decide` on
+  the whole closed goal is what works. Base64's 4-binder version does close with
+  `split` + `decide`. See §6.3b's note in the ledger.
+- **A base32 twin transfers the proof _shape_, never the constants.** Base64's
+  `Zh==` needs `b64BlockUnapply [0x66] = some Zg==`; base32's `MZ======` needs
+  `MY======`, because the two bases pad at different widths. Re-`#eval` every
+  literal before writing the proof — `decide` will catch it, but only if you let
+  it.
 - **`../lean-basen` pins `codec` through `flake.lock`.** If it predates something
   this repo added, the fix is a targeted `nix flake update codec` + `lake update
 codec` — a `bad import` means a stale pin, never a wrong import.
