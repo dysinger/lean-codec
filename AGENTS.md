@@ -32,8 +32,8 @@ Guidance for AI coding agents working in this repository.
 >    exactly **one** of them ("The `basen` bases are `Codec` values"), and that
 >    block carries **both** of that requirement's live scenarios plus 2 more.
 >    The other 6 requirements are not touched at all.
-> 3. `openspec validate --all` → `openspec archive lean-basen` → `openspec
-validate --all` again (this change MODIFIES a live requirement).
+> 3. `openspec validate --all` → `openspec archive lean-basen` →
+>    `openspec validate --all` again (this change MODIFIES a live requirement).
 > 4. **Confirm the 36 boxes are ticked by reading the ledger** — `openspec
 archive` **accepts an incomplete change without complaint**, so a green
 >    archive is never evidence of anything.
@@ -160,17 +160,25 @@ Each verified format/protocol is its own git repo, initialized from
 `require codec from git` injection — never vendored**, and inheriting the
 single-`Bytes n`-substrate and `[propext, Quot.sound]`-only discipline.
 
-**Toolchain: the Lean 4 repos are on 4.35.0** (2026-11-05): `lean-codec`,
-`lean-basen` and `lean-nix-flake-template` all pin `lean-toolchain`
-`v4.35.0` and nixpkgs `1d06008`. Keep them in step — `lean-basen` fetches
-`codec` by rev, so a `codec` bump means `nix flake update codec` +
-`lake update codec` there. **`../workflow` is deliberately excluded**: it pins a
-`cauli/lean4` fork at sha `62b6a229` (base 4.33) so its emitted C matches the
-published WASM link kit, and `flake.nix` says explicitly "Do NOT move this pin".
-Do not bump it as part of an ecosystem-wide bump. Two traps from the last one:
-`lean-toolchain` is **inert** in these repos (nothing reads it — check
-`lake build -v`), and a `lake build` segfault right after a bump means stale
-`.lake` artifacts, so `rm -rf .lake` before diagnosing.
+**Toolchain: all four Lean 4 repos are on 4.35.0** (2026-11-05):
+`lean-codec`, `lean-basen`, `lean-nix-flake-template` and `../workflow` each pin
+`lean-toolchain` `v4.35.0` and nixpkgs `1d06008`. Keep them in step —
+`lean-basen` fetches `codec` by rev, so a `codec` bump means
+`nix flake update codec` + `lake update codec` there.
+
+**`../workflow` was the one exception and no longer is.** It used to pin a
+`cauli/lean4` fork (`62b6a229`) with "Do NOT move this pin", because it was
+compiling the kernel to WASM and needed emitted C to match a prebuilt link kit.
+**That WASM path never worked and was removed 2026-11-05** — the link-kit
+archives are `-m32` cross-compiled while the emitted `Kernel.c` is not (OOB crash
+inside `l_Lean_Json_parse`), and rebuilding Lean to wasm32 to match hit an
+`emscripten`/`lld-22` wall. The fork input and both packages that served it are
+gone; it now uses nixpkgs `lean4` like everything else. **Do not reintroduce a
+fork pin** without evidence the link kit is regenerated at a matching sha.
+
+Two traps from the 4.35.0 bump: `lean-toolchain` is **inert** in these repos
+(nothing reads it — check `lake build -v`), and a `lake build` segfault right
+after a bump means stale `.lake` artifacts, so `rm -rf .lake` before diagnosing.
 
 In `../lean-basen`, `codec` is a flake input threaded into `default.nix`, which
 rewrites `require codec from git …` → a local `require codec from "./codec-src"`
