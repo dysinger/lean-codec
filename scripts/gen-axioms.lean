@@ -35,11 +35,22 @@ every `lake build`.
 open Lean Elab Command
 
 /-- Mirror of `CodecAxioms.isGeneratedAux` in `Axioms.lean` — see the module header
-for why this cannot be imported. -/
-def localIsGeneratedAux (n : Name) : Bool :=
+for why this cannot be imported.
+
+Deliberate difference from the classifier it mirrors: an `eq_irrel`-suffixed name is
+**not** dropped, because `Codec.Nat.eq_irrel` is an authored law (the audit's finding
+— the suffix rule silently un-gated it). The suite partition check in `Axioms.lean`
+forces the two sides to agree: the allowlist there lists exactly the names this
+predicate drops, so if this mirror ever drops something the gate expects, `lake
+build` fails naming it. -/
+def localIsGeneratedAux (n : Name) : Bool := Id.run do
+  -- Authored laws that happen to carry a generated-looking suffix. Keep in sync
+  -- with `CodecAxioms.gatedTheorems`'s comment; the partition check is the guard.
+  let authored : Array Name := #[`Codec.Nat.eq_irrel]
+  if authored.contains n then return false
   let s := n.components.getLast!.toString
-  s == "eq_def" || s == "inj" || s == "injEq" || s == "sizeOf_spec" ||
-    s == "congr_simp" || s == "dec" || s == "eq_irrel" || s == "induct"
+  return s == "eq_def" || s == "inj" || s == "injEq" || s == "sizeOf_spec" ||
+    s == "congr_simp" || s == "dec" || s == "induct"
 
 /-- Mirror of `CodecAxioms.gatedTheorems` in `Axioms.lean`. -/
 def localGatedTheorems (env : Environment) : Array Name := Id.run do

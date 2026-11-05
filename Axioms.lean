@@ -24,21 +24,37 @@ The generated region at the bottom of this file is **derived from the compiled
 environment**, so it covers whatever `Codec` exports rather than what a maintainer
 remembered to list. The generator walks `Environment.constants`, keeps every
 constant in the `Codec` or `Iso` namespace whose `ConstantInfo` is `thmInfo` (a
-theorem, not a `def`), and drops three kinds of non-authorial name:
+theorem, not a `def`), and drops two kinds of non-authorial name:
 
 * unsafe constants and private / internal-detail names — not public surface;
 * **compiler-generated auxiliaries**, recognised by their last component:
-  `eq_def`, `inj`, `injEq`, `sizeOf_spec`, `congr_simp`, `dec`, `eq_irrel`. Lean
-  emits these for every structure and `def`; their footprints are derived from
-  declarations that are themselves gated, so gating them adds noise and no
-  information.
+  `eq_def`, `inj`, `injEq`, `sizeOf_spec`, `congr_simp`, `dec`, `eq_irrel`,
+  `induct`.
 
-`gateCoverage` (below) re-runs that same enumeration **at build time** and compares
-it against `gatedNames`, the list the generator writes alongside the body. A
-disagreement — including the direction where a theorem was never gated at all —
-fails the build with the missing names printed. Adding a theorem to `Codec/` and
-forgetting to regenerate is therefore a **build failure**, not a silent hole:
-coverage is a property of the mechanism, not of a list someone remembers.
+## The coverage check is a *partition*, not a filter
+
+The suffix rule above is a **default classifier, not an authority**. It was one in
+fact until `codec-audit-round-two`: `Codec.Nat.eq_irrel` — an authored theorem with
+a docstring explaining the proof-irrelevance role it plays — ends in `eq_irrel` and
+was silently dropped from the gate, and the three `MeasureDecreases*.dec` /
+`Unfold.dec` structure-field projections were dropped for the same last-name reason.
+A name-based mechanism can always un-gate a law a human wrote, so a green build said
+nothing about them.
+
+The hole is closed structurally: `generatedAuxAllowlist` (below) lists **by name,
+with a reason**, every declaration the suffix rule drops, and two build-time checks
+run on every `lake build`:
+
+* `partition` — every public theorem is in `gatedNames` **xor**
+  `generatedAuxAllowlist`; a name in neither fails the build printing the name (an
+  un-gated law), and a name in both also fails (a self-contradiction).
+* `gateCoverage` — `gatedNames` agrees with the environment, so a rename or a stale
+  entry is a build failure too.
+
+Forgetting to maintain the allowlist is therefore a **build failure** rather than a
+silent hole, which is the strongest property a name-based gate can have. It is *not*
+"sound by construction": the allowlist is still a list a maintainer maintains. What
+changed is that its lapses are loud.
 
 Regenerate with:
 
@@ -48,15 +64,27 @@ nix develop --command lake env lean scripts/gen-axioms.lean
 
 ## Current state
 
-**279** public theorems are gated. Footprint distribution:
+**364** public theorems are covered, by a partition with no third route:
+
+| side | count | what it is |
+| --- | --- | --- |
+| gated (`gatedNames`) | **292** | footprint pinned by `#print axioms` |
+| allowlisted (`generatedAuxAllowlist`) | **72** | not a law; reason recorded in place |
+| un-gated and unlisted | **0** | a build failure, by construction |
+
+Gated footprint distribution:
 
 | footprint | count |
 | --- | --- |
-| `[propext, Quot.sound]` | 190 |
-| `[propext]` | 56 |
+| `[propext, Quot.sound]` | 197 |
+| `[propext]` | 61 |
 | `[Quot.sound]` | 4 |
-| axiom-free | 29 |
+| axiom-free | 30 |
 | `[propext, Classical.choice, Quot.sound]` | **0** |
+
+`Codec.Nat.eq_irrel` is one of the axiom-free 30, and it is in the gated set only
+since `codec-audit-round-two`: the suffix classifier had been dropping it as an
+`eq_irrel`-shaped auxiliary, which is what motivated the partition.
 
 `Classical.choice` appears in **no** law. The one law that used to carry it —
 `Codec.findByte_spec`, which reached classical logic through `Array.findIdx?`'s
@@ -70,35 +98,67 @@ namespace CodecAxioms
 
 open Lean Elab Command
 
-/-- Non-authorial theorem names the compiler emits for every structure or `def`.
-None is a law a human wrote, and every one's footprint is derived from declarations
-that are themselves gated.
+/-- Default classifier for non-authorial theorem names: the ones the compiler emits
+for every structure or `def`.
+
+**This is a heuristic, not an authority.** Its claim used to be "none is a law a
+human wrote", and that was false: `Codec.Nat.eq_irrel` is an authored, docstringed
+theorem that this rule dropped, and the three `MeasureDecreases*.dec` / `Unfold.dec`
+projections are structure fields a human wrote. Every decision this classifier makes
+is audited by `CodecAxioms.partition` below, which requires each dropped name to
+appear in `generatedAuxAllowlist` with a reason — so a wrong decision here is a
+build failure, not a silent gap. Never read this rule as "therefore not a law".
 
 `induct` is the `@[elab_as_elim]` principle Lean derives for a recursive `def` from
 its `termination_by` / structural recursion (here `findFrom.induct`); it is a proof
 of the recursion, not a law. -/
-def isGeneratedAux (n : Name) : Bool :=
+def isGeneratedAux (n : Name) : Bool := Id.run do
+  -- Authored laws that carry a generated-looking suffix. `Codec.Nat.eq_irrel` is a
+  -- law (see its docstring) that the bare suffix rule used to drop; the partition
+  -- check below means this list cannot hide anything, only name it.
+  let authored : Array Name := #[`Codec.Nat.eq_irrel]
+  if authored.contains n then return false
   let s := n.components.getLast!.toString
-  s == "eq_def" || s == "inj" || s == "injEq" || s == "sizeOf_spec" ||
-    s == "congr_simp" || s == "dec" || s == "eq_irrel" || s == "induct"
+  return s == "eq_def" || s == "inj" || s == "injEq" || s == "sizeOf_spec" ||
+    s == "congr_simp" || s == "dec" || s == "induct"
 
-/-- The gated set: every public theorem in the `Codec`/`Iso` namespaces, minus the
-compiler-generated auxiliaries, sorted. This is the **single** definition of "which
-theorems the gate covers" — the generator and the build-time check both call it, so
-the list in the file and the set in the environment cannot drift apart. -/
-def gatedTheorems (env : Environment) : Array Name := Id.run do
+/-- Every public theorem candidate in the `Codec`/`Iso` namespaces, **before** any
+name-based declination. This is the universe `gatedNames` and
+`generatedAuxAllowlist` must partition.
+
+The unsafe / private / internal-detail filter is *not* a declination: those are not
+public surface at all (`@[implemented_by]` helpers, `_private` proofs), so they are
+outside the universe rather than dropped from it. The allowlist only ever describes
+names a reader could cite. -/
+def publicTheorems (env : Environment) : Array Name := Id.run do
   let mut thms : Array Name := #[]
   for (name, ci) in env.constants.toList do
     if (`Codec).isPrefixOf name || (`Iso).isPrefixOf name then
       match ci with
       | .thmInfo _ =>
-        if ci.isUnsafe || isPrivateName name || name.isInternalDetail ||
-            isGeneratedAux name then
+        if ci.isUnsafe || isPrivateName name || name.isInternalDetail then
           pure ()
         else
           thms := thms.push name
       | _ => pure ()
   return thms.qsort (fun a b => Name.toString a < Name.toString b)
+
+/-- The membership decisions of `isGeneratedAux`, per name — the candidate set split
+into the two sets the partition requires. Used by both build-time checks; kept here so
+the split and the assertion that it *is* a partition live together. -/
+def partitionInto (env : Environment) : Array Name × Array Name := Id.run do
+  let mut dropped : Array Name := #[]
+  let mut kept : Array Name := #[]
+  for n in publicTheorems env do
+    if isGeneratedAux n then dropped := dropped.push n else kept := kept.push n
+  return (kept, dropped)
+
+/-- The kept side of the classifier: the universe minus the names `isGeneratedAux`
+drops — the set the `gatedNames` mirror of the environment is built from. Named
+because the generator script mirrors *it*, and because "what the classifier keeps" and
+"what `generatedAuxAllowlist` declares" are the two halves the `partition` check
+compares. -/
+def gatedTheorems (env : Environment) : Array Name := partitionInto env |>.1
 
 /-- Declarations knowingly excluded from the `[propext, Quot.sound]`-only discipline,
 by name. Each must also appear in the "Explicit exclusion" section at the end of
@@ -112,6 +172,142 @@ makes an exclusion *visible* in the diff; deleting it would make the next one a
 silent addition to `isGeneratedAux` instead. -/
 def exclusions : Array Name := #[]
 
+/-- The other half of the gate's partition: every public theorem the suffix rule drops
+without footprint-checking, listed **by name with the reason it is not a law**.
+
+This is the audit's finding made structural. The suffix rule is a heuristic that can
+drop an authored law — it did drop `Codec.Nat.eq_irrel` — so it cannot be the last
+word. This list is the last word: `CodecAxioms.partition` (below) requires every name
+here to *actually* be dropped by `isGeneratedAux` (so the list cannot smuggle a law
+out of the gate), requires every dropped public theorem to appear here (so nothing
+falls between the two sets), and requires the list to be disjoint from `gatedNames`.
+
+Why each entry is not a law. Four groups, each with its own reason in place:
+
+* **`inj`, `injEq`, `sizeOf_spec`, `congr_simp`, `eq_def`** — compiler auxiliaries:
+  the constructor injectivity equation, its `Bool` form, the derived `SizeOf`
+  equation, the `@[congr]` lemma for recursor arguments, and the compiled-body
+  equation of a `def`. Each restates its own definition; none says anything about
+  which bytes a codec accepts.
+* **`Iso.MeasureDecreases.dec`, `Iso.MeasureDecreasesR.dec`, `Iso.Unfold.dec`** — a
+  **`Prop`-valued structure field**: part of the *type a caller supplies*, not a
+  theorem proved about it. `MeasureDecreases.dec` is the well-foundedness hypothesis
+  of `foldl`, `MeasureDecreasesR.dec` the mirror for `foldr`, and `Unfold.dec` the
+  same obligation on the factored recursion. The `@[projection]` theorems Lean derives
+  from them report whatever the caller gave — they assert nothing. Note that the
+  *satisfiability* of these obligations **is** a law, and is gated:
+  `counterMeasureDecreases` / `counterMeasureDecreasesR`.
+* **`Codec.findFrom.induct`** — **the recursion principle of a `def`**, generated by
+  Lean from `findFrom`'s structural recursion. A proof that the recursion terminates,
+  not a statement about the codec.
+
+`Codec.Nat.eq_irrel` is deliberately **not** here. It is an authored theorem — its
+docstring explains the proof-irrelevance role it plays in closing the laws without
+`Classical.choice` — so it belongs in the gated set even though its name matches the
+`eq_irrel` pattern. The classifier no longer drops it either (`isGeneratedAux` names
+it as an authored exception), which is why it is absent from the group above. That is
+the shape of every future correction: a law the heuristic misclassifies moves into
+the gated set, and the allowlist keeps only what is genuinely not a law. -/
+def generatedAuxAllowlist : Array Name := #[
+  -- **`Prop`-valued structure fields**: part of the type a caller supplies, not a
+  -- theorem proved about it. Their satisfiability *is* a law, and is gated
+  -- (`counterMeasureDecreases`, `counterMeasureDecreasesR`).
+  `Iso.MeasureDecreases.dec,
+  `Iso.MeasureDecreasesR.dec,
+  `Iso.Unfold.dec,
+
+  -- **The recursion principle of a `def`** (`findFrom`'s structural recursion).
+  `Codec.findFrom.induct,
+
+-- **`inj` — the injectivity equation of a constructor.** Lean emits it for every
+-- inductive constructor and structure `mk`: two applications are equal iff their
+-- fields are, which the constructor's own typing already gives. It states nothing
+-- about which bytes a codec accepts.
+  `Codec.Normal.mk.inj,
+  `Codec.Suffix.mk.inj,
+  `Codec.alt.inj,
+  `Codec.iso.inj,
+  `Codec.pure.inj,
+  `Codec.satisfy.inj,
+  `Codec.seq.inj,
+  `Iso.Unfold.mk.inj,
+  `Iso.mk.inj,
+
+-- **`injEq` — the `Bool`-valued form of the same equation**, the shape `simp`
+-- consumes. An auxiliary of `inj`, not an independent statement.
+  `Codec.Normal.mk.injEq,
+  `Codec.Suffix.mk.injEq,
+  `Codec.alt.injEq,
+  `Codec.iso.injEq,
+  `Codec.pure.injEq,
+  `Codec.satisfy.injEq,
+  `Codec.seq.injEq,
+  `Iso.Unfold.mk.injEq,
+  `Iso.mk.injEq,
+
+-- **`sizeOf_spec` — the defining equation of the derived `SizeOf` instance.**
+-- Part of Lean's termination machinery; about the size of a description value, not
+-- about a codec's behaviour.
+  `Codec.Normal.mk.sizeOf_spec,
+  `Codec.Suffix.mk.sizeOf_spec,
+  `Codec.alt.sizeOf_spec,
+  `Codec.byte.sizeOf_spec,
+  `Codec.empty.sizeOf_spec,
+  `Codec.iso.sizeOf_spec,
+  `Codec.pure.sizeOf_spec,
+  `Codec.satisfy.sizeOf_spec,
+  `Codec.seq.sizeOf_spec,
+  `Iso.Unfold.mk.sizeOf_spec,
+  `Iso.mk.sizeOf_spec,
+
+-- **`congr_simp` — the `@[congr]` lemma `congr_simp` derives** so that `simp` can
+-- rewrite under a recursion's argument (well-founded or `partial` definitions).
+-- `simp` plumbing, nothing more.
+  `Codec.Normal.mk.congr_simp,
+  `Codec.Suffix.mk.congr_simp,
+  `Codec.decodeFull.congr_simp,
+  `Codec.decodeFullArrayFast.congr_simp,
+  `Codec.decodeFullArraySearch.congr_simp,
+  `Codec.decodeFullFastSearch.congr_simp,
+  `Codec.decodeFullStep.congr_simp,
+  `Codec.decodeFullStepPacked.congr_simp,
+  `Codec.decodeRepeat.congr_simp,
+  `Codec.fill.congr_simp,
+  `Codec.shiftedOfFn.congr_simp,
+  `Codec.splice.congr_simp,
+  `Iso.MeasureDecreasesR.toUnfold.congr_simp,
+  `Iso.foldl.congr_simp,
+  `Iso.foldr.congr_simp,
+  `Iso.mk.congr_simp,
+
+-- **`eq_def` — the compiled-body equation of a `def`** (`f x = body`). It unfolds a
+-- definition the source already states; nobody cites it as an authority, and it is
+-- regenerated automatically whenever the body changes.
+  `Codec.Rel.eq_def,
+  `Codec.choice.eq_def,
+  `Codec.count.eq_def,
+  `Codec.decode.eq_def,
+  `Codec.decodeArray.eq_def,
+  `Codec.decodeFast.eq_def,
+  `Codec.decodeFullArrayFast.eq_def,
+  `Codec.decodeFullArraySearch.eq_def,
+  `Codec.decodeFullFast.eq_def,
+  `Codec.decodeFullFastSearch.eq_def,
+  `Codec.decodeFullStep.eq_def,
+  `Codec.decodeFullStepPacked.eq_def,
+  `Codec.decodeOne.eq_def,
+  `Codec.encode.eq_def,
+  `Codec.encodeArray.eq_def,
+  `Codec.encodeArrayFold.eq_def,
+  `Codec.encodeRepeat.eq_def,
+  `Codec.encodeWholeRepeatAcc.eq_def,
+  `Codec.fastEncodeRepeatAcc.eq_def,
+  `Codec.findFrom.eq_def,
+  `Codec.pushBytesFrom.eq_def,
+  `Codec.relRepeat.eq_def,
+  `Iso.foldRec.eq_def,
+]
+
 -- BEGIN GENERATED gatedNames
 /-- The names this file actually pins a `#guard_msgs` block for. GENERATED — written
 in lockstep with the body, so it is a record of what is gated rather than a second
@@ -123,6 +319,7 @@ def gatedNames : List Lean.Name := [
   ,`Codec.CandAligned_fst
   ,`Codec.CandAligned_tail
   ,`Codec.Fin.cast_val
+  ,`Codec.Nat.eq_irrel
   ,`Codec.Normal.ext
   ,`Codec.Normal.ext_iff
   ,`Codec.Normal.fixed
@@ -382,9 +579,21 @@ def gatedNames : List Lean.Name := [
   ,`Codec.uniqCounterexample_productive
   ,`Codec.uniqCounterexample_single
   ,`Codec.uniqCounterexample_unambiguous
+  ,`Codec.uniqSeqBo_false
+  ,`Codec.uniqSeqBo_true
+  ,`Codec.uniqSeqBo_unambiguous
+  ,`Codec.uniqSeqD2_one
+  ,`Codec.uniqSeqD2_unambiguous
+  ,`Codec.uniqSeqD2_zero
+  ,`Codec.uniqSeqWhole_false
+  ,`Codec.uniqSeqWhole_true
+  ,`Codec.uniqSeq_not_congruent
+  ,`Codec.uniqSeq_not_relAligned
+  ,`Codec.uniqSeq_unambiguous_not_congruent
   ,`Iso.apply_eq_some_of_unapply
   ,`Iso.bind_eq_some
   ,`Iso.counterMeasureDecreases
+  ,`Iso.counterMeasureDecreasesR
   ,`Iso.dropLast_append_last
   ,`Iso.foldRec_append
   ,`Iso.ite_some_eq_some
@@ -407,7 +616,7 @@ run_cmd do
   let env ← getEnv
   let covered := Std.HashSet.ofList gatedNames
   let excluded := Std.HashSet.ofList CodecAxioms.exclusions.toList
-  let actual := CodecAxioms.gatedTheorems env
+  let actual := CodecAxioms.partitionInto env |>.1
   let mut unGated : Array Name := #[]
   let mut coveredSet : Std.HashSet Name := {}
   for n in actual do
@@ -424,6 +633,50 @@ run_cmd do
         m!"{String.join (stale.toList.map fun n => s!"  {Name.toString n}\n")}"
     throwError msg
   logInfo m!"axiom gate: {actual.size} public theorems covered ({excluded.size} explicit exclusion(s))"
+
+/-! **Partition check**, run on every `lake build`. The coverage check above only
+compares `gatedNames` against the *kept* side of the classifier, so a theorem the
+classifier drops is invisible to it — that is exactly how `Codec.Nat.eq_irrel` sat
+un-gated. This second check closes that path: the gated set and
+`generatedAuxAllowlist` must **partition** the public theorems, with no third route
+out of the gate.
+
+Four failures, each naming what is wrong:
+
+* a public theorem in **neither** set — a law nothing footprint-checks;
+* a name in **both** — the gate's own record contradicts itself;
+* an allowlist entry the classifier does **not** drop — a typo or a stale name, or an
+  attempt to un-gate a law by listing it, and both must fail;
+* a name in both `exclusions` and the allowlist — an exclusion is a *measured
+  footprint with a reason*, an allowlist entry is *not a law*, so they cannot
+  describe the same declaration. -/
+run_cmd do
+  let env ← getEnv
+  let gated := Std.HashSet.ofList gatedNames
+  let allow := Std.HashSet.ofList CodecAxioms.generatedAuxAllowlist.toList
+  let pub := CodecAxioms.publicTheorems env
+  let noPath := pub.filter fun n => !gated.contains n && !allow.contains n
+  let both := pub.filter fun n => gated.contains n && allow.contains n
+  let notDropped := CodecAxioms.generatedAuxAllowlist.filter fun n =>
+    !(CodecAxioms.isGeneratedAux n) || !pub.contains n
+  let exclusionOverlap := CodecAxioms.exclusions.filter allow.contains
+  if !noPath.isEmpty || !both.isEmpty || !notDropped.isEmpty ||
+      !exclusionOverlap.isEmpty then
+    let mut msg : MessageData := ""
+    if !noPath.isEmpty then
+      msg := msg ++ m!"public theorems in NEITHER the gated set nor the allowlist (un-gated: regenerate, or allowlist by name with a reason):\n" ++
+        m!"{String.join (noPath.toList.map fun n => s!"  {Name.toString n}\n")}"
+    if !both.isEmpty then
+      msg := msg ++ m!"names in BOTH the gated set and the allowlist (the partition requires disjointness):\n" ++
+        m!"{String.join (both.toList.map fun n => s!"  {Name.toString n}\n")}"
+    if !notDropped.isEmpty then
+      msg := msg ++ m!"allowlist entries the classifier does not drop (stale name, or a law cannot be allowlisted out of the gate):\n" ++
+        m!"{String.join (notDropped.toList.map fun n => s!"  {Name.toString n}\n")}"
+    if !exclusionOverlap.isEmpty then
+      msg := msg ++ m!"names in both the exclusion list and the allowlist (an exclusion is a measured footprint; an allowlist entry is not a law):\n" ++
+        m!"{String.join (exclusionOverlap.toList.map fun n => s!"  {Name.toString n}\n")}"
+    throwError msg
+  logInfo m!"axiom gate: {pub.size} public theorems partitioned, {gatedNames.length} gated and {CodecAxioms.generatedAuxAllowlist.size} allowlisted"
 
 end CodecAxioms
 
@@ -479,6 +732,9 @@ why it was fixed instead of documented.
 /-- info: 'Codec.Fin.cast_val' does not depend on any axioms -/
 #guard_msgs in
 #print axioms Codec.Fin.cast_val
+/-- info: 'Codec.Nat.eq_irrel' does not depend on any axioms -/
+#guard_msgs in
+#print axioms Codec.Nat.eq_irrel
 /-- info: 'Codec.Normal.ext' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Codec.Normal.ext
@@ -1256,6 +1512,39 @@ why it was fixed instead of documented.
 /-- info: 'Codec.uniqCounterexample_unambiguous' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Codec.uniqCounterexample_unambiguous
+/-- info: 'Codec.uniqSeqBo_false' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Codec.uniqSeqBo_false
+/-- info: 'Codec.uniqSeqBo_true' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Codec.uniqSeqBo_true
+/-- info: 'Codec.uniqSeqBo_unambiguous' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.uniqSeqBo_unambiguous
+/-- info: 'Codec.uniqSeqD2_one' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Codec.uniqSeqD2_one
+/-- info: 'Codec.uniqSeqD2_unambiguous' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.uniqSeqD2_unambiguous
+/-- info: 'Codec.uniqSeqD2_zero' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Codec.uniqSeqD2_zero
+/-- info: 'Codec.uniqSeqWhole_false' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.uniqSeqWhole_false
+/-- info: 'Codec.uniqSeqWhole_true' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.uniqSeqWhole_true
+/-- info: 'Codec.uniqSeq_not_congruent' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.uniqSeq_not_congruent
+/-- info: 'Codec.uniqSeq_not_relAligned' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.uniqSeq_not_relAligned
+/-- info: 'Codec.uniqSeq_unambiguous_not_congruent' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.uniqSeq_unambiguous_not_congruent
 /-- info: 'Iso.apply_eq_some_of_unapply' does not depend on any axioms -/
 #guard_msgs in
 #print axioms Iso.apply_eq_some_of_unapply
@@ -1265,6 +1554,9 @@ why it was fixed instead of documented.
 /-- info: 'Iso.counterMeasureDecreases' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Iso.counterMeasureDecreases
+/-- info: 'Iso.counterMeasureDecreasesR' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Iso.counterMeasureDecreasesR
 /-- info: 'Iso.dropLast_append_last' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Iso.dropLast_append_last
