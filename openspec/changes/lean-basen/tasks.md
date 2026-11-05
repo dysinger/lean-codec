@@ -550,8 +550,24 @@ linter'`→ no hits).`Common`: `simpa using hb`→`simp at hb`(the linter's own
 
 - [x] 6.10 **Toolchain skew (same in both repos, so not a divergence):**
       `lean-toolchain` pins `leanprover/lean4:v4.30.0`, but the nixpkgs `lean`
-      provided by the dev shell reports **4.34.1**. — **VERIFIED, and the answer
-      is the unused-pin one.** `lake` does **not** honour the pin in either
+      provided by the dev shell reports **4.34.1**. — **RESOLVED by correcting
+      the pin (`b9262d8` in `../lean-basen`, `5887623` here).** The
+      inconsistency was in `lean-toolchain`, _not_ in `flake.lock`: the lock
+      pins a nixpkgs that legitimately provides 4.34.1, and both agree. The file
+      now says `v4.34.1`, which is what builds. **No `flake.lock` change, no
+      `nix flake update`, no toolchain rebuild** — it is a one-line text edit,
+      verified by re-reading `lake build -v` (still `-lean4-4.34.1/bin/lean`)
+      and re-running the gates (13 / 25 / 45 / 24 jobs, all green).
+
+      **Not an upgrade.** Upstream's current stable is 4.35.0 (2026-10-12) and
+      nixpkgs master now carries it, so 4.34.1 is one release / 18 days behind —
+      i.e. current, not stale. Moving to 4.35.0 was explicitly declined as an
+      unnecessary rebuild, and is a separate decision from this fix. The
+      remaining honest choice, if ever wanted, is to *delete* the file rather
+      than maintain a pin nothing reads; that is still an owner call, but it is
+      no longer an *inconsistency*.
+
+      Original finding: `lake` does **not** honour the pin in either
       build path: `lake build -v` shows the compiler is
       `/nix/store/…-lean4-4.34.1/bin/lean`, and `default.nix:64` takes
       `nativeBuildInputs = [ lean4 ]` (nixpkgs) with no reference to
