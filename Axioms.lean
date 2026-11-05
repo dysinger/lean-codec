@@ -325,6 +325,7 @@ def gatedNames : List Lean.Name := [
   ,`Codec.Normal.fixed
   ,`Codec.Normalizer.idem
   ,`Codec.Rel_alt
+  ,`Codec.Rel_between
   ,`Codec.Rel_byte
   ,`Codec.Rel_cast
   ,`Codec.Rel_cast_symm
@@ -339,6 +340,8 @@ def gatedNames : List Lean.Name := [
   ,`Codec.Rel_pure
   ,`Codec.Rel_satisfy
   ,`Codec.Rel_seq
+  ,`Codec.Rel_seqLeft
+  ,`Codec.Rel_seqRight
   ,`Codec.Suffix.drop_zero
   ,`Codec.Suffix.eq_empty_of_remaining_zero
   ,`Codec.Suffix.ext
@@ -760,6 +763,9 @@ why it was fixed instead of documented.
 /-- info: 'Codec.Rel_alt' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Codec.Rel_alt
+/-- info: 'Codec.Rel_between' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Codec.Rel_between
 /-- info: 'Codec.Rel_byte' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Codec.Rel_byte
@@ -802,6 +808,12 @@ why it was fixed instead of documented.
 /-- info: 'Codec.Rel_seq' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Codec.Rel_seq
+/-- info: 'Codec.Rel_seqLeft' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Codec.Rel_seqLeft
+/-- info: 'Codec.Rel_seqRight' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Codec.Rel_seqRight
 /-- info: 'Codec.Suffix.drop_zero' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.Suffix.drop_zero
