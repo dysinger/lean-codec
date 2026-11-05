@@ -67,15 +67,80 @@ the `token` analogue. Text/Unicode is rebuilt downstream (`lean-text`) on top of
 bytes, not in core. **One byte-string type, one job** (see
 [Representations](#representations-one-length-indexed-byte-string)): the _spec_
 substrate is the single length-indexed `Bytes n := Fin n → UInt8`, which is
-structurally reducible for proofs **and** a scalar indexed load at runtime — there
+structurally reducible for proofs **and** expected (as an IR matter, not a theorem) to
+lower to a scalar indexed load — there
 is no separate `List` spec and no `ByteArray` run-model slab _for the specification
 carrier_ (`decode`/`encode`/`Rel` and the laws). The packed (`Array UInt8`) and
 byte-slice (`ByteArray`) carriers in `Codec/Packed.lean`/`Codec/ByteSlice.lean` are
 proved-equal or trust-seam _implementations on top of_ that single spec — see
 [Performance](#performance-two-proof-layers-and-where-the-speed-goes).
 
+**[D2] The nondeterministic list decoder — filed under Departures, where it belongs.**
+The anchor id `[D2]` is kept for continuity (downstream files cite it), but the
+classification is _departure_, not strengthening. This anchor has now been mis-filed
+**twice**, in opposite directions, and the reason is worth recording because it is
+the check a reader should apply:
+
+- "Departures" was wrong because a `Departures` heading means an observable
+  semantics change, and `[D2]` was described as merely exposing the paper's `Rel`;
+- "Strengthenings" is wrong for the **same** reason in the other direction. This
+  section's own definition (above) is that a strengthening is "a _strengthening_ —
+  no observable-semantics change". `codec`'s `decode` returns the unfiltered pair
+  list, the paper's `parse` returns only whole-string matches: those are different
+  observable results from the same input, so the change is observable and it is a
+  **departure**. Calling it a strengthening because the new result is a superset
+  confuses "more informative" with "no observable change"; a superset _is_ a
+  different observation.
+
+**And the premise needed correcting too.** The paper has **two** values, not one:
+`parse :: Parser α → String → [α]` (the `[α]`-interpreter, filtered at `""`) and
+`data Rel α = Rel [(α, String)]` (the graph). So `codec` did not _extend_ a `Rel`;
+it **replaced an `[α]`-interpreter with the graph**. The link to `parse` is a theorem
+— `decode_spec` filtered at `Suffix.empty` gives `Rel d x s ↔ (x, Suffix.empty n) ∈
+decode d s` (`bidir`) — not a definitional identity.
+
+The paper's decoder returns a _list_ of `(value, remaining)` pairs:
+
+```haskell
+newtype Parser α = Parser (String → [(α, String)])
+```
+
+(§4.1), and its denotation is the graph `data Rel α = Rel [(α, String)]` (§4.3).
+`codec` keeps the list: `decode` returns every `(value, remainder)` pair, and `|` is
+list concatenation. **This is a strengthening, not a departure**, and the earlier
+placement under "Departures" was a defect: the paper's `parse` _filters_ its result
+to whole-string matches —
+
+```haskell
+parse (Parser p) s = [x | (x, "") ← p s]
+```
+
+— so the paper's `parse` is not even the full relation; its `Rel` is. `codec`'s
+`decode` returns the unfiltered pair list, i.e. a **superset** of what `parse`
+yields and exactly the paper's `Rel`. Nothing observable changes; `codec` simply
+exposes the relation rather than only its fully-consuming slice, and states the
+relationship as the law `Rel d x s ↔ (x, Suffix.empty n) ∈ decode d s`.
+
 **[D3] `|` is the paper's _backtracking union_, not committed choice.**
 `decode (d₁ | d₂) s = decode d₁ s ++ decode d₂ s`, matching `Rel (d₁ | d₂) = Rel d₁ ∨ Rel d₂` by construction. (The paper itself treats the two directions asymmetrically — and it _says so_ in §3.3, where the `Alternative` class is introduced, not only in §4 where the instances are given: its _parser_ `|` is backtracking union (`++`, §4.1) while its _printer_ `|` is left-biased `mplus` (try left, else right; §4.2). `codec` keeps the **relation** backtracking — that is the single source of truth — and lets `encode` inherit the printer's left-bias naturally, so `Rel` and `decode` agree by construction and nothing rounds through a committed choice.)
+
+**Scope of that claim: `Rel`, `decode`, `encode` — not everything in the crate.**
+Core _also_ ships a committed-choice decoder, `Codec.decodeOne`
+(`Codec/DecodeOne.lean`), whose `alt` is `orElse` (first non-`none` branch) and
+whose `seq` commits to the **first** `d₁` result. It is sound (`decodeOne_mem`:
+every result is a genuine `decodeArray` result) but **not complete** — it can
+return `none` where `decodeArray` has results — and its completeness is recorded as
+**open**, not claimed. So "`|` is backtracking union" is a statement about the
+relation and the list decoder; a second, explicitly gated surface exists and a
+porter who wants only the paper's semantics should ignore it.
+
+**Multiplicity: "agree by construction" means the same _graph_, not the same _data_.**
+`decode (d | d) s = decode d s ++ decode d s`, a **list concatenation**, so
+`decode (d | d) s` returns every result **twice**, while `Rel (d | d) = Rel d ∨
+Rel d` is the idempotent `∨` and carries each pair once. A porter who models `|` as
+set union will match on `Rel` and diverge from `decode` on multiplicity — and, if
+they dedupe, break `encode`'s left-bias correspondence. The two "agree" at the level
+of which values relate to which strings; they do not agree as multisets.
 
 **[D4] Lossless capture — a destructive constructor such as the paper's
 `ignore` is _impossible_ under strict isomorphism.** The paper (§6.3) defines
@@ -83,7 +148,17 @@ proved-equal or trust-seam _implementations on top of_ that single spec — see
 partial isomorphism**": it maps _any_ run of blanks down to a single unit value
 and, on printing, emits a **fixed, single** representation back — so an
 arbitrary-length whitespace run is not preserved, and the inverse invariant
-holds only "modulo equivalence classes" (§3.1) rather than literally. (`skipSpace`
+holds only "modulo equivalence classes" (§3.1) rather than literally.
+
+**Read the quotation precisely: that sentence is about `ignore` alone.** The paper
+turns it into a _family_ by instantiating it three ways — `skipSpace`, `optSpace`,
+`sepSpace` — and the "not a strict partial isomorphism" verdict is inherited from
+`ignore`, not separately argued for each. In particular `skipSpace` re-emits the
+**empty** list (it _parses_ any run of blanks, _prints_ nothing), which is exactly
+the lossy direction; `optSpace` prints exactly one space; `sepSpace` requires one
+input blank and prints one. Citing the paper's sentence as if it covered
+`skipSpace`/`optSpace` as independently-argued cases overstates it, and an earlier
+revision of this anchor did exactly that. (`skipSpace`
 and `optSpace` in §6.3 are the two **direct** instantiations of `ignore`; `sepSpace =
 text " " ∗ skipSpace` merely _composes_ `skipSpace` behind a required blank, so it is
 not a third instantiation.) The three differ in what they re-emit, and the
@@ -109,7 +184,22 @@ unconditionally.
 **The diagnosis, sharpened (normal forms).** `ignore` cannot inhabit `Iso α S`
 _because it is not an `Iso`_ — it is the lossy _half_ of a codec whose honest
 object is a bijection with the **quotient of the concrete syntax by the
-information-free variation**. A format often accepts several spellings of one
+information-free variation**. This is `Codec/Normal.lean`'s own account of the
+record: its module header says the earlier `[D4]` "conclusion is right, but its
+diagnosis was incomplete" — capture-verbatim is one _instantiation_ of the quotient
+layer (the identity normalizer), not the explanation of why `ignore` fails. The
+quotient-as-object formulation is the explanation; capture-verbatim is the
+degenerate case that happens to need no `norm`.
+
+**Capture-verbatim is length-preserving, and that bounds what it can do.**
+`norm : Bytes n → Bytes n`, so the normalizer cannot shorten its input. Case folding
+(half the point of `[D4]` for a Base16 decoder) fits; **collapsing a whitespace run
+does not** — that is `Bytes m → Bytes n` with `m ≠ n` and needs a different carrier.
+So the one thing the paper's `ignore` existed _for_ — discarding an arbitrary-length
+blank run — is the one thing this layer cannot reproduce, and the layer says so at
+the point of use rather than in a later parenthesis. A codec using it also owes the
+per-instance fact that its encoder emits a normal form, without which the
+normalising decoder can fail on its own encoder's output. A format often accepts several spellings of one
 value (RFC 4648 §8: a Base16 decoder MUST accept both `6F` and `6f`, since case
 carries no information), so the quotient is `S/~` where `s ~ t ↔ norm s = norm t`
 for a total idempotent `norm`. `codec` puts that quotient in the **object** rather
@@ -131,11 +221,15 @@ independent departure.** The foil is concrete and the paper names it: Parsec "pr
 a `|` combinator, but its semantics implements predictive parsing with a look ahead of
 1, whereas our implementation supports unlimited backtracking" (§4.4), so "with
 Parsec, `p | q` may fail, even if `q` would succeed". Designs like that require `|`'s
-branches to be _prefix-disjoint_ so at most one can match. `codec` requires none, and
-could not use such a condition even if offered it: because `|` is `[D3]`'s
-backtracking union, the branches are tried independently and concatenated, and no
-prefix condition can work for repetition anyway (`[]` is a proper prefix of every
-non-empty string, so `nil | cons` is never prefix-disjoint).
+branches to be _prefix-disjoint_ so at most one can match. `codec` requires none —
+and the checkable reason is that **`Codec.alt` carries no premise at all**: `[D3]`'s
+backtracking union tries the branches independently and concatenates their results,
+so there is no hypothesis a prefix condition could add to. A prefix condition could
+therefore only _narrow_ a law that already holds for free. (It would also be
+unavailable in general: `[]` is a proper prefix of every non-empty string, so
+`nil | cons` is never prefix-disjoint.) An earlier revision justified this with an
+unfalsifiable "could not use such a condition even if offered it", which cannot be
+checked against anything; the premise-free statement can.
 
 **[D6] `Codec` is a description _value_, not the §3.4 typeclass.** The paper
 embeds syntax descriptions polymorphically (a `Syntax` typeclass, with `$`/`∗`/
@@ -160,11 +254,19 @@ anything `codec` requires; it was invented in an earlier draft).
 **And there is no `chainl1` value to need it.** The paper's `chainl1 = foldl f $ arg
 ∗ many (op ∗ arg)` is a description; `codec`, being strict, has no such value
 (`[S6]`). What exists is the triple `relChainl1` / `decodeChainl1` / `encodeChainl1`,
-and composing it needs **four** things: `Iso.foldl`, **a `MeasureDecreases` witness
-for that fold** (a separate argument — `Iso.foldl` does not carry it), the
-repetition triple, and a `ConsumesByte` witness for the decoder. Saying "`foldl` is
-the combinator `chainl1` actually needs" understated it by three components, and an
-earlier revision that said "three" still missed `MeasureDecreases`.
+and composing it needs **five** things: `Iso.foldl`, **a `MeasureDecreases` witness
+for that fold** (a separate argument — `Iso.foldl` does not carry it), **a
+_terminal_ seed**, the repetition triple, and a `ConsumesByte` witness for the
+decoder. Saying "`foldl` is the combinator `chainl1` actually needs" understated it
+by three components, and an earlier revision that said "three" still missed
+`MeasureDecreases`; a revision that said "four" missed the seed.
+
+**The terminal-seed obligation is not decoration.** `Iso.foldl`'s `apply` returns
+`none` on a seed that still unapplies (`Codec/Iso.lean`): the fold is defined over
+the states `unapply` reaches, so a seed with a live step has no image and the
+composition silently has no result. `[S4]` already states this restriction; `[D7]`
+omitted it, so the two anchors disagreed on what the fold obliges a caller to supply.
+They now agree.
 
 **[D8] The _value-level_ checks carry a _decidable_ witness, not the paper's
 `Eq α`/`(α → Bool)`.** Scoped precisely, because the claim is easy to overstate:
@@ -188,30 +290,6 @@ deliberately do **not** totalize it.
 
 ### Strengthenings (we complete the paper, without changing its meaning)
 
-**[D2] The nondeterministic list decoder — _refiled here from "Departures"_ (the
-anchor id is kept for continuity; several downstream files cite it).** The paper's
-decoder returns a _list_ of `(value, remaining)` pairs:
-
-```haskell
-newtype Parser α = Parser (String → [(α, String)])
-```
-
-(§4.1), and its denotation is the graph `data Rel α = Rel [(α, String)]` (§4.3).
-`codec` keeps the list: `decode` returns every `(value, remainder)` pair, and `|` is
-list concatenation. **This is a strengthening, not a departure**, and the earlier
-placement under "Departures" was a defect: the paper's `parse` _filters_ its result
-to whole-string matches —
-
-```haskell
-parse (Parser p) s = [x | (x, "") ← p s]
-```
-
-— so the paper's `parse` is not even the full relation; its `Rel` is. `codec`'s
-`decode` returns the unfiltered pair list, i.e. a **superset** of what `parse`
-yields and exactly the paper's `Rel`. Nothing observable changes; `codec` simply
-exposes the relation rather than only its fully-consuming slice, and states the
-relationship as the law `Rel d x s ↔ (x, Suffix.empty n) ∈ decode d s`.
-
 **[S1] `Iso.law` is a _field_, and for every structural `Iso` it holds
 _unconditionally_.** The paper §3.1 states the inverse invariant in prose,
 unchecked, and §5 gives the motivating problem in its own words: an `Iso` written
@@ -221,10 +299,23 @@ would be interesting to see **how the invariants of `Iso` values could be encode
 a dependently typed language**". `codec` answers both: `law` is a required field, so
 a broken `Iso` does not typecheck.
 
+**Composition is `≫`, not the paper's `◦` — and the two read in opposite order.**
+`Codec/Iso.lean` defines `infixr:80 " ≫ " => Iso.trans` as _Kleisli_ composition:
+`f ≫ g` applies `f` first, then `g`. The paper's `◦` is ordinary function
+composition, `g ◦ f` = apply `f` then `g`. So a porter reading `f ≫ g` as `f`
+after `g` will invert every composed iso — and the error is silent, because both
+have the right type in the common case. This is a renaming the anchor must state,
+not an implementation detail.
+
+**The full unconditional-iso list**, because an earlier revision named a subset:
+`id`, `ofTotal`, `trans` (`≫`), `inverse`, `prod` (`×`), `associate`, `commute`,
+`unit`, `element`, `subset`, `nil`, `cons`, `optionSome`. `ofTotal` is the one that
+matters most for a porter: it turns two round-trip equations into the `law`, so a
+total bijection needs no hand-written inverse proof.
+
 **Two strengths, stated separately, because they are not the same strength.**
-(i) For the **structural** isos (`unit`, `commute`, `associate`, `element`,
-`subset`, `inverse`, `×`, `◦`) the law holds **unconditionally** — no hypothesis,
-because `[D4]` removes the lossy `ignore` that would have needed one. (ii)
+(i) For the **structural** isos in that list the law holds **unconditionally** — no
+hypothesis, because `[D4]` removes the lossy `ignore` that would have needed one. (ii)
 `Iso.foldl`/`foldr` also carry a `field`, but their `apply` is restricted to
 **terminal seeds** (`Iso.foldl` refuses a seed that still unapplies), so they hold
 _on that domain_, with a `MeasureDecreases` witness the caller supplies — which is
@@ -234,18 +325,70 @@ rather than contradicting.
 
 **[S2] Format-agnostic naming.** `Syntax`/`parse`/`print`/`token` are the paper's
 text vocabulary; on bytes they mislead, so they become `Codec`/`decode`/`encode`/
-`byte`. **Only two of those four are a rename:** `Syntax → Codec` and `print →
-encode` change the name and nothing else. `token → byte` changes the _carrier_
-(`Char` → `UInt8`, `[D1]`), and `parse → decode` changes the _result shape_
-(whole-string matches → every `(value, remainder)` pair, `[D2]`) — so those two are
-not cosmetic and should not be ported as if they were.
+`byte`. **Only one of those four is a pure rename:** `Syntax → Codec`. The other
+three are not cosmetic and should not be ported as if they were:
+
+- `token → byte` changes the _carrier_ (`Char` → `UInt8`, `[D1]`);
+- `parse → decode` changes the _result shape_ (whole-string matches → every
+  `(value, remainder)` pair, `[D2]`);
+- `print → encode` changes the **argument**: the paper's `print` is a method
+  selected by the value's `Printer α` instance, while `encode` takes an explicit
+  description value — `encode : (d : Codec α) → α → Option (Σ n, Bytes n)`. That is
+  `[D6]`'s typeclass-to-value move, not a rename. An earlier revision called this a
+  rename; it is the one place `[S2]` and `[D6]` overlap, and the overlap is why
+  `print → encode` has the largest porting cost of the four.
 
 **[S3] Zero domain-specific leaf codecs.** Core ships every primitive leaf —
 `byte`, `satisfy` — plus the non-leaf `pure` (a value-equality check, not a
-format), **and one derived byte-run combinator, `takeWhile`**. `takeWhile` ships as
-the triple `relTakeWhile` / `decodeTakeWhile` / `encodeTakeWhile`
-(`Codec/Combinators.lean`), the same relation-then-two-directions shape every other
-combinator has, with `decodeTakeWhile_spec` and `encodeTakeWhile_rel` its laws.
+format), **and one derived byte-run combinator, the `takeWhile` triple**. It ships
+as `relTakeWhile` / `decodeTakeWhile` / `encodeTakeWhile` (`Codec/Combinators.lean`),
+the same relation-then-two-directions shape every other combinator has, with
+`decodeTakeWhile_spec` and `encodeTakeWhile_rel` its laws. (An earlier revision
+cited the symbol `Codec.takeWhile`, **which does not exist** — `#check` reports an
+unknown identifier; there is no single `Codec`-valued `takeWhile`, only the triple.)
+
+**The complete core `Codec`-value inventory**, because this anchor is the one a
+porter reads to know what they must reproduce and an earlier revision listed only
+the leaves:
+
+| value                                                                                | at                                       | bounded?                                   |
+| ------------------------------------------------------------------------------------ | ---------------------------------------- | ------------------------------------------ |
+| `byte`, `satisfy`                                                                    | `Codec/Codec.lean` (`[D6]` constructors) | leaf                                       |
+| `pure`                                                                               | `Codec/Codec.lean`                       | relates only the empty string              |
+| `empty`, `alt` (`                                                                    | `), `seq` (`∗`), `iso`                   | `Codec/Codec.lean`                         | structural |
+| `count`, `manyUpTo`, `optional`, `maybe`, `choice`, `seqRight`, `seqLeft`, `between` | `Codec/Combinators.lean`                 | **bounded** — hence genuine `Codec` values |
+| `Normal` layer: `fill`, `decodeNormal`                                               | `Codec/Normal.lean`                      | `[D4]`'s quotient                          |
+
+The bounded eight matter for two reasons. They are `Codec` values (so a porter must
+have them), and `[S6]` **relies on `optional`** — an unbounded `many` cannot be a
+`Codec` value, but `optional` and `manyUpTo k` can because their bound is part of
+the description. Unbounded repetition is the `relRepeat`/`decodeRepeat`/
+`encodeRepeat` triple exposed as a **run value** (`[S6]`), and `takeWhile` is the
+same shape: a triple, not a `Codec` constructor, because its length is bounded only
+by the input.
+
+**The core module inventory**, because an earlier revision listed anchors by value but
+omitted a whole public module. Every file below is public, ships gated laws, and is
+part of what a porter must reproduce:
+
+| module                   | what it is                                                                  | sample gated laws                                          |
+| ------------------------ | --------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `Codec/Codec.lean`       | `Bytes n`, `Rel`, the `Codec` AST, `decode`/`encode`                        | `Codec.decode_spec`, `Codec.encode_rel`                    |
+| `Codec/Iso.lean`         | `Iso`, the structural isos, `foldl`/`foldr`                                 | `Iso.law`, `Iso.unfoldBy_sound`                            |
+| `Codec/Sound.lean`       | the roundtrip/birid laws, the hypothesis families, `findFrom`               | `Codec.roundtrip`, `Codec.huniq_not_derivable`             |
+| `Codec/Combinators.lean` | the bounded `Codec` values, `takeWhile`/`sepBy`/`chainl1`/`chainr1` triples | `Codec.decodeTakeWhile_spec`                               |
+| `Codec/Encode.lean`      | the encoder and its structural lemmas                                       | `Codec.encodeArray_eq`                                     |
+| `Codec/Decode.lean`      | `decodeFull` (the `Run` combinator)                                         | `Codec.decodeFull_spec`                                    |
+| `Codec/Packed.lean`      | Layer 1: `decodeArray`, `decodeWhole`                                       | `Codec.decodeArray_eq`                                     |
+| **`Codec/Normal.lean`**  | **`[D4]`'s quotient layer: `Normal`/`Normalizer`/`fill`/`decodeNormal`**    | `Codec.decodeNormal_encode`, `Codec.decodeNormal_of_fixed` |
+| `Codec/DecodeOne.lean`   | the committed-choice `decodeOne` (sound, completeness open — `[D3]`)        | `Codec.decodeOne_mem`, `Codec.decodeArray_unique`          |
+| `Codec/ByteSlice.lean`   | Layer 2: the named C trust seams                                            | `Codec.findByte_spec`                                      |
+
+`Codec/Normal.lean` is the one an earlier revision omitted entirely: it is a public
+module with its own gated laws (`Normal.fixed`, `Normalizer.idem`,
+`decodeNormal_encode`, `decodeNormal_of_fixed`), and `[D4]`'s whole
+quotient-as-object argument lives there. A porter reading only `[D2]`/`[S3]`/`[S6]`
+would not have known the layer exists.
 
 It is `UInt8`-specialised and says so: its docstring names `varint` and UTF-8 as
 the intended uses, i.e. it is the _shape_ those formats need, not any of them.
@@ -336,16 +479,16 @@ indexed load in the emitted IR. There is no second `List UInt8`/`Array`/`ByteArr
 trust-seam implementations on top of this spec — see
 [Performance](#performance-two-proof-layers-and-where-the-speed-goes).)
 
-|                    | **`Bytes n`** (`= Fin n → UInt8`)                                                             |
-| ------------------ | --------------------------------------------------------------------------------------------- |
-| **Job**            | the single _specification_ substrate (proof) and its scalar-read run-model                    |
-| **Shape**          | a length-indexed function; `s ⟨i, ·⟩` is a structural read, no `List` cons cell               |
-| **For the prover** | reducible under `simp`/`rfl`/`funext`; decidable equality is finitary (`funext` over `Fin n`) |
-| **At runtime**     | a scalar indexed load — the length `n` is a _type_ index, not a boxed `Nat`                   |
+|                    | **`Bytes n`** (`= Fin n → UInt8`)                                                                                                            |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Job**            | the single _specification_ substrate (proof) and its scalar-read run-model                                                                   |
+| **Shape**          | a length-indexed function; `s ⟨i, ·⟩` is a structural read, no `List` cons cell                                                              |
+| **For the prover** | reducible under `simp`/`rfl`/`funext`; decidable equality is finitary (`funext` over `Fin n`)                                                |
+| **At runtime**     | an **IR-level expectation**, not a theorem: `n` is a _type_ index, so a read _should_ lower to a scalar indexed load. Measured caveat below. |
 
 **The decision.** Every law (`Rel`, `decode_spec`, `bidir`, `roundtrip`, …) is stated and
 proved over the single `Bytes n`, because that one type is both what the proof assistant
-can reduce _and_ what lowers to a scalar indexed load. `decode d (s : Bytes n)` returns
+can reduce _and_ what is expected to lower to a scalar indexed load. `decode d (s : Bytes n)` returns
 `List (α × Suffix n)` where a `Suffix n` carries the remaining length (a `m ≤ n` witness)
 and the remaining `Bytes m`; `encode d x` returns `Option ({n : Nat} × Bytes n)` — the
 encoded bytes and their length in one sigma.
@@ -392,13 +535,23 @@ changes; only the ground floor does.
 
 The **spec substrate is the single length-indexed `Bytes n := Fin n → UInt8`**: it
 is a reducible, length-indexed function, so every `Fin`/`funext` lemma applies and
-every law is a finite induction, **and** it lowers to a scalar indexed load in the
-emitted IR — no second carrier, no transfer lemma _for the laws_. So the
-_specification_ has one byte-string type: **`Bytes n` is the proof substrate and
-its own scalar-read run-model** (the length is a _type_ index, not a boxed `Nat`).
-"The model you prove on" and "the model you read at speed" are the same thing. (The
-packed `Array`/`ByteArray` carriers sit _above_ this substrate as proved-equal or
-trust-seam implementations; the laws never leave `Bytes n`.) — see
+every law is a finite induction, and no second carrier is needed _for the laws_. So
+the _specification_ has one byte-string type: **`Bytes n` is both the proof substrate
+and its own scalar-read run-model**.
+
+**Two lowering claims are in circulation here, and they are about different values —
+keep them apart.** (i) For a `Bytes n` read, the claim that it lowers to a scalar
+indexed load is an **IR expectation**, not a theorem: no law in this repository states
+anything about emitted code, and IR inspection is the only evidence for it. (ii) The
+repo also records, in `Codec/ByteSlice.lean`, that the _packed cursor_ is a `Nat` and
+**does lower to a boxed bignum** — measured, not assumed. These sit on opposite sides
+of the boxed/unboxed line, and an earlier revision offered both as unlabelled
+"lowering" claims, which reads as a contradiction unless you know which value each is
+about. The honest summary: `Bytes n`'s index is _syntactically_ a type index (so a
+compiler _can_ unbox it), the cursor is _not_ (and by measurement is not unboxed), and
+neither is a proved property of this library. (The packed `Array`/`ByteArray` carriers
+sit _above_ the substrate as proved-equal or trust-seam implementations; the laws never
+leave `Bytes n`.) — see
 [Representations](#representations-one-length-indexed-byte-string-the-spec-substrate).
 
 ### `[D2]` + `[D3]` the decoder returns a _list_, and `|` means "try both, keep
@@ -497,13 +650,16 @@ fails". To ship `iterate` as an isomorphism you would have to _claim_ the two
 fixpoints agree — false in general — or burden every caller with a fragile
 precondition. `codec` omits `iterate` and defines `foldl`/`foldr` _directly_ by
 well-founded recursion (each step strictly decreases a measure, which _is_ the
-honest guarantee). `chainl1` needs **four** things — `Iso.foldl`, a
+honest guarantee). `chainl1` needs **five** things — `Iso.foldl`, a
 `MeasureDecreases` witness for that fold (a separate argument, not bundled into
-`Iso.foldl`), the repetition triple, and a `ConsumesByte` witness for the decoder —
-and `codec` supplies all four, so nothing is lost and no unsound law is shipped.
-(An earlier revision of this paragraph said "`foldl` is all `chainl1` needs"; a
-later one said "three", still missing `MeasureDecreases`. All three statements of
-this paragraph now agree.)
+`Iso.foldl`), a **terminal** seed (`Iso.foldl`'s `apply` returns `none` on a seed
+that still unapplies), the repetition triple, and a `ConsumesByte` witness for the
+decoder. `codec` supplies the two folds and both witness families —
+`counterMeasureDecreases` for `foldl` and `counterMeasureDecreasesR` for `foldr`, so
+neither law rests on an uninhabited premise — while the fold, the terminal seed and
+the repetition are the caller's to supply for their own format. Nothing is lost and
+no unsound law is shipped. (Earlier revisions of this paragraph said "`foldl` is all
+`chainl1` needs", then "three", then "four"; all four statements now agree, at five.)
 
 ### `[D8]` decidable checks instead of `Eq`/`Bool`
 
@@ -526,11 +682,13 @@ constructor will not typecheck without the proof.
 
 ### `[S2]` + `[S3]` renaming, and an empty-of-leaves core
 
-Naming (`token`→`byte`, `parse`/`print`→`decode`/`encode`) keeps the text-world
-vocabulary from leaking onto bytes. The scope decision (`[S3]`) keeps core empty
-of concrete formats, so nothing in it can silently assume text or one machine's
-endianness; the first downstream leaf (`u8`, literally just `byte`) is the smoke
-test that the framework is genuinely general.
+Naming (`token`→`byte`, `parse`→`decode`, `print`→`encode`) keeps the text-world
+vocabulary from leaking onto bytes — and, as `[S2]` states, only `Syntax → Codec` is
+a pure rename: the carrier, the result shape and the `print`/`encode` argument all
+change with the name. The scope decision (`[S3]`) keeps core empty of concrete
+formats, so nothing in it can silently assume text or one machine's endianness; the
+first downstream leaf (`u8`, literally just `byte`) is the smoke test that the
+framework is genuinely general.
 
 ### `[S4]` `foldl`/`foldr` are fresh, and need a termination witness
 
@@ -553,9 +711,12 @@ under "empty, or one more element"), the _decoder_ (which requires each step to
 consume a byte so it terminates), and the _encoder_ (which recurses on the value
 list, so it needs no condition). `[S5]` proves "least fixpoint" rather than
 asserting it; `[S6]` records the structural consequence of strictness — there is
-no `sepBy`/`sepBy1`/`some`/`many1` **value**, only the relation/decoder/encoder
-triple, and the `sepBy` triple has "one or more" (non-empty) semantics. A porter
-should look for these three readings, not for a `many` object.
+no `many`/`many1` **value**, only the relation/decoder/encoder triple, and the
+`sepBy` triple has "one or more" (non-empty) semantics. **Bounded** repetition is
+different and _is_ available as a `Codec` value — `count`, `manyUpTo`, `optional`,
+`maybe` (`[S3]`'s inventory) — because a bound is part of the description; only the
+unbounded case has no node. A porter should look for these three readings, not for a
+`many` object.
 
 ---
 
@@ -600,6 +761,24 @@ Every `Codec` is built by structural induction over the seven constructors
 constructor that wraps an `Iso`, so the inverse guarantee is **structural**:
 the law is a field, and the two theorems above hold **unconditionally** for every
 description — no solver, no per-combinator gate, no prefix-disjointness condition.
+
+**But the hypotheses that gate the _uniqueness_ laws do not come for free, and a
+composed codec does not inherit its leaves' uniqueness.** `encode_of_decode`,
+`encode_injective_of_unambiguous`, `decodeArray_unique` and `decodeFull_spec` are each
+conditional on a family — `Unambiguous`, `Functional`, `RelAligned`, `LengthDet`,
+`LengthConst`, `huniq` — and core supplies each only at `Codec.byte`. That supplier
+establishes **satisfiability** (the predicate has an inhabitant, so the definition is
+not vacuous), **not congruence**: `Codec.Sound.uniqSeq_not_congruent` proves that
+`Unambiguous d₁ → Unambiguous d₂ → Unambiguous (seq d₁ d₂)` is **false**, with a
+counterexample where both halves are unambiguous and `seq` relates two distinct
+values to one one-byte input. `uniqSeq_not_relAligned` refutes the same for
+`RelAligned`. So every uniqueness-gated law in this tree is **leaf-only**: a
+downstream format must discharge the family for _its own_ description, and a porter
+who assumes composition will ship an unsound decoder.
+
+The pair that _does_ close a composition is `Functional d ∧ RelAligned (Rel d)` —
+that is what `decodeArray_unique` uses — and it is a hypothesis a caller supplies,
+never one the leaves donate.
 
 ### Three generic primitives, added because a real codec could not be written without them
 
@@ -716,8 +895,8 @@ call it by hand. **`decodeWhole`** is the wired surface:
 
 ```lean
 -- the fast, whole-buffer full-consumption decoder — the surface to run
-decodeWhole      : Codec α → ConsumesByte d → Array UInt8 → Option (List α)
-decodeWholeBytes : Codec α → ConsumesByte d → Bytes n      → Option (List α)
+decodeWhole      : (d : Codec α) → d.ConsumesByte → Array UInt8 → Option (List α)
+decodeWholeBytes : (d : Codec α) → d.ConsumesByte → Bytes n      → Option (List α)
 ```
 
 `decodeWhole` delegates straight to the packed `Array UInt8` + `Nat`-cursor search;
