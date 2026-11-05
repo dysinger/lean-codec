@@ -19,7 +19,7 @@ One reviewer finding was refuted and is deliberately absent — see design D1.
       `../lean-basen/Axioms.lean`, mirroring `codec`'s
       (`Axioms.lean:120-136`, `:615-636`, `:653-683`). It currently has **zero**
       mechanism: `grep -cE 'run_cmd|Lean\.Elab|Environment|partitionInto|getEnv'
-    Axioms.lean` → `0`, and 437 theorems vs 440 pins agree only by discipline.
+  Axioms.lean` → `0`, and 437 theorems vs 440 pins agree only by discipline.
 - [ ] 1.0.2 Add a `generatedAuxAllowlist` for basen's own compiler auxiliaries,
       by name with a reason, so the partition is closed rather than merely added.
 - [ ] 1.0.3 Verify load-bearing in **that** repo: add a throwaway public theorem,
@@ -241,16 +241,27 @@ One reviewer finding was refuted and is deliberately absent — see design D1.
 
 ---
 
-## Archive ordering (recorded per the AGENTS.md hazard)
+## Archive ordering — RESOLVED 2026-11-05
 
-`codec-audit-round-two` is **complete but not yet archived**, and both changes
-MODIFY `codec/axiom-gate`'s "The axiom footprint of every public theorem is checked
-on every build". A MODIFIED requirement **replaces the whole block**, so:
+`codec-audit-round-two` **has been archived** as
+`openspec/changes/archive/2026-11-05-codec-audit-round-two/`, with its three spec
+deltas synced into `openspec/specs/` first and verified scenario-by-scenario
+(no live scenario was dropped: `codec/axiom-gate` 3 -> 6, `codec/review-remediation`
+4 -> 5, `codec/congruence-honesty` created from ADDED-only).
 
-1. Archive `codec-audit-round-two` **first**.
-2. Run `openspec validate --all` after that archive.
-3. Then archive this change, after confirming every scenario from round two's
-   MODIFIED block is still present in this change's delta (this delta was authored
-   against the _live_ spec, which predates round two's sync — so this delta carries
-   round two's three partition scenarios forward already, and that must be
-   re-verified at archive time, not assumed).
+**What this means for this change's archive:** this delta was authored against the
+_pre_-sync text, so it will replace `codec/axiom-gate`'s and
+`codec/review-remediation`'s requirements a second time. Round two's scenario sets
+are now the baseline. Before archiving this change:
+
+1. ~~Re-run the scenario diff live-vs-delta.~~ **Verified 2026-11-05, now that
+   round two is synced:** every replacement is a strict superset —
+   `codec/axiom-gate` 6 -> 6 (identical set), `codec/review-remediation`
+   "Documentation SHALL distinguish quoted from derived claims" 2 -> 4,
+   `basen` "conformance laws are gated" 1 -> 3 and "A decoder rejects malformed
+   input" 5 -> 7, `template` "skeleton builds … zero sorry" 2 -> 3 and
+   "dependency-injection convention" 1 -> 2. **Nothing is dropped.** Re-run the
+   diff at archive time anyway; it is cheap and this repo has been bitten.
+2. `openspec validate --all` after the archive and confirm it stays green.
+3. Check `codec/law-coverage` is created with its `## Purpose` carried across (it is
+   the only ADDED-only capability here).
