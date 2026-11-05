@@ -85,7 +85,19 @@ def count {α : Type} (n : Nat) (p : Codec α) : Codec (List α) :=
   | n + 1 => Codec.iso (Iso.cons) (Codec.seq p (count n p))
 
 /-- `manyUpTo n p` is at most `n` repetitions of `p`, as the choice of exactly
-`k` repetitions for `0 ≤ k ≤ n`. Total and `#eval`-able. -/
+`k` repetitions for `0 ≤ k ≤ n`. Total and `#eval`-able.
+
+**Ordering consequence, measured at this definition: results are shortest-first.**
+`List.range (n+1)` is `[0, 1, …, n]` and `choice` is a right-associated `alt`, whose
+decode is list concatenation — so for a `p` that can relate at several lengths the
+results come out shortest first. Measured 2026-11-05 at exactly this definition,
+`decode (manyUpTo 2 Codec.byte)` on a 2-byte input yields, as `(length, remaining)`
+pairs, **`[(0, 2), (1, 1), (2, 0)]`**. **A first-result consumer therefore gets the
+empty list**, and `decodeOne` over a `manyUpTo` always yields `[]` — which is
+exactly the failure mode `[D3]` describes for committed choice, reintroduced here in
+a derived value rather than in the relation. This is not a defect in `manyUpTo` (its
+denotation is the full backtracking union, `Rel_manyUpTo`); it is a property a caller
+must know before choosing `decodeOne` as its decoder. -/
 def manyUpTo {α : Type} (n : Nat) (p : Codec α) : Codec (List α) :=
   choice ((List.range (n + 1)).map (fun k => count k p))
 
@@ -236,6 +248,141 @@ theorem Rel_choice {α : Type} (ps : List (Codec α)) (x : α) {n : Nat} (s : By
         · subst d'
           exact Or.inl hd'
         · exact Or.inr ⟨d', hmem, hd'⟩
+
+/-! ### `manyUpTo`, and the `List.range`/`map` bridge it needs
+
+`manyUpTo n p` is `choice ((List.range (n+1)).map (fun k => count k p))`, so
+`Rel_choice` alone cannot reach `count` — it says "some member of the list relates",
+and the member is `count k p` only after pushing through `map` and `range`. That
+bridge (`mem_map_range_iff`) is the lemma that did not exist, and it is worth
+isolating because it is the **only** place `manyUpTo`'s bound appears in its law.
+
+#### The `Classical.choice` trap this family hit, and the fix
+
+The obvious proof of `Rel (count k p) xs s ↔ xs.length = k ∧ relRepeat …` is an
+induction on `k`. It is **wrong for the gate**, silently: carrying
+`xs.length = k` into the induction context makes every `cases xs` a *dependent*
+match on a list whose equation sits in the context, which leaks `Classical.choice`
+(`#print axioms` reports `[propext, Classical.choice, Quot.sound]` with no error
+from the compiler). This is AGENTS.md's first trap, and it cost several attempts here.
+
+The landed shape avoids it by never carrying the equation into a `match`:
+
+* `countToRelRepeat` — `Rel (count k p)` implies `relRepeat`, induction on `k`;
+* `countLength` — a `count` relates only length-`k` lists, induction on `k`;
+* `relRepeatToCount` — the converse, **recursing on the list** rather than on `k`, so
+  the length is `xs.length` *derived from the term* and no equation is in context;
+* `Rel_count_eq_relRepeat` — their conjunction, which is where the two meet.
+
+Each is `[propext]`-only or `[propext, Quot.sound]`-only. The split is not
+cosmetic: it is what keeps the family inside the axiom gate.
+-/
+
+/-- The `List.range`/`map` bridge: a member of `(List.range (n+1)).map f` is
+`f k` for some `k ≤ n`. `Rel_choice` needs this to reach `count` at a bounded index,
+and it is the only place `manyUpTo`'s bound enters the law. -/
+theorem mem_map_range_iff {α : Type u} (n : Nat) (f : Nat → α) (d : α) :
+    d ∈ (List.range (n + 1)).map f ↔ ∃ k ≤ n, f k = d := by
+  rw [List.mem_map]
+  constructor
+  · rintro ⟨k, hk, rfl⟩
+    rw [List.mem_range] at hk
+    exact ⟨k, Nat.le_of_lt_succ hk, rfl⟩
+  · rintro ⟨k, hk, rfl⟩
+    exact ⟨k, by rw [List.mem_range]; omega, rfl⟩
+
+/-- `count k p` implies the repetition denotation. Induction on `k`; no length
+equation is carried, so no `cases` here is dependent. `[propext]`-only. -/
+theorem countToRelRepeat {α : Type} (p : Codec α) (k : Nat) :
+    ∀ (xs : List α) {m : Nat} (s : Bytes m), Rel (count k p) xs s → relRepeat (Rel p) xs m s := by
+  induction k with
+  | zero =>
+      intro xs m s h
+      cases xs with
+      | nil => rw [Rel_count_zero] at h; rw [relRepeat_nil]; exact h.2
+      | cons x rest => rw [Rel_count_zero] at h; exact absurd h.1 (by simp)
+  | succ k ih =>
+      intro xs m s h
+      rcases (Rel_count_succ p k xs (s := s)).1 h with
+        ⟨x', r', j, hj, s₁, s₂, hs, hab, hp, hc⟩
+      subst hab
+      exact ⟨j, hj, s₁, s₂, hs, hp, ih r' s₂ hc⟩
+
+/-- A `count k p` relates only lists of length `k` — the "exactly `k`" half, proved
+deliberately **separately** from the denotation equivalence: conjoining it into the
+`↔` below makes the induction's `cases` dependent and leaks `Classical.choice`.
+`[propext]`-only. -/
+theorem countLength {α : Type} (p : Codec α) (k : Nat) :
+    ∀ (xs : List α) {m : Nat} (s : Bytes m), Rel (count k p) xs s → xs.length = k := by
+  induction k with
+  | zero =>
+      intro xs m s h
+      cases xs with
+      | nil => rfl
+      | cons x rest => rw [Rel_count_zero] at h; exact absurd h.1 (by simp)
+  | succ k ih =>
+      intro xs m s h
+      rcases (Rel_count_succ p k xs (s := s)).1 h with
+        ⟨x', r', j, hj, s₁, s₂, hs, hab, hp, hc⟩
+      subst hab
+      simp [ih r' s₂ hc]
+
+/-- The repetition denotation implies `Rel (count xs.length p) xs s`. **Recursion is
+on the list, not on `k`** — that is the whole point: the length is `xs.length`,
+derived from the term, so the match is non-dependent and no equation is carried in
+context. Induction on `k` with `xs.length = k` in scope is the `Classical.choice`
+leak this family was rewritten to avoid. `[propext]`-only. -/
+theorem relRepeatToCount {α : Type} (p : Codec α) :
+    ∀ (xs : List α) {m : Nat} (s : Bytes m),
+      relRepeat (Rel p) xs m s → Rel (count xs.length p) xs s := by
+  intro xs
+  induction xs with
+  | nil =>
+      intro m s h
+      show Rel (count 0 p) [] s
+      rw [Rel_count_zero]
+      exact ⟨rfl, (relRepeat_nil (Rel p) (s := s)).1 h⟩
+  | cons y ys ih =>
+      intro m s h
+      rw [relRepeat_cons] at h
+      rcases h with ⟨j, hj, s₁, s₂, hs, hp, hc⟩
+      have hrec : Rel (count ys.length p) ys s₂ := ih s₂ hc
+      show Rel (count (ys.length + 1) p) (y :: ys) s
+      rw [Rel_count_succ]
+      exact ⟨y, ys, j, hj, s₁, s₂, hs, rfl, hp, hrec⟩
+
+/-- **`count k p` at exactly `k` elements** — the conjoined form of
+`relRepeatToCount` and `countLength`. `[propext]`-only. -/
+theorem Rel_count_eq_relRepeat {α : Type} (p : Codec α) (k : Nat)
+    (xs : List α) {m : Nat} (s : Bytes m) :
+    Rel (count k p) xs s ↔ xs.length = k ∧ relRepeat (Rel p) xs m s := by
+  constructor
+  · intro h
+    exact ⟨countLength p k xs s h, countToRelRepeat p k xs s h⟩
+  · rintro ⟨hl, hr⟩
+    subst hl
+    exact relRepeatToCount p xs s hr
+
+/-- **`manyUpTo`'s law** — at most `n` repetitions of `p`, tied to the repetition
+denotation rather than merely `#eval`-ed.
+
+The `∃ k ≤ n` is the bound doing its work: `manyUpTo n p` relates `xs` iff there is
+*some* `k` within the bound for which `count k p` — i.e. `relRepeat` at `xs.length` —
+relates it. **Ordering warning (see the definition's docstring):** the results are
+enumerated shortest-first, so a `decodeOne`-style first-result consumer still gets
+`[]`. `[propext, Quot.sound]`-only. -/
+theorem Rel_manyUpTo {α : Type} (p : Codec α) (n : Nat) (xs : List α) {m : Nat}
+    (s : Bytes m) :
+    Rel (manyUpTo n p) xs s ↔ ∃ k ≤ n, xs.length = k ∧ relRepeat (Rel p) xs m s := by
+  unfold manyUpTo
+  rw [Rel_choice]
+  constructor
+  · rintro ⟨d, hmem, hd⟩
+    obtain ⟨k, hk, rfl⟩ := (mem_map_range_iff n (fun k => count k p) d).1 hmem
+    exact ⟨k, hk, (Rel_count_eq_relRepeat p k xs s).1 hd⟩
+  · rintro ⟨k, hk, hlen, hrel⟩
+    exact ⟨count k p, (mem_map_range_iff n (fun k => count k p) (count k p)).2 ⟨k, hk, rfl⟩,
+      (Rel_count_eq_relRepeat p k xs s).2 ⟨hlen, hrel⟩⟩
 
 /-! ## Unbounded repetition: the list combinators re-derived over `relRepeat`
 
