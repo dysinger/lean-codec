@@ -329,10 +329,12 @@ def gatedNames : List Lean.Name := [
   ,`Codec.Rel_cast
   ,`Codec.Rel_cast_symm
   ,`Codec.Rel_choice
+  ,`Codec.Rel_count_eq_relRepeat
   ,`Codec.Rel_count_succ
   ,`Codec.Rel_count_zero
   ,`Codec.Rel_empty
   ,`Codec.Rel_iso
+  ,`Codec.Rel_manyUpTo
   ,`Codec.Rel_optional_some
   ,`Codec.Rel_pure
   ,`Codec.Rel_satisfy
@@ -389,7 +391,9 @@ def gatedNames : List Lean.Name := [
   ,`Codec.consumedAbs_drop_one
   ,`Codec.consumedAbs_id
   ,`Codec.consumedAbs_remaining
+  ,`Codec.countLength
   ,`Codec.countSuccConsumesByte
+  ,`Codec.countToRelRepeat
   ,`Codec.count_succ
   ,`Codec.cursor_bridge
   ,`Codec.decodeArray_bounded
@@ -509,6 +513,7 @@ def gatedNames : List Lean.Name := [
   ,`Codec.list_ofFn_getElem_clean
   ,`Codec.map_toList_eq_ofFn_none_iff
   ,`Codec.mem_decodeArray_iff
+  ,`Codec.mem_map_range_iff
   ,`Codec.mem_packedCands
   ,`Codec.nil_append_size
   ,`Codec.nil_append_toList
@@ -542,6 +547,7 @@ def gatedNames : List Lean.Name := [
   ,`Codec.relAligned_byte
   ,`Codec.relChainl1_cast
   ,`Codec.relChainr1_cast
+  ,`Codec.relRepeatToCount
   ,`Codec.relRepeat_cast
   ,`Codec.relRepeat_cons
   ,`Codec.relRepeat_cons_eq
@@ -766,6 +772,9 @@ why it was fixed instead of documented.
 /-- info: 'Codec.Rel_choice' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Codec.Rel_choice
+/-- info: 'Codec.Rel_count_eq_relRepeat' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Codec.Rel_count_eq_relRepeat
 /-- info: 'Codec.Rel_count_succ' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Codec.Rel_count_succ
@@ -778,6 +787,9 @@ why it was fixed instead of documented.
 /-- info: 'Codec.Rel_iso' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Codec.Rel_iso
+/-- info: 'Codec.Rel_manyUpTo' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.Rel_manyUpTo
 /-- info: 'Codec.Rel_optional_some' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Codec.Rel_optional_some
@@ -946,9 +958,15 @@ why it was fixed instead of documented.
 /-- info: 'Codec.consumedAbs_remaining' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.consumedAbs_remaining
+/-- info: 'Codec.countLength' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Codec.countLength
 /-- info: 'Codec.countSuccConsumesByte' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.countSuccConsumesByte
+/-- info: 'Codec.countToRelRepeat' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Codec.countToRelRepeat
 /-- info: 'Codec.count_succ' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Codec.count_succ
@@ -1306,6 +1324,9 @@ why it was fixed instead of documented.
 /-- info: 'Codec.mem_decodeArray_iff' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.mem_decodeArray_iff
+/-- info: 'Codec.mem_map_range_iff' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.mem_map_range_iff
 /-- info: 'Codec.mem_packedCands' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.mem_packedCands
@@ -1405,6 +1426,9 @@ why it was fixed instead of documented.
 /-- info: 'Codec.relChainr1_cast' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.relChainr1_cast
+/-- info: 'Codec.relRepeatToCount' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Codec.relRepeatToCount
 /-- info: 'Codec.relRepeat_cast' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Codec.relRepeat_cast
