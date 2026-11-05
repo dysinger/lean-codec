@@ -107,9 +107,11 @@ newtype Parser α = Parser (String → [(α, String)])
 
 (§4.1), and its denotation is the graph `data Rel α = Rel [(α, String)]` (§4.3).
 `codec` keeps the list: `decode` returns every `(value, remainder)` pair, and `|` is
-list concatenation. **This is a strengthening, not a departure**, and the earlier
-placement under "Departures" was a defect: the paper's `parse` _filters_ its result
-to whole-string matches —
+list concatenation. **An earlier revision filed this as a _strengthening_ and that
+was wrong** — for the reason this anchor's opening gives: a superset is a different
+observation, so it is a **departure**, and the "departure" heading it sits under is
+correct. (The mis-filing happened in both directions before this was settled; do not
+re-open it.) The paper's `parse` _filters_ its result to whole-string matches —
 
 ```haskell
 parse (Parser p) s = [x | (x, "") ← p s]
@@ -117,9 +119,11 @@ parse (Parser p) s = [x | (x, "") ← p s]
 
 — so the paper's `parse` is not even the full relation; its `Rel` is. `codec`'s
 `decode` returns the unfiltered pair list, i.e. a **superset** of what `parse`
-yields and exactly the paper's `Rel`. Nothing observable changes; `codec` simply
-exposes the relation rather than only its fully-consuming slice, and states the
-relationship as the law `Rel d x s ↔ (x, Suffix.empty n) ∈ decode d s`.
+yields and exactly the paper's `Rel`. The **relation** is unchanged; the
+**observation** is not — `[α]` and `[(α, String)]` are different results for the same
+input — which is why this is a departure and not a strengthening. It states the
+relationship to `parse` as a theorem rather than a definitional identity:
+`Rel d x s ↔ (x, Suffix.empty n) ∈ decode d s`.
 
 **[D3] `|` is the paper's _backtracking union_, not committed choice.**
 `decode (d₁ | d₂) s = decode d₁ s ++ decode d₂ s`, matching `Rel (d₁ | d₂) = Rel d₁ ∨ Rel d₂` by construction. (The paper itself treats the two directions asymmetrically — and it _says so_ in §3.3, where the `Alternative` class is introduced, not only in §4 where the instances are given: its _parser_ `|` is backtracking union (`++`, §4.1) while its _printer_ `|` is left-biased `mplus` (try left, else right; §4.2). `codec` keeps the **relation** backtracking — that is the single source of truth — and lets `encode` inherit the printer's left-bias naturally, so `Rel` and `decode` agree by construction and nothing rounds through a committed choice.)
@@ -342,8 +346,14 @@ three are not cosmetic and should not be ported as if they were:
 `byte`, `satisfy` — plus the non-leaf `pure` (a value-equality check, not a
 format), **and one derived byte-run combinator, the `takeWhile` triple**. It ships
 as `relTakeWhile` / `decodeTakeWhile` / `encodeTakeWhile` (`Codec/Combinators.lean`),
-the same relation-then-two-directions shape every other combinator has, with
-`decodeTakeWhile_spec` and `encodeTakeWhile_rel` its laws. (An earlier revision
+with `decodeTakeWhile_spec` and `encodeTakeWhile_rel` its laws. **Stated precisely,
+because an earlier revision called this "the same shape every other combinator has"
+and that is false:** `chainl1`/`chainr1` have **four** laws each
+(`decode…_spec`, `encode…_rel`, `encode…_ne_none`, `encode…_of_decode`), while
+`takeWhile` and `sepBy` have **two** — the decode→encode half is absent, which is
+open work in `openspec/changes/codec-audit-round-three` §1.5. And `takeWhile` is a
+_run-value triple_ like `relRepeat`, not one of the bounded-eight `Codec` values:
+its bound is the **input length**, not part of the description (`[S6]`). (An earlier revision
 cited the symbol `Codec.takeWhile`, **which does not exist** — `#check` reports an
 unknown identifier; there is no single `Codec`-valued `takeWhile`, only the triple.)
 
@@ -355,7 +365,7 @@ the leaves:
 | ------------------------------------------------------------------------------------ | ---------------------------------------- | ------------------------------------------ |
 | `byte`, `satisfy`                                                                    | `Codec/Codec.lean` (`[D6]` constructors) | leaf                                       |
 | `pure`                                                                               | `Codec/Codec.lean`                       | relates only the empty string              |
-| `empty`, `alt` (`                                                                    | `), `seq` (`∗`), `iso`                   | `Codec/Codec.lean`                         | structural |
+| `empty`, `alt` (`\|`), `seq` (`∗`), `iso`                                            | `Codec/Codec.lean`                       | structural                                 |
 | `count`, `manyUpTo`, `optional`, `maybe`, `choice`, `seqRight`, `seqLeft`, `between` | `Codec/Combinators.lean`                 | **bounded** — hence genuine `Codec` values |
 | `Normal` layer: `fill`, `decodeNormal`                                               | `Codec/Normal.lean`                      | `[D4]`'s quotient                          |
 
@@ -371,18 +381,27 @@ by the input.
 omitted a whole public module. Every file below is public, ships gated laws, and is
 part of what a porter must reproduce:
 
-| module                   | what it is                                                                  | sample gated laws                                          |
-| ------------------------ | --------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `Codec/Codec.lean`       | `Bytes n`, `Rel`, the `Codec` AST, `decode`/`encode`                        | `Codec.decode_spec`, `Codec.encode_rel`                    |
-| `Codec/Iso.lean`         | `Iso`, the structural isos, `foldl`/`foldr`                                 | `Iso.law`, `Iso.unfoldBy_sound`                            |
-| `Codec/Sound.lean`       | the roundtrip/birid laws, the hypothesis families, `findFrom`               | `Codec.roundtrip`, `Codec.huniq_not_derivable`             |
-| `Codec/Combinators.lean` | the bounded `Codec` values, `takeWhile`/`sepBy`/`chainl1`/`chainr1` triples | `Codec.decodeTakeWhile_spec`                               |
-| `Codec/Encode.lean`      | the encoder and its structural lemmas                                       | `Codec.encodeArray_eq`                                     |
-| `Codec/Decode.lean`      | `decodeFull` (the `Run` combinator)                                         | `Codec.decodeFull_spec`                                    |
-| `Codec/Packed.lean`      | Layer 1: `decodeArray`, `decodeWhole`                                       | `Codec.decodeArray_eq`                                     |
-| **`Codec/Normal.lean`**  | **`[D4]`'s quotient layer: `Normal`/`Normalizer`/`fill`/`decodeNormal`**    | `Codec.decodeNormal_encode`, `Codec.decodeNormal_of_fixed` |
-| `Codec/DecodeOne.lean`   | the committed-choice `decodeOne` (sound, completeness open — `[D3]`)        | `Codec.decodeOne_mem`, `Codec.decodeArray_unique`          |
-| `Codec/ByteSlice.lean`   | Layer 2: the named C trust seams                                            | `Codec.findByte_spec`                                      |
+| module                   | what it is                                                                                              | sample gated laws                                          |
+| ------------------------ | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `Codec/Codec.lean`       | `Bytes n`, `Rel`, the `Codec` AST, `decode`/`encode`                                                    | `Codec.decode_spec`, `Codec.encode_rel`                    |
+| `Codec/Iso.lean`         | `Iso`, the structural isos, `foldl`/`foldr`                                                             | `Iso.unfoldBy_sound`, `Iso.counterMeasureDecreases`        |
+| `Codec/Sound.lean`       | the roundtrip/birid laws, the hypothesis families, `findFrom`                                           | `Codec.roundtrip`, `Codec.huniq_not_derivable`             |
+| `Codec/Combinators.lean` | the bounded `Codec` values, `takeWhile`/`sepBy`/`chainl1`/`chainr1` triples                             | `Codec.decodeTakeWhile_spec`                               |
+| `Codec/Encode.lean`      | the encoder's accumulator lemmas (the encoder's _soundness_ law is `Codec.encode_rel`, in `Sound.lean`) | `Codec.fastEncodeRepeat_eq`                                |
+| `Codec/Decode.lean`      | `decodeFull` (the `Run` combinator)                                                                     | `Codec.decodeFull_spec`                                    |
+| `Codec/Packed.lean`      | Layer 1: `decodeArray`, `decodeWhole`                                                                   | `Codec.decodeArray_eq`                                     |
+| **`Codec/Normal.lean`**  | **`[D4]`'s quotient layer: `Normal`/`Normalizer`/`fill`/`decodeNormal`**                                | `Codec.decodeNormal_encode`, `Codec.decodeNormal_of_fixed` |
+| `Codec/DecodeOne.lean`   | the committed-choice `decodeOne` (sound, completeness open — `[D3]`)                                    | `Codec.decodeOne_mem`, `Codec.decodeArray_unique`          |
+| `Codec/ByteSlice.lean`   | Layer 2: the named C trust seams                                                                        | `Codec.findByte_spec`                                      |
+
+**`Iso.law` is a _field_, not a law of this library**, and an earlier revision of the
+table above listed it as one. It is the third field of `structure Iso` — the inverse
+obligation a _caller_ supplies — and it appears in `Axioms.lean` only because Lean
+compiles a field projection as a `thmInfo`-shaped constant, so the gate's
+"walk `thmInfo`" enumeration sees it. Gating a projection of a hypothesis proves
+nothing; it is the same category error as reading Layer-2's "no axioms" as "no trust".
+What `[S1]` claims is that `law` is _required_, which is a fact about the structure's
+shape, not a theorem about `Iso` values.
 
 `Codec/Normal.lean` is the one an earlier revision omitted entirely: it is a public
 module with its own gated laws (`Normal.fixed`, `Normalizer.idem`,
