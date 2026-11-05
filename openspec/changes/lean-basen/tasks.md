@@ -133,7 +133,7 @@ findings marked **superseded** are re-derived in
       builds (45 jobs), runs, installs `bin/bench`, and exits 0; corrupting one
       hex vector to `[0x36, 0x37]` fails `lake build bench` with
       `has type ?m.13 = ?m.13 but is expected to have type
-  Base16.hexBlockUnapply 102 = some [54, 55]`.
+Base16.hexBlockUnapply 102 = some [54, 55]`.
 - [x] 5.4 **`lakefile.lean` pins `@ "master"` vs the template's `@ "main"`.** —
       **done.** Commented in `lakefile.lean` and cross-referenced from AGENTS.md.
       The finding's framing was wrong on one point worth recording: `master` is
@@ -192,7 +192,7 @@ A subagent reviewer compared `../lean-basen` against `../lean-codec` across four
 axes (project uniformity, theorem coverage, code quality, archive readiness).
 Three findings block the archive. Each was re-verified by hand here before fixing.
 
-- [ ] 6.1 **THE PROOF GATE IS NOT ENFORCED — `lakefile.lean` has no
+- [x] 6.1 **THE PROOF GATE IS NOT ENFORCED — `lakefile.lean` has no
       `moreLeanArgs`.** `lean-codec/lakefile.lean:20` sets
       `moreLeanArgs := #["-DwarningAsError=true"]`; `lean-basen/lakefile.lean`
       does not (`grep -n moreLeanArgs lakefile.lean` → no hits). Consequence,
@@ -268,16 +268,16 @@ Three findings block the archive. Each was re-verified by hand here before fixin
       **Do not restart from B.** The spike settled it; the cost is in
       characterising `b64BlockDecodeLenient`, not in the §3.5 statement.
 
-- [x] 6.3 **Two commit messages claim theorems that do not exist.** —
-      **PARTLY RESOLVED.** Commit `9d5074e` implied `b64Zh`/`b64Zm9` rejection
-      is proved, and `3dfc249` says of `b32Tail1_pad_bits_mod4` that "`MZ======`
-      … is not an encoding of anything" — while `MZ` appears zero times in
-      `Base32.lean`. The base64 half is now _partly_ backed by the three lemmas
-      above (the block-level rejection is proved; the whole-input statement is
-      not). The base32 `MZ======` claim has **no** theorem behind it at all and
-      is still open. Since commit messages cannot be rewritten without
-      rewriting history, the fix is the theorems — 6.2's remaining lift plus a
-      base32 twin. **Do not treat this as closed by 6.2's partial landing.**
+- [~] 6.3a **Base64 commit message claims a theorem that did not exist.** —
+  **PARTLY RESOLVED (block-level proved, whole-input open).** Commit `9d5074e` implied `b64Zh`/`b64Zm9` rejection
+  is proved, and `3dfc249` says of `b32Tail1_pad_bits_mod4` that "`MZ======`
+  … is not an encoding of anything" — while `MZ` appears zero times in
+  `Base32.lean`. The base64 half is now _partly_ backed by the three lemmas
+  above (the block-level rejection is proved; the whole-input statement is
+  not). The base32 `MZ======` claim has **no** theorem behind it at all and
+  is still open. Since commit messages cannot be rewritten without
+  rewriting history, the fix is the theorems — 6.2's remaining lift plus a
+  base32 twin. **Do not treat this as closed by 6.2's partial landing.**
 
 - [ ] 6.4 **`Axioms.lean` gate covers 91 of 404 theorems (22.5%).** Per module:
       Base2 16/31, Base4 12/31, Base8 12/31, Base10 12/31, Base16 24/60,
@@ -291,17 +291,57 @@ Three findings block the archive. Each was re-verified by hand here before fixin
       `Common.lean:22` and `Base64.lean:22` — a "make it green" switch on the
       two largest surfaces. Whether enabling it surfaces real noise is
       unverified; record it as known debt rather than flip it blind.
-- [ ] 6.6 **Four dead exported theorems**: `Base64.b64BlockUnapply_one`,
+- [x] 6.6 **RESOLVED by gating, not deleting.** Four laws were referenced only
+      by their own declarations: `Base64.b64BlockUnapply_one`,
+      `Base64.b64BlockUnapply_two`, `Base64.b64Split_shape`,
+      `Base32.b32Split_shape`. All four are true and are the natural
+      load-bearing facts for a split-level argument, so they were gated in
+      `Axioms.lean` rather than removed. Gating immediately paid off twice:
+      all four turned out to be `[propext]`-only rather than
+      `[propext, Quot.sound]`, which the gate caught on the first build — three
+      wrong docstrings corrected. Original finding: `Base64.b64BlockUnapply_one`,
       `Base64.b64BlockUnapply_two`, `Base64.b64Split_shape`,
       `Base32.b32Split_shape` — declared, referenced only by their declarations.
-- [ ] 6.7 **`openspec/` is an empty untracked directory** in `../lean-basen`.
+- [x] 6.7 **RESOLVED — directory removed.** `openspec/` was an empty untracked
+      directory in `../lean-basen`; git cannot track empty dirs, so it was local
+      debris and it was misleading because the ledger lives in `lean-codec`.
+      Original finding: `openspec/` is an empty untracked directory in `../lean-basen`.
       Git cannot track empty dirs, so this is local debris, and it is misleading
       because the AGENTS.md note says the ledger lives in `lean-codec`.
-- [ ] 6.8 **No `CHANGELOG.md`** in `../lean-basen`, though `lean-codec` has one.
+- [x] 6.8 **RESOLVED — `CHANGELOG.md` added.** Records the audit outcome, the
+      proof-gate fix and the landing history back to the initial port.
+      Original finding: no `CHANGELOG.md` in `../lean-basen`, though `lean-codec` has one.
       A library about to be archived should carry its release notes.
-- [ ] 6.9 **Naming inconsistency**: `b64_block_run_of_boundary` /
+- [x] 6.9 **RESOLVED — six declarations renamed** to
+      `decodeFullB{32,64}TailOfEncode`, `b{32,64}BoundaryPin`,
+      `b{32,64}BlockRunOfBoundary`, with every call site.
+      Original finding: naming inconsistency — `b64_block_run_of_boundary` /
       `b64_boundary_pin` / `decodeFull_b64Tail_of_encode` use snake_case prefixes
       while the rest of the file is `b64BlockRun…` camelCase.
+- [ ] 6.3b **Base32 commit message claims a theorem that does not exist —
+      and there is no theorem at all.** Commit `3dfc249` says of
+      `b32Tail1_pad_bits_mod4` that "`MZ======` (where `Z` = 25 sets one of
+      them) is not an encoding of anything". `grep -rn 'MZ' BaseN/Base32.lean`
+      returns **zero hits**: no theorem, no definition, no vector. The
+      _canonical-side_ fact is proved (`b32Tail1_pad_bits`,
+      `b32Tail1_pad_bits_mod4`), but the **rejection** of the concrete
+      `MZ======` input is entirely unstated.
+
+      **This is a separate item from 6.2 by design.** 6.2 is blocked on a
+      `Suffix`/`splice` bookkeeping problem in the whole-input lift; 6.3b is
+      blocked on nothing — the base32 lift is structurally simpler than the
+      base64 one (a single 1-byte tail shape, and `b32BlockApply` has the same
+      re-encode guard), and the block-level lemmas to reuse already exist. It is
+      therefore the **recommended next task**: it closes one of the two
+      remaining archive blockers and is not entangled with 6.2's difficulty.
+
+      Shape: prove `b32BlockApply [0x4D, 0x5A, 61,61,61,61,61,61] = none` (the
+      `MZ======` char block) by the same recipe as
+      `b64BlockApply_b64Zh_chars` — `unfold`, minimal `simp only`, `split` on
+      the re-encode guard, `decide` — then lift with a base32 twin of
+      `not_rel_b64TailElem_of_apply_none`. Then gate both in `Axioms.lean`.
+      Correct this commit message's claim only once the theorem exists.
+
 - [ ] 6.10 **Toolchain skew (same in both repos, so not a divergence):**
       `lean-toolchain` pins `leanprover/lean4:v4.30.0`, but the nixpkgs `lean`
       provided by the dev shell reports **4.34.1**. Elan is present so `lake`
