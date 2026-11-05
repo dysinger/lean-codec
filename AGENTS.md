@@ -2,258 +2,110 @@
 
 Guidance for AI coding agents working in this repository.
 
-> ## NEXT SESSION: ONE TASK, AND ONLY THIS TASK
+> ## START HERE: one task, and the ledger says which
 >
-> **`lean-basen`: finish the seven remaining polish tasks, then archive it.**
-> **Owner decision, 2026-11-04.** That work happens in the sibling repo
-> `../lean-basen` in its own `nix develop`; the ledger is
-> `openspec/changes/lean-basen/tasks.md` here plus its `tasks.md` there. See
-> `## Current state` for the verified per-task state, the dependency order, the
-> archive hazard, and the stale-`flake.lock` trap — all four are recorded there and
-> none are repeated here. **Do not archive until the seven are done**: the
-> archive command accepts an incomplete change without complaint, so a green archive proves
-> nothing.
+> **The ledger is the single source of truth for what to do next:**
+> **[`openspec/changes/lean-basen/tasks.md`](openspec/changes/lean-basen/tasks.md)**.
+> Open it first; take the highest-numbered open item. This file deliberately does
+> not restate the task list, because a copy here is stale the moment the ledger
+> moves — which is exactly what happened to the version this replaced.
 >
-> ---
+> That work happens in the sibling repo `../lean-basen` in that repo's own
+> `nix develop`, against the ledger here.
 >
-> **Queued AFTER that (do not start it in the same session):** `huniq` for
-> unequal-length `alt` — the one real proof obligation left in this repo's
-> whole-buffer story. Kept below in full so the analysis is not lost.
+> **Current position, in one line:** one change open (`lean-basen`, in progress,
+> not archivable); two release blockers left, both §6 rejection theorems. Work
+> **§6.3b before §6.2** — §6.3b is the simpler base32 twin and is not entangled
+> with §6.2's `Suffix`/`splice` problem. See `## Current state` for why, and the
+> traps that have already cost sessions.
 >
-> **Why this and nothing else.** A three-reviewer audit of the project against
-> `PAPER.md`/`README.md` established that the core is pure and proved but that
-> "ready to use" was false for three reasons — no `Iso` helper, no `ConsumesByte`
-> for `seq`/`iso`, no single-value decode — and **all three are now fixed with
-> format-agnostic primitives only** (`Iso.ofTotal`,
-> `Codec.seqConsumesByte`/`isoConsumesByte`, `decodeWholeOne`).
-> **No concrete format was added to this package**, and none should be: `[S3]`
-> stands, and the formats (base2/4/8/10/16/32/64) live in `../lean-basen`. A first
-> attempt did add a `Codec/Examples.lean` with `u8`/`u16le`/`u16be`; it was removed
-> as bleed-in from the downstream repo's territory. What is left is the fourth
-> finding, and it is a theorem, not an ergonomics gap:
->
-> `decodeFull_spec` takes `huniq` (at most one value list fully consumes a string).
-> It is discharged **only** at `Codec.byte`, through a chain that needs
-> `LengthConst` — a _constant-step-length_ relation. Every variable-length format
-> (a `varint`, a text format, anything with `alt` over unequal lengths) is outside
-> it. `huniq_not_derivable` already machine-checks that unambiguity + productivity
-> do **not** imply `huniq`, so this is not a formality.
->
-> **The task:**
->
-> 1. State the honest general sufficient condition. `relRepeat_unique_same_length`
->    is indexed by list length; the counterexample (`[a]` vs `[b, b]`) is excluded
->    by the _length index_, not by `LengthDet`. So the work is a condition that
->    pins the consuming list's length without requiring constant step length —
->    the `RelAligned` direction already sketched in `Codec/Sound.lean`.
-> 2. Discharge the condition **generically**, at the _schema_ a variable-length
->    format is built from — `alt` of two `satisfy`-guarded branches with a
->    disjointness premise, stated over an abstract predicate — so the premise gets an
->    in-tree supplier that is not `Codec.byte`. **Do not instantiate it at a concrete
->    format**: `[S3]` keeps formats out of this package, and the `varint` that would
->    consume the lemma belongs in `../lean-basen`. A generic schema-level lemma is
->    the reusable artifact; a `varint` here would repeat the `Codec/Examples.lean`
->    breach that was just removed.
-> 3. Record the outcome in `Codec/Sound.lean`'s section note and `README.md`
->    (the `[S1]`/`huniq` discussion). If the condition turns out not to be
->    statable without new hypotheses, say so and say exactly which — do not weaken
->    `decodeFull_spec`'s statement to make it go through.
->
-> **Requirements:** green `lake build` + `lake build bench` (zero warnings),
-> green `openspec validate --all`, individual-file commits, `#print axioms` on
-> **every** new lemma must report `[propext, Quot.sound]`-only (run it; do not
-> assume — the `Classical.choice` trap has bitten twice in this tree), and every
-> figure you write must be a lane's literal output from that session.
->
-> **Explicitly out of scope:** any new OpenSpec change; `lean-basen`; a hand-written
-> C parser for `k > 1` (the `CRef` reference exists and measures ~4× at `k = 1`);
-> and `utf8`, which needs a text-carrier decision, not a proof fix.
->
-> **Known-open, recorded so it is not rediscovered:** `decodeOne` is a
-> committed-choice decoder with no completeness theorem and no wired entry point;
-> `decodeFullArray` is a documented footgun (commits to `head?`); the Layer-2
-> seams are trusted-not-proven by design and are excluded from the axiom gate.
-
-**Four hard requirements, before anything else:**
-
-1. **Play an audible alarm every time you pause** — see
-   [Pause signal](#pause-signal-mandatory) below. It is a mandate, not a nicety.
-2. **This file is a pointer to the active OpenSpec change, not a second copy of
-   it.** Direction for the next session is `openspec/changes/<name>/`, applied
-   through `openspec instructions apply`; `AGENTS.md` says _which_ change to work
-   and _how this environment works_, and nothing else. Do not restate task lists,
-   measured numbers, lemma tables, or status here — that is what `tasks.md` and
-   `review.md` are for, and a copy in this file is stale the moment the ledger
-   moves. When a fact already lives in `openspec/`, **link to it instead of
-   duplicating it**; if this file and an `openspec/` artifact disagree, the
-   artifact wins and this file gets fixed.
-3. **Direction lives only here and in `openspec/`.** No `HANDOFF.md`, no
-   `NOTES.md`, no `*-wip.lean` scratch files, no second place a next session could
-   look. If a scratch file earns its keep, land its content in the library or in
-   the change's `tasks.md` and delete the file.
-4. **Work lands in the repo, and every session ends with a checkpoint commit.**
-   Do **not** develop proofs in `/tmp` (or any path outside the repo) and intend
-   to splice later. `AGENTS.md` permits `/tmp/probe.lean` for exactly one case —
-   the library does not build and you need to iterate against the built library —
-   and that file is deleted the moment the build is green again. New proofs, new
-   lemmas, and half-finished cases are **written into `Codec/*.lean`**, with the
-   unfinished obligation marked by a `sorry` that fails `lake build` (the gate is
-   the honest marker). This is not a style preference: work in `/tmp` is invisible
-   to `git`, to the build gate, and to the next session, and one reboot loses it.
-   End every session with a commit (individual files, per the git conventions) so
-   the tree is never the only copy of anything.
-
-**This file is forward-looking operating instructions, not a session diary.**
-History — what landed when, what was reverted, what a past session measured —
-belongs in `openspec/` (the task ledger) and `CHANGELOG.md`. Do not append
-"session status" sections here; that practice is what made this file 536 lines
-of mutually-contradicting snapshots. Keep it short and true.
-
-**Where a session leaves its handoff: the `## Current state` block below, in
-place.** Rewrite that block; do not add to it, and do not create a new
-`HANDOFF.md`/`NOTES.md`/`STATUS.md` per session — a second handoff file is the
-same session-diary failure in a different filename, and it silently rots the
-moment `Current state` disagrees with it. The distinction that keeps this file
-honest: `Current state` states _what is true now and what is next_ (always
-rewritten, never appended), while _how it got there_ and _what was measured_ live
-in the change's `tasks.md` and in `CHANGELOG.md`.
-
-## Where the truth lives
-
-**One source of truth per concern.** When two files disagree, the left column wins:
-
-| Question                                        | Authoritative file                                |
-| ----------------------------------------------- | ------------------------------------------------- |
-| The `Bytes` type's definition                   | `Codec/Codec.lean:68`                             |
-| What is this library, why each design choice    | `README.md` (`[D#]`/`[S#]`), `PAPER.md`           |
-| **Which change to work next**                   | `openspec list --json` + `## Current state` below |
-| What work is open, and how done is done         | `openspec/changes/<name>/tasks.md`                |
-| The evidence behind a finding                   | `openspec/changes/<name>/review.md`               |
-| What a change is _allowed_ to change            | `openspec/changes/<name>/proposal.md`             |
-| The behavioural contract                        | `openspec/specs/**/spec.md`                       |
-| How this environment is set up and how to build | this file                                         |
-
-**Anything else is a summary.** If a summary and an `openspec/` artifact differ,
-the artifact is correct and the summary is stale — fix the summary.
-
-**`Bytes n` means `Fin n → UInt8`** (`Codec/Codec.lean:68`). That line is the
-definition; every other document is a _record_ of it. A `Bytes` spelled without
-its length index, or as `List UInt8`/`Array UInt8`/`ByteArray`, is a **defect**
-in whichever doc contains it (including a changelog entry — a corrected entry can
-drift again; a stated precedence cannot). The removed `List`-carrier's
-`Array.extract`/`toList` transport lemmas are the `Classical.choice` source
-`README.md`'s "Representations" section exists to keep out.
+> **Do not archive until both are closed.** `openspec archive` accepts an
+> incomplete change without complaint, so a green archive proves nothing.
 
 ## Current state
 
-**The next session's work is the boxed task at the top of this file. Everything in
-this section is background for it; nothing here competes with it.**
+**Do not record status here — compute it.** The ledger is the source of truth:
 
-**Do not record status here — compute it.** Two commands answer everything:
+| Question                       | Authoritative file                                                                                                     |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| **What is the task right now** | [`openspec/changes/lean-basen/tasks.md`](openspec/changes/lean-basen/tasks.md) — always the highest-numbered open item |
+| Open changes + task counts     | `nix develop --command openspec list --json`                                                                           |
+| Are the spec deltas sound      | `nix develop --command openspec validate --all`                                                                        |
 
-```bash
-nix develop --command openspec list --json | sed -n '/^{/,$p'   # active changes + counts
-nix develop --command openspec validate --all                    # spec deltas sound
-```
+One change is open, `lean-basen`, and its code lives in the sibling repo
+`../lean-basen` in that repo's own `nix develop`. Read the ledger for its task
+list; this file does not restate it.
 
-**No OpenSpec change is open in this repo, and none is to be created for the next
-session** — that session's work is the boxed task at the top of this file, done
-directly on the tree. `codec-review-remediation` was archived on 2026-11-01 into
-`openspec/changes/archive/2026-11-01-codec-review-remediation/`, and its
-requirements are now live under `openspec/specs/codec/**` — read those for the
-behavioural contract, and the archived `tasks.md` / `review.md` for how it got
-there and what was measured. **Do not continue that change.**
+### The two remaining archive blockers (and why there are two, not one)
 
-**`lean-basen` IS the next session's work (owner decision, 2026-11-04), and it is
-`in-progress` at 18/25** — do not archive it. Its code lives in the sibling repo
-`../lean-basen` in that repo's own `nix develop`, so it touches nothing here; its
-ledger is `openspec/changes/lean-basen/tasks.md` (this repo) plus its own `tasks.md`
-there. **The seven open tasks are mechanical polish, not proofs**: 5.2 (AGENTS.md
-drift) → 5.3/5.4/5.12 (build wiring + notes) → 5.8/5.9/5.13 (code/doc nits), in that
-dependency order (the change's own status block gives it). Verified still open on
-2026-11-04, not merely unticked: `lakefile.lean` pins `@ "master"` (template uses
-`main`); no `packages.bench` in `flake.nix`; `byte0`/`byte1` are bare lowercase
-exports in `Base32.lean`/`Base64.lean`; `Base2.valToBit` falls back to `49` on
-invalid input.
+Both are §6 items in the ledger, recorded there in full. Stated here only so the
+_shape_ of the problem is not lost:
 
-**Archive hazard, and why the archive was refused on 2026-11-04.** This change
-MODIFIES "The `basen` bases are `Codec` values", and a MODIFIED block **replaces the
-live requirement wholesale** on archive. `openspec archive` does **not** check task
-completion — verified from its `--help` — so a green archive is not evidence of
-anything. Before archiving: finish the seven tasks, re-read
-`openspec/specs/basen/spec.md` and confirm the delta is a superset, archive, then
-`openspec validate --all` again.
+- **§6.2 — the base64 whole-input lift.** `decodeFullB64 b64Zh = none`. Three
+  supporting lemmas are landed and gated; the lift itself is repeatedly blocked on
+  `Suffix`/`splice` index bookkeeping in the `blocks = []` branch. **The approach
+  is settled** (do not revisit it); the difficulty is purely transport plumbing.
+- **§6.3b — the base32 twin.** `MZ======` is named in a commit message with no
+  theorem behind it (`grep MZ BaseN/Base32.lean` → zero hits).
 
-**When working there, first:** `../lean-basen` pins `codec` through `flake.lock`,
-and that pin **predates** this repo's `Iso.ofTotal` /
-`seqConsumesByte` / `isoConsumesByte` / `decodeWholeOne` — so those are not available
-there until a targeted `nix flake update codec` + `lake update codec`. A `bad import`
-failure means the pin is stale, never that the import is wrong.
+**Work §6.3b before §6.2.** It is structurally simpler (one 1-byte tail shape),
+reuses the base64 recipe and lemmas that already exist, and is **not entangled**
+with §6.2's `splice` problem. It closes one of two blockers without touching the
+hard one.
 
-**No deferral remains.** The one item 5.10 left open — the `lean` skill's
-~70-char bold-lead-in cap — was closed on 2026-11-02: all 60 entries now comply,
-by shortening the title and moving the original wording into the entry body, so
-nothing a reader would quote was lost (verified: line and bullet counts unchanged,
-zero titles dropped). 5.10's deferred item is therefore done, not dropped.
+### Roadmap (shape only — the ledger has the detail)
 
-**Not a deferral, and not to be "finished" later:** `huniq` is supplied for
-`Codec.byte` only (`decodeFull_spec_byte`). Task 2.6 asked for exactly one concrete
-instance so the premise is demonstrably satisfiable in-tree, and that is done. For
-an arbitrary codec `huniq` is a hypothesis _by design_ — and for a
-non-constant-length relation the un-indexed statement is simply false
-(`Codec.huniq_not_derivable`). Do not reopen this as unfinished work.
+1. Close §6.3b, then §6.2. Both are rejection theorems, not new subsystems.
+2. Re-read `openspec/specs/basen/spec.md`, confirm §6.2's delta is a superset,
+   then archive `lean-basen`. **`openspec archive` does not check task completion**
+   — a green archive is not evidence of anything, so verify separately.
+3. Then the next format port (ordering is an owner decision; this file does not
+   guess it).
 
-**Direction lives in exactly two places: this file and `openspec/`** — no
-`HANDOFF.md`, no notes file, no scratch tree. `openspec/lean-notes.md` is
-_lessons, not direction_ (it is the project half of the global `lean` skill); if an
-entry there ever reads like a task list, move it to the ledger.
+### Traps that have actually cost sessions here
 
-Five facts about that change are worth stating here **only because a reader who
-skips the ledger would get them wrong**, and all five are also in `tasks.md`:
+- **`Suffix`/`splice` bookkeeping is where §6.2 dies.** Before touching it, read
+  `Codec`'s own `Suffix`/`splice` API and its existing read-through lemmas
+  directly. Six sessions were lost re-deriving them from
+  `decodeFullB64_reject_ZgAAAA` rather than reading them.
+- **`decodeFull` is not `decodeFullB64`.** The fixed-width bases use the `Run`
+  combinator (unfolds with `WellFounded.fix_eq` + `decodeFullStep.eq_def` +
+  `simp`); the padded bases use a `filterMap` composition that same recipe gets
+  **stuck** on. Use `cases h : decodeFullB64 s` + `decodeFullB64_some` instead —
+  the library never unfolds that recursion, and none of its own rejection
+  theorems do either.
+- **A §3.5 pad-bit rejection is a `decide`, not an induction.** The check is
+  already `b64BlockApply`'s own guard, so the block-level law is `unfold` +
+  minimal `simp only` + `split` + `decide`. Only the lift is work.
+- **`../lean-basen` pins `codec` through `flake.lock`.** If it predates something
+  this repo added, the fix is a targeted `nix flake update codec` + `lake update
+codec` — a `bad import` means a stale pin, never a wrong import.
+- **`huniq` is a hypothesis by design for any codec other than `Codec.byte`**
+  (`Codec.huniq_not_derivable` machine-checks that it does not follow from
+  unambiguity + productivity). Do not reopen it as unfinished work.
 
-- **`decodeFull_spec`'s `huniq` is now supplied at `Codec.byte`, and nowhere
-  else.** `Codec.decodeFull_spec_byte` needs no hypothesis. For any **other** codec
-  `huniq` remains a hypothesis and the derivation is open — do not claim it is
-  discharged there. The chain itself is in `tasks.md` 2.6; do not re-derive it.
-- **Run the wired surfaces, not the specification.** `decodeWhole` /
-  `decodeWholeBytes` and `encodeWhole` / `encodeWholeRepeat` / `encodeWholeBytes`
-  are the named entry points, each tied to `decodeFull` / `encode` /
-  `encodeRepeat` by a law. `decodeFull` and `encodeRepeat` stay the specification.
-  (Those laws equate them to `decodeFull`; where that carries `huniq` it is finding
-  7.6, not a defect in the wiring.)
-- **Read `tasks.md` 6.1b's "SESSION 9" block before touching
-  `Codec/Packed.lean`** (five plan corrections), and check `#print axioms` on
-  **any** new transport lemma rather than assuming — the `Classical.choice` trap
-  bit twice exactly there.
-- **The Layer-2 `memcpy` seam is deliberately NOT wired, for an axiom reason.**
-  `commitRemainder` is ~50–75× faster than the `List` transport (measured live by
-  `benchRemainderTransports`), but the connecting lemma needs
-  `Array.toList_extract`, which carries `Classical.choice` here. Speed is not the
-  obstacle; the gate is. Do not "fix" this by weakening to a classical proof.
-- **Only `R5.1` may change a declaration _shape_** (design D9), and it must keep
-  every theorem's statement, prove the new definition equal to the old, and stay
-  `[propext, Quot.sound]`-only / zero-`sorry` / `#eval`-able. Nothing else may.
+### Rules about this file
 
-**History is not direction.** What landed, when, and what was measured belongs in
-the change's `tasks.md` and in `CHANGELOG.md` — including for archived changes,
-whose own `tasks.md` under `openspec/changes/archive/` is the reference. Do not
-re-teach landed work here, and do not extend an archived change with new audit
-work.
+- **Direction lives in exactly two places: this file and `openspec/`.** No
+  `HANDOFF.md`, no `NOTES.md`, no scratch tree. `openspec/lean-notes.md` is
+  _lessons, not direction_ (the project half of the global `lean` skill); if an
+  entry there reads like a task list, move it to the ledger.
+- **History is not direction.** What landed, when, and what was measured belongs
+  in the change's `tasks.md` and `CHANGELOG.md` — including archived changes,
+  whose own `tasks.md` under `openspec/changes/archive/` is the reference. Do not
+  re-teach landed work here.
+- **Archive hazard.** `lean-basen` MODIFIES "The `basen` bases are `Codec`
+  values", and a MODIFIED block **replaces** the live requirement wholesale. Two
+  changes modifying the same requirement must archive dependency-first, with the
+  order recorded in the later change's `tasks.md`.
 
-**Archive hazards, recorded where the archive step will look for them.** A
-MODIFIED requirement **replaces** the whole block on archive, so: re-read
-`openspec/specs/<area>/spec.md` immediately before archiving, confirm the delta's
-text is a superset, and run `openspec validate --all` after **each** archive. Two
-changes modifying the same requirement must archive dependency-first, with the
-required order recorded in the later change's `tasks.md`. (`lean-basen` carries
-the last live instance of this: it MODIFIES "The `basen` bases are `Codec`
-values".)
+### Ecosystem shape (stable, not status)
 
 Each verified format/protocol is its own git repo, initialized from
 `lean-nix-flake-template`, prefix-dropped internally (`lean-basen` → `basen`/
-`BaseN`; `lean-vbin` → `vbin`; …), depending on `codec` **by flake input + `require
-codec from git` injection — never vendored**, and inheriting the single-`Bytes n`-
-substrate and `[propext, Quot.sound]`-only discipline.
+`BaseN`; `lean-vbin` → `vbin`; …), depending on `codec` **by flake input +
+`require codec from git` injection — never vendored**, and inheriting the
+single-`Bytes n`-substrate and `[propext, Quot.sound]`-only discipline.
 
 In `../lean-basen`, `codec` is a flake input threaded into `default.nix`, which
 rewrites `require codec from git …` → a local `require codec from "./codec-src"`
@@ -303,14 +155,16 @@ nix develop --command lake env lean /tmp/c.lean    # expect [propext, Quot.sound
 
 ```bash
 nix develop --command lake build         # library + Axioms.lean: zero sorry/warnings
-nix develop --command lake build bench   # the bench lane (dev-loop only)
+nix develop --command lake build bench   # the bench lane (fast dev loop)
+nix build '.#bench'                      # same lane, sandboxed — BUILDS AND RUNS it
 ```
 
-The `bench` line above is **known-incomplete**: there is no `packages.bench` in
-that flake, so the exe is not a flake target — that repo's task 5.3 owns wiring
-it. Do not read a green `lake build bench` as "the bench is verified in CI",
-and do not add a `nix build '.#bench'` for it here. 5.3 is a
-_verification-recipe_ item, not a docs nit; do it first if you need the bench.
+`packages.bench` exists and is a **package, not a `checks` entry**: the lane
+value-checks known vectors, which is evidence, not proof, so it must not be able
+to fail the proof gate. Its `installPhase` _runs_ the executable, so
+`nix build '.#bench'` verifies the vectors rather than merely producing a binary.
+Do not add it to `checks`, and do not treat a green `lake build bench` as having
+verified anything — that only compiles.
 
 `Axioms.lean` is a `@[default_target]` lib, so `lake build` runs its `#guard_msgs`
 gates; a `Classical.choice` regression fails the build. To check one law by hand:
