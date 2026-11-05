@@ -184,7 +184,21 @@
       green
 - [x] 6.2 `nix develop --command lake build bench` — bench still compiles and links
 - [x] 6.3 `nix develop --command openspec validate --all`
-- [ ] 6.4 `nix flake check` (detached with `nohup`, never foregrounded)
-- [ ] 6.5 `../lean-basen`: `lake build`, `lake build bench`, `nix build '.#bench'`
-- [ ] 6.6 Commit per task family (gate / congruence / coverage / basen / README),
+- [x] 6.4 `nix flake check` (detached with `nohup`, never foregrounded)
+- [x] 6.5 `../lean-basen`: `lake build`, `lake build bench`, `nix build '.#bench'`
+- [x] 6.6 Commit per task family (gate / congruence / coverage / basen / README),
       individual files only, printing `git diff --cached --name-only` before each
+
+## Gate results (2026-11-05)
+
+| gate                                  | result                                                                              |
+| ------------------------------------- | ----------------------------------------------------------------------------------- |
+| `lake build` (this repo)              | green — 364 public theorems, 292 gated + 72 allowlisted, `Classical.choice` in none |
+| `lake build bench`                    | green — compiles and links (pre-existing `ld` SDK-version warnings only)            |
+| `openspec validate --all`             | 9 passed, 0 failed                                                                  |
+| `nix flake check`                     | green — `lean`, `openspec`, `formatting`                                            |
+| `../lean-basen` `lake build`          | green — 25 jobs, `Axioms.lean` gate 440/440                                         |
+| `../lean-basen` `lake build bench`    | green — 45 jobs                                                                     |
+| `../lean-basen` `nix build '.#bench'` | green — builds **and runs**, exit 0                                                 |
+
+`nix fmt` reformatted `README.md` once; the working tree is formatted afterwards.
