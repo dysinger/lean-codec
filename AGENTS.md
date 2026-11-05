@@ -2,67 +2,48 @@
 
 Guidance for AI coding agents working in this repository.
 
-> ## START HERE: one task left — archive `lean-basen`. The ledger has the detail.
+> ## START HERE: no change is open. The next task is an owner decision.
 >
-> **The ledger is the single source of truth for what to do next:**
-> **[`openspec/changes/lean-basen/tasks.md`](openspec/changes/lean-basen/tasks.md)**.
-> Its §6 opens with a fenced `NEXT SESSION` block with the exact steps. This file
-> deliberately does not restate the task list, because a copy here is stale the
-> moment the ledger moves — which is exactly what happened to the version this
-> replaced.
+> **`lean-basen` was archived 2026-11-05** into
+> `openspec/changes/archive/2026-11-05-lean-basen/`: 36/36 tasks, all four
+> `../lean-basen` gates green (`lake build`, `lake build bench`,
+> `nix build '.#bench'`, `nix flake check`), live `basen` spec updated (+3
+> added, 1 requirement modified, 17 -> 24 scenarios) and
+> `openspec validate --all` re-run green afterwards. `openspec list` reports
+> **no open change**.
 >
-> That work happens in the sibling repo `../lean-basen` in that repo's own
-> `nix develop`, against the ledger here.
+> **The next task (another format port) is an owner decision — this file does not
+> guess it.** When one is chosen, write it as a new change under
+> `openspec/changes/<name>/` and let _that_ `tasks.md` be the ledger. Do not
+> re-open `lean-basen`: its tasks file is archived history, not direction.
 >
-> **Current position, in one line:** one change open (`lean-basen`), **36/36
-> tasks complete**, status `complete`, **archivable**. All three release blockers
-> (§6.1, §6.2, §6.3b) and both follow-up audit items (§6.4, §6.5) are closed;
-> §6.10 (toolchain) is closed too — the ecosystem is on Lean 4.35.0. Nothing is
-> outstanding except the archive itself.
->
-> ### What to do next session, exactly
->
-> **Archive `lean-basen`. That is the whole task.** In order:
->
-> 1. In `../lean-basen`, own `nix develop`: `lake build`, `lake build bench`,
->    `nix build '.#bench'`, `nix flake check` — all four green.
-> 2. Re-read `openspec/specs/basen/spec.md` and confirm this change's delta is a
->    **superset**. **Already checked 2026-11-05** (re-confirm, don't re-derive):
->    the live spec has 17 scenarios across 7 requirements; the delta MODIFIES
->    exactly **one** of them ("The `basen` bases are `Codec` values"), and that
->    block carries **both** of that requirement's live scenarios plus 2 more.
->    The other 6 requirements are not touched at all.
-> 3. `openspec validate --all` → `openspec archive lean-basen` →
->    `openspec validate --all` again (this change MODIFIES a live requirement).
-> 4. **Confirm the 36 boxes are ticked by reading the ledger** — `openspec
-archive` **accepts an incomplete change without complaint**, so a green
->    archive is never evidence of anything.
->
-> After the archive, **no change is open**, and the next task (another format
-> port) is an **owner decision** — this file must not guess it.
+> Everything below is the **stable** part — how to work here, what the gates are,
+> and the traps that have cost sessions. Status is computed from `openspec/`,
+> never recorded here.
 
 ## Current state
 
 **Do not record status here — compute it.** The ledger is the source of truth:
 
-| Question                       | Authoritative file                                                                                                     |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| **What is the task right now** | [`openspec/changes/lean-basen/tasks.md`](openspec/changes/lean-basen/tasks.md) — always the highest-numbered open item |
-| Open changes + task counts     | `nix develop --command openspec list --json`                                                                           |
-| Are the spec deltas sound      | `nix develop --command openspec validate --all`                                                                        |
+| Question                       | Authoritative file                                                                               |
+| ------------------------------ | ------------------------------------------------------------------------------------------------ |
+| **What is the task right now** | `nix develop --command openspec list --json` — there is no ledger until a new change is authored |
+| Open changes + task counts     | `nix develop --command openspec list --json`                                                     |
+| Are the spec deltas sound      | `nix develop --command openspec validate --all`                                                  |
+| Archived history               | `openspec/changes/archive/<date>-<name>/tasks.md` (e.g. `2026-11-05-lean-basen`)                 |
 
-One change is open, `lean-basen`, and its code lives in the sibling repo
-`../lean-basen` in that repo's own `nix develop`. Read the ledger for its task
-list; this file does not restate it.
+**No change is open.** `lean-basen` was archived 2026-11-05; its code lives in
+the sibling repo `../lean-basen`, which is built in that repo's own
+`nix develop`. Nothing in this file restates its task list — that file is now
+archived history under `openspec/changes/archive/2026-11-05-lean-basen/`.
 
-### Archive blockers: all closed
+### How `lean-basen` closed (history — the archived ledger has the detail)
 
 §6.1 (proof gate), §6.2 (base64 `Zh==`/`Zm9=` whole-input rejection) and §6.3b
-(base32 `MZ======`) are all landed and gated, and the two post-audit items are
-also closed: **§6.4** now gates **418/418** public theorems (was 91/404), and
-**§6.5** removed every `set_option linter.… false` rather than deferring it.
-
-**§6.10 is closed: the ecosystem is on Lean 4.35.0.** The `lean-toolchain` pins
+(base32 `MZ======`) all landed and gated, and the two post-audit items closed:
+**§6.4** gates **418/418** public theorems (was 91/404), and **§6.5** removed
+every `set_option linter.… false` rather than deferring it. **§6.10** closed:
+the ecosystem is on Lean 4.35.0. The `lean-toolchain` pins
 now match what builds (`v4.35.0`), the lockfiles are nixpkgs `1d06008`
 (2026-11-03), and `basen` tracks `codec` `3277d48`. The bump cost **one line**
 in `Codec/Packed.lean` — `basen` needed no source changes — because the
@@ -94,15 +75,14 @@ that 8-byte input. The landed proof keeps a two-line `omega` for the `cons`
 branch anyway — it must not depend on a `#eval` about one literal — and it
 closed in one session.
 
-### Roadmap (shape only — the ledger has the detail)
+### Roadmap (shape only — an owner decision, not a ledger entry)
 
-1. Archive `lean-basen` (blockers closed; see above). Re-read
-   `openspec/specs/basen/spec.md`, confirm this change's delta is a superset,
-   then archive and re-run `openspec validate --all`. **`openspec archive` does
-   not check task completion** — a green archive is not evidence of anything, so
-   verify separately.
-2. Then the next format port (ordering is an owner decision; this file does not
-   guess it).
+1. ~~Archive `lean-basen`.~~ **Done 2026-11-05.** `openspec archive` does not
+   check task completion, so completion was verified separately by reading the
+   archived `tasks.md` (36 ticked, 0 open) and all four `../lean-basen` gates.
+2. **The next format port.** Ordering is an owner decision; this file does not
+   guess it. When decided, author a new change under `openspec/changes/` — the
+   archived `lean-basen` ledger is the model for shape, not a template to resume.
 
 ### Traps that have actually cost sessions here
 
