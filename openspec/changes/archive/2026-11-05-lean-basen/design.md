@@ -32,6 +32,10 @@ layout: `BaseN.Base2`, `BaseN.Base4`, `BaseN.Base8`, `BaseN.Base10`,
 `BaseN.Base16`, `BaseN.Base32`, `BaseN.Base64`, plus a `BaseN` facade re-exporting
 them (mirroring `fstar-basen`'s `Data.BaseN.fst`).
 
+> **SUPERSEDED (facade only).** The facade shipped as **module re-exports only**
+> — no `Base` inductive and no dispatcher; see D4 below and `tasks.md` 4.1. The
+> namespace / module layout decided here is unchanged.
+
 ### D2 — Substrate is the `codec` `Bytes n`, surface is `Codec` values
 
 Each base is a `codec` `Codec` value over the `Bytes n := Fin n → UInt8`
@@ -57,6 +61,16 @@ digit math for 10.
 
 ### D4 — One inherited roundtrip law per base, plus a facade
 
+> **SUPERSEDED (the facade half).** As built and shipped, `BaseN` re-exports the
+> seven modules as **modules only**: there is no `Base` inductive, no
+> `BaseN.roundtrip` and no `encode (b : Base)` / `decode (b : Base)` dispatcher.
+> Each base is its own `Codec` value decoded/encoded by the uniform
+> `Codec.decodeFull` / `encodeB{32,64}`, so the radix lives in the value the
+> caller holds rather than in a dispatch index. See `tasks.md` 4.1 (and the
+> 5.x finding at `tasks.md` 119–120, which records that the stale `Base`-enum
+> bullet described a facade that does not exist). The **inherited roundtrip law**
+> half of this decision is unchanged and is what shipped.
+
 Each `BaseN.BaseX` proves `roundtrip (bs) : decodeFull {x}Elem {x}ConsumesByte
 (encode{X} bs) = some bs` (inherited from `decodeRepeat_spec`/`encodeRepeat_rel`;
 no bespoke proof per base). The facade `BaseN` re-exports the seven modules and
@@ -71,6 +85,11 @@ vectors for 2/4/8/10) at the block-`iso` `unapply` direction.
 injected as a flake input (`codec-src`+`codec-native` `.olean`artifacts) per
 the`ecosystem`dependency-injection convention.  (No`bench`/`cli` executable
 yet — the bench lane is task 4.2.)
+
+> **SUPERSEDED (last sentence only).** The `bench` executable did land — it is
+> task 4.2, and `packages.bench` runs it (`installPhase` executes the binary, so
+> `nix build '.#bench'` verifies the vectors rather than merely producing one).
+> The build shape decided here is unchanged.
 
 ### D6 — Base10 is three zero-padded decimal digits per byte (RESOLVED this
 
@@ -97,6 +116,8 @@ bijective per byte, mirroring base8's 3-octal-digits-per-byte.
   any bad byte or wrong arity (matching `fstar-basen`).
 - **[Facade `Base` dispatch adds a layer between the per-base lemmas]** → keep it
   thin (one `match`), prove it by cases; the per-base lemmas are the real proofs.
+  **SUPERSEDED:** the dispatch layer was not built at all (`tasks.md` 4.1), so
+  this risk was retired rather than mitigated.
 
 ## Migration Plan
 
@@ -107,6 +128,8 @@ bijective per byte, mirroring base8's 3-octal-digits-per-byte.
    decoder + roundtrip + vectors; then Base08, Base32, Base64.
 3. Add Base2, Base4, Base10 with their own spec-defined digit math.
 4. Add the `BaseN` facade + `Base` dispatch + a bench lane (vectors + roundtrip).
+   **SUPERSEDED (the dispatch half):** shipped as module re-exports only
+   (`tasks.md` 4.1); the bench lane landed as 4.2.
 5. Gate: `lake build` zero `sorry`/warnings, `#print axioms` = `[propext,
 Quot.sound]`, `nix flake check` green.
 
@@ -121,7 +144,8 @@ Quot.sound]`, `nix flake check` green.
 This change's bespoke-surface phase is **closed**. All seven bases were
 re-expressed as `Codec` values by `basen-uniform-leaf-api` (archived;
 lean-basen commits `7eefebc`…`bef44ae`), and the facade + bench were rewired to
-the Codec-value surface (`bef44ae`). `lake build` is green, zero
+the Codec-value surface (`bef44ae`). (The "facade" here means the `BaseN`
+**re-export module**, not a `Base` dispatch — that was never built; see D4.) `lake build` is green, zero
 `sorry`/warnings, `#print axioms` on every per-base `roundtrip` =
 `[propext, Quot.sound]`, and `nix flake check` is green (codec is a public
 `github:dysinger/lean-codec` flake input; `flake.lock` pins `77c1c54`, not the
