@@ -75,10 +75,12 @@ Recorded verbatim from the full review (`/tmp/lean-basen-review.md`); nothing is
 "too minor" to track. **Re-classification after `basen-uniform-leaf-api`:** the
 `Codec`-value rewrite deleted the bespoke `decodeN`/`decode`/`encode` surface
 that most of these findings reference. Status below reflects the current surface;
-findings marked **superseded** are re-derived in
-`basen-rfc-conformance-theorems` (the active change), not in this one.
+findings marked **superseded** were re-derived in
+`basen-rfc-conformance-theorems`, which has since **landed and archived**
+(2026-10-27) — so they are closed, not pending, and this ledger has carried them
+as history since then.
 
-### Superseded — re-derived in `basen-rfc-conformance-theorems`
+### Superseded — re-derived in `basen-rfc-conformance-theorems` (landed, archived)
 
 - [x] 5.1 **RFC 4648 non-conformance: base32/base64 decoders accept trailing data
       after `=` padding (padding is not enforced to be terminal).** — the bespoke

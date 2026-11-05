@@ -127,7 +127,10 @@ the Codec-value surface (`bef44ae`). `lake build` is green, zero
 `github:dysinger/lean-codec` flake input; `flake.lock` pins `77c1c54`, not the
 stale `88e4c36` — see `bef44ae`).
 
-The **remaining work lives in `basen-rfc-conformance-theorems`**, the active
-change, which subsumes the bespoke-surface review findings 5.1 (non-terminal
-padding) / 5.7 (smoke coverage) / 5.10 (base16 lowercase). See this change's
-`tasks.md` §5 for which review findings are still open vs. superseded.
+**Status update (2026-11-05): there is no remaining work, and no other active
+change.** The RFC-conformance work this paragraph used to defer to was landed by
+`basen-rfc-conformance-theorems` (archived 2026-10-27), which subsumed the
+bespoke-surface review findings 5.1 (non-terminal padding) / 5.7 (smoke
+coverage) / 5.10 (base16 lowercase). All 36 tasks of this change are closed and
+it is ready to archive; see `tasks.md` §5 for which review findings were
+superseded rather than re-derived here.
