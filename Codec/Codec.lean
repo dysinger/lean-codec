@@ -903,7 +903,7 @@ theorem bdrop_drop_eq_bytes {n : Nat} (r : Suffix n) (m : Nat)
 `s₁` then `s₂` to `t₂.bytes` (and threading the `≤` witnesses to a suffix of `n`)
 is the same as prepending the concatenation `s₁ ++ s₂` to `t₁`, provided the
 middle region reconstructs `t₁.bytes` (`t₂.prepend s₂ = t₁.bytes`). This is the
-`seq`-case reassociation the `decode_spec` law needs (see `Sound.decode_spec`);
+`seq`-case reassociation the `decode_spec` law needs (see `Codec.decode_spec`);
 it is the `splice`/`prepend` analogue of `List.append_assoc` transported through
 the length-index casts. Without the `h` hypothesis it is false (the two sides
 read `t₂.bytes` and `t₁.bytes` respectively in the deep-suffix region).

@@ -101,7 +101,7 @@ theorem decodeFast_eq {α : Type} (d : Codec α) :
 /-! ## The repetition decoder (productive `many` as well-founded recursion) -/
 
 /-- An executable mirror of `Productive`: every decoding step strictly shortens
-the remaining buffer. Equivalent to `Productive` (see `Sound.productive_iff_consumesByte`);
+the remaining buffer. Equivalent to `Productive` (see `Codec.productive_iff_consumesByte`);
 this is the form the repetition decoder consumes as its well-foundedness witness. -/
 def ConsumesByte {α : Type} (p : Codec α) : Prop :=
   ∀ x {n : Nat} (s : Bytes n) (t : Suffix n), (x, t) ∈ decode p s → t.remaining < n
@@ -139,7 +139,7 @@ theorem decodeRepeat_eq {α : Type} (p : Codec α) (h : ConsumesByte p) (n : Nat
 /-- The single-byte primitive is productive: decoding one byte always consumes
 exactly one byte. This is the `ConsumesByte` witness that makes
 `decodeRepeat Codec.byte _` total (and `#eval`-able); the general case is
-`Sound.productive_iff_consumesByte`. -/
+`Codec.productive_iff_consumesByte`. -/
 theorem byteConsumesByte : ConsumesByte Codec.byte := by
   intro x n s t hmem
   by_cases h : n = 0

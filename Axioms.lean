@@ -201,6 +201,8 @@ def gatedNames : List Lean.Name := [
   ,`Codec.decodeArray_getElem?_spec
   ,`Codec.decodeArray_unambiguous_byte
   ,`Codec.decodeArray_unambiguous_value
+  ,`Codec.decodeArray_unique
+  ,`Codec.decodeArray_unique_byte
   ,`Codec.decodeChainl1_spec
   ,`Codec.decodeChainr1_spec
   ,`Codec.decodeFast_eq
@@ -329,6 +331,7 @@ def gatedNames : List Lean.Name := [
   ,`Codec.prepend_empty_self
   ,`Codec.prepend_eq_of_eq_splice
   ,`Codec.prepend_id
+  ,`Codec.prepend_prefix_agree
   ,`Codec.prepend_prefix_eq
   ,`Codec.prepend_prefix_read
   ,`Codec.prepend_single_bdrop
@@ -348,6 +351,7 @@ def gatedNames : List Lean.Name := [
   ,`Codec.relRepeat_suffix_inj
   ,`Codec.relRepeat_unbounded_of_empty
   ,`Codec.relRepeat_unique_same_length
+  ,`Codec.relUnambiguous_of_relAligned
   ,`Codec.rel_byte_cast
   ,`Codec.remaining_at_cursor
   ,`Codec.remaining_at_reroot
@@ -707,6 +711,12 @@ why it was fixed instead of documented.
 /-- info: 'Codec.decodeArray_unambiguous_value' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.decodeArray_unambiguous_value
+/-- info: 'Codec.decodeArray_unique' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.decodeArray_unique
+/-- info: 'Codec.decodeArray_unique_byte' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.decodeArray_unique_byte
 /-- info: 'Codec.decodeChainl1_spec' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.decodeChainl1_spec
@@ -1091,6 +1101,9 @@ why it was fixed instead of documented.
 /-- info: 'Codec.prepend_id' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.prepend_id
+/-- info: 'Codec.prepend_prefix_agree' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.prepend_prefix_agree
 /-- info: 'Codec.prepend_prefix_eq' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.prepend_prefix_eq
@@ -1148,6 +1161,9 @@ why it was fixed instead of documented.
 /-- info: 'Codec.relRepeat_unique_same_length' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.relRepeat_unique_same_length
+/-- info: 'Codec.relUnambiguous_of_relAligned' does not depend on any axioms -/
+#guard_msgs in
+#print axioms Codec.relUnambiguous_of_relAligned
 /-- info: 'Codec.rel_byte_cast' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Codec.rel_byte_cast
