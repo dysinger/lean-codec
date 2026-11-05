@@ -562,10 +562,46 @@ unsafe def benchDecodeFullFast (n : Nat) : IO Unit := do
       IO.println s!"decodeFullFast root [{n}]: value + bridge OK (unbenchmarked, see 6.1b)"
   | none => throw (IO.userError "decodeFullFastRoot: expected some, got none")
 
+/-! ## Value-check for `count`'s inductive step (`codec-audit-round-three` §1.1.3)
+
+`Rel_count_succ` is proved, but a proof of a *decomposition* is exactly the shape
+that can be vacuously true on a description that never relates anything. This lane
+exercises the behaviour at two concrete `n` (`1` and `3`), so the step is not only
+proved but observed: it decodes and re-encodes `count n Codec.byte` over a vector of
+`n` bytes, and checks the result is the whole vector with nothing left over.
+
+It deliberately does **not** re-derive the statement — it goes through
+`decodeWhole`, the wire surface a consumer uses, so the check also covers the
+composition of the step with the real decoder rather than only the `Rel` predicate. -/
+unsafe def benchCountStep : IO Unit := do
+  for m in [0, 2] do
+    let k := m + 1
+    let p : Codec UInt8 := Codec.byte
+    -- `count k byte` relates a length-`k` list of `b`s to `k` copies of `b`.
+    let b : UInt8 := 0x2A
+    let xs : List UInt8 := List.replicate k b
+    match encodeWhole (count k p) xs with
+    | none => throw (IO.userError s!"count step [n={k}]: encodeWhole returned none")
+    | some a =>
+        if a.size != k then
+          throw (IO.userError s!"count step [n={k}]: expected {k} bytes, got {a.size}")
+        match decodeWhole (count k p) (countSuccConsumesByte p byteConsumesByte m) a with
+        | none => throw (IO.userError s!"count step [n={k}]: decodeWhole returned none")
+        | some results =>
+            -- `count k byte` related exactly one value to this input, and
+            -- whole-buffer decode enumerates every fully-consuming result, so the
+            -- result list must be the singleton `[xs]`. Checking the list *and* its
+            -- length is what makes this a statement about the step rather than
+            -- about the first element the search happened to find.
+            if results != [xs] then
+              throw (IO.userError s!"count step [n={k}]: expected exactly one result [{k} values], got {results.length}")
+            IO.println s!"count step [n={k}]: round trip OK (the step law holds at a concrete n)"
+  -- The `n = 0` base case is `Rel_count_zero`; the step is claimed for `n + 1`, so
+  -- `k = 0` would prove nothing here and is deliberately absent.
+
 /-- **The wired fast surface (task 6.3)**: `decodeWhole` is the named entry point
 readers are pointed at, and this lane asserts it is both *correct* and *the fast
 path* — i.e. that wiring did not accidentally leave the surface on the slow route.
-
 Both claims are checked, not assumed:
 
 * the value is byte-for-byte what `decodeFull` returns, via the `decodeWhole_eq`
@@ -1474,6 +1510,10 @@ unsafe def main (args : List String) : IO Unit := do
   -- parameter. It runs FIRST, before any lane whose cost or success depends on
   -- `n`/`m`, so it is reached on every invocation — including a default run.
   Codec.Bench.benchSeamBoundaries
+  -- `count`'s inductive step, value-checked at two concrete `n` (§1.1.3). It needs no
+  -- `n`/`m` scale parameter — it builds its own 1- and 3-byte vectors — so it runs
+  -- here, alongside the other scale-free lanes, and is reached on every invocation.
+  Codec.Bench.benchCountStep
   -- Machine calibration baseline (memset/memcpy at the same byte count), once at
   -- startup so every lane below is relative to this machine's raw memory speed.
   Codec.Bench.benchCalibration nCapped reps
