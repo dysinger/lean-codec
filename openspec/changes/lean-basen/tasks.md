@@ -274,10 +274,11 @@ Three findings block the archive. Each was re-verified by hand here before fixin
   … is not an encoding of anything" — while `MZ` appears zero times in
   `Base32.lean`. The base64 half is now _partly_ backed by the three lemmas
   above (the block-level rejection is proved; the whole-input statement is
-  not). The base32 `MZ======` claim has **no** theorem behind it at all and
-  is still open. Since commit messages cannot be rewritten without
-  rewriting history, the fix is the theorems — 6.2's remaining lift plus a
-  base32 twin. **Do not treat this as closed by 6.2's partial landing.**
+  not). The base32 `MZ======` claim is now **closed** by §6.3b
+  (`decodeFullB32_reject_MZ`, whole-input, gated). Since commit messages
+  cannot be rewritten without rewriting history, the fix is the theorems —
+  §6.3b's landed; only 6.2's base64 lift remains. **Do not treat this as
+  closed by 6.2's partial landing.**
 
 - [ ] 6.4 **`Axioms.lean` gate covers 91 of 404 theorems (22.5%).** Per module:
       Base2 16/31, Base4 12/31, Base8 12/31, Base10 12/31, Base16 24/60,
@@ -318,8 +319,53 @@ Three findings block the archive. Each was re-verified by hand here before fixin
       Original finding: naming inconsistency — `b64_block_run_of_boundary` /
       `b64_boundary_pin` / `decodeFull_b64Tail_of_encode` use snake_case prefixes
       while the rest of the file is `b64BlockRun…` camelCase.
-- [ ] 6.3b **Base32 commit message claims a theorem that does not exist —
-      and there is no theorem at all.** Commit `3dfc249` says of
+- [x] 6.3b **Base32 commit message claims a theorem that does not exist —
+      and there is no theorem at all.** — **RESOLVED (whole-input, this item).**
+      The `MZ` vector now exists and is rejected end-to-end:
+
+      - `BaseN.Base32.MZ : Bytes 8` — the `MZ======` character block (the
+        definition the commit message named and the file never had);
+      - `b32BlockApply_b32Mz_chars` — the block decoder rejects it, because `MZ`
+        lenient-decodes to `0x66` whose canonical encoding is `MY======`, so the
+        re-encode guard fails. `[propext]`-only;
+      - `b32TailApply_b32Mz_chars` — lifted to the tail element. `[propext]`-only;
+      - `not_rel_b32TailElem_of_apply_none` — the block-`none` to
+        tail-relation bridge, the base32 twin of the base64 one;
+      - **`decodeFullB32_reject_MZ : decodeFullB32 MZ = none`** — the
+        whole-input theorem. `[propext, Quot.sound]`-only, zero
+        `Classical.choice`.
+
+      All five are gated in `Axioms.lean` under a new §6.3b block. The gate was
+      verified **load-bearing** by mutation: stubbing
+      `decodeFullB32_reject_MZ` to `sorry` fails `lake build` with
+      `error: BaseN/Base32.lean:2682:8: declaration uses 'sorry'`, exit 1;
+      restoring it goes green (25 jobs).
+
+      **Two refutations recorded, because both were wrong first.** (1) The block
+      law was first written expecting `b32BlockUnapply [0x66] = some [0x4D, 0x51,
+      …]` (`MQ`) by analogy with base64's `Zh`→`Zg`; `decide` refuted it — `0x66`
+      re-encodes to `MY======` (`0x4D, 0x59`), because `102 / 8 = 12` → `M` and
+      `(102 % 8) * 4 = 24` → `Y`. The canonical *encoders* of the two bases are
+      different, so the re-encode value cannot be carried over by analogy — only
+      the proof *shape* transfers. (2) The base64 recipe's `split` + `simp_all`
+      does **not** transfer: `b32BlockDecodeLenient` matches an 8-binder list with
+      a longer `if` ladder than base64's 4-binder one, and `split`/`simp_all` both
+      blow the simp step limit. The working spelling is `unfold … ; decide` on the
+      whole closed goal — which is what the ledger's "a §3.5 pad-bit rejection is
+      a `decide`, not an induction" note actually licenses.
+
+      **Whole-input lift shape (for §6.2):** the `blocks = nil` branch is the
+      live one, and it is *simpler* than `ZgAAAA`'s — with `t.remaining = 8` the
+      tail run is a single element consuming 8, so `sb₁` reads exactly as `MZ`
+      and `not_rel_b32TailElem_of_apply_none` closes it. The one real cost was
+      proving `List.ofFn sb₁ = [0x4D, …, 0x3D]`: `List.ext_getElem` with an
+      explicit `∀ k (hk : k < 8), sb₁ ⟨k, hk⟩ = s₀ ⟨k, hk⟩` helper, because
+      `List.length_ofFn` cannot be `▸`-applied at the `Fin`-index type. This
+      supports the AGENTS.md claim that §6.3b is *not* entangled with §6.2's
+      `Suffix`/`splice` problem, but it does **not** close §6.2: the base64 lift
+      is still open.
+
+      Original finding: Commit `3dfc249` says of
       `b32Tail1_pad_bits_mod4` that "`MZ======` (where `Z` = 25 sets one of
       them) is not an encoding of anything". `grep -rn 'MZ' BaseN/Base32.lean`
       returns **zero hits**: no theorem, no definition, no vector. The
