@@ -184,8 +184,9 @@ Base16.hexBlockUnapply 102 = some [54, 55]`.
 The substantive work (seven `Codec`-value bases + facade + bench + gate) is **done**
 and landed. All seven mechanical polish items (5.2–5.13) are closed. A
 pre-archive hypercritical audit (2026-11-04) then found **three release blockers**,
-recorded below as §6. **Two are now closed** (6.1 the proof gate, 6.3b the
-base32 `MZ======` rejection); **§6.2 is the one remaining blocker.**
+recorded below as §6. **All three are now closed** (6.1 the proof gate, 6.3b the
+base32 `MZ======` rejection, 6.2 the base64 `Zh==`/`Zm9=` whole-input
+rejection). **Nothing recorded here blocks the archive.**
 
 ## 6. Pre-archive audit findings (2026-11-04) — release blockers
 
@@ -193,32 +194,29 @@ A subagent reviewer compared `../lean-basen` against `../lean-codec` across four
 axes (project uniformity, theorem coverage, code quality, archive readiness).
 Three findings block the archive. Each was re-verified by hand here before fixing.
 
-> ### NEXT SESSION: do §6.2, and nothing else first
+> ### NEXT SESSION: the blockers are closed — verify, then archive
 >
-> **§6.3b is closed (2026-11-05).** One archive blocker is left: **§6.2's
-> whole-input lift**, `decodeFullB64 b64Zh = none`. It was re-scoped that same
-> session after measuring that its recorded obstacle did not exist — see the
-> re-scope note inside §6.2. It is now the **same 4-step shape as
-> `decodeFullB32_reject_MZ`, at 4 bytes instead of 8.**
+> **§6.2 landed 2026-11-05.** All three audit blockers (6.1, 6.2, 6.3b) are
+> closed and gated, so **nothing here blocks the archive**. What remains is the
+> archive itself, and it is a _checklist_, not a proof task:
 >
-> Concretely, next session:
->
-> 1. Open `../lean-basen` in **its own** `nix develop` (not this repo's).
-> 2. Read `decodeFullB32_reject_MZ` in `BaseN/Base32.lean` — it is the worked
->    template, and it is green and gated.
-> 3. Prove `decodeFullB64_reject_b64Zh : decodeFullB64 b64Zh = none`, then the
->    `b64Zm9` twin (`decodeFullB64_reject_b64Zm9`), by the same recipe.
-> 4. Gate both in `Axioms.lean`; verify the gate is load-bearing by stubbing to
->    `sorry` and confirming `lake build` fails naming the declaration.
-> 5. Close §6.3a (the commit-message claim) once the base64 theorems exist, and
->    tick §6.2.
->
-> **Only then** is the change archivable. Before archiving, re-read
-> `AGENTS.md`'s archive-hazard note: `lean-basen` MODIFIES "The `basen` bases are
-> `Codec` values", so check `openspec validate --all` after the archive too.
+> 1. Open `../lean-basen` in **its own** `nix develop` (not this repo's) and
+>    re-run its recipe: `lake build` (zero `sorry`/warnings), `lake build bench`,
+>    `nix build '.#bench'`, `nix flake check`.
+> 2. Re-read `openspec/specs/basen/spec.md` against this change's delta and
+>    confirm the delta is a **superset** — the archive replaces the live
+>    requirement wholesale, so a dropped scenario is silently lost.
+> 3. `openspec validate --all` here, then archive, then `openspec validate --all`
+>    again (AGENTS.md's archive-hazard note: this change MODIFIES "The `basen`
+>    bases are `Codec` values").
+> 4. **`openspec archive` does not check task completion** — confirm the ledger
+>    shows 6.1/6.2/6.3a/6.3b ticked _before_ archiving, not because a green
+>    archive said so.
 >
 > §6.4 / §6.5 / §6.10 are **not** archive blockers (they are coverage, lint debt
-> and a toolchain-skew question respectively) — do not let them displace §6.2.
+> and a toolchain-skew question respectively). §6.4 in particular is large
+> mechanical work; do not let it delay the archive, and do not let a green
+> archive be read as covering it.
 
 - [x] 6.1 **THE PROOF GATE IS NOT ENFORCED — `lakefile.lean` has no
       `moreLeanArgs`.** `lean-codec/lakefile.lean:20` sets
@@ -241,12 +239,13 @@ Three findings block the archive. Each was re-verified by hand here before fixin
       load-bearing by stubbing a theorem to `sorry`, then keep the prose
       (which becomes true only at that point).
 
-- [~] 6.2 **`b64Zh` / `b64Zm9` are orphaned definitions.**
-  `BaseN/Base64.lean:2147,2150` declare them; `grep -rn '\bb64Zh\b'`
-  across the repo returned **one** hit — the definition itself. No theorem
-  mentions either. So the RFC 4648 §3.5 non-canonical-pad-bit rejection for
-  the concrete vectors `Zh==` / `Zm9=` was **true but unstated** (both
-  `#eval` to `none`). A def with no theorem is worse than either half alone.
+- [x] 6.2 **`b64Zh` / `b64Zm9` are orphaned definitions.** — **RESOLVED
+      (whole-input, this item).** Both vectors are now rejected end-to-end:
+      `BaseN/Base64.lean:2147,2150` declare them; `grep -rn '\bb64Zh\b'`
+      across the repo returned **one** hit — the definition itself. No theorem
+      mentions either. So the RFC 4648 §3.5 non-canonical-pad-bit rejection for
+      the concrete vectors `Zh==` / `Zm9=` was **true but unstated** (both
+      `#eval` to `none`). A def with no theorem is worse than either half alone.
 
       **SPIKED 2026-11-04 — approach chosen on evidence.** Two candidates were
       spiked in `/tmp` before writing anything:
@@ -317,17 +316,72 @@ Three findings block the archive. Each was re-verified by hand here before fixin
       **Do not restart from B.** The spike settled the *approach*; only the
       scoping note above was stale.
 
-- [~] 6.3a **Base64 commit message claims a theorem that did not exist.** —
-  **PARTLY RESOLVED (block-level proved, whole-input open).** Commit `9d5074e` implied `b64Zh`/`b64Zm9` rejection
-  is proved, and `3dfc249` says of `b32Tail1_pad_bits_mod4` that "`MZ======`
-  … is not an encoding of anything" — while `MZ` appears zero times in
-  `Base32.lean`. The base64 half is now _partly_ backed by the three lemmas
-  above (the block-level rejection is proved; the whole-input statement is
-  not). The base32 `MZ======` claim is now **closed** by §6.3b
-  (`decodeFullB32_reject_MZ`, whole-input, gated). Since commit messages
-  cannot be rewritten without rewriting history, the fix is the theorems —
-  §6.3b's landed; only 6.2's base64 lift remains. **Do not treat this as
-  closed by 6.2's partial landing.**
+      **LANDED 2026-11-05 — the whole-input lift, and the re-scope held.** The
+      five-step plan above was executed as written. The proof is factored as
+      **one** private lift plus two thin instances, rather than duplicated per
+      vector:
+
+      - `decodeFullB64_none_of_rejected_tail` (private) — the 4-step lift,
+        parameterised by the input `s : Bytes 4`, the literal `c` its bytes read
+        as (`List.ofFn s = c`), a pad position `kp : Fin 4` with `(s kp) = 61`,
+        and `b64TailApply c = none`. `kp` is a parameter **because the two tails
+        pad at different widths** — `Zh==` at index 2, `Zm9=` at index 3 — which
+        is the base32-twin lesson ("transfers the shape, never the constants")
+        showing up inside base64 itself, not only across bases.
+      - `b64BlockApply_b64Zm9_chars` / `b64TailApply_b64Zm9_chars` / `b64Zm9_chars`
+        — the `Zm9=` block-level triple, the twin of the `Zh==` one landed
+        previously. `Zm9` lenient-decodes to `[0x66, 0x6F]` (`fo`), whose
+        canonical encoding is **`Zm8=`**, not `Zm9=` — re-`#eval`'d, not assumed.
+      - **`decodeFullB64_reject_b64Zh`** and **`decodeFullB64_reject_b64Zm9`** —
+        the whole-input theorems, `[propext, Quot.sound]`-only, zero
+        `Classical.choice`.
+
+      All five new declarations are gated in `Axioms.lean` (the two whole-input
+      ones under a §6.2 block; `b64BlockApply_b64Zm9_chars` /
+      `b64TailApply_b64Zm9_chars` `[propext]`-only, `b64Zm9_chars` axiom-free).
+      The gate was verified **load-bearing** by mutation: stubbing
+      `decodeFullB64_reject_b64Zh` to `sorry` fails `lake build` with
+      `error: BaseN/Base64.lean:3480:8: declaration uses 'sorry'`; restoring it
+      goes green (25 jobs). Both vectors are also `example`-checked in
+      `Bench.lean`; `lake build bench` green (45 jobs).
+
+      Landed in `../lean-basen` as `cd833ae` (the two theorems),
+      `13006f7` (gate + bench) and `ed5fef4` (CHANGELOG). `lake build` 25 jobs,
+      `lake build bench` 45, `lake build Axioms` 24 — all green, zero
+      `sorry`/warnings; `nix build '.#bench'` exit 0 (sandboxed build that
+      *runs* the value checks); `nix flake check` green
+      (`checks.aarch64-darwin.formatting` + `checks.aarch64-darwin.lean`).
+
+      **One correction to the plan, recorded because it is generalisable.** The
+      plan said "`decodeRepeat` on 4 bytes gives `blocks = []`", and the
+      `#eval` confirmation was re-run first (`(…).map (fun p => (p.1.length,
+      p.2.remaining))` → `[(0, 4)]`), so the branch analysed really is the live
+      one. The proof still **writes** the `cons` branch of the block run and
+      kills it with the pad byte, rather than citing the `#eval` — a `#eval` is
+      evidence about one literal, and the theorem must not depend on it. That
+      branch is `4 ≤ 4 - t.remaining` versus `¬ (kp.val < 4 - t.remaining)`: a
+      two-line `omega`, no `splice` and no index transport, exactly as the
+      re-scope predicted. The cost that *did* appear was in the plumbing, not
+      the mathematics: (a) `splice_prefix_read` needs its `hm : m ≤ n` argument
+      supplied explicitly (`(m := 4) (by omega)`), and (b) the `hpad` fact must
+      be stated at `Fin 4` on the *input* type — `Bytes n` is a function, so a
+      `Fin s.length` spelling is not even well typed, and an `omega` inside a
+      statement's index annotation is elaborated without the `have`s that make
+      it true (so the index proof is a caller-supplied literal `decide`).
+
+- [x] 6.3a **Base64 commit message claims a theorem that did not exist.** —
+      **RESOLVED (§6.2 landed, whole-input proved, 2026-11-05).** Commit `9d5074e` implied `b64Zh`/`b64Zm9` rejection
+      is proved, and `3dfc249` says of `b32Tail1_pad_bits_mod4` that "`MZ======`
+      … is not an encoding of anything" — while `MZ` appears zero times in
+      `Base32.lean`. The base64 half is now _partly_ backed by the three lemmas
+      above (the block-level rejection is proved; the whole-input statement is
+      not). The base32 `MZ======` claim is now **closed** by §6.3b
+      (`decodeFullB32_reject_MZ`, whole-input, gated). Since commit messages
+      cannot be rewritten without rewriting history, the fix is the theorems — and
+      both halves now exist: §6.3b's `decodeFullB32_reject_MZ` (base32) and §6.2's
+      `decodeFullB64_reject_b64Zh` / `decodeFullB64_reject_b64Zm9` (base64), all
+      whole-input and gated. Every claim in `9d5074e` and `3dfc249` is now backed by
+      a theorem.
 
 - [ ] 6.4 **`Axioms.lean` gate covers 91 of 404 theorems (22.5%).** Per module:
       Base2 16/31, Base4 12/31, Base8 12/31, Base10 12/31, Base16 24/60,
