@@ -160,9 +160,11 @@ anything `codec` requires; it was invented in an earlier draft).
 **And there is no `chainl1` value to need it.** The paper's `chainl1 = foldl f $ arg
 ∗ many (op ∗ arg)` is a description; `codec`, being strict, has no such value
 (`[S6]`). What exists is the triple `relChainl1` / `decodeChainl1` / `encodeChainl1`,
-and composing it needs **three** things: `Iso.foldl`, the repetition triple, and a
-`ConsumesByte` witness for the decoder. Saying "`foldl` is the combinator `chainl1`
-actually needs" understated it by two components.
+and composing it needs **four** things: `Iso.foldl`, **a `MeasureDecreases` witness
+for that fold** (a separate argument — `Iso.foldl` does not carry it), the
+repetition triple, and a `ConsumesByte` witness for the decoder. Saying "`foldl` is
+the combinator `chainl1` actually needs" understated it by three components, and an
+earlier revision that said "three" still missed `MeasureDecreases`.
 
 **[D8] The _value-level_ checks carry a _decidable_ witness, not the paper's
 `Eq α`/`(α → Bool)`.** Scoped precisely, because the claim is easy to overstate:
@@ -238,22 +240,40 @@ encode` change the name and nothing else. `token → byte` changes the _carrier_
 (whole-string matches → every `(value, remainder)` pair, `[D2]`) — so those two are
 not cosmetic and should not be ported as if they were.
 
-**[S3] Zero domain-specific leaf codecs.** Core ships only the primitive leaves
-`byte` and `satisfy` (plus the non-leaf `pure`, which is a value-equality
-check, not a format);
-every concrete format (`u8`/`utf8`/`varint`/…) lives downstream (`lean-binary`,
-`lean-text`). Nothing in core can silently bake in a text- or machine-specific
-assumption.
+**[S3] Zero domain-specific leaf codecs.** Core ships every primitive leaf —
+`byte`, `satisfy` — plus the non-leaf `pure` (a value-equality check, not a
+format), **and one derived byte-run combinator, `takeWhile`**. `takeWhile` ships as
+the triple `relTakeWhile` / `decodeTakeWhile` / `encodeTakeWhile`
+(`Codec/Combinators.lean`), the same relation-then-two-directions shape every other
+combinator has, with `decodeTakeWhile_spec` and `encodeTakeWhile_rel` its laws.
+
+It is `UInt8`-specialised and says so: its docstring names `varint` and UTF-8 as
+the intended uses, i.e. it is the _shape_ those formats need, not any of them.
+Every concrete format (`u8`/`utf8`/`varint`/…) still lives downstream
+(`lean-basen`, `lean-text`): no named format is defined in core, and nothing in
+core can silently bake in a text- or machine-specific assumption. `decodeRepeat` —
+the already-proved `relRepeat`/`decodeRepeat`/`encodeRepeat` triple — is exposed as
+a **run value**, never a `Codec` constructor (`[S6]`).
 
 **[S4] `foldl`/`foldr` are _fresh_ well-founded derivations, not `inverse ∘
-foldl ∘ inverse`.** The right-fold dual is a distinct definition, and "type-incoherent"
-is checkable rather than rhetorical: the paper's `foldl` is
-`Iso (α, [β]) α` built from a step `Iso (α, β) α`; the dual needs `Iso ([α], β) β`
-from a step `Iso (α, β) β`, and `inverse : Iso (α, β) α → Iso α (α, β)` produces
-neither the right argument order nor the right nesting — the `[β]`/`[α]` positions do
-not line up, so no composition of `inverse`/`foldl` has the type. Both folds take
-their own decreasing-measure witness (`measure : α → Nat` plus `MeasureDecreases`),
-a _precondition_, not an unconditional law like the structural isos (`[S1]`).
+foldl ∘ inverse`.** The right-fold dual is a distinct definition, and
+"type-incoherent" is checkable rather than rhetorical. The types are, in the code:
+
+```
+foldl : Iso (α × β) α → Iso (α × List β) α      -- step consumes β, accumulates α
+foldr : Iso (β × α) α → Iso (α × List β) α      -- step has β on the LEFT
+```
+
+(the `measure : α → Nat` and witness arguments are omitted for clarity). The paper's
+`foldl` is the first. The dual needs a step whose **argument order is swapped** —
+`Iso (β × α) α` — and `inverse : Iso (α × β) α → Iso α (α × β)` produces neither
+that argument order nor the right nesting, so no composition of `inverse`/`foldl`
+has the type. An earlier revision of this section attributed `Iso ([α], β) β` to
+the dual, which is not the code; the type claim is the one above.
+
+Both folds take their own decreasing-measure witness (`measure : α → Nat` plus
+`MeasureDecreases` / `MeasureDecreasesR`), a _precondition_, not an unconditional
+law like the structural isos (`[S1]`).
 
 **[S5] `relRepeat`'s least-fixpoint status is _proved_, not asserted.** The
 repetition denotation is the least relation closed under the `nil`/`cons` rules;
@@ -419,13 +439,24 @@ accepts this and says the inverse law holds only "modulo equivalence classes".
 
 `codec` cannot do that — not as a preference, but as a **consequence of the
 isomorphism itself**. Every `codec` building block is a strict partial
-isomorphism, and the inverse law is a _field_ you must supply to construct one. A
-lossy combinator like `ignore` cannot satisfy that field: it sends every run of
-whitespace (any length) to the same value, so `unapply` cannot recover which run came out of a given result. There is no round-trip at all — `decode "   "` and
-`decode ""` both give the same value, so `encode` cannot tell them apart and
-`encode (decode s) = s` fails for every non-canonical `s`. Because `codec` is
-isomorphic _by the type of its combinators_, it simply **cannot include
-`ignore`** — the constructor would not typecheck (no proof exists for it).
+isomorphism, and the inverse law is a _field_ you must supply to construct one:
+`apply a = some b ↔ unapply b = some a`. A lossy combinator like `ignore` sends
+_every_ run of whitespace (any length) to the same value, so its `apply` is a
+constant. Substituting that into the field gives `True ↔ unapply () = some a` for
+**every** `a` at once — satisfiable only for a single `a`, i.e. false as soon as `α`
+has two distinct elements. That is why `ignore` cannot inhabit `Iso`: the law is an
+`↔` quantified over _every_ `a`, and a constant `apply` cannot satisfy it twice.
+
+Note what is **not** the reason, because an earlier revision of this section said it
+and it is wrong: the failure is not that "two distinct inputs map to one output, so
+`unapply` cannot choose". `unapply` is perfectly free to pick either one; a partial
+isomorphism makes no claim that `unapply` is a function of the _input_ — it is a
+function of the _output_. The obstruction is the `↔`'s universal quantifier, not any
+ambiguity in `unapply`. (Separately, and consistently: `decode "   "` and `decode
+""` would both yield the same value, so a re-emitted representation must be the one
+canonical spelling — which is exactly what the `Normal S norm` quotient type of
+`[D4]` above supplies, and why the lossy direction is `decodeNormal` composed
+_outside_ the `Iso`.)
 
 So instead of following the paper's destructive combinator, a run of optional
 bytes is _captured_ and re-emitted verbatim — same length, same bytes — so parse
@@ -466,11 +497,13 @@ fails". To ship `iterate` as an isomorphism you would have to _claim_ the two
 fixpoints agree — false in general — or burden every caller with a fragile
 precondition. `codec` omits `iterate` and defines `foldl`/`foldr` _directly_ by
 well-founded recursion (each step strictly decreases a measure, which _is_ the
-honest guarantee). `chainl1` needs three things — `Iso.foldl`, the repetition
-triple, and a `ConsumesByte` witness for the decoder — and `codec` supplies all
-three, so nothing is lost and no unsound law is shipped. (An earlier revision of
-this paragraph said "`foldl` is all `chainl1` needs"; `[D7]`'s own text above
-corrects that, and the two now agree.)
+honest guarantee). `chainl1` needs **four** things — `Iso.foldl`, a
+`MeasureDecreases` witness for that fold (a separate argument, not bundled into
+`Iso.foldl`), the repetition triple, and a `ConsumesByte` witness for the decoder —
+and `codec` supplies all four, so nothing is lost and no unsound law is shipped.
+(An earlier revision of this paragraph said "`foldl` is all `chainl1` needs"; a
+later one said "three", still missing `MeasureDecreases`. All three statements of
+this paragraph now agree.)
 
 ### `[D8]` decidable checks instead of `Eq`/`Bool`
 
@@ -595,8 +628,11 @@ them by example — that is the rule working as intended, not a gap to be closed
 - **`codec`** (this package): the pure framework — `Iso`, `Codec`, `Rel`, the two
   interpreters (the single `Bytes n` substrate), and the laws. **No
   domain-specific leaf codecs** (not even `u8`).
-- **`lean-binary`** (downstream): `u8`, `u16le`/`u16be`, … , `varint`,
-  `lengthPrefix`, image/Protobuf demos, and the speed benchmark.
+- **`lean-basen`** (downstream): the numeral bases — `base2`/`base4`/`base8`/
+  `base10`/`base16`/`base32`/`base64`, plus `varint` and `lengthPrefix` on top of
+  them, with their conformance theorems. It is the worked example of this rule:
+  `codec` ships the framework, `lean-basen` ships the formats. (An earlier revision
+  of this line named `lean-binary`, which does not exist; the repo was renamed.)
 - **`lean-text`** (downstream): `utf8` plus `text`/`identifier`/`whitespace` —
   the paper's §6 text domain, re-based on bytes.
 
@@ -638,9 +674,20 @@ never conflated:
   `byteSlice_spec`, `blitBytes_spec`, `findByte_spec`, `commitRemainder_spec` — so
   the C's contract names a theorem rather than "read the definition". Any consumer
   or bench cites the law instead of re-deriving the body. The laws are not uniformly
-  axiom-free: `findByte_spec` reports `[propext]` (its `Array.findIdx?` scan goes
-  through `DecidableEq UInt8`), and the other three report none. That difference is
+  axiom-free: `byteSlice_spec`, `blitBytes_spec` and `commitRemainder_spec` report
+  no axioms at all, while `findByte_spec` reports `[propext]` — it reduces through
+  `Array.getElem?`, whose array-bound decision is propositional. That difference is
   recorded at each law, not treated as drift — `[propext]` is inside the gate.
+
+  `findByte`'s body is a **constructive `Nat`-recursion** (`Codec.findFrom`), not
+  `Array.findIdx?`. The earlier `findIdx?` body reached `Classical.choice` through
+  `DecidableEq UInt8`, so `findByte_spec` reported
+  `[propext, Classical.choice, Quot.sound]` while the prose claimed `[propext]`.
+  That gap is closed: the scan is written out so the footprint is a property of the
+  code, and five content laws (`findFrom_sound`, `_least`, `_min`, `_complete`,
+  `_finds`, all `[propext, Quot.sound]`-only) state what `memchr` actually
+  guarantees — the result is in `[off, size)`, holds `b`, and no earlier index does;
+  `none` means no index `≥ off` holds `b`.
 
   The seams are **generic** bulk byte movement, not semantic parsers: `byteSlice`
   (suffix `memcpy`), `blitBytes` (buffer-to-buffer `memcpy`), `findByte` (`memchr`),
@@ -721,9 +768,12 @@ prints both figures.
 per-element codec, and quoting a "× off C" ratio against it is a category error:
 `memcpy` moves a byte for ~0.045 ns (a bulk copy, hardware-accelerated), while a
 parser does per-element _work_ — read, decide, advance, accumulate. The honest
-reference for a parser is a hand-written C parser over the same bytes, and this
-repo does not yet ship one. So the figures below are given **as ns/step and as a
-multiple of the measured pure-Lean floor**, not as a ratio to `memcpy`.
+reference for a parser is a hand-written C parser over the same bytes. **This repo
+now ships one** (`Codec/CRef.c` + `benchCReference`; see "The hand-written C
+reference" below) — an earlier revision of this paragraph said "this repo does not
+yet ship one", which was true then and is not now, and contradicts the section at
+the end of this document. So the figures below are given **as ns/step and as a
+multiple of the measured pure-Lean floor**.
 
 Measured with `bench`'s `benchDecodeShapes` lane, `n` = 4 KiB, 15 samples of 3 calls
 each, at load average ~2.3–2.6 on 10 cores.
@@ -840,13 +890,25 @@ number.
 Measured in one session, two consecutive `bench 4096 4096` runs at load ~2.9 on 10
 cores, burst medians, 512 steps per burst:
 
-| lane                         | run 1 (min / median / max) | run 2 (min / median / max) | ns/step         |
-| ---------------------------- | -------------------------- | -------------------------- | --------------- |
-| `idealCursor`                | 10136 / 10253 / 10446      | 10573 / 10709 / 10828      | 2.50 / 2.61     |
-| `decodeFullArray` (`k = 1`)  | 14467 / 14615 / 14695      | 13965 / 14087 / 14346      | **28.5 / 27.5** |
-| `decodeFullArray k=2`        | 27695 / 28105 / 28210      | 25767 / 26173 / 26546      | **54.9 / 51.1** |
-| `packedCands k=1` (per call) | 74 / 75 / 77               | 73 / 75 / 76               | 75 / 75         |
-| `packedCands k=2` (per call) | 94 / 94 / 95               | 92 / 95 / 96               | **94 / 95**     |
+| lane                        | run 1 (min / median / max) | run 2 (min / median / max) | ns/step         |
+| --------------------------- | -------------------------- | -------------------------- | --------------- |
+| `idealCursor`               | 10136 / 10253 / 10446      | 10573 / 10709 / 10828      | 2.50 / 2.61     |
+| `decodeFullArray` (`k = 1`) | 14467 / 14615 / 14695      | 13965 / 14087 / 14346      | **28.5 / 27.5** |
+| `decodeFullArray k=2`       | 27695 / 28105 / 28210      | 25767 / 26173 / 26546      | **54.9 / 51.1** |
+
+**The `packedCands` rows are deliberately _not_ in this table.** They are a
+_different_ run of a _different_ lane (`benchDecodeShapes`, 200 steps per burst),
+and an earlier revision of this document printed them here next to a set of figures
+from another session — which is how the same lane came to be quoted as both
+`85 / 86 / 87` and `74 / 75 / 77` for `k = 1`. One figure, one run, one table. The
+`packedCands` numbers are the ones two paragraphs above: **86 / 106 ns per call**
+(`k = 1` / `k = 2`), from `benchDecodeShapes`. The `74 / 75 / 77` and `92 / 95 / 96`
+figures that used to sit here were produced by a **bug in that lane** — its
+closure computed `j % (a.size + 1)` and the accompanying bound proof inside the
+measured region, so it priced a `Nat` modulus and a proof-term construction rather
+than `packedCands`. `Bench.lean` records the fix (the cursor is now hoisted out of
+the closure and the premise asserts it). **The 75 / 95 figures are withdrawn**, and
+so is any derivation from them.
 
 **What that says — the search is linear in `k`, and its cost is not all in
 `packedCands`.**
@@ -859,7 +921,10 @@ cores, burst medians, 512 steps per burst:
   ~25 ns per-candidate cost. So **~5 ns/step is _not_ `packedCands`** — it is the
   `decodeArray` re-list plus the singleton `PackedCand` allocation in
   `decodeFullArraySearch`. That residue is what a rewrite would have to attack, and
-  it is a measured number rather than a guess.
+  it is a measured number rather than a guess. (That ~20 ns is taken from the
+  `benchDecodeShapes` pair above, not from this table — the subtraction is
+  legitimate only because both terms are the same lane in the same run, which is
+  exactly the property the withdrawn pair did not have.)
 - `packedCands` measures **86 ns/call** at `k = 1` and **106** at `k = 2` in the
   compiled burst lane. The older "3 ns/call hot" figure is **withdrawn outright** —
   it was a folded-away sink, not a measurement (see the note above).
