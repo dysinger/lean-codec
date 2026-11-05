@@ -580,13 +580,16 @@ linter'`→ no hits).`Common`: `simpa using hb`→`simp at hb`(the linter's own
         failed with "No goals to be solved"); `basen` needed **no** changes at
         all (25 / 45 / 24 jobs green as-is).
 
-      The fix is `first | (tail) | skip`, which is deliberately
-      **toolchain-portable** rather than a 4.35-only rewrite: the plain
-      deletion works on 4.35.0 but *fails* on 4.34.1 (verified both ways), and
-      `try`-wrapping was tested and is wrong in the other direction (`try simp
-      only` does not admit the `split` that 4.34.1 needs). So the law is green
-      on both, and the docstring says why the wrapper is load-bearing rather
-      than decorative.
+      **Provenance of the fix, because the two obvious ones are wrong.** The
+      plain deletion works on 4.35.0 but *fails* on 4.34.1 (`unsolved goals`),
+      and `try`-wrapping fails the other way (`try simp only` does not admit the
+      `split` 4.34.1 needs). That is why the intermediate fix was
+      `first | (tail) | skip`, portable across both. **That guard has since been
+      removed**: the ecosystem is now pinned to 4.35.0, so the law is a single
+      `conv => lhs; rw [….eq_def]` line, verified **non-vacuous** by mutating an
+      arm of the statement (it then fails with `unsolved goals`). A one-tactic
+      proof deserves that check — it is otherwise indistinguishable from a goal
+      that closed for the wrong reason.
 
       Pins after the bump: `lean-toolchain` `v4.35.0` in both repos,
       `flake.lock` nixpkgs `1d06008` (2026-11-03), `codec` input `3277d48`.

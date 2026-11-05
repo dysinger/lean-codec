@@ -68,12 +68,16 @@ now match what builds (`v4.35.0`), the lockfiles are nixpkgs `1d06008`
 in `Codec/Packed.lean` — `basen` needed no source changes — because the
 toolchain itself was a cache substitution. Two traps from that bump:
 
-- **A single law was toolchain-dependent.** `Codec/Packed.lean`'s
-  `decodeFullArraySearch_cons`: 4.35.0 closes the goal at the `conv`+`rw` that
-  4.34.1 left open, so the tail fails with "No goals to be solved". The fix is a
-  `first | (tail) | skip` wrapper — deliberately portable, since the plain
-  deletion is green on 4.35.0 but red on 4.34.1, and `try`-wrapping fails the
-  other way.
+- **A single law was toolchain-dependent, and is now simply shorter.**
+  `Codec/Packed.lean`'s `decodeFullArraySearch_cons`: 4.35.0 closes the goal at
+  the `conv`+`rw` that 4.34.1 left open, so the old `simp only`/`split`/
+  `injection` tail became dead. The provenance is worth knowing because the
+  naive fixes were _wrong_: plain deletion is green on 4.35.0 but **red on
+  4.34.1**, and `try`-wrapping fails the other way. While both toolchains were
+  supported it carried a `first | (tail) | skip` guard; now that the ecosystem
+  is pinned to 4.35.0 the guard is gone and the proof is **one line**. Verified
+  non-vacuous by mutating an arm of the statement (it then fails with
+  `unsolved goals`) — do that check whenever a proof collapses to one tactic.
 - **A `lake build` segfault after a bump means stale build state.** Right after
   the bump, `lake build bench` aborted with `unsupported IRType` (exit 139);
   `rm -rf .lake` and the same command is green. So before diagnosing a crash as
