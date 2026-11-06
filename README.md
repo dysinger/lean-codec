@@ -355,8 +355,9 @@ with `decodeTakeWhile_spec`, `encodeTakeWhile_rel`, `encodeTakeWhile_ne_none` an
 `encodeTakeWhile_of_decode` its laws. **Stated precisely, because an earlier revision
 called this "the same shape every other combinator has" and that is false:**
 `chainl1`/`chainr1` have **four** laws each (`decode…_spec`, `encode…_rel`,
-`encode…_ne_none`, `encode…_of_decode`), and since
-`openspec/changes/codec-audit-round-three` §1.5 so do `takeWhile` and `sepBy`. The
+`encode…_ne_none`, `encode…_of_decode`), and since `codec-audit-round-three` §1.5
+(`openspec/changes/archive/2026-11-06-codec-audit-round-three/`) so do `takeWhile`
+and `sepBy`. The
 fourth law is _conditional_ in every case — `encode…_of_decode` needs the
 relation-level `relFunctional` hypothesis, because the encoders are only
 right-inverses of the decoders on functional descriptions — so "four laws" is the
