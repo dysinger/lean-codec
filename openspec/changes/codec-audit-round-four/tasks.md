@@ -111,13 +111,13 @@ Highest priority: this is a _mathematical_ error, not a wording one, and it surv
 three archive rounds because every gate checks theorems and this was a claim about the
 _absence_ of one.
 
-- [ ] 1.1 Land `lengthDet_relUnambAlignedWitness` and
+- [x] 1.1 Land `lengthDet_relUnambAlignedWitness` and
       `lengthDet_not_implies_relAligned` in `Codec/Sound.lean`. **R5-01.** ✔Verified
       `[propext]`-only by the main agent (Appendix A.1). The witness
       `relUnambAlignedWitness` is already in the tree; the theorem is ~20 lines of
       `match` on the two length indices. Statement of the second:
       `¬ (∀ {α} (R : α → {m : Nat} → Bytes m → Prop), LengthDet R → RelAligned R)`.
-- [ ] 1.2 Land the **strong form** with productivity added as a second hypothesis, so a
+- [x] 1.2 Land the **strong form** with productivity added as a second hypothesis, so a
       reader cannot attribute the failure to productivity's absence. **R5-01**, design
       §D1. Needs two more terms, both **in Appendix A.1** (originally the auditor's
       probe `/tmp/r5a/p2.lean` — paste from the Appendix, not from `/tmp`):
@@ -128,7 +128,7 @@ m ≠ 0` (a `match` on `m`, four arms), and
       closed by `relUnambiguous_not_implies_relAligned` applied to the two witnesses.
       Method that works: copy `p2.lean`'s bodies — they are `match`-on-`m` throughout;
       a `match` on `t` as well as `m` fails to refine the hypothesis (see 1.3's note).
-- [ ] 1.3 Land `relAligned_not_implies_lengthDet` (the other direction), completing the
+- [x] 1.3 Land `relAligned_not_implies_lengthDet` (the other direction), completing the
       four-way diagram. **Corrected**: the auditor's report _names_ this theorem but its
       probe files do **not** contain it — the name appears only in prose. It is therefore
       **not** verified from the audit; the main agent proved it, and the working proof
@@ -142,7 +142,7 @@ m ≠ 0` (a `match` on `m`, four arms), and
       match on `m₁`/`t₁`/`h₁` and then on `m₂`/`t₂`/`h₂` — matching only on `m₂` leaves
       `h₂` unrefined and the `m=1 × m=2` arm cannot close. The `m₁=2, m₂=1` arm is
       `exact absurd hle (by omega)`.
-- [ ] 1.4 Replace `def LengthDet`'s "**open**: it may or may not hold, and no theorem
+- [x] 1.4 Replace `def LengthDet`'s "**open**: it may or may not hold, and no theorem
       settles it either way" paragraph (and the parenthetical about the earlier
       `DecidableEq` story) with the refutation. **The "diagram" is a markdown table in
       the docstring with exactly these six rows** — copy it from design §D1; each row
@@ -155,7 +155,7 @@ m ≠ 0` (a `match` on `m`, four arms), and
       `RelAligned ↛ LengthDet` (`relAligned_not_implies_lengthDet`). **R5-01.**
       Put the table in `LengthDet`'s docstring; `RelAligned`'s (1.5) cross-references it
       rather than repeating all six rows.
-- [ ] 1.5 Replace `def RelAligned`'s "**`LengthDet` is a third, separate family** …
+- [x] 1.5 Replace `def RelAligned`'s "**`LengthDet` is a third, separate family** …
       plausible but unproved here … recorded as open" paragraph with: (a) the measured
       incomparability, cross-referencing 1.4's table; (b) why the pair is _jointly_
       load-bearing in `relRepeat_cons_eq` — `hld` is used exactly once, at
@@ -172,7 +172,7 @@ m ≠ 0` (a `match` on `m`, four arms), and
       Found already-done by a cold-start test that read the entry points fresh. Ticked
       per this ledger's own rule — never leave a finished task unticked.
 
-- [ ] 1.7 Annotate the archived round-three ledger's `:77` entry — **do not rewrite
+- [x] 1.7 Annotate the archived round-three ledger's `:77` entry — **do not rewrite
       it**. A ledger records what was believed then; rewrite and the fact that it was
       wrong for three rounds disappears. Add a one-line dated note pointing at the
       refutation. **R5-02.**
@@ -182,7 +182,7 @@ m ≠ 0` (a `match` on `m`, four arms), and
 Both fixes are already proved by the main agent; this section is transcription plus
 docstring repair.
 
-- [ ] 2.1 Add three lemmas to `Codec/Packed.lean`, next to `decodeWholeBytes_eq`. The
+- [x] 2.1 Add three lemmas to `Codec/Packed.lean`, next to `decodeWholeBytes_eq`. The
       names below are the ones the verified proof uses; keep them (they are descriptive
       and the `_apply`/`_eq` convention matches `bdrop_*`/`prepend_*`):
       `arrayToBytes_bytesToArray_apply` (pointwise, `Array.getElem_toList` +
@@ -198,16 +198,16 @@ docstring repair.
       dependent `Fin` bound **leaks `Classical.choice`** (write
       `Nat.lt_of_lt_of_eq i.isLt (bytesToArray_size s)`); and the final dependent rewrite
       cannot be `rw`/`subst`/`generalize`.
-- [ ] 2.2 Correct `decodeWholeBytes_eq`'s docstring: it claims the right side "is
+- [x] 2.2 Correct `decodeWholeBytes_eq`'s docstring: it claims the right side "is
       `decodeFull d h n` applied to the readback — i.e. the law a caller who started
       from `Bytes n` would state", and it is not. Point at `decodeWholeBytes_spec` once
       2.1 lands, and replace the false "`rfl`" claim with the two bridge lemmas.
       **R5-04.**
-- [ ] 2.3 Add `decodeRepeat_mem_iff_general` to `Codec/Sound.lean`. **R5-13.**
+- [x] 2.3 Add `decodeRepeat_mem_iff_general` to `Codec/Sound.lean`. **R5-13.**
       ✔Proved and in **Appendix A.4** (`[propext, Quot.sound]`-only) — also proved
       independently by the auditor; it is a character-for-character rename of the
       specialised proof.
-- [ ] 2.4 Rewrite `decodeRepeat_mem_iff`'s docstring. It says the specialisation is
+- [x] 2.4 Rewrite `decodeRepeat_mem_iff`'s docstring. It says the specialisation is
       forced because `Codec.byte` is "the only step relation whose `∃ s₀` collapses for
       free" — **false**: `prepend_empty_self`'s statement mentions no step relation at
       all, so the collapse is uniform. State that the specialisation is a convenience
@@ -216,7 +216,7 @@ docstring repair.
 
 ## 3. The `huniq` claim is carried by the wrong theorem (R5-05)
 
-- [ ] 3.1 Add the `∃ R` form as a **new name `huniq_not_derivable_full`** — do **not**
+- [x] 3.1 Add the `∃ R` form as a **new name `huniq_not_derivable_full`** — do **not**
       restate the existing `huniq_not_derivable`: `Axioms.lean` pins the existing one by
       name, and a rename would invalidate the archived ledgers' references. ✔Proved and in **Appendix A.3** (`[propext, Quot.sound]`-only), by packaging
       the three existing `uniqCounterexample_*` lemmas:
@@ -225,7 +225,7 @@ docstring repair.
  ¬ (∀ (xs ys : List Bool) (n : Nat) (s : Bytes n),
  relRepeat R xs n s → relRepeat R ys n s → xs = ys)`.
       Keep the existing `n = 2` version as the small witness. **R5-05.**
-- [ ] 3.2 Point the section header's "machine-checked below as `huniq_not_derivable`" at
+- [x] 3.2 Point the section header's "machine-checked below as `huniq_not_derivable`" at
       the strengthened name. The existing theorem never mentions `relUnambiguous` or
       productivity, so a reader who runs `#print axioms` on it learns only "two lists
       here differ" — the prose attributes strictly more than the name supports.
@@ -236,7 +236,7 @@ docstring repair.
 The substantive one is R5-11; the rest are one-clause corrections. `PAPER.md` is the
 authority for every quote.
 
-- [ ] 4.1 **`[D4]` title + opener.** Rewrite "**[D4] Lossless capture** — a destructive
+- [x] 4.1 **`[D4]` title + opener.** Rewrite "**[D4] Lossless capture** — a destructive
       constructor such as the paper's `ignore` is _impossible_ under strict
       isomorphism" so the anchor states at the top that both shipped mechanisms are
       **length-preserving** (`norm : Bytes n → Bytes n`; `relTakeWhile` relates a run of
@@ -244,22 +244,22 @@ authority for every quote.
       blank run, a `Bytes m → Bytes n` map with `m ≠ n` — is **not reproduced** by
       core. Keep the correct 40-lines-later caveat; stop making it carry the whole
       disclosure. **R5-11**, design §D4. Do **not** build the carrier.
-- [ ] 4.2 **`[S1]` "the full unconditional-iso list".** Add the one clause that
+- [x] 4.2 **`[S1]` "the full unconditional-iso list".** Add the one clause that
       `Iso.foldl`/`Iso.foldr` are _deliberately_ excluded (their law holds only on the
       terminal-seed domain — anchor (ii) already says so), so the list is not called
       "full" while omitting the only two `Iso`-valued `def`s in the file. **R5-12**;
       ✔verified by grepping `^def` in `Codec/Iso.lean`.
-- [ ] 4.3 **`[S2]` `print → encode`.** Replace "a method selected by the value's
+- [x] 4.3 **`[S2]` `print → encode`.** Replace "a method selected by the value's
       `Printer α` instance" with the paper's actual form: `print :: Printer α → α →
 Maybe String` takes an explicit _pretty-printer implementation_ value. The
       conclusion ("largest porting cost") survives; the justification does not — what
       differs is _what the argument is_ (`[D6]`'s typeclass-to-value move), not whether
       one is passed. **R5-17.**
-- [ ] 4.4 **`[S3]` "none has an in-tree caller".** `isoConsumesByte` **is** called, at
+- [x] 4.4 **`[S3]` "none has an in-tree caller".** `isoConsumesByte` **is** called, at
       `Codec/Combinators.lean:403` inside `countSuccConsumesByte`; ✔verified by grep.
       `Iso.ofTotal` and `decodeWholeOne` are genuinely caller-free. Rewrite to
       distinguish the three. **R5-18.**
-- [ ] 4.5 **`[S3]` "complete core `Codec`-value inventory".** The `Normal` row
+- [x] 4.5 **`[S3]` "complete core `Codec`-value inventory".** The `Normal` row
       (`fill`, `decodeNormal`) contains **zero** `Codec` values. **Take the first
       option — drop the row** and add one sentence after the table: "every `Codec`-valued
       definition in the tree is one of these fifteen; `Normal`'s `fill`/`decodeNormal`
@@ -267,24 +267,24 @@ Maybe String` takes an explicit _pretty-printer implementation_ value. The
       table's literal title true and needs no new column. (Do _not_ retitle to "core
       values a porter must reproduce" — that invites the next row, and the anchor's
       whole point is a finite, checkable list.) **R5-19.**
-- [ ] 4.6 **`[D2]` "the paper has two values, not one".** Scope it: the paper has two
+- [x] 4.6 **`[D2]` "the paper has two values, not one".** Scope it: the paper has two
       _decoder-side_ values; `print` is a third interpreter. **R5-23.**
-- [ ] 4.7 **`[D4]` "realized by repetition over a `subset p byte` step".** The step is
+- [x] 4.7 **`[D4]` "realized by repetition over a `subset p byte` step".** The step is
       `Codec.satisfy p` (`Combinators.lean:1276`); no code composes `subset` with
       `byte`. **R5-24.**
-- [ ] 4.8 **Module-inventory table.** `Normal.fixed` / `Normalizer.idem` are listed as
+- [x] 4.8 **Module-inventory table.** `Normal.fixed` / `Normalizer.idem` are listed as
       "gated laws" but are **structure projections** — the same category error
       README:394–402 itself applies to `Iso.law`. Annotate. **R5-25.**
-- [ ] 4.9 **`[S4]` "fresh well-founded derivations".** `Iso.lean:375–383` says the
+- [x] 4.9 **`[S4]` "fresh well-founded derivations".** `Iso.lean:375–383` says the
       recursion is "factored once"; `foldr` reuses `unfoldBy`. The distinct thing is
       the step _type_ and the measure witness. Reword. **R5-26.**
-- [ ] 4.10 **`Nat`-cursor lowering citation.** Cited to `Codec/ByteSlice.lean`; it
+- [x] 4.10 **`Nat`-cursor lowering citation.** Cited to `Codec/ByteSlice.lean`; it
       primarily lives at `Codec/Packed.lean:15–30`. Fix the citation. **R5-27.**
-- [ ] 4.11 **`[D8]` `satisfy`.** The "`UInt8` totality" reason does not explain why
+- [x] 4.11 **`[D8]` `satisfy`.** The "`UInt8` totality" reason does not explain why
       `subset` _was_ converted to `DecidablePred`; and `satisfy` has no paper
       counterpart, so it sits oddly under a paper-combinator anchor. Reword and scope.
       **R5-28.**
-- [ ] 4.12 **`[S1]` "unconditionally … no hypothesis".** `Iso.element`/`Iso.subset`
+- [x] 4.12 **`[S1]` "unconditionally … no hypothesis".** `Iso.element`/`Iso.subset`
       take `[DecidableEq α]`/`[DecidablePred p]` — instance hypotheses. Qualify.
       **R5-29.**
 
@@ -293,52 +293,52 @@ Maybe String` takes an explicit _pretty-printer implementation_ value. The
 Five of these are self-contradictions inside one file. Each is cheap; each steered a
 reader.
 
-- [ ] 5.1 **`length_filterMap_le` (R5-14).** Its docstring calls `packedCands` "a
+- [x] 5.1 **`length_filterMap_le` (R5-14).** Its docstring calls `packedCands` "a
       `filterMap`"; `Packed.lean:599–610` shows a `map` and `:579` **bolds** "Built by
       `map`, not `filterMap`, and that is a measured 2.6×". The lemma has **zero
       callers** and `packedCands`'s bound comes from `length_map`. **Delete the
       lemma** (design §D8) rather than repair prose no reader consumes.
-- [ ] 5.2 **`DecodeOne.lean:19` (R5-15).** "sound only when unambiguous/functional"
+- [x] 5.2 **`DecodeOne.lean:19` (R5-15).** "sound only when unambiguous/functional"
       contradicts `decodeOne_mem` seven lines later and the theorem itself (no
       hypothesis, `[propext, Quot.sound]`). Change "sound only when" → "equal to
       `decodeArray` only when", and say soundness is unconditional.
-- [ ] 5.3 **`RelAligned`'s "Satisfied by `byte` (`relUnambiguous` at `Bytes 1`)"
+- [x] 5.3 **`RelAligned`'s "Satisfied by `byte` (`relUnambiguous` at `Bytes 1`)"
       (R5-16).** No such lemma exists — the supplier is `relAligned_byte` — and the
       at-one-length justification is the length/unambiguity confusion the _next_
       docstring retracts. Rewrite to cite `relAligned_byte` and the prefix argument.
-- [ ] 5.4 **`min_rotate` (R5-07).** Dead: `grep` outside `Axioms.lean` returns only its
+- [x] 5.4 **`min_rotate` (R5-07).** Dead: `grep` outside `Axioms.lean` returns only its
       own definition, and `btake_btake` is plain `rfl` and never mentions it. Its
       docstring claims the `#print axioms` pins "confirm it for the laws that cite
       this" — nothing cites it. **Delete** the lemma and both `Axioms.lean` entries
       (`gatedNames` + the `#print axioms` block), then regenerate. `omega` supplies it
       in place if ever needed.
-- [ ] 5.5 **`Combinators.lean:1269` (R5-20).** "Only `relTakeWhile_cast` is new" —
+- [x] 5.5 **`Combinators.lean:1269` (R5-20).** "Only `relTakeWhile_cast` is new" —
       `encodeTakeWhile_of_decode` is a new ~15-line proof, not an inherited term. One
       clause.
-- [ ] 5.6 **`Iso.lean:846–853` (R5-21).** Still uses "chain-isolated in both
+- [x] 5.6 **`Iso.lean:846–853` (R5-21).** Still uses "chain-isolated in both
       directions", the phrase `README [D7]` says "was invented in an earlier draft" and
       disowns. Replace with the measure/terminal-seed obligation that _is_ the reason.
-- [ ] 5.7 **`Codec.lean:30–33` (R5-22).** "The typeclass reading would prevent the two
+- [x] 5.7 **`Codec.lean:30–33` (R5-22).** "The typeclass reading would prevent the two
       interpreters from having [those] types" is false — a typeclass parameter _is_
       `Type → Type`. The real reason (given correctly at README:697–700) is that a
       typeclass gives no finite case list to induct over.
-- [ ] 5.8 **`Normal.lean:41–49` (R5-30).** "for a **decidable** idempotent `norm`" —
+- [x] 5.8 **`Normal.lean:41–49` (R5-30).** "for a **decidable** idempotent `norm`" —
       `Normalizer` carries no `Decidable` field. **Default: state the sentence as
       describing an intended instantiation — do not add a field.** `Normalizer` has
       exactly one field (`idem`), and adding `Decidable` would put a new hypothesis on
       the `fill`/`fixed` interface, which is the opposite of the file's stated rationale
       for using a fixed-point subtype. The two options are not cost-symmetric, so there
       is no real choice here. **R5-30.**
-- [ ] 5.9 **`Rel_seqLeft` docstring (R5-09).** Its twin has a long docstring that
+- [x] 5.9 **`Rel_seqLeft` docstring (R5-09).** Its twin has a long docstring that
       explicitly warns the proof recipe does **not** transfer between the two halves;
       `Rel_seqLeft` has none. Add two lines.
-- [ ] 5.10 **`Rel_manyUpTo` (R5-08).** This is a NITPICK, not an optional task — every
+- [x] 5.10 **`Rel_manyUpTo` (R5-08).** This is a NITPICK, not an optional task — every
       box in this ledger is ticked or the change does not archive, and an "optional" box
       is the one that gets skipped silently. Do the cheap version: leave the statement
       alone (the `∃ k` form is _correct_ and shows the bound's provenance via
       `count k p`) and add **one sentence** to its docstring saying so. **Default: do not add the corollary.** There is no caller today, and inventing
       one is how a dead lemma gets born (see §6.2). **R5-08.**
-- [ ] 5.11 **`Axioms.lean` defs table (R5-03, R5-10).** Change "has a stated law, by the
+- [x] 5.11 **`Axioms.lean` defs table (R5-03, R5-10).** Change "has a stated law, by the
       proxy" to "named by a gated theorem's type — the proxy's whole measurement (a
       mention, not a strength claim)", and name the two vacuous cases
       (`decodeArrayFast_eq`, `decodeWholeOneBytes_eq` — `rfl` unfolds whose docstrings
@@ -346,19 +346,19 @@ reader.
 
 ## 6. `basen` — gate parity and the stale pin (R5-33, R5-36, R5-32, R5-31)
 
-- [ ] 6.1 **Bump the pin.** `nix flake lock --update-input codec` (targeted — never all
+- [x] 6.1 **Bump the pin.** `nix flake lock --update-input codec` (targeted — never all
       inputs), then `lake update codec`. **R5-33.** ✔Verified stale: pin
       `eb1d77af838f26b89a6bb6ccc1ad81063a0d4fd3`, HEAD
       `e1d8d124ea928f35cdef98533b40b036ca20293f`, 27 commits, ancestor confirmed. The
       27 commits add law families and _withdraw a prose claim_ (`99526b4`); none changes
       a type `basen` imports.
-- [ ] 6.2 **Delete the eight dead `*Run` values.** `bitRun`, `quartetRun`, `octRun`,
+- [x] 6.2 **Delete the eight dead `*Run` values.** `bitRun`, `quartetRun`, `octRun`,
       `digRun`, `b32Run`, `b64Run`, `b32TailRun`, `b64TailRun` — each occurs **exactly
       once** in the tree (its own `def`); ✔verified. Keep `hexRun` (5 occurrences,
       genuinely used by base16's fold proofs). **R5-36**, design §D5. Also check
       `decodeBit`-style orphans: `decodeBit` has 2 hits (def + docstring) and
       `roundtrip` calls `decodeFull …` directly.
-- [ ] 6.3 **Port the definition-coverage check** into `basen/Axioms.lean`: `publicDefs`,
+- [x] 6.3 **Port the definition-coverage check** into `basen/Axioms.lean`: `publicDefs`,
       `mentionedByGated`, `isDerivedDefName`, `definitionSurfaceAllowlist` and the
       `run_cmd`, mirroring `codec/Axioms.lean`. Widen the namespace predicate to
       `BaseN` (codec's checks `Codec`/`Iso`; basen's must check `BaseN` only — `Codec.*`
@@ -380,20 +380,20 @@ reader.
       not a failure — record it and move on. Do not tune `isDerivedDefName` to shrink
       the list; that is the dumping ground the allowlist's reasons exist to avoid.
 
-- [ ] 6.4 **Correct the prose counts and gate the paragraph.** `Axioms.lean:32–40` says
+- [x] 6.4 **Correct the prose counts and gate the paragraph.** `Axioms.lean:32–40` says
       `440 pins / 437 / 483`; reality is `441 / 438 / 484` (✔verified by grep:
       438 `BaseN` pins + 3 `Codec` pins = 441; `484 = 438 + 46`). Same at
       `:1655–1656`. Then extend `headerNumbers` to compute so many constants that the
       paragraph cannot rot — design §D7. **R5-34.**
-- [ ] 6.5 **Fix the log line's arithmetic.** `"438 pinned + 46 allowlisted = 447 of
+- [x] 6.5 **Fix the log line's arithmetic.** `"438 pinned + 46 allowlisted = 447 of
 484"` — `447` is the _kept_ side of `partitionInto` (`484 − 37 suffix-dropped`),
       not `438 + 46`. The checks are correct; the message conflates two sets in one
       equation. **R5-35.**
-- [ ] 6.6 **Even-arity lowercase witness needs its positive counterpart.** Add
+- [x] 6.6 **Even-arity lowercase witness needs its positive counterpart.** Add
       `decodes_6F : decodeFull hexElem hexConsumesByte 2 (…) = some [0x6F]` so
       `rejects_lowercase_even_arity` can cite it as the explicit "only difference is
       case" contrast instead of relying on an unstated premise. **R5-32.**
-- [ ] 6.7 **Bench lane: pin the values it only implies.** Add concrete `example`
+- [x] 6.7 **Bench lane: pin the values it only implies.** Add concrete `example`
       value-checks for **base16 whole-string** `encodeHex foobar = "666F6F626172"`,
       **base2/4/8/10 whole-string** encoder outputs, and **plain decode-to-bytes** for
       the padded bases (`decodeFullB64` / `decodeFullB32` on canonical strings).
@@ -404,7 +404,7 @@ reader.
 
 ## 7. `codec` gates (R5-37, plus housekeeping)
 
-- [ ] 7.1 Regenerate `Axioms.lean` after §1–§5 (`scripts/gen-axioms.lean`), and move
+- [x] 7.1 Regenerate `Axioms.lean` after §1–§5 (`scripts/gen-axioms.lean`), and move
       the header tables **and** the `expected*` constants together. **Do not predict the
       delta — the run prints it.** The four gate lines give
       `N public theorems partitioned, G gated and A allowlisted` and
@@ -415,7 +415,7 @@ reader.
       Sanity anchors from the current tree (**not** a target): 400/327/73 theorems,
       140/111/29 defs. The only planned removals are `min_rotate` (−1 gated) and
       `length_filterMap_le` (−1 gated).
-- [ ] 7.2 **`CRef.c` placement (R5-37).** Nitpick, but the rule's letter matters: the
+- [x] 7.2 **`CRef.c` placement (R5-37).** Nitpick, but the rule's letter matters: the
       file's own header concedes it "parses bytes and is therefore deliberately outside
       `Codec/`'s design rule". It is bench-only, not `@[extern]`, not in the gate.
       **Take the second option: keep it where it is and document it.** Add one sentence

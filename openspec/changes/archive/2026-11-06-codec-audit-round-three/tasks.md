@@ -75,6 +75,15 @@ ticked as if done:
 - The general arity rejection for the five fixed-width bases: renamed to
   `rejects_single_char` honestly; the general law needs a `decodeFull`-length lemma.
 - `LengthDet → RelAligned`: **open**, neither proved nor refuted (see `Sound.lean`).
+  > **Annotation, 2026-11-06 — do not rewrite the line above.** This was wrong: the
+  > implication is **refuted**, and the witness (`relUnambAlignedWitness`) was
+  > already in the tree when this ledger was written. The refutation
+  > (`lengthDet_not_implies_relAligned`, _and_ the strengthened
+  > `lengthDet_not_implies_relAligned_productive`; converse too, as
+  > `relAligned_not_implies_lengthDet`) landed in
+  > `codec-audit-round-four` §1. The entry is left as written because a ledger
+  > records what was believed at the time — rewriting it would hide that the belief
+  > was wrong for three archive rounds.
 
 Gate state: codec **325** gated / 73 allowlisted / 398 partitioned, plus **139**
 public definitions (`110` mentioned + `29` allowlisted, `0` silent); `../lean-basen`
