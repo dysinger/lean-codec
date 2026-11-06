@@ -88,11 +88,11 @@ failure mode. **It is not soundness.**
 
 ## Current state
 
-**400** public theorems are covered, by a partition with no third route:
+**410** public theorems are covered, by a partition with no third route:
 
 | side | count | what it is |
 | --- | --- | --- |
-| gated (`gatedNames`) | **327** | footprint pinned by `#print axioms` |
+| gated (`gatedNames`) | **337** | footprint pinned by `#print axioms` |
 | allowlisted (`generatedAuxAllowlist`) | **73** | not a law; reason recorded in place |
 | un-gated and unlisted | **0** | a build failure, by construction |
 
@@ -103,12 +103,12 @@ Gated footprint distribution — **generated** from the same `collectAxioms` res
 
 | footprint | count |
 | --- | --- |
-| `[propext, Quot.sound]` | 210 |
-| `[propext]` | 79 |
+| `[propext, Quot.sound]` | 216 |
+| `[propext]` | 83 |
 | `[Quot.sound]` | 4 |
 | axiom-free | 34 |
 | anything else | 0 |
-| **total** | **327** |
+| **total** | **337** |
 
 `[propext, Classical.choice, Quot.sound]` rows: **0** — every gated law is
 inside the discipline.
@@ -118,10 +118,20 @@ Definitions, by the third check:
 
 | side | count | what it is |
 | --- | --- | --- |
-| public `def`s (after dropping compiler machinery) | **140** | the universe |
-| mentioned by a gated theorem's type | **111** | has a stated law, by the proxy |
+| public `def`s (after dropping compiler machinery) | **141** | the universe |
+| named by a gated theorem's type | **112** | *mentioned* — the proxy's whole measurement (a mention, not a strength claim) |
 | `definitionSurfaceAllowlist` | **29** | no law; reason recorded in place |
 | silent | **0** | a build failure, by construction |
+
+The middle row is a **mention proxy**, and the column says so deliberately. It
+measures one thing: that no public definition can be covered by *silence*. It is
+**not** a count of definitions with characterised behaviour, and it can be satisfied
+vacuously — by a theorem that mentions the constant trivially. Two entries here are
+exactly that: `decodeArrayFast_eq` and `decodeWholeOneBytes_eq` are `rfl` unfolds of
+their own bodies, whose docstrings already admit it (`#print axioms` reports *no
+axioms*, the signature of a restatement rather than a law). An earlier revision of
+this table said "has a stated law, by the proxy", which over-read the count by those
+two. The count is unchanged at 111; what changed is what the column claims.
 
 **The theorem/definition counts are asserted, and the footprint table is
 generated** — two mechanisms, because they have different failure modes.
@@ -553,8 +563,11 @@ def gatedNames : List Lean.Name := [
   ,`Codec.Suffix.ext
   ,`Codec.Suffix.hle
   ,`Codec.Suffix_cast_remaining
+  ,`Codec.aligned_alignedNotLengthDetWitness
   ,`Codec.altConsumesByte
   ,`Codec.append_toArray_ofFn_concat
+  ,`Codec.arrayToBytes_bytesToArray
+  ,`Codec.arrayToBytes_bytesToArray_apply
   ,`Codec.array_bridge
   ,`Codec.array_readback
   ,`Codec.attach_eq_cons
@@ -654,11 +667,13 @@ def gatedNames : List Lean.Name := [
   ,`Codec.decodeOne_mem
   ,`Codec.decodeRepeat_eq
   ,`Codec.decodeRepeat_mem_iff
+  ,`Codec.decodeRepeat_mem_iff_general
   ,`Codec.decodeRepeat_spec
   ,`Codec.decodeSepBy_spec
   ,`Codec.decodeTakeWhile_spec
   ,`Codec.decodeWholeBytes_eq
   ,`Codec.decodeWholeBytes_size
+  ,`Codec.decodeWholeBytes_spec
   ,`Codec.decodeWholeOneBytes_eq
   ,`Codec.decodeWholeOne_eq
   ,`Codec.decodeWhole_eq
@@ -722,13 +737,16 @@ def gatedNames : List Lean.Name := [
   ,`Codec.functional_byte
   ,`Codec.huniq_byte
   ,`Codec.huniq_not_derivable
+  ,`Codec.huniq_not_derivable_full
   ,`Codec.isoConsumesByte
   ,`Codec.lengthConst_byte
   ,`Codec.lengthDetWitness_unamb
   ,`Codec.lengthDet_byte
   ,`Codec.lengthDet_not_implied_by_unamb
+  ,`Codec.lengthDet_not_implies_relAligned
+  ,`Codec.lengthDet_not_implies_relAligned_productive
   ,`Codec.lengthDet_of_lengthConst
-  ,`Codec.length_filterMap_le
+  ,`Codec.lengthDet_relUnambAlignedWitness
   ,`Codec.length_packedCands_le
   ,`Codec.lengths_eq_of_const
   ,`Codec.list_ofFn_getElem_clean
@@ -736,9 +754,9 @@ def gatedNames : List Lean.Name := [
   ,`Codec.mem_decodeArray_iff
   ,`Codec.mem_map_range_iff
   ,`Codec.mem_packedCands
-  ,`Codec.min_rotate
   ,`Codec.nil_append_size
   ,`Codec.nil_append_toList
+  ,`Codec.not_lengthDet_alignedNotLengthDetWitness
   ,`Codec.not_productive_pure
   ,`Codec.ofFn_concat
   ,`Codec.ofFn_shifted
@@ -763,10 +781,12 @@ def gatedNames : List Lean.Name := [
   ,`Codec.prepend_prefix_eq
   ,`Codec.prepend_prefix_read
   ,`Codec.prepend_single_bdrop
+  ,`Codec.prod_relUnambAlignedWitness
   ,`Codec.productive_iff_consumesByte
   ,`Codec.pushBytesFrom_eq
   ,`Codec.pushBytes_eq
   ,`Codec.relAligned_byte
+  ,`Codec.relAligned_not_implies_lengthDet
   ,`Codec.relChainl1_cast
   ,`Codec.relChainr1_cast
   ,`Codec.relRepeatToCount
@@ -979,11 +999,11 @@ run_cmd do
   let gated := gatedNames.length
   let allow := CodecAxioms.generatedAuxAllowlist.size
   -- Lockstep with "Current state" above.
-  let expectedPub := 400
-  let expectedGated := 327
+  let expectedPub := 410
+  let expectedGated := 337
   let expectedAllow := 73
-  let expectedDefs := 140
-  let expectedMentioned := 111
+  let expectedDefs := 141
+  let expectedMentioned := 112
   let expectedDefAllow := 29
   let mut bad : Array String := #[]
   if pub.size != expectedPub then
@@ -1159,12 +1179,21 @@ why it was fixed instead of documented.
 /-- info: 'Codec.Suffix_cast_remaining' does not depend on any axioms -/
 #guard_msgs in
 #print axioms Codec.Suffix_cast_remaining
+/-- info: 'Codec.aligned_alignedNotLengthDetWitness' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.aligned_alignedNotLengthDetWitness
 /-- info: 'Codec.altConsumesByte' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.altConsumesByte
 /-- info: 'Codec.append_toArray_ofFn_concat' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.append_toArray_ofFn_concat
+/-- info: 'Codec.arrayToBytes_bytesToArray' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.arrayToBytes_bytesToArray
+/-- info: 'Codec.arrayToBytes_bytesToArray_apply' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.arrayToBytes_bytesToArray_apply
 /-- info: 'Codec.array_bridge' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.array_bridge
@@ -1462,6 +1491,9 @@ why it was fixed instead of documented.
 /-- info: 'Codec.decodeRepeat_mem_iff' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.decodeRepeat_mem_iff
+/-- info: 'Codec.decodeRepeat_mem_iff_general' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.decodeRepeat_mem_iff_general
 /-- info: 'Codec.decodeRepeat_spec' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.decodeRepeat_spec
@@ -1477,6 +1509,9 @@ why it was fixed instead of documented.
 /-- info: 'Codec.decodeWholeBytes_size' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Codec.decodeWholeBytes_size
+/-- info: 'Codec.decodeWholeBytes_spec' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.decodeWholeBytes_spec
 /-- info: 'Codec.decodeWholeOneBytes_eq' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.decodeWholeOneBytes_eq
@@ -1666,6 +1701,9 @@ why it was fixed instead of documented.
 /-- info: 'Codec.huniq_not_derivable' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.huniq_not_derivable
+/-- info: 'Codec.huniq_not_derivable_full' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.huniq_not_derivable_full
 /-- info: 'Codec.isoConsumesByte' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.isoConsumesByte
@@ -1681,12 +1719,18 @@ why it was fixed instead of documented.
 /-- info: 'Codec.lengthDet_not_implied_by_unamb' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.lengthDet_not_implied_by_unamb
+/-- info: 'Codec.lengthDet_not_implies_relAligned' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Codec.lengthDet_not_implies_relAligned
+/-- info: 'Codec.lengthDet_not_implies_relAligned_productive' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Codec.lengthDet_not_implies_relAligned_productive
 /-- info: 'Codec.lengthDet_of_lengthConst' does not depend on any axioms -/
 #guard_msgs in
 #print axioms Codec.lengthDet_of_lengthConst
-/-- info: 'Codec.length_filterMap_le' depends on axioms: [propext, Quot.sound] -/
+/-- info: 'Codec.lengthDet_relUnambAlignedWitness' depends on axioms: [propext] -/
 #guard_msgs in
-#print axioms Codec.length_filterMap_le
+#print axioms Codec.lengthDet_relUnambAlignedWitness
 /-- info: 'Codec.length_packedCands_le' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.length_packedCands_le
@@ -1708,15 +1752,15 @@ why it was fixed instead of documented.
 /-- info: 'Codec.mem_packedCands' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.mem_packedCands
-/-- info: 'Codec.min_rotate' depends on axioms: [propext, Quot.sound] -/
-#guard_msgs in
-#print axioms Codec.min_rotate
 /-- info: 'Codec.nil_append_size' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.nil_append_size
 /-- info: 'Codec.nil_append_toList' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.nil_append_toList
+/-- info: 'Codec.not_lengthDet_alignedNotLengthDetWitness' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.not_lengthDet_alignedNotLengthDetWitness
 /-- info: 'Codec.not_productive_pure' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Codec.not_productive_pure
@@ -1789,6 +1833,9 @@ why it was fixed instead of documented.
 /-- info: 'Codec.prepend_single_bdrop' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.prepend_single_bdrop
+/-- info: 'Codec.prod_relUnambAlignedWitness' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Codec.prod_relUnambAlignedWitness
 /-- info: 'Codec.productive_iff_consumesByte' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.productive_iff_consumesByte
@@ -1801,6 +1848,9 @@ why it was fixed instead of documented.
 /-- info: 'Codec.relAligned_byte' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.relAligned_byte
+/-- info: 'Codec.relAligned_not_implies_lengthDet' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.relAligned_not_implies_lengthDet
 /-- info: 'Codec.relChainl1_cast' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.relChainl1_cast
