@@ -11,7 +11,7 @@ One reviewer finding was refuted and is deliberately absent — see design D1.
 
 ---
 
-## Status — verified 2026-11-06, session 4 — **45/56 ticked**
+## Status — verified 2026-11-06, session 4 — **56/56 ticked: COMPLETE**
 
 **Read this table, then run the check below it. Do not trust the numbers; re-derive
 them.** A task is `[x]` when the code is in the tree **and** the evidence is recorded
@@ -19,32 +19,30 @@ in the ledger; the evidence column below is that record. Tasks still `[ ]` name 
 remains, so nothing is re-done. The round-four audit closed several §2 tasks — those
 are ticked, and the two §2 tasks it left undone are named.
 
-| section                          | checkbox   | evidence / what remains                                                                                          |
-| -------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------- |
-| §1.0 basen gate parity           | done       | mechanism in `../lean-basen/Axioms.lean`; 3 `run_cmd` checks                                                     |
-| §1.1 `count` step                | done       | `Rel_count_succ`, `countSuccConsumesByte`, bench lane                                                            |
-| §1.2 `manyUpTo`                  | done       | `Rel_manyUpTo` + the 4-law `Classical.choice` split                                                              |
-| §1.3 `seq*`/`between`            | done       | 3 `Rel` laws + docstrings                                                                                        |
-| §1.4 `optional`/`maybe`/`choice` | done       | `none` case, alias laws, `Rel_choice` limits                                                                     |
-| **§1.5 `sepBy`/`takeWhile`**     | done       | +4 laws, +2 `rel…_cast`; gate 389 = 316 + 73                                                                     |
-| §1.6 dead surface                | done       | 4 `btake` laws + 2 `Suffix.consumed` laws; the "no callers" claim refuted                                        |
-| §1.7 "free theorem" docstring    | done       | rewritten to the 3-part measured account; `decode_spec` family does not transfer                                 |
-| §1.8 def-coverage gate           | done       | 3rd `run_cmd`; 139 defs = 110 mentioned + 29 allowlisted; probe verified load-bearing                            |
-| §1.9 generated footprint table   | done       | `renderDistribution`; generated table equals the hand-written one (209/78/4/34 = 325)                            |
-| §1.10 part-1 gates               | done       | `lake build` 15 / `bench` 28 / `openspec validate` 10-10 / commits per family                                    |
-| §2.1 `RelAligned`                | **3 of 4** | 2.1.1 ✓ theorem, 2.1.2 ✓ docstring, 2.1.3 ✓ `LengthDet` marked **open**; **2.1.4 open**                          |
-| §2.2 template                    | **3 of 4** | 2.2.1 ✓ `warningAsError`, 2.2.2 ✓ `master`, 2.2.3 ✓ `scripts/verify-sorry-gate.sh`; **2.2.4 open** (flake gates) |
-| §2.3 basen remaining             | **4 of 5** | 2.3.1 ✓ CHANGELOG, 2.3.2 ✓ header counts, 2.3.3 ✓ renamed, 2.3.4 ✓ even-arity witness; **2.3.5 open** (gates)    |
-| §2.4 codec prose drift           | **3 of 7** | 2.4.1 ✓ `Buffer` deleted, 2.4.2 ✓ `Encode.lean` row, 2.4.5 ✓ `[S3]` shape; **2.4.3, 2.4.4, 2.4.6, 2.4.7 open**   |
-| §2.5 part-2 gates                | OPEN       | run last                                                                                                         |
+| section                          | checkbox | evidence / what remains                                                                             |
+| -------------------------------- | -------- | --------------------------------------------------------------------------------------------------- |
+| §1.0 basen gate parity           | done     | mechanism in `../lean-basen/Axioms.lean`; 3 `run_cmd` checks                                        |
+| §1.1 `count` step                | done     | `Rel_count_succ`, `countSuccConsumesByte`, bench lane                                               |
+| §1.2 `manyUpTo`                  | done     | `Rel_manyUpTo` + the 4-law `Classical.choice` split                                                 |
+| §1.3 `seq*`/`between`            | done     | 3 `Rel` laws + docstrings                                                                           |
+| §1.4 `optional`/`maybe`/`choice` | done     | `none` case, alias laws, `Rel_choice` limits                                                        |
+| **§1.5 `sepBy`/`takeWhile`**     | done     | +4 laws, +2 `rel…_cast`; gate 389 = 316 + 73                                                        |
+| §1.6 dead surface                | done     | 4 `btake` laws + 2 `Suffix.consumed` laws; the "no callers" claim refuted                           |
+| §1.7 "free theorem" docstring    | done     | rewritten to the 3-part measured account; `decode_spec` family does not transfer                    |
+| §1.8 def-coverage gate           | done     | 3rd `run_cmd`; 139 defs = 110 mentioned + 29 allowlisted; probe verified load-bearing               |
+| §1.9 generated footprint table   | done     | `renderDistribution`; generated table equals the hand-written one (209/78/4/34 = 325)               |
+| §1.10 part-1 gates               | done     | `lake build` 15 / `bench` 28 / `openspec validate` 10-10 / commits per family                       |
+| §2.1 `RelAligned`                | done     | + `lengthDet_not_implied_by_unamb`; the fixed-width prose withdrawn                                 |
+| §2.2 template                    | done     | + `nix flake check` 2/2 and `nix build .#native .#cli` green                                        |
+| §2.3 basen remaining             | done     | + basen gates green: 25 jobs, `484 = 438 + 46`, `nix build '.#bench'` exit 0                        |
+| §2.4 codec prose drift           | done     | + leak marked unmeasured, `[D5]` elision marked, `optional` claim retracted, AGENTS pointer removed |
+| §2.5 part-2 gates                | done     | codec 4/4 checks, basen 3/3, template 2/2; commits per family                                       |
 
-**A checkbox states what is true, not what is next.** §2 tasks that are done are
-ticked, even though part 1 is unstarted — otherwise the ledger reports 16/56 while 28
-tasks are complete, which is the confusion this table exists to remove. What is
-_next_ is a separate question: **§1 is now CLOSED (all of §1.0–§1.10), so the next
-task is the remaining §2 items** — 2.1.4, 2.2.4, 2.3.5, 2.4.3, 2.4.4, 2.4.6, 2.4.7,
-then the §2.5 gates. Part 1 came first because §2's remaining prose claims describe
-laws that had to exist first; they now do.
+**A checkbox states what is true, not what is next.** §1 and §2 are both closed.
+What remains is **archiving**, which is not a task number — the archive-ordering
+section at the bottom of this file is the checklist (re-run the live-vs-delta scenario
+diff, `openspec validate --all` after the archive, and confirm
+`codec/law-coverage`'s `## Purpose` is carried across).
 
 ### Re-derive the state (do not trust this table)
 
@@ -60,12 +58,12 @@ nix develop --command lake build 2>&1 | tail -3
 nix develop --command openspec validate --all 2>&1 | tail -1
 ```
 
-Expected today: `45` completed / `56` total; `45` ticked lines; `11` open lines; the
-grep shows **all four laws for all four relations** (`encodeSepBy_` and
-`encodeTakeWhile_` each have `_rel` / `_ne_none` / `_of_decode` beside
-`encodeChainl1_`/`encodeChainr1_`) — §1.5's gap is closed; `lake build` green at 15
-jobs printing **four** gate lines (`398 = 325 + 73`; defs `139 = 110 + 29`);
-`openspec validate --all` 10/10.
+Expected today (**COMPLETE**): `56` completed / `56` total; `56` ticked lines;
+`0` open lines; `lake build` green at 15 jobs printing **four** gate lines
+(`400 = 327 + 73`; defs `140 = 111 + 29`); `lake build bench` 28 jobs;
+`openspec validate --all` 10/10; `nix flake check` 3/3. Both sibling repos green:
+`../lean-basen` (25 jobs, `484 = 438 + 46`, `nix build '.#bench'`),
+`../lean-nix-flake-template` (`nix flake check` 2/2, `nix build .#native .#cli`).
 
 ### Known OPEN work that is NOT a §-task number
 
@@ -759,13 +757,39 @@ design.
 
 ### 2.5 Part 2 gates
 
-- [ ] 2.5.1 codec: `lake build`, `lake build bench`, `openspec validate --all`,
+- [x] 2.5.1 codec: `lake build`, `lake build bench`, `openspec validate --all`,
       `nix flake check` (detached with `nohup`, never foregrounded).
-- [ ] 2.5.2 `../lean-basen`: `lake build`, `lake build bench`,
+
+      **All green 2026-11-06.** `lake build` 15 jobs, four gate lines
+      (`400 = 327 + 73`; defs `140 = 111 + 29`); `lake build bench` 28 jobs;
+      `openspec validate --all` 10 passed / 0 failed; `nix flake check` (detached)
+      `checks.lean`, `checks.formatting`, `checks.openspec` all ✅.
+
+      **A trap worth recording:** the first detached `nix flake check` failed
+      `checks.formatting` because the ledger was **unformatted in the working tree**
+      — passing `grep`-derived counts into `tasks.md` and committing through the hook
+      is not enough, since the sandboxed check sees the tree. Run `nix fmt` before the
+      detached check, or the failure reads as a `treefmt` regression.
+
+- [x] 2.5.2 `../lean-basen`: `lake build`, `lake build bench`,
       `nix build '.#bench'`.
-- [ ] 2.5.3 `../lean-nix-flake-template`: `nix flake check`,
+
+      **Green** (same run as 2.3.5, repo clean at `68f2231`): `lake build` 25 jobs
+      `484 = 438 + 46`; `lake build bench` 45 jobs; `nix build '.#bench'` exit 0.
+
+- [x] 2.5.3 `../lean-nix-flake-template`: `nix flake check`,
       `nix build .#native .#cli`.
-- [ ] 2.5.4 Commit per task family, individual files only.
+
+      **Green** (same run as 2.2.4, repo clean at `64ce6ef`): `nix flake check` 2/2
+      (`lean`, `formatting`); `nix build .#native .#cli` exit 0.
+
+- [x] 2.5.4 Commit per task family, individual files only.
+
+      **Done**, each with `git diff --cached --name-only` printed first:
+      `99526b4` Sound §2.1.4, `513636b` Axioms; `242debe` Combinators §2.4.6,
+      `95a4e55` README §2.4.3/4/6, `a37019f` AGENTS §2.4.7, `113e0fc` openspec.
+      The two cross-repo tasks (2.2.4, 2.3.5) need no commit here — they are gates,
+      and both repos were clean before and after.
 
 ---
 
