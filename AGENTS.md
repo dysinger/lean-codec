@@ -63,12 +63,15 @@ Guidance for AI coding agents working in this repository.
 > `master`, the arity renames, the `enrichHex`-style prose fixes) and redoing one is
 > the concrete cost of this confusion.
 >
-> **Three items are open in code, not as task numbers** — do not "discover" them as
-> bugs: basen's three `native_decide` bench uses (annotated with the route out,
-> which needs a `b32TailApply_b32MZTA_chars`-shaped lemma that does not exist), the
+> **Two items are open in code, not as task numbers** — do not "discover" them as
+> bugs: basen's three `native_decide` bench uses (annotated with the route out, which
+> needs a `b32TailApply_b32MZTA_chars`-shaped lemma that does not exist), and the
 > general arity rejection for the fixed-width bases (needs a `decodeFull`-length
-> lemma). **`LengthDet → RelAligned` is no longer open**: it is refuted, and
-> `round-four` §1 lands the refutation. Do not re-record it as open.
+> lemma). Both are recorded in `round-four`'s tasks §8 as prose, deliberately without
+> checkboxes.
+>
+> **`LengthDet → RelAligned` is no longer open**: it is refuted, and `round-four` §1
+> lands the refutation. Do not re-record it as open.
 >
 > **Never cite a line number in this file or the ledger.** Both carried stale
 > `:693`/`:646` figures for the same laws within a single session; cite the grep.

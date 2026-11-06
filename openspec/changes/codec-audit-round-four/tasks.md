@@ -14,19 +14,42 @@ findings come from the **fifth review round** (rounds one to three produced
 `<date>-codec-audit-round-four`, and the _next_ review's findings will be `R6-nn` in a
 change called `round-five`.
 
-Evidence base: `/tmp/r5-a-vacuity.md` (910 lines), `/tmp/r5-b-departures.md` (1658
-lines), `/tmp/r5-c-cross.md` (521 lines), merged ledger `/tmp/r5-SYNTHESIS.md`.
-Main-agent verification probes: `/tmp/verify/*.lean`.
-
-**`/tmp` does not survive a reboot.** Every proof this ledger depends on is therefore
-**inlined below** rather than left as a path — if a `/tmp` reference is missing, the
-task still has its content. The reports are cited for provenance only; no task requires
-reading them. If `/tmp/r5a/p2.lean` is gone, §1.2's two terms are still fully specified
-there in prose.
+**Nothing in this ledger requires `/tmp`.** The reports (`/tmp/r5-a-vacuity.md`,
+`r5-b-departures.md`, `r5-c-cross.md`, merged `/tmp/r5-SYNTHESIS.md`) and the probes
+(`/tmp/verify/*.lean`, `/tmp/r5a/*.lean`) are cited for **provenance only** — they were
+used to _find_ these findings, and a reader needs none of them to _fix_ one. Every proof
+body lived only in `/tmp`, so all of them are inlined in **Appendix A** and were
+re-verified to compile against the current tree. A `/tmp` path appearing below is
+"where this came from", never "what you must open": if the file is gone, the task text
+is still complete.
 
 **Verification status of the findings.** Every MUST and SHOULD item was independently
 re-derived by the main agent before being written here (marked ✔). One item is
 **predicted, not run** (§6.3) and says so.
+
+## Build state during implementation — read this before task 1.1
+
+**The build will be RED from §1.1 until §7.1, and that is expected.** The axiom gate
+fails per-law with `not pinned by this gate` for any theorem `Axioms.lean` does not
+pin, so adding a law turns `lake build` red by design (`AGENTS.md`, "The gate catches
+your own new laws, by design"). This ledger says "regenerate after §1–§5", which taken
+literally leaves a red build for several tasks.
+
+**The policy, so nobody stalls on it:** work the law batches (§1, §2, §3) with the
+build red, keeping a compile check on the _single module_ rather than the whole build:
+
+```bash
+nix develop --command lake env lean Codec/Sound.lean     # type/elaboration check
+```
+
+Then run `scripts/gen-axioms.lean` and fix the two header tables + six `expected*`
+constants (§7.1) **once**, after §1–§3, and from then on `lake build` is the gate again.
+Do **not** regenerate after every individual law — the generator rewrites the whole
+file and the header constants have to be recomputed each time. Do **not** tick §1.1
+believing the build is supposed to be green; §9 is where green is required.
+
+`openspec` counts every `- [ ]` in this file, so no section may contain a checkbox that
+is not real work (§8 explains why it has none).
 
 ## Severity key
 
@@ -87,14 +110,14 @@ _absence_ of one.
 
 - [ ] 1.1 Land `lengthDet_relUnambAlignedWitness` and
       `lengthDet_not_implies_relAligned` in `Codec/Sound.lean`. **R5-01.** ✔Verified
-      `[propext]`-only by the main agent (`/tmp/verify/m1.lean`). The witness
+      `[propext]`-only by the main agent (Appendix A.1). The witness
       `relUnambAlignedWitness` is already in the tree; the theorem is ~20 lines of
       `match` on the two length indices. Statement of the second:
       `¬ (∀ {α} (R : α → {m : Nat} → Bytes m → Prop), LengthDet R → RelAligned R)`.
 - [ ] 1.2 Land the **strong form** with productivity added as a second hypothesis, so a
       reader cannot attribute the failure to productivity's absence. **R5-01**, design
-      §D1. Needs two more terms, both transcribed verbatim from the auditor's probe
-      `/tmp/r5a/p2.lean` (still on disk; do not re-derive):
+      §D1. Needs two more terms, both **in Appendix A.1** (originally the auditor's
+      probe `/tmp/r5a/p2.lean` — paste from the Appendix, not from `/tmp`):
       `prod_relUnambAlignedWitness : ∀ a {m} (t : Bytes m), relUnambAlignedWitness a t →
 m ≠ 0` (a `match` on `m`, four arms), and
       `lengthDet_not_implies_relAligned_productive :
@@ -105,8 +128,8 @@ m ≠ 0` (a `match` on `m`, four arms), and
 - [ ] 1.3 Land `relAligned_not_implies_lengthDet` (the other direction), completing the
       four-way diagram. **Corrected**: the auditor's report _names_ this theorem but its
       probe files do **not** contain it — the name appears only in prose. It is therefore
-      **not** verified from the audit; the main agent proved it and the working proof is
-      `/tmp/verify/i3.lean` (`[propext, Quot.sound]`-only). Transcribe:
+      **not** verified from the audit; the main agent proved it, and the working proof
+      is **Appendix A.1** (`[propext, Quot.sound]`-only). Transcribe:
       `alignedNotLengthDetWitness a := (m=1 -> a = true) | (m=2 -> a = true) | False`
       (one value at **two** lengths — `RelAligned` holds because no second value relates
       at all, so the conclusion `a = b` is discharged from `a = true`; `LengthDet` fails
@@ -137,9 +160,15 @@ m ≠ 0` (a `match` on `m`, four arms), and
       identified `a₀ = b₀`, to conclude the two step-lengths agree. So neither hypothesis
       can be dropped. (**R5-06**; reviewer A's S4.)
 
-- [ ] 1.6 Delete `AGENTS.md`'s clause "and `LengthDet → RelAligned` (neither proved nor
+- [x] 1.6 Delete `AGENTS.md`'s clause "and `LengthDet → RelAligned` (neither proved nor
       refuted)" from the "three items open in code" list, and fix the "Three items"
       count that depends on it. **R5-02.**
+
+      **DONE in the authoring session** (`556f546`, then corrected): the clause is
+      gone, the sentence now reads "Two items are open in code", and it names both.
+      Found already-done by a cold-start test that read the entry points fresh. Ticked
+      per this ledger's own rule — never leave a finished task unticked.
+
 - [ ] 1.7 Annotate the archived round-three ledger's `:77` entry — **do not rewrite
       it**. A ledger records what was believed then; rewrite and the fact that it was
       wrong for three rounds disappears. Add a one-line dated note pointing at the
@@ -158,7 +187,7 @@ docstring repair.
       `decodeWholeBytes_spec`. The short proof above `decodeWholeBytes_spec`
       (`spec_aux`, taking `k`, `hk : k = n`, `a`, `ha` abstract) is a **local helper** —
       make it a `private theorem` or fold it into the main proof; it is not public
-      surface and needs no gate entry. **R5-04.** ✔Proved (`/tmp/verify/s2z.lean`),
+      surface and needs no gate entry. **R5-04.** ✔Proved (**Appendix A.2**),
       `[propext, Quot.sound]`-only. **Three traps recorded in design §D3 and all three
       fired:** the docstring's "`rfl` by `funext`/`Fin.ext`" is wrong (needs
       `Array.getElem_toList` + `List.getElem_ofFn`; `Array.getElem_mk` and
@@ -172,8 +201,8 @@ docstring repair.
       2.1 lands, and replace the false "`rfl`" claim with the two bridge lemmas.
       **R5-04.**
 - [ ] 2.3 Add `decodeRepeat_mem_iff_general` to `Codec/Sound.lean`. **R5-13.**
-      ✔Proved by both the auditor and the main agent (`/tmp/verify/b3.lean`),
-      `[propext, Quot.sound]`-only, and it is a character-for-character rename of the
+      ✔Proved and in **Appendix A.4** (`[propext, Quot.sound]`-only) — also proved
+      independently by the auditor; it is a character-for-character rename of the
       specialised proof.
 - [ ] 2.4 Rewrite `decodeRepeat_mem_iff`'s docstring. It says the specialisation is
       forced because `Codec.byte` is "the only step relation whose `∃ s₀` collapses for
@@ -186,13 +215,12 @@ docstring repair.
 
 - [ ] 3.1 Add the `∃ R` form as a **new name `huniq_not_derivable_full`** — do **not**
       restate the existing `huniq_not_derivable`: `Axioms.lean` pins the existing one by
-      name, and a rename would invalidate the archived ledgers' references. ✔Proved
-      (`/tmp/verify/s3.lean`), `[propext, Quot.sound]`-only, by packaging the three
-      existing `uniqCounterexample_*` lemmas:
+      name, and a rename would invalidate the archived ledgers' references. ✔Proved and in **Appendix A.3** (`[propext, Quot.sound]`-only), by packaging
+      the three existing `uniqCounterexample_*` lemmas:
       `∃ (R : Bool → {m : Nat} → Bytes m → Prop), relUnambiguous R ∧
  (∀ a {m} (t : Bytes m), R a t → m ≠ 0) ∧
  ¬ (∀ (xs ys : List Bool) (n : Nat) (s : Bytes n),
-     relRepeat R xs n s → relRepeat R ys n s → xs = ys)`.
+   relRepeat R xs n s → relRepeat R ys n s → xs = ys)`.
       Keep the existing `n = 2` version as the small witness. **R5-05.**
 - [ ] 3.2 Point the section header's "machine-checked below as `huniq_not_derivable`" at
       the strengthened name. The existing theorem never mentions `relUnambiguous` or
@@ -404,21 +432,27 @@ cast` cannot be `rw`/`subst`/`generalize`** — carry `hk : k = n` and
 
 ## 8. Recorded, deliberately NOT fixed here
 
-- [ ] 8.1 **The length-changing carrier for `[D4]`.** Would be
-      `Iso (Bytes m) (Bytes n)` or a `List`-shaped normalizer, with its own
-      `Productive`/`ConsumesByte`/shrink-witness obligations. A design change, not a
-      prose fix; needs an owner decision because it changes what `[S3]`/`[S4]` may ship.
-      Design §D4.
-- [ ] 8.2 **`relRepeat_induction` has zero callers.** The principle's _existence_ is
-      the least-fixpoint property, so the claim is accurate whether or not anything
-      uses it. Recorded as a known state; no action.
-- [ ] 8.3 **README throughput figures were not re-measured** by the audit, and
-      `AGENTS.md` forbids quoting a figure without running its lane in the same
-      session. Not touched. If they are ever quoted, re-run `benchBurst`/`benchRatio`
-      first.
-- [ ] 8.4 **`basen`'s `native_decide` ×3** remain bench-only with no law depending on
-      them (✔confirmed: `Bench.lean` is a `lean_exe`, no library module imports it, and
-      they are `example`s outside `publicTheorems`). Unchanged, still tracked open.
+**These are NOT tasks and carry no checkboxes, deliberately.** They were open
+checkboxes until a cold-start test caught the consequence: `openspec` counts every
+`- [ ]` in this file, so four "no action" boxes inflated `totalTasks` to 56 and made
+`56/56` **unreachable** — the only way to reach it would be to tick work the design
+document says must not be ticked. Deleting the boxes is the honest fix; the items stay
+recorded as prose, which is what "recorded" meant.
+
+- **§8.1 — the length-changing carrier for `[D4]`.** Would be
+  `Iso (Bytes m) (Bytes n)` or a `List`-shaped normalizer, with its own
+  `Productive`/`ConsumesByte`/shrink-witness obligations. A design change, not a prose
+  fix; needs an owner decision because it changes what `[S3]`/`[S4]` may ship. See
+  design §D4. **If the owner wants it, it is a new change, not a task here.**
+- **§8.2 — `relRepeat_induction` has zero callers.** The principle's _existence_ is the
+  least-fixpoint property, so the claim is accurate whether or not anything uses it.
+  Known state, no action.
+- **§8.3 — the README's throughput figures were not re-measured** by the audit, and
+  `AGENTS.md` forbids quoting a figure without running its lane in the same session.
+  Not touched. If anyone ever quotes them, run `benchBurst`/`benchRatio` first.
+- **§8.4 — `basen`'s `native_decide` ×3** remain bench-only with no law depending on
+  them (✔confirmed: `Bench.lean` is a `lean_exe`, no library module imports it, and
+  they are `example`s outside `publicTheorems`). Unchanged, still tracked open.
 
 ## 9. Gates (run all three repos; they are different flakes)
 
