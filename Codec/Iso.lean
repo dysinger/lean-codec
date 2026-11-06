@@ -845,9 +845,14 @@ inverse law only "modulo equivalence classes" — the forward-iteration fixpoint
 `b` (where `apply b = none`) and the backward-iteration fixpoint `a` (where
 `unapply a = none`) need not coincide, because `apply a = some b ↔ unapply b =
 some a` does not force `apply a = none ↔ unapply a = none`. Encoding the law as a
-field would require a per-element "chain-isolated in both directions"
-precondition, which is precisely the gloss this library rejects. `foldl` (proved
-directly, above) is the combinator `chainl1` actually needs; `iterate` is omitted
-rather than shipped with a subtly-unsound law. -/
+field would require a per-element precondition: the forward and backward iteration
+measures must agree at each step, and the two fixpoints must be the *same* element,
+so a witness can only be supplied by a term that carries both a measure and a
+transport of the terminal seed — not by a gloss. (An earlier revision called this
+"chain-isolated in both directions"; that phrase was invented in an earlier draft
+and is **disowned** by `README [D7]` — the obligation above is what is actually
+required, and the phrase described a condition nobody can discharge.) `foldl`
+(proved directly, above) is the combinator `chainl1` actually needs; `iterate` is
+omitted rather than shipped with a subtly-unsound law. -/
 
 end Iso

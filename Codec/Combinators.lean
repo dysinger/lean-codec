@@ -109,6 +109,13 @@ theorem Rel_seqRight {α : Type} (p : Codec Unit) (q : Codec α) (x : α) {n : N
     rw [Rel_seq]
     exact ⟨m, hm, s₁, s₂, hs, hp, hq⟩
 
+/-- `p <* q` parses/prints `p` then `q`, keeping only `p` — the mirror of
+`Rel_seqRight`, whose docstring carries the composite-`Iso` warning. **That warning
+does not transfer to this half**: `seqRight`'s `Iso` is the *composite*
+`commute ≫ inverse unit`, whereas `seqLeft`'s is the single `inverse unit`, so the
+left-hand equation **is** `simp`-dischargeable and the `injection … with h; subst h`
+that `Rel_seqRight` needs is not required here. Do not copy one recipe to the other.
+`[propext]`-only. -/
 theorem Rel_seqLeft {α : Type} (p : Codec α) (q : Codec Unit) (x : α) {n : Nat}
     (s : Bytes n) :
     Rel (seqLeft p q) x s ↔
@@ -570,7 +577,13 @@ The `∃ k ≤ n` is the bound doing its work: `manyUpTo n p` relates `xs` iff t
 *some* `k` within the bound for which `count k p` — i.e. `relRepeat` at `xs.length` —
 relates it. **Ordering warning (see the definition's docstring):** the results are
 enumerated shortest-first, so a `decodeOne`-style first-result consumer still gets
-`[]`. `[propext, Quot.sound]`-only. -/
+`[]`. `[propext, Quot.sound]`-only.
+
+The `∃ k` is **not** redundant, and is not simplified away: keeping `k` separate
+shows the bound's *provenance* — the witness is the `count k p` branch of `choice`,
+which is exactly the branch the `mem_map_range_iff` step produces. There is no caller
+today; the statement is kept in the form the derivation yields rather than in a
+shortened one nothing would consume. -/
 theorem Rel_manyUpTo {α : Type} (p : Codec α) (n : Nat) (xs : List α) {m : Nat}
     (s : Bytes m) :
     Rel (manyUpTo n p) xs s ↔ ∃ k ≤ n, xs.length = k ∧ relRepeat (Rel p) xs m s := by
@@ -1268,9 +1281,11 @@ a varint (`takeWhile highBitSet` + a fold `iso`), a UTF-8 code-unit run. Like
 finite `many` node to embed), and its laws are inherited (`decodeRepeat_spec` /
 `encodeRepeat_rel` / `encodeRepeat_ne_none`) with **no new induction**: each is the
 `relRepeat` law at the step `Rel (satisfy p)`, so the family has the same four-law
-shape as `chainl1`/`chainr1`. Only `relTakeWhile_cast` is new, and it is the
-`relRepeat_cast` transport the `_of_decode` direction needs to conclude at the input
-length rather than the decoder's `n - 0`. -/
+shape as `chainl1`/`chainr1`. Two things are new rather than inherited:
+`relTakeWhile_cast`, the `relRepeat_cast` transport the `_of_decode` direction needs
+to conclude at the input length rather than the decoder's `n - 0`, and the proof of
+`encodeTakeWhile_of_decode` (~15 lines), which is not an inherited term. (An earlier
+revision said "Only `relTakeWhile_cast` is new", which undercounted.) -/
 
 /-- The denotation of `takeWhile p`: `relRepeat` over the step `Rel (satisfy p)`. -/
 def relTakeWhile (p : UInt8 → Bool) : List UInt8 → (n : Nat) → Bytes n → Prop :=

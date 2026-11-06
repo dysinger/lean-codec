@@ -16,10 +16,14 @@ commits to the *first* `d₁` result (a `bind`, not a `flatMap` over all of them
 ## The gating contract
 
 `decodeOne` commits `|` to one branch and `*` to the first left result, so it is
-**sound only when the description is unambiguous/functional** — i.e. when
-`decodeArray d a i` has at most one result. It is therefore *never* presented as
-equal to the backtracking `decodeArray` without that hypothesis. The facts proved
-mirror the `decodeFull_spec` template (`Codec.Decode`):
+equal to the backtracking `decodeArray` only when the description is
+unambiguous/functional — i.e. when `decodeArray d a i` has at most one result. It is
+therefore *never* presented as **equal** to `decodeArray` without that hypothesis.
+**Soundness is unconditional**: `decodeOne_mem` (fact 1 below) has no hypothesis and
+`[propext, Quot.sound]`-only, so a committed choice never fabricates a result; what
+the hypothesis buys is *completeness*. (An earlier revision read "sound only when",
+which contradicts `decodeOne_mem` seven lines later.) The facts proved mirror the
+`decodeFull_spec` template (`Codec.Decode`):
 
 1. **Unconditional soundness** — `decodeOne_mem`: every result `decodeOne`
    returns is a genuine backtracking result (`(x, c) ∈ decodeArray d a i`), so a

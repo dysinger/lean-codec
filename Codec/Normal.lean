@@ -41,11 +41,19 @@ the identity (`fill_fixed`).
 ## Why a subtype and not Lean's `Quotient`
 
 `Quotient` is non-reducible: no law stated over it can be closed by `simp`/`rfl`,
-and `Quot.sound` would enter the axiom gate of every law that touches it. For a
-**decidable idempotent** `norm` the fixed-point subtype is definitionally the same
+and `Quot.sound` would enter the axiom gate of every law that touches it. For an
+idempotent `norm` the fixed-point subtype is definitionally the same
 quotient, keeps the library's "reduce and compute" proof discipline, and stays
 `[propext, Quot.sound]`-only (in fact these lemmas report `[propext]` or no
 axioms).
+
+**No `Decidable` is required, and none is carried.** An earlier revision said "for
+a **decidable** idempotent `norm`"; that describes an *intended instantiation*, not
+a field of this structure. `Normalizer` has exactly one field (`idem`) — adding a
+`Decidable` field would put a new hypothesis on the `fill`/`fixed` interface, which
+is the opposite of the rationale just given for using a fixed-point subtype rather
+than a quotient. Deciding the equality is something a *consumer* does when it needs
+to compute; it is not part of the interface here.
 
 ## The laws: one on the arrow, one on the normalizer
 

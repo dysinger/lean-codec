@@ -20,12 +20,16 @@ The combinators are:
   * `byte`        — the description relating each byte to itself (`token`)
 
 Note: `Codec` is an inductive *description* (an AST), not the paper's
-polymorphically-embedded typeclass. The typeclass reading would prevent the
-two interpreters from having types `decode : Codec α → {n : Nat} → Bytes n → …` and
-`encode : Codec α → α → …` (which require `Codec` to be a `Type → Type`
-constructor applied to a value type). This is the free-alternative / free-applicative
-encoding of syntax descriptions, and it is what makes `Rel`, `decode`, and
-`encode` into interpreters over a single description value.
+polymorphically-embedded typeclass. The reason is **not** a typing obstruction —
+an earlier revision claimed "the typeclass reading would prevent the two
+interpreters from having types `decode : Codec α → {n : Nat} → Bytes n → …` and
+`encode : Codec α → α → …`", and that is **false**: a typeclass parameter *is* a
+`Type → Type` argument, so `decode [Codec α]` typechecks. The real reason is
+inductive: a typeclass gives **no finite case list** to induct over, and every law
+in `Codec/Sound.lean` (`encode_rel`, `decode_spec`, `bidir`, `roundtrip`) is a
+structural induction on the description. This is the free-alternative /
+free-applicative encoding of syntax descriptions, and it is what makes `Rel`,
+`decode`, and `encode` into interpreters over a single description value.
 -/
 
 universe u v
@@ -646,11 +650,6 @@ unrestricted-index form of `btake_apply`. -/
 theorem btake_agree {n m : Nat} (s : Bytes n) (i : Fin (min m n)) :
     btake m s i = s ⟨i.val, Nat.lt_of_lt_of_le i.isLt (Nat.min_le_right m n)⟩ :=
   rfl
-
-/-- `min (min m k) n = min m (min k n)` — the length rearrangement `btake_btake`
-names. `omega` cannot reach `Classical.choice` here (linear `Nat` arithmetic); the
-`#print axioms` pins in `Axioms.lean` confirm it for the laws that cite this. -/
-theorem min_rotate (n m k : Nat) : min (min m k) n = min m (min k n) := by omega
 
 /-- **`btake` composes.** Taking `k` then `m` reads the same byte as taking
 `min m k`, stated pointwise so no length cast is needed. -/
