@@ -19,34 +19,43 @@ Guidance for AI coding agents working in this repository.
 > it holds the **stable** part — how to work here, what the gates are, and the traps
 > that have cost sessions. Status is computed from `openspec/`, never recorded here.
 >
-> **Where the next session starts, exactly.** §1.0-§1.4 are landed and gated
-> (16/56), and the round-four audit's fixes are pushed on top (see the ledger's
-> "Round-four audit" section). Begin at **`tasks.md` §1.5** — the
-> `sepBy`/`takeWhile` decode→encode halves, mirroring the already-proved chain pair.
+> **Where the next session starts, exactly.** The ledger's `## Status — verified`
+> table is the authoritative state; this box only says how to use it.
 >
-> **Confirm that baseline in one command before writing a proof** — do not take it
-> from this paragraph:
+> **Next task: `tasks.md` §1.5** — the `sepBy`/`takeWhile` decode→encode halves
+> (`encodeSepBy_of_decode`, `encodeSepBy_ne_none` and the `takeWhile` twins),
+> mirroring the already-proved `encodeChainl1_of_decode` / `encodeChainl1_ne_none`.
+> After §1.5: §1.6, §1.7, §1.8, §1.9, §1.10, then §2. **Do not start §2 before
+> §1.10 is green** — §2's prose claims describe laws that must exist first.
+>
+> **Re-derive the state; do not believe a number in prose.** Three commands:
 >
 > ```bash
+> nix develop --command openspec list --json | grep -E 'completedTasks|totalTasks'
+> grep -oE '^- \[x\] [0-9.]+' openspec/changes/codec-audit-round-three/tasks.md | wc -l
 > grep -n 'theorem encodeChainl1_\|theorem encodeSepBy_\|theorem encodeTakeWhile_' Codec/Combinators.lean
 > ```
 >
-> Expected today: `encodeSepBy_rel` and `encodeTakeWhile_rel` (the `_rel` half only,
-> i.e. the gap §1.5 closes) and, as the model to copy, `encodeChainl1_rel`,
-> `encodeChainl1_ne_none`, `encodeChainl1_of_decode` (plus the `_injective` and
-> `chainr1` twins). §1.5.1/§1.5.2 add `encode*_of_decode` + `encode*_ne_none` for
-> `sepBy` and `takeWhile`.
+> Expected today: **16 completed / 56 total**, and the grep shows `encodeSepBy_rel`
+> and `encodeTakeWhile_rel` (the `_rel` half only — **this is the gap §1.5 closes**)
+> next to `encodeChainl1_rel` / `_ne_none` / `_of_decode` (the model to copy). If the
+> grep already shows `encodeSepBy_of_decode`, §1.5 is part-done: read the ledger, not
+> this file.
+>
+> **`[x]` means "in the tree AND evidence recorded in the ledger" — never tick on
+> intent.** §2 is the one place this bites: several §2 tasks are _done in code_ but
+> deliberately left `[ ]` because they are scheduled after §1. Read the ledger's
+> "evidence / what remains" column before redoing anything in §2, or you will
+> re-implement `warningAsError` in the template for the third time.
+>
+> **Three items are open in code, not as task numbers** — do not "discover" them as
+> bugs: basen's three `native_decide` bench uses (annotated with the route out,
+> which needs a `b32TailApply_b32MZTA_chars`-shaped lemma that does not exist), the
+> general arity rejection for the fixed-width bases (needs a `decodeFull`-length
+> lemma), and `LengthDet → RelAligned` (neither proved nor refuted).
 >
 > **Never cite a line number in this file or the ledger.** Both carried stale
-> `:693`/`:646` figures for those laws within a single session; the grep above is
-> the citation.
->
-> **Do §1.5, then §1.6-§1.10, then §2.** §2's prose claims are worthless before the
-> laws exist. Three things are recorded as **open** and must not be re-opened as if
-> they were unfinished work: basen's three `native_decide` bench uses (annotated with
-> the exact route that removes them — needs a `b32TailApply_b32MZTA_chars`-shaped
-> lemma that does not exist yet), the general arity rejection for the fixed-width
-> bases (needs a `decodeFull`-length lemma), and `LengthDet → RelAligned`.
+> `:693`/`:646` figures for the same laws within a single session; cite the grep.
 >
 > **Round two is archived.** `2026-11-05-codec-audit-round-two` (42/42 tasks, its
 > three spec deltas synced into `openspec/specs/` and verified scenario-by-scenario)

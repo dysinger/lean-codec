@@ -11,114 +11,77 @@ One reviewer finding was refuted and is deliberately absent — see design D1.
 
 ---
 
-## Status at end of 2026-11-05 session 2 — **16/56**
+## Status — verified 2026-11-05, session 3 — **16/56 ticked**
 
-| section                          | state                                                               |
-| -------------------------------- | ------------------------------------------------------------------- |
-| §1.0 basen gate parity           | **done** — mechanism ported; 446 laws / 483 theorems partitioned    |
-| §1.1 `count` step                | **done** — `Rel_count_succ` + `countSuccConsumesByte` + bench check |
-| §1.2 `manyUpTo`                  | **done** — law + the `Classical.choice` split                       |
-| §1.3 `seq*`/`between`            | **done** — three `Rel` laws, docstrings fixed                       |
-| §1.4 `optional`/`maybe`/`choice` | **done** — `none` case, alias laws, `Rel_choice` limits             |
-| **§1.5 `sepBy`/`takeWhile`**     | **NEXT — unstarted**                                                |
-| §1.6–§1.10                       | not started                                                         |
-| §2.1–§2.5                        | not started (depends on §1)                                         |
+**Read this table, then run the check below it. Do not trust the numbers; re-derive
+them.** Ticked means the ledger checkbox is `[x]` AND the evidence is in the tree.
+Open means the checkbox is `[ ]` — including §2 tasks that the round-four audit
+partly closed, which are called out explicitly so nobody double-does them.
 
-Gate state at this point: `lake build` green, **310** gated / 72 allowlisted / 382
-partitioned (plus 2 new laws from the round-four audit, already pinned);
-`openspec validate --all` 10/10. `../lean-basen` green at 25 jobs on codec
-`add3ce4`: **438 pinned + 46 allowlisted = 447 of 484**, header numbers verified.
+| section                          | checkbox        | evidence / what remains                                                                                                                        |
+| -------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| §1.0 basen gate parity           | done            | mechanism in `../lean-basen/Axioms.lean`; 3 `run_cmd` checks                                                                                   |
+| §1.1 `count` step                | done            | `Rel_count_succ`, `countSuccConsumesByte`, bench lane                                                                                          |
+| §1.2 `manyUpTo`                  | done            | `Rel_manyUpTo` + the 4-law `Classical.choice` split                                                                                            |
+| §1.3 `seq*`/`between`            | done            | 3 `Rel` laws + docstrings                                                                                                                      |
+| §1.4 `optional`/`maybe`/`choice` | done            | `none` case, alias laws, `Rel_choice` limits                                                                                                   |
+| **§1.5 `sepBy`/`takeWhile`**     | **OPEN**        | **NEXT SESSION STARTS HERE** — see the grep below                                                                                              |
+| §1.6 dead surface                | OPEN            | `btake` still has 0 theorems; `Suffix.consumed` likewise                                                                                       |
+| §1.7 "free theorem" docstring    | OPEN            | `Combinators.lean` still says "no new induction, no gate"                                                                                      |
+| §1.8 def-coverage gate           | OPEN            | not added to `Axioms.lean`                                                                                                                     |
+| §1.9 generated footprint table   | OPEN            | header is asserted, not generated                                                                                                              |
+| §1.10 part-1 gates               | OPEN            | run after §1.5–§1.9                                                                                                                            |
+| §2.1 `RelAligned`                | **3 of 4 done** | 2.1.1 ✓ (theorem), 2.1.2 ✓ (docstring), 2.1.3 ✓ (`LengthDet` marked **open**); **2.1.4 open**                                                  |
+| §2.2 template                    | **3 of 4 done** | 2.2.1 ✓ `warningAsError`, 2.2.2 ✓ `master`, 2.2.3 ✓ verified load-bearing (incl. CLI); **2.2.4 open** (the `nix flake check` gates)            |
+| §2.3 basen remaining             | **2 of 5 done** | 2.3.1 ✓ CHANGELOG, 2.3.2 ✓ header counts, 2.3.3 ✓ renamed (general law still **open**), 2.3.4 ✓ even-arity witness; **2.3.5 open** (the gates) |
+| §2.4 codec prose drift           | **3 of 7 done** | 2.4.1 ✓ `Codec.Buffer` deleted, 2.4.2 ✓ `Encode.lean` row, 2.4.5 ✓ `[S3]` shape; **2.4.3, 2.4.4, 2.4.6, 2.4.7 open**                           |
+| §2.5 part-2 gates                | OPEN            | run last                                                                                                                                       |
 
-**Do not count families, count tasks.** Each of §1.1–§1.4 cost several laws beyond
-the one the task names (`Rel_count_succ` needed `count_succ` plus two productivity
-witnesses; `manyUpTo` needed four laws to stay out of `Classical.choice`). §1.5 is
-the first family with a named model to mirror, so it should be cheaper.
+**The §2 rows are deliberately left unticked** even where the work is done, because
+§2 is ordered after §1: ticking §2 while §1.5 is unstarted would make the "§2
+depends on §1" ordering read as satisfied when it is not. The evidence column is the
+record; the checkbox is the schedule. When §1.10 is green, tick those §2 items in one
+pass against the evidence above.
+
+### Re-derive the state (do not trust this table)
+
+```bash
+cd /Users/user/_/lean-codec
+nix develop --command openspec list --json | grep -E 'completedTasks|totalTasks'
+grep -oE '^- \[x\] [0-9.]+' openspec/changes/codec-audit-round-three/tasks.md | wc -l
+grep -oE '^- \[ \] [0-9.]+' openspec/changes/codec-audit-round-three/tasks.md | wc -l
+# the §1.5 baseline, which is the thing the next session depends on:
+grep -n 'theorem encodeChainl1_\|theorem encodeSepBy_\|theorem encodeTakeWhile_' Codec/Combinators.lean
+# repo health:
+nix develop --command lake build 2>&1 | tail -3
+nix develop --command openspec validate --all 2>&1 | tail -1
+```
+
+Expected today: `16` completed / `56` total; `16` ticked lines; `40` open lines; the
+grep shows `encodeSepBy_rel` and `encodeTakeWhile_rel` (**the gap**) plus
+`encodeChainl1_rel` / `_ne_none` / `_of_decode` (the model); `lake build` green at 15
+jobs with `382 = 310 + 72` verified; `openspec validate --all` 10/10.
+
+### Known OPEN work that is NOT a §-task number
+
+Three items are recorded open in code and must not be "re-discovered" as bugs, nor
+ticked as if done:
+
+- basen `Bench.lean` uses `native_decide` 3× (banned). Annotated in place; the route
+  out needs a `b32TailApply_b32MZTA_chars`-shaped lemma that does not exist.
+- The general arity rejection for the five fixed-width bases: renamed to
+  `rejects_single_char` honestly; the general law needs a `decodeFull`-length lemma.
+- `LengthDet → RelAligned`: **open**, neither proved nor refuted (see `Sound.lean`).
+
+Gate state: codec **310** gated / 72 allowlisted / 382 partitioned; `../lean-basen`
+green at 25 jobs on the codec pin in its `flake.lock`: **438 + 46 = 447 of 484**,
+header verified. (Check the pin with `nix flake metadata --json | grep -A2 codec`
+rather than trusting a hash written here.)
+
+**Do not count families, count tasks.** §1.1–§1.4 each cost several laws beyond the
+one the task names. §1.5 is the first family with a named model to mirror.
 
 ---
-
-## Round-four audit (2026-11-05, three read-only reviewers) — findings applied
-
-A second hypercritical audit ran after §1.0–§1.4 landed. Reports in
-`/tmp/r4-a.md` (codec), `/tmp/r4-b.md` (basen), `/tmp/r4-c.md` (cross-repo).
-Everything below was **re-verified in-tree before being applied**; the refuted
-items are listed as refuted, because relaying an unverified finding is the defect
-this whole change exists to prevent.
-
-**Fixed in this pass (with the verification that justified each):**
-
-- **§2.1.1/§2.1.2/§2.1.3 — `relUnambiguous` vs `RelAligned` is _incomparability_.**
-  The `RelAligned` docstring claimed "there is no relation that is unambiguous and
-  not aligned". **Refuted and now a theorem**: `relUnambiguous_not_implies_relAligned`
-  - `relUnambAlignedWitness` + `relUnambAlignedWitness_unamb` in `Codec/Sound.lean`.
-    Independently reproduced the design's D4 measurement — `relUnambiguous S` is
-    `[propext, Quot.sound]`-only, `¬ RelAligned S` axiom-free. The docstring was
-    rewritten: the predicates are incomparable; the withdrawn advice ("prove
-    `relUnambiguous`, it is enough") is documented as unsound because
-    `decodeArray_unique` needs `RelAligned` **and** `Functional`; and the
-    `LengthDet → RelAligned` "needs `DecidableEq`/classical" aside is recorded as an
-    **open** claim about a proof route, not a strength fact.
-- **§2.4.2 — README's `Codec/Encode.lean` row** cited `Codec.encodeArray_eq`, which
-  lives in `Packed.lean`; `Encode.lean`'s own encoder laws are
-  `fastEncodeRepeat_eq`/`fastEncodeRepeatAcc_eq`. Row corrected, and it now says the
-  encoder's soundness law is `Codec.encode_rel` in `Sound.lean`.
-- **§2.4.5 — README's "the same shape every other combinator has"** was false.
-  Measured: `chainl1`/`chainr1` have four laws each; `sepBy`/`takeWhile` have two.
-  Corrected, and `takeWhile` is now stated as a run-value triple on the `[S6]` side,
-  not one of the bounded eight.
-- **README `[D2]` self-contradiction** — the anchor's opening correctly classifies
-  `[D2]` as a _departure_, then a mid-anchor sentence re-asserted the refuted
-  _strengthening_ classification 10 lines later. Rewritten so both agree.
-- **README `[S3]` malformed table row** — a literal `|` inside a code span split the
-  `empty`/`alt` row into a phantom column. Escaped.
-- **README `Iso.law` row** — cited a structure **field projection** as a "sample
-  gated law". Replaced with `Iso.unfoldBy_sound` / `Iso.counterMeasureDecreases`,
-  plus a note that gating a projection of a hypothesis proves nothing.
-- **`Axioms.lean` headers (both repos) were stale and are now _asserted_.**
-  codec said `364 / 292` and `197/61/4/30` while the tree was at `382 / 310` and
-  `201/74/4/31`; basen said `446 / 437 / 9` while it was at `483 / 437 / 46` — the
-  latter was **my own error** from §1.0 (the prose said 9 after the 37 suffix-dropped
-  entries were added). Both headers corrected, and each file gained a `headerNumbers`
-  `run_cmd` that fails the build on a mismatch. **Verified load-bearing in both repos**
-  by perturbing the expected constant.
-- **§2.3.1 — basen `CHANGELOG.md:75`** said the 4.35.0 move "was declined" while
-  `:42` records it as taken. Corrected to past tense with the contradiction noted.
-- **§2.3.2 — basen `Axioms.lean:24-30`** "all 440 public theorems" conflated 3
-  `Codec.*` pins with the `BaseN` universe. Rewritten: 440 pins = 437 `BaseN` + 3
-  `Codec`; gate universe is 484 = 438 + 46; distributions measured.
-- **§2.3.3 — `rejects_bad_arity` renamed to `rejects_single_char`** in
-  Base2/4/8/10 (`rejects_odd_arity` → same in Base16), with docstrings saying it is a
-  single-point witness, not the general law. **The general law is recorded as open**:
-  it needs a `decodeFull`-consumed-length lemma that does not exist. The `coverage`
-  check caught the rename in both directions and named all five stale pins.
-- **§2.3.4 — `Base16.rejects_lowercase` could not discriminate case from arity**
-  (`'6'` at `n = 1` is rejected for arity too). Added
-  `rejects_lowercase_even_arity` on `"6f"`, where case is the only defect. Both pinned.
-- **§2.2.1/§2.2.2 — template `warningAsError` added** (count was 0) and
-  `@ "main"` → `@ "master"`. **Verified load-bearing**: a `sorry` now fails
-  `lake build` with `declaration uses 'sorry'`.
-- **Template `cli` was invisible to the gate** (new finding, not in the ledger): the
-  `lean_exe` was not a `@[default_target]` and `Example.lean` did not import
-  `Example.Count.CLI`, so `nix build .#check`'s bare `lake build` could not see a
-  `sorry` in the CLI. Both fixed; verified a CLI `sorry` now fails.
-- **base32 pad-bit prose (new finding).** `b32Tail1_pad_bits` said "3 zero pad bits"
-  while proving `% 4 = 0` (**2** bits); `b32Tail3_pad_bits` said 3 while proving
-  `% 2 = 0` (**1** bit) — and its own next sentence correctly said "leaving 1 …
-  unused". The theorems were right, the prose wrong. Corrected (2 and 1).
-
-**Recorded but NOT fixed, with the reason:**
-
-- **basen `Bench.lean` uses `native_decide` three times**, which `AGENTS.md` bans.
-  Verified: these are the only `native_decide` in the ecosystem (codec has zero). They
-  are `example`s in a module the gate never imports, so the gate cannot see them.
-  They are the _positive_ counterparts to the rejection lemmas beside them. The honest
-  fix is to route them through `decodeFullB32_char`, which needs a library lemma
-  (`b32TailApply_b32MZTA_chars`) that does not exist — new scope, so it is annotated
-  in place as banned-but-present rather than silently kept or silently deleted.
-- **basen `flake.lock` pins codec 65 commits behind** HEAD, so `nix build` in basen
-  builds a codec missing §1.0–§1.4. Not bumped here: the sandboxed build would then
-  need the new laws gated, which is a separate verified step.
-- **`Base16.decodeHexFold_both_cases` is `rfl`** — it asserts `f s = <f's own
-unfolding>`, not that two spellings agree. Recorded for a later pass.
 
 ---
 
