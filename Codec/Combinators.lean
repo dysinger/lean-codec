@@ -596,9 +596,19 @@ would embed the absent `many` node. See the module docstring for why.
 `p` (the head `x₀`), then arbitrarily many `sep *> p` (the tail, folded by
 `relRepeat`). The empty list is **not** a `sepBy` value (the `[]` case is `False`,
 and `encodeSepBy [] = none`), so this combinator is semantically the paper's
-`sepBy1` (one-or-more), *not* `sepBy` (zero-or-more); zero-or-more separation is
-`optional (sepBy p sep)`. This is the `many`-case denotation statement,
-specialized to a non-empty head. -/
+`sepBy1` (one-or-more), *not* `sepBy` (zero-or-more). This is the `many`-case
+denotation statement, specialized to a non-empty head.
+
+**What zero-or-more would be, stated correctly.** An earlier revision said "zero-or-
+more separation is `optional (sepBy p sep)`", and **that is false twice over**: there
+is no `sepBy p sep` `Codec` value to apply `optional` to (this whole section exists
+because unbounded separation is a run-value triple over `relRepeat`, not a `Codec`),
+and even if there were, `optional` maps `α ↦ Option α`, so `optional (sepBy …)` would
+be `Option (List α)` — a value that is either absent or a whole list — not a list of
+zero or more separated elements. The zero-or-more *denotation* is the head case made
+optional in the relation, `relRepeat (Rel (seqRight sep p)) [] _ _`, which is the
+empty list; there is no derived `sepBy0`/`decodeSepBy0`/`encodeSepBy0` triple and no
+claim that one exists. -/
 def relSepBy {α : Type} (p : Codec α) (sep : Codec Unit) :
     List α → {n : Nat} → Bytes n → Prop
   | x₀ :: rest, n, s => ∃ (m : Nat) (hm : m ≤ n) (s₁ : Bytes m) (s₂ : Bytes (n - m)),
