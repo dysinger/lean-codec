@@ -669,11 +669,13 @@ def encodeChainr1 {α β : Type} (f : Iso ((α × β) × α) α)
           | none => none
           | some s' => some ⟨s₀.1 + s'.1, concat s₀.2 s'.2⟩
 
-/-! ## Soundness of the `many`-derived list combinators
+/-! ## Laws of the `many`-derived list combinators
 
-The re-derived combinators satisfy the same shape of laws as the primitives
-(`decode_spec`/`encode_rel` in `Codec.Sound`): the decoder is complete and sound
-against the relation, and the encoder only prints in-relation values. Productivity
+The re-derived combinators satisfy the same *shape* of laws as the primitives
+(`decode_spec`/`encode_rel`/`encode_ne_none`/`encode_of_decode` in `Codec.Sound`):
+the decoder is complete and sound against the relation, the encoder only prints
+in-relation values, it succeeds on every in-relation value, and on a *functional*
+description it reproduces exactly the bytes the decoder consumed. Productivity
 appears only as the decoder's `hsep` argument, never as a gate on the laws.
 -/
 
@@ -756,6 +758,32 @@ theorem decodeSepBy_spec {α : Type} (p : Codec α) (sep : Codec Unit)
         refine ⟨(rest, r'), hmem₂, ?_⟩
         exact congrArg (fun y => (x₀ :: rest, y)) htrans
 
+/-- Encoder completeness for `sepBy`: every list in `relSepBy` encodes
+successfully (the head via `encode_ne_none`, the tail via
+`encodeRepeat_ne_none`). Structural on the value list; no productivity witness
+needed, exactly as for `encodeChainl1_ne_none`. -/
+theorem encodeSepBy_ne_none {α : Type} (p : Codec α) (sep : Codec Unit) :
+    ∀ (xs : List α) {n : Nat} (s : Bytes n), relSepBy p sep xs s → encodeSepBy p sep xs ≠ none := by
+  intro xs n s hrel
+  cases xs with
+  | nil =>
+      intro h
+      rw [relSepBy.eq_def] at hrel
+      exact hrel.elim
+  | cons x₀ rest =>
+      rw [relSepBy] at hrel
+      rcases hrel with ⟨m, _hm, s₁, s₂, _hs, hrel₀, hrelrest⟩
+      rw [encodeSepBy]
+      have hne₀ : encode p x₀ ≠ none := encode_ne_none p x₀ s₁ hrel₀
+      cases h₁ : encode p x₀ with
+      | none => exact False.elim (hne₀ h₁)
+      | some e₀ =>
+          have hne' : encodeRepeat (seqRight sep p) rest ≠ none :=
+            encodeRepeat_ne_none (seqRight sep p) rest s₂ hrelrest
+          cases h₂ : encodeRepeat (seqRight sep p) rest with
+          | none => exact False.elim (hne' h₂)
+          | some e' => simp
+
 /-- Encoder soundness for `sepBy`: any list the `sepBy`-encoder prints is in
 `relSepBy`. Structural on the value list; no productivity witness needed. -/
 theorem encodeSepBy_rel {α : Type} (p : Codec α) (sep : Codec Unit) :
@@ -781,6 +809,45 @@ theorem encodeSepBy_rel {α : Type} (p : Codec α) (sep : Codec Unit) :
               refine ⟨s₀.1, Nat.le.intro rfl, s₀.2, cast (congrArg Bytes (Nat.add_sub_cancel_left s₀.1 s'.1).symm) s'.2, ?_, encode_rel p x₀ hx, ?_⟩
               · exact concat_eq_splice s₀.2 s'.2
               · exact (relRepeat_cast (Rel (seqRight sep p)) rest (Nat.add_sub_cancel_left s₀.1 s'.1).symm s'.2).2 (encodeRepeat_rel (seqRight sep p) rest hr)
+
+/-- `relSepBy` is insensitive to a length-cast of its byte string (the
+`relFunctional`-carrying transport `encodeSepBy_of_decode` needs to conclude at the
+*input* length `n` rather than the decoder's `n - 0`). Same argument as
+`relChainl1_cast`: every conjunct is definitionally transported through
+`cast (congrArg Bytes e)`, so the two sides are literally `rfl`. -/
+theorem relSepBy_cast {α : Type} (p : Codec α) (sep : Codec Unit) (xs : List α)
+    {n m : Nat} (e : n = m) (s : Bytes n) :
+    relSepBy p sep xs (cast (congrArg Bytes e) s) ↔ relSepBy p sep xs s := by
+  cases e
+  rfl
+
+/-- Under `relSepBy` functionality, a list the `sepBy` decoder accepts (with no
+remainder) re-encodes to exactly the same bytes — the `sepBy` mirror of
+`encodeChainl1_of_decode`, making
+`encodeSepBy p sep xs = some s ↔ (xs, Suffix.empty n) ∈ decodeSepBy p sep hsep s`
+a bijection for functional `sepBy` descriptions. -/
+theorem encodeSepBy_of_decode {α : Type} (p : Codec α) (sep : Codec Unit)
+    (hsep : ConsumesByte (seqRight sep p))
+    (hd : relFunctional (relSepBy p sep)) (xs : List α)
+    {n : Nat} {s : Bytes n} (hdcd : (xs, Suffix.empty n) ∈ decodeSepBy p sep hsep s) :
+    encodeSepBy p sep xs = some ⟨n, s⟩ := by
+  rcases (decodeSepBy_spec p sep hsep xs (s := s) (r := Suffix.empty n)).1 hdcd with
+    ⟨s₀, hsplit, hrel⟩
+  have hcast : s = cast (congrArg Bytes (Nat.sub_zero n)) s₀ := by
+    rw [hsplit]
+    exact prepend_empty s₀
+  have hrels : relSepBy p sep xs s := by
+    rw [hcast]
+    exact (relSepBy_cast p sep xs (Nat.sub_zero n) s₀).1 hrel
+  have hne : encodeSepBy p sep xs ≠ none := encodeSepBy_ne_none p sep xs s hrels
+  cases he : encodeSepBy p sep xs with
+  | none => exact False.elim (hne he)
+  | some e =>
+      rcases e with ⟨n', s'⟩
+      have hrel' : relSepBy p sep xs s' := encodeSepBy_rel p sep xs he
+      have hs' : (⟨n', s'⟩ : Sigma fun k => Bytes k) = ⟨n, s⟩ := hd xs s' s hrel' hrels
+      cases hs'
+      rfl
 
 /-- The bidirectional law for `chainl1`: the chain decoder is complete and sound
 against `relChainl1`. Unconditional; productivity is the decoder's `hsep` argument.
@@ -1153,7 +1220,11 @@ It is the variable-length-token primitive: an alphabet run (`takeWhile isHexDigi
 a varint (`takeWhile highBitSet` + a fold `iso`), a UTF-8 code-unit run. Like
 `sepBy`/`chainl1`, it is a *relation, a decoder, an encoder* triple (there is no
 finite `many` node to embed), and its laws are inherited (`decodeRepeat_spec` /
-`encodeRepeat_rel`) with zero new induction. -/
+`encodeRepeat_rel` / `encodeRepeat_ne_none`) with **no new induction**: each is the
+`relRepeat` law at the step `Rel (satisfy p)`, so the family has the same four-law
+shape as `chainl1`/`chainr1`. Only `relTakeWhile_cast` is new, and it is the
+`relRepeat_cast` transport the `_of_decode` direction needs to conclude at the input
+length rather than the decoder's `n - 0`. -/
 
 /-- The denotation of `takeWhile p`: `relRepeat` over the step `Rel (satisfy p)`. -/
 def relTakeWhile (p : UInt8 → Bool) : List UInt8 → (n : Nat) → Bytes n → Prop :=
@@ -1185,5 +1256,43 @@ theorem encodeTakeWhile_rel (p : UInt8 → Bool) :
     ∀ (bs : List UInt8) {n : Nat} {s : Bytes n},
       encodeTakeWhile p bs = some ⟨n, s⟩ → relTakeWhile p bs n s :=
   encodeRepeat_rel (Codec.satisfy p)
+
+/-- Encoder completeness for `takeWhile`, inherited from `encodeRepeat_ne_none`:
+every run in `relTakeWhile p` encodes successfully. -/
+theorem encodeTakeWhile_ne_none (p : UInt8 → Bool) :
+    ∀ (bs : List UInt8) {n : Nat} (s : Bytes n), relTakeWhile p bs n s → encodeTakeWhile p bs ≠ none :=
+  encodeRepeat_ne_none (Codec.satisfy p)
+
+/-- `relTakeWhile` is insensitive to a length-cast of its byte string (the
+`relRepeat`-level transport `encodeTakeWhile_of_decode` needs, inherited from
+`relRepeat_cast`). -/
+theorem relTakeWhile_cast (p : UInt8 → Bool) (bs : List UInt8)
+    {n m : Nat} (e : n = m) (s : Bytes n) :
+    relTakeWhile p bs m (cast (congrArg Bytes e) s) ↔ relTakeWhile p bs n s :=
+  relRepeat_cast (Rel (Codec.satisfy p)) bs e s
+
+/-- Under `relTakeWhile` functionality, a run the `takeWhile` decoder accepts (with
+no remainder) re-encodes to exactly the same bytes — the `takeWhile` mirror of
+`encodeSepBy_of_decode`. -/
+theorem encodeTakeWhile_of_decode (p : UInt8 → Bool)
+    (hd : relFunctional (relTakeWhile p)) (bs : List UInt8)
+    {n : Nat} {s : Bytes n} (hdcd : (bs, Suffix.empty n) ∈ decodeTakeWhile p s) :
+    encodeTakeWhile p bs = some ⟨n, s⟩ := by
+  rcases (decodeTakeWhile_spec p bs n s (Suffix.empty n)).1 hdcd with ⟨s₀, hsplit, hrel⟩
+  have hcast : s = cast (congrArg Bytes (Nat.sub_zero n)) s₀ := by
+    rw [hsplit]
+    exact prepend_empty s₀
+  have hrels : relTakeWhile p bs n s := by
+    rw [hcast]
+    exact (relTakeWhile_cast p bs (Nat.sub_zero n) s₀).1 hrel
+  have hne : encodeTakeWhile p bs ≠ none := encodeTakeWhile_ne_none p bs s hrels
+  cases he : encodeTakeWhile p bs with
+  | none => exact False.elim (hne he)
+  | some e =>
+      rcases e with ⟨n', s'⟩
+      have hrel' : relTakeWhile p bs n' s' := encodeTakeWhile_rel p bs he
+      have hs' : (⟨n', s'⟩ : Sigma fun k => Bytes k) = ⟨n, s⟩ := hd bs s' s hrel' hrels
+      cases hs'
+      rfl
 
 end Codec
