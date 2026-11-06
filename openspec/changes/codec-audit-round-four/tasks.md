@@ -9,6 +9,12 @@ Evidence base: `/tmp/r5-a-vacuity.md` (910 lines), `/tmp/r5-b-departures.md` (16
 lines), `/tmp/r5-c-cross.md` (521 lines), merged ledger `/tmp/r5-SYNTHESIS.md`.
 Main-agent verification probes: `/tmp/verify/*.lean`.
 
+**`/tmp` does not survive a reboot.** Every proof this ledger depends on is therefore
+**inlined below** rather than left as a path — if a `/tmp` reference is missing, the
+task still has its content. The reports are cited for provenance only; no task requires
+reading them. If `/tmp/r5a/p2.lean` is gone, §1.2's two terms are still fully specified
+there in prose.
+
 **Verification status of the findings.** Every MUST and SHOULD item was independently
 re-derived by the main agent before being written here (marked ✔). One item is
 **predicted, not run** (§6.3) and says so.
@@ -77,18 +83,51 @@ _absence_ of one.
       `match` on the two length indices. Statement of the second:
       `¬ (∀ {α} (R : α → {m : Nat} → Bytes m → Prop), LengthDet R → RelAligned R)`.
 - [ ] 1.2 Land the **strong form** with productivity added as a second hypothesis, so a
-      reader cannot attribute the failure to productivity's absence. Requires the
-      auditor's `prod_relUnambAlignedWitness`. **R5-01**, design §D1.
+      reader cannot attribute the failure to productivity's absence. **R5-01**, design
+      §D1. Needs two more terms, both transcribed verbatim from the auditor's probe
+      `/tmp/r5a/p2.lean` (still on disk; do not re-derive):
+      `prod_relUnambAlignedWitness : ∀ a {m} (t : Bytes m), relUnambAlignedWitness a t →
+  m ≠ 0` (a `match` on `m`, four arms), and
+      `lengthDet_not_implies_relAligned_productive :
+  ¬ (∀ {α} (R), LengthDet R → (∀ a {m} (t : Bytes m), R a t → m ≠ 0) → RelAligned R)`,
+      closed by `relUnambiguous_not_implies_relAligned` applied to the two witnesses.
+      Method that works: copy `p2.lean`'s bodies — they are `match`-on-`m` throughout;
+      a `match` on `t` as well as `m` fails to refine the hypothesis (see 1.3's note).
 - [ ] 1.3 Land `relAligned_not_implies_lengthDet` (the other direction), completing the
-      four-way diagram. `[propext, Quot.sound]`-only per the auditor.
+      four-way diagram. **Corrected**: the auditor's report _names_ this theorem but its
+      probe files do **not** contain it — the name appears only in prose. It is therefore
+      **not** verified from the audit; the main agent proved it and the working proof is
+      `/tmp/verify/i3.lean` (`[propext, Quot.sound]`-only). Transcribe:
+      `alignedNotLengthDetWitness a := (m=1 -> a = true) | (m=2 -> a = true) | False`
+      (one value at **two** lengths — `RelAligned` holds because no second value relates
+      at all, so the conclusion `a = b` is discharged from `a = true`; `LengthDet` fails
+      at `true`/1 vs `true`/2), then
+      `relAligned_not_implies_lengthDet : ¬ (∀ {α} (R), RelAligned R → LengthDet R)`.
+      **Proof note (cost me one failed attempt):** in `aligned_alignedNotLengthDetWitness`
+      match on `m₁`/`t₁`/`h₁` and then on `m₂`/`t₂`/`h₂` — matching only on `m₂` leaves
+      `h₂` unrefined and the `m=1 × m=2` arm cannot close. The `m₁=2, m₂=1` arm is
+      `exact absurd hle (by omega)`.
 - [ ] 1.4 Replace `def LengthDet`'s "**open**: it may or may not hold, and no theorem
-      settles it either way" (and the parenthetical about the earlier
-      `DecidableEq` story) with the refutation and the diagram table. **R5-01.**
+      settles it either way" paragraph (and the parenthetical about the earlier
+      `DecidableEq` story) with the refutation. **The "diagram" is a markdown table in
+      the docstring with exactly these six rows** — copy it from design §D1; each row
+      names a theorem that exists after §1.1–§1.3 or in the tree already:
+      `LengthConst → LengthDet` (`lengthDet_of_lengthConst`) ·
+      `RelAligned → relUnambiguous` (`relUnambiguous_of_relAligned`) ·
+      `relUnambiguous ↛ RelAligned` (`relUnambiguous_not_implies_relAligned`) ·
+      `relUnambiguous ↛ LengthDet` (`lengthDet_not_implied_by_unamb`) ·
+      `LengthDet ↛ RelAligned` (`lengthDet_not_implies_relAligned`) ·
+      `RelAligned ↛ LengthDet` (`relAligned_not_implies_lengthDet`). **R5-01.**
+      Put the table in `LengthDet`'s docstring; `RelAligned`'s (1.5) cross-references it
+      rather than repeating all six rows.
 - [ ] 1.5 Replace `def RelAligned`'s "**`LengthDet` is a third, separate family** …
-      plausible but unproved here … recorded as open" paragraph with the measured
-      incomparability, and state why the pair is _jointly_ load-bearing in
-      `relRepeat_cons_eq` (reviewer A's S4: `hld` is used only _after_ `hal` has
-      identified the values — see **R5-06**).
+      plausible but unproved here … recorded as open" paragraph with: (a) the measured
+      incomparability, cross-referencing 1.4's table; (b) why the pair is _jointly_
+      load-bearing in `relRepeat_cons_eq` — `hld` is used exactly once, at
+      `have hmm : m = m' := hld a a' hRa (hxy ▸ hRa')`, i.e. **after** `hal` has already
+      identified `a₀ = b₀`, to conclude the two step-lengths agree. So neither hypothesis
+      can be dropped. (**R5-06**; reviewer A's S4.)
+
 - [ ] 1.6 Delete `AGENTS.md`'s clause "and `LengthDet → RelAligned` (neither proved nor
       refuted)" from the "three items open in code" list, and fix the "Three items"
       count that depends on it. **R5-02.**
@@ -102,15 +141,22 @@ _absence_ of one.
 Both fixes are already proved by the main agent; this section is transcription plus
 docstring repair.
 
-- [ ] 2.1 Add `arrayToBytes_bytesToArray_apply`, `arrayToBytes_bytesToArray` and
-      `decodeWholeBytes_spec` to `Codec/Packed.lean`. **R5-04.** ✔Proved
-      (`/tmp/verify/s2z.lean`), `[propext, Quot.sound]`-only. **Three traps recorded
-      in design §D3 and they all fired:** the docstring's "`rfl` by `funext`/`Fin.ext`"
-      is wrong (needs `Array.getElem_toList` + `List.getElem_ofFn`; `Array.getElem_mk`
-      and `Array.getElem_eq_getElem_toList` do not exist in 4.35.0); a `simpa` on the
-      dependent `Fin` bound **leaks `Classical.choice`**; and the final dependent
-      rewrite must be `spec_aux`-shaped (`hk : k = n`, `ha : a = cast …` as
-      hypotheses) because `rw`/`subst`/`generalize` each fail.
+- [ ] 2.1 Add three lemmas to `Codec/Packed.lean`, next to `decodeWholeBytes_eq`. The
+      names below are the ones the verified proof uses; keep them (they are descriptive
+      and the `_apply`/`_eq` convention matches `bdrop_*`/`prepend_*`):
+      `arrayToBytes_bytesToArray_apply` (pointwise, `Array.getElem_toList` +
+      `List.getElem_ofFn`), `arrayToBytes_bytesToArray` (the `cast`-form transport),
+      `decodeWholeBytes_spec`. The short proof above `decodeWholeBytes_spec`
+      (`spec_aux`, taking `k`, `hk : k = n`, `a`, `ha` abstract) is a **local helper** —
+      make it a `private theorem` or fold it into the main proof; it is not public
+      surface and needs no gate entry. **R5-04.** ✔Proved (`/tmp/verify/s2z.lean`),
+      `[propext, Quot.sound]`-only. **Three traps recorded in design §D3 and all three
+      fired:** the docstring's "`rfl` by `funext`/`Fin.ext`" is wrong (needs
+      `Array.getElem_toList` + `List.getElem_ofFn`; `Array.getElem_mk` and
+      `Array.getElem_eq_getElem_toList` do **not** exist in 4.35.0); a `simpa` on the
+      dependent `Fin` bound **leaks `Classical.choice`** (write
+      `Nat.lt_of_lt_of_eq i.isLt (bytesToArray_size s)`); and the final dependent rewrite
+      cannot be `rw`/`subst`/`generalize`.
 - [ ] 2.2 Correct `decodeWholeBytes_eq`'s docstring: it claims the right side "is
       `decodeFull d h n` applied to the readback — i.e. the law a caller who started
       from `Bytes n` would state", and it is not. Point at `decodeWholeBytes_spec` once
@@ -129,12 +175,16 @@ docstring repair.
 
 ## 3. The `huniq` claim is carried by the wrong theorem (R5-05)
 
-- [ ] 3.1 Add the `∃ R` form as `huniq_not_derivable'` (or restate the existing name):
-      “there exists a relation that is `relUnambiguous` **and** productive, for which
-      two distinct lists fully consume one string”. ✔Proved
+- [ ] 3.1 Add the `∃ R` form as a **new name `huniq_not_derivable_full`** — do **not**
+      restate the existing `huniq_not_derivable`: `Axioms.lean` pins the existing one by
+      name, and a rename would invalidate the archived ledgers' references. ✔Proved
       (`/tmp/verify/s3.lean`), `[propext, Quot.sound]`-only, by packaging the three
-      existing `uniqCounterexample_*` lemmas. Keep the existing `n = 2` version as the
-      small witness. **R5-05.**
+      existing `uniqCounterexample_*` lemmas:
+      `∃ (R : Bool → {m : Nat} → Bytes m → Prop), relUnambiguous R ∧
+   (∀ a {m} (t : Bytes m), R a t → m ≠ 0) ∧
+   ¬ (∀ (xs ys : List Bool) (n : Nat) (s : Bytes n),
+       relRepeat R xs n s → relRepeat R ys n s → xs = ys)`.
+      Keep the existing `n = 2` version as the small witness. **R5-05.**
 - [ ] 3.2 Point the section header's "machine-checked below as `huniq_not_derivable`" at
       the strengthened name. The existing theorem never mentions `relUnambiguous` or
       productivity, so a reader who runs `#print axioms` on it learns only "two lists
@@ -161,7 +211,7 @@ authority for every quote.
       ✔verified by grepping `^def` in `Codec/Iso.lean`.
 - [ ] 4.3 **`[S2]` `print → encode`.** Replace "a method selected by the value's
       `Printer α` instance" with the paper's actual form: `print :: Printer α → α →
-    Maybe String` takes an explicit _pretty-printer implementation_ value. The
+Maybe String` takes an explicit _pretty-printer implementation_ value. The
       conclusion ("largest porting cost") survives; the justification does not — what
       differs is _what the argument is_ (`[D6]`'s typeclass-to-value move), not whether
       one is passed. **R5-17.**
@@ -234,10 +284,13 @@ reader.
 - [ ] 5.9 **`Rel_seqLeft` docstring (R5-09).** Its twin has a long docstring that
       explicitly warns the proof recipe does **not** transfer between the two halves;
       `Rel_seqLeft` has none. Add two lines.
-- [ ] 5.10 **`Rel_manyUpTo` (R5-08).** Optional: add the `∃ k`-free corollary
-      (`xs.length ≤ n ∧ relRepeat …`) so a caller need not unpack the bound. Note in
-      the docstring that the `∃ k` form is kept for provenance (it shows the bound
-      arrives via `count k p`).
+- [ ] 5.10 **`Rel_manyUpTo` (R5-08).** This is a NITPICK, not an optional task — every
+      box in this ledger is ticked or the change does not archive, and an "optional" box
+      is the one that gets skipped silently. Do the cheap version: leave the statement
+      alone (the `∃ k` form is _correct_ and shows the bound's provenance via
+      `count k p`) and add **one sentence** to its docstring saying so. Only add the
+      `∃`-free corollary as a real theorem if a caller wants it — do not invent a
+      consumer. **R5-08.**
 - [ ] 5.11 **`Axioms.lean` defs table (R5-03, R5-10).** Change "has a stated law, by the
       proxy" to "named by a gated theorem's type — the proxy's whole measurement (a
       mention, not a strength claim)", and name the two vacuous cases
@@ -261,17 +314,32 @@ reader.
 - [ ] 6.3 **Port the definition-coverage check** into `basen/Axioms.lean`: `publicDefs`,
       `mentionedByGated`, `isDerivedDefName`, `definitionSurfaceAllowlist` and the
       `run_cmd`, mirroring `codec/Axioms.lean`. Widen the namespace predicate to
-      `BaseN`. **R5-36.** Expect it to name ~28 substantive defs; classify each as
-      law / alias / `Iso`-law-as-field / internal witness, reasons in place. **This is
-      the task whose outcome is not fully predicted** — the auditor's list of 28 is
-      from a `/tmp` mirror, not from the ported check.
+      `BaseN` (codec's checks `Codec`/`Iso`; basen's must check `BaseN` only — `Codec.*`
+      names are the dependency's and stay outside). **R5-36.**
+
+      **The outcome is open on purpose, and here is how to handle it, so the session does
+      not stall.** The auditor's "28 substantive defs" came from a `/tmp` mirror
+      (`/tmp/probe-basen/ProbeDefs.lean`) with 38 machinery names filtered by hand, not
+      from the ported check; expect a *different* set. Procedure: (a) run the ported
+      check and let it print the silent set; (b) for each name, classify into exactly one
+      of four groups and write the reason in place —
+      `Iso`-law-as-field (`*BlockIso`, `*TailIso`, `Run.decode/encode/rel` projections),
+      `Type`-level alias, internal witness, or **lawless-and-dead**; (c) **dead ones get
+      deleted** (§6.2 already removes the eight `*Run` values — check whether each
+      remaining candidate is dead by `grep -c` before allowlisting it, because
+      allowlisting dead API is the failure mode §1.8 exists to prevent); (d) anything
+      with a live consumer but no law gets a law or an allowlist reason. If the ported
+      check names **zero** defs because §6.2 already removed them all, that is a pass,
+      not a failure — record it and move on. Do not tune `isDerivedDefName` to shrink
+      the list; that is the dumping ground the allowlist's reasons exist to avoid.
+
 - [ ] 6.4 **Correct the prose counts and gate the paragraph.** `Axioms.lean:32–40` says
       `440 pins / 437 / 483`; reality is `441 / 438 / 484` (✔verified by grep:
       438 `BaseN` pins + 3 `Codec` pins = 441; `484 = 438 + 46`). Same at
       `:1655–1656`. Then extend `headerNumbers` to compute so many constants that the
       paragraph cannot rot — design §D7. **R5-34.**
 - [ ] 6.5 **Fix the log line's arithmetic.** `"438 pinned + 46 allowlisted = 447 of
-    484"` — `447` is the _kept_ side of `partitionInto` (`484 − 37 suffix-dropped`),
+484"` — `447` is the _kept_ side of `partitionInto` (`484 − 37 suffix-dropped`),
       not `438 + 46`. The checks are correct; the message conflates two sets in one
       equation. **R5-35.**
 - [ ] 6.6 **Even-arity lowercase witness needs its positive counterpart.** Add
@@ -290,9 +358,16 @@ reader.
 ## 7. `codec` gates (R5-37, plus housekeeping)
 
 - [ ] 7.1 Regenerate `Axioms.lean` after §1–§5 (`scripts/gen-axioms.lean`), and move
-      the header tables **and** the `expected*` constants together. Expected direction:
-      +6 theorems (§1) +3 laws (§2) +1 (§3) −`min_rotate` −`length_filterMap_le`
-      — **compute from the run, not from this line**.
+      the header tables **and** the `expected*` constants together. **Do not predict the
+      delta — the run prints it.** The four gate lines give
+      `N public theorems partitioned, G gated and A allowlisted` and
+      `header numbers verified (N = G + A; defs …)`; the generator also rewrites the
+      footprint distribution between its `BEGIN/END GENERATED distribution` markers, so
+      that table needs no hand edit. Then update **by hand** the two header tables and
+      the six `expected*` constants in `headerNumbers` to match, and re-run until green.
+      Sanity anchors from the current tree (**not** a target): 400/327/73 theorems,
+      140/111/29 defs. The only planned removals are `min_rotate` (−1 gated) and
+      `length_filterMap_le` (−1 gated).
 - [ ] 7.2 **`CRef.c` placement (R5-37).** Nitpick, but the rule's letter matters: the
       file's own header concedes it "parses bytes and is therefore deliberately outside
       `Codec/`'s design rule". It is bench-only, not `@[extern]`, not in the gate.
@@ -300,15 +375,23 @@ reader.
       sentence to `AGENTS.md` saying the `Codec/` **directory** holds one bench-only
       file that is not part of the library. Do not delete — it is the C reference the
       perf claims are measured against.
-- [ ] 7.3 Update `openspec/lean-notes.md` with the two new lessons: (a) **a dependent
+- [x] 7.3 Update `openspec/lean-notes.md` with the two new lessons: (a) **a dependent
       `Fin`/`Array` bound reached by `simpa` leaks `Classical.choice`** — state the
       bound explicitly instead; (b) **a dependent rewrite under `decode d h (size) ∘
-    cast` cannot be `rw`/`subst`/`generalize`** — carry `hk : k = n` and
+  cast` cannot be `rw`/`subst`/`generalize`** — carry `hk : k = n` and
       `ha : a = cast …` as hypotheses and `subst` twice.
-- [ ] 7.4 Add the class-level lesson to `openspec/lean-notes.md`: _a "necessity" claim
+
+      **DONE in the authoring session** (`722a69f`, 2026-11-06), together with the
+      `AGENTS.md` traps (`d0fb9db`) and the global skill (`lean-skills` `6cf4b05`).
+      Ticked so it is not re-done; the entries are dated and headed
+      "(**round-five audit**)".
+
+- [x] 7.4 Add the class-level lesson to `openspec/lean-notes.md`: _a "necessity" claim
       about why code was written a particular way has no gate — grep it before believing
       it._ Five of this round's findings (R5-13, R5-14, R5-15, R5-16, R5-18) were that
       shape.
+
+      **DONE in the authoring session** (same commit, entry 3).
 
 ## 8. Recorded, deliberately NOT fixed here
 
@@ -343,6 +426,166 @@ reader.
 - [ ] 9.5 Verify every new law's footprint by hand:
       `printf 'import Codec\n#print axioms Codec.<n>\n' > /tmp/c.lean` →
       expect `[propext, Quot.sound]` or cleaner. `Classical.choice` is a defect.
+
+---
+
+## Appendix A — the proofs, inlined (do not depend on `/tmp`)
+
+These are the four proof bodies §1–§3 transcribe. They are `lake env lean`-verified in the
+authoring session; the axiom footprint of each is noted. Copy them, then correct the
+docstrings around them. **They are written in an `open Codec` / `namespace Codec` block
+as standalone files** — landing them means moving each inside `Codec/Sound.lean`'s or
+`Codec/Packed.lean`'s existing `namespace Codec`, and dropping the `#print axioms` lines
+(`scripts/gen-axioms.lean` generates the gated equivalents).
+
+### A.1 — §1.1, §1.2, §1.3 (`Codec/Sound.lean`) — `[propext]` / `[propext, Quot.sound]`
+
+```lean
+-- §1.1
+theorem lengthDet_relUnambAlignedWitness : LengthDet relUnambAlignedWitness := by
+  intro a m₁ m₂ t₁ t₂ h₁ h₂
+  match m₁, t₁, h₁ with
+  | 1, _, h₁ =>
+      match m₂, t₂, h₂ with
+      | 1, _, _ => rfl
+      | 2, _, h₂ => exact absurd (h₁.symm.trans h₂) (by decide)
+      | 0, _, h₂ => exact absurd h₂ (by simp [relUnambAlignedWitness])
+      | _+3, _, h₂ => exact absurd h₂ (by simp [relUnambAlignedWitness])
+  | 2, _, h₁ =>
+      match m₂, t₂, h₂ with
+      | 1, _, h₂ => exact absurd (h₁.symm.trans h₂) (by decide)
+      | 2, _, _ => rfl
+      | 0, _, h₂ => exact absurd h₂ (by simp [relUnambAlignedWitness])
+      | _+3, _, h₂ => exact absurd h₂ (by simp [relUnambAlignedWitness])
+  | 0, _, h₁ => exact absurd h₁ (by simp [relUnambAlignedWitness])
+  | _+3, _, h₁ => exact absurd h₁ (by simp [relUnambAlignedWitness])
+
+theorem lengthDet_not_implies_relAligned :
+    ¬ (∀ {α : Type} (R : α → {m : Nat} → Bytes m → Prop), LengthDet R → RelAligned R) :=
+  fun h => relUnambiguous_not_implies_relAligned
+    (h relUnambAlignedWitness lengthDet_relUnambAlignedWitness)
+
+-- §1.2
+theorem prod_relUnambAlignedWitness :
+    ∀ a {m : Nat} (t : Bytes m), relUnambAlignedWitness a t → m ≠ 0 := by
+  intro a m t h
+  match m, t, h with
+  | 0, _, h => exact absurd h (by simp [relUnambAlignedWitness])
+  | 1, _, _ => decide
+  | 2, _, _ => decide
+  | _+3, _, h => exact absurd h (by simp [relUnambAlignedWitness])
+
+theorem lengthDet_not_implies_relAligned_productive :
+    ¬ (∀ {α : Type} (R : α → {m : Nat} → Bytes m → Prop),
+        LengthDet R → (∀ a {m : Nat} (t : Bytes m), R a t → m ≠ 0) → RelAligned R) := by
+  intro h
+  exact relUnambiguous_not_implies_relAligned
+    (h relUnambAlignedWitness lengthDet_relUnambAlignedWitness prod_relUnambAlignedWitness)
+
+-- §1.3
+def alignedNotLengthDetWitness (a : Bool) : {m : Nat} → Bytes m → Prop
+  | 1, _ => a = true
+  | 2, _ => a = true
+  | _, _ => False
+
+theorem aligned_alignedNotLengthDetWitness : RelAligned alignedNotLengthDetWitness := by
+  intro a b m₁ m₂ t₁ t₂ hle h₁ h₂ _
+  match m₁, t₁, h₁ with
+  | 1, _, h₁ => match m₂, t₂, h₂ with
+    | 1, _, h₂ => exact h₁.trans h₂.symm
+    | 2, _, h₂ => exact h₁.trans (h₂ ▸ rfl)
+    | 0, _, h₂ => exact absurd h₂ (by simp [alignedNotLengthDetWitness])
+    | _+3, _, h₂ => exact absurd h₂ (by simp [alignedNotLengthDetWitness])
+  | 2, _, h₁ => match m₂, t₂, h₂ with
+    | 1, _, _ => exact absurd hle (by omega)
+    | 2, _, h₂ => exact h₁.trans h₂.symm
+    | 0, _, h₂ => exact absurd h₂ (by simp [alignedNotLengthDetWitness])
+    | _+3, _, h₂ => exact absurd h₂ (by simp [alignedNotLengthDetWitness])
+  | 0, _, h₁ => exact absurd h₁ (by simp [alignedNotLengthDetWitness])
+  | _+3, _, h₁ => exact absurd h₁ (by simp [alignedNotLengthDetWitness])
+
+theorem not_lengthDet_alignedNotLengthDetWitness : ¬ LengthDet alignedNotLengthDetWitness := by
+  intro h
+  have h1 : alignedNotLengthDetWitness true (m := 1) (fun _ => (0x41 : UInt8)) := rfl
+  have h2 : alignedNotLengthDetWitness true (m := 2) (fun _ => (0x41 : UInt8)) := rfl
+  have := h (a := true) (fun _ : Fin 1 => (0x41 : UInt8)) (fun _ : Fin 2 => (0x41 : UInt8)) h1 h2
+  omega
+
+theorem relAligned_not_implies_lengthDet :
+    ¬ (∀ {α : Type} (R : α → {m : Nat} → Bytes m → Prop), RelAligned R → LengthDet R) :=
+  fun h => not_lengthDet_alignedNotLengthDetWitness (h alignedNotLengthDetWitness
+    aligned_alignedNotLengthDetWitness)
+```
+
+Measured: `lengthDet_relUnambAlignedWitness` and `lengthDet_not_implies_relAligned`
+`[propext]`; `aligned_alignedNotLengthDetWitness` and `relAligned_not_implies_lengthDet`
+`[propext, Quot.sound]`.
+
+### A.2 — §2.1 (`Codec/Packed.lean`) — `[propext, Quot.sound]`
+
+```lean
+theorem arrayToBytes_bytesToArray_apply {n : Nat} (s : Bytes n)
+    (i : Fin (bytesToArray s).size) :
+    arrayToBytes (bytesToArray s) i
+      = s ⟨i.val, Nat.lt_of_lt_of_eq i.isLt (bytesToArray_size s)⟩ := by
+  have hiL : i.val < (List.ofFn s).length := by
+    rw [List.length_ofFn]; exact Nat.lt_of_lt_of_eq i.isLt (bytesToArray_size s)
+  show (Array.mk (List.ofFn s))[i.val] = s _
+  rw [← Array.getElem_toList]
+  exact List.getElem_ofFn (f := s) (i := i.val) (h := hiL)
+
+theorem arrayToBytes_bytesToArray {n : Nat} (s : Bytes n) :
+    arrayToBytes (bytesToArray s)
+      = cast (congrArg Bytes (bytesToArray_size s).symm) s := by
+  funext i
+  rw [cast_bytes_val_symm (e := (bytesToArray_size s)) (f := s) (i := i)]
+  exact arrayToBytes_bytesToArray_apply s i
+
+-- local helper; make private or fold in
+private theorem decodeWholeBytes_spec_aux {α : Type} (d : Codec α) (h : ConsumesByte d)
+    {n : Nat} (s : Bytes n) (k : Nat) (hk : k = n)
+    (a : Bytes k) (ha : a = cast (congrArg Bytes hk.symm) s) :
+    d.decodeFull h k a = d.decodeFull h n s := by
+  subst hk; subst ha; rfl
+
+theorem decodeWholeBytes_spec {α : Type} (d : Codec α) (h : ConsumesByte d) {n : Nat}
+    (s : Bytes n) : decodeWholeBytes d h s = decodeFull d h n s := by
+  unfold decodeWholeBytes
+  rw [decodeWhole_eq]
+  exact decodeWholeBytes_spec_aux d h s _ (bytesToArray_size s) _ (arrayToBytes_bytesToArray s)
+```
+
+### A.3 — §3.1 (`Codec/Sound.lean`) — `[propext, Quot.sound]`
+
+```lean
+theorem huniq_not_derivable_full :
+    ∃ (R : Bool → {m : Nat} → Bytes m → Prop),
+      relUnambiguous R ∧ (∀ a {m : Nat} (t : Bytes m), R a t → m ≠ 0) ∧
+      ¬ (∀ (xs ys : List Bool) (n : Nat) (s : Bytes n),
+          relRepeat R xs n s → relRepeat R ys n s → xs = ys) := by
+  refine ⟨uniqCounterexampleRel, uniqCounterexample_unambiguous,
+    uniqCounterexample_productive, ?_⟩
+  intro h
+  have := h [true] [false, false] 2 (fun _ => 0) uniqCounterexample_single uniqCounterexample_pair
+  exact absurd this (by simp)
+```
+
+### A.4 — §2.3 (`Codec/Sound.lean`) — `[propext, Quot.sound]`
+
+```lean
+theorem decodeRepeat_mem_iff_general {α : Type} (p : Codec α) (h : ConsumesByte p)
+    {n : Nat} (s : Bytes n) (xs : List α) :
+    (xs, Suffix.empty n) ∈ decodeRepeat p h n s ↔ relRepeat (Rel p) xs n s := by
+  rw [decodeRepeat_spec p h]
+  constructor
+  · rintro ⟨s₀, hs, hrel⟩
+    have hpre : (Suffix.empty n).prepend s₀ = s := hs.symm
+    rw [prepend_empty_self] at hpre
+    subst hpre
+    exact hrel
+  · intro hrel
+    exact ⟨s, (prepend_empty_self n s).symm, hrel⟩
+```
 
 ---
 
