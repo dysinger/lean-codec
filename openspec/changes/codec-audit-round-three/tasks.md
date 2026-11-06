@@ -11,7 +11,7 @@ One reviewer finding was refuted and is deliberately absent — see design D1.
 
 ---
 
-## Status — verified 2026-11-06, session 4 — **32/56 ticked**
+## Status — verified 2026-11-06, session 4 — **45/56 ticked**
 
 **Read this table, then run the check below it. Do not trust the numbers; re-derive
 them.** A task is `[x]` when the code is in the tree **and** the evidence is recorded
@@ -27,11 +27,11 @@ are ticked, and the two §2 tasks it left undone are named.
 | §1.3 `seq*`/`between`            | done       | 3 `Rel` laws + docstrings                                                                                        |
 | §1.4 `optional`/`maybe`/`choice` | done       | `none` case, alias laws, `Rel_choice` limits                                                                     |
 | **§1.5 `sepBy`/`takeWhile`**     | done       | +4 laws, +2 `rel…_cast`; gate 389 = 316 + 73                                                                     |
-| §1.6 dead surface                | OPEN       | `btake` still has 0 theorems; `Suffix.consumed` likewise                                                         |
-| §1.7 "free theorem" docstring    | OPEN       | `Combinators.lean` still says "no new induction, no gate"                                                        |
-| §1.8 def-coverage gate           | OPEN       | not added to `Axioms.lean`                                                                                       |
-| §1.9 generated footprint table   | OPEN       | header is asserted, not generated                                                                                |
-| §1.10 part-1 gates               | OPEN       | run after §1.5–§1.9                                                                                              |
+| §1.6 dead surface                | done       | 4 `btake` laws + 2 `Suffix.consumed` laws; the "no callers" claim refuted                                        |
+| §1.7 "free theorem" docstring    | done       | rewritten to the 3-part measured account; `decode_spec` family does not transfer                                 |
+| §1.8 def-coverage gate           | done       | 3rd `run_cmd`; 139 defs = 110 mentioned + 29 allowlisted; probe verified load-bearing                            |
+| §1.9 generated footprint table   | done       | `renderDistribution`; generated table equals the hand-written one (209/78/4/34 = 325)                            |
+| §1.10 part-1 gates               | done       | `lake build` 15 / `bench` 28 / `openspec validate` 10-10 / commits per family                                    |
 | §2.1 `RelAligned`                | **3 of 4** | 2.1.1 ✓ theorem, 2.1.2 ✓ docstring, 2.1.3 ✓ `LengthDet` marked **open**; **2.1.4 open**                          |
 | §2.2 template                    | **3 of 4** | 2.2.1 ✓ `warningAsError`, 2.2.2 ✓ `master`, 2.2.3 ✓ `scripts/verify-sorry-gate.sh`; **2.2.4 open** (flake gates) |
 | §2.3 basen remaining             | **4 of 5** | 2.3.1 ✓ CHANGELOG, 2.3.2 ✓ header counts, 2.3.3 ✓ renamed, 2.3.4 ✓ even-arity witness; **2.3.5 open** (gates)    |
@@ -39,11 +39,12 @@ are ticked, and the two §2 tasks it left undone are named.
 | §2.5 part-2 gates                | OPEN       | run last                                                                                                         |
 
 **A checkbox states what is true, not what is next.** §2 tasks that are done are
-ticked, even though §1.5 is unstarted — otherwise the ledger reports 16/56 while 28
+ticked, even though part 1 is unstarted — otherwise the ledger reports 16/56 while 28
 tasks are complete, which is the confusion this table exists to remove. What is
-_next_ is a separate question, answered by the §1.5 row and by `AGENTS.md`: **do §1
-before §2**, because §2's remaining prose claims describe laws that must exist first.
-Ticking a §2 task does not license starting §2.
+_next_ is a separate question: **§1 is now CLOSED (all of §1.0–§1.10), so the next
+task is the remaining §2 items** — 2.1.4, 2.2.4, 2.3.5, 2.4.3, 2.4.4, 2.4.6, 2.4.7,
+then the §2.5 gates. Part 1 came first because §2's remaining prose claims describe
+laws that had to exist first; they now do.
 
 ### Re-derive the state (do not trust this table)
 
@@ -59,11 +60,12 @@ nix develop --command lake build 2>&1 | tail -3
 nix develop --command openspec validate --all 2>&1 | tail -1
 ```
 
-Expected today: `32` completed / `56` total; `32` ticked lines; `24` open lines; the
+Expected today: `45` completed / `56` total; `45` ticked lines; `11` open lines; the
 grep shows **all four laws for all four relations** (`encodeSepBy_` and
-`encodeTakeWhile_` each now have `_rel` / `_ne_none` / `_of_decode` beside
+`encodeTakeWhile_` each have `_rel` / `_ne_none` / `_of_decode` beside
 `encodeChainl1_`/`encodeChainr1_`) — §1.5's gap is closed; `lake build` green at 15
-jobs with `389 = 316 + 73` verified; `openspec validate --all` 10/10.
+jobs printing **four** gate lines (`398 = 325 + 73`; defs `139 = 110 + 29`);
+`openspec validate --all` 10/10.
 
 ### Known OPEN work that is NOT a §-task number
 
@@ -76,7 +78,8 @@ ticked as if done:
   `rejects_single_char` honestly; the general law needs a `decodeFull`-length lemma.
 - `LengthDet → RelAligned`: **open**, neither proved nor refuted (see `Sound.lean`).
 
-Gate state: codec **316** gated / 73 allowlisted / 389 partitioned; `../lean-basen`
+Gate state: codec **325** gated / 73 allowlisted / 398 partitioned, plus **139**
+public definitions (`110` mentioned + `29` allowlisted, `0` silent); `../lean-basen`
 green at 25 jobs on the codec pin in its `flake.lock`: **438 + 46 = 447 of 484**,
 header verified. (Check the pin with `nix flake metadata --json | grep -A2 codec`
 rather than trusting a hash written here.)
@@ -446,17 +449,36 @@ design.
 
 ### 1.6 Dead public surface
 
-- [ ] 1.6.1 Resolve `btake` (`Codec/Codec.lean:112`): zero theorems, zero callers,
+- [x] 1.6.1 Resolve `btake` (`Codec/Codec.lean:112`): zero theorems, zero callers,
       one `grep` hit (its own definition) while `bdrop` has 19 lemmas. Either prove
       the law its docstring advertises (`btake m s i = s i` for `i < m`) or delete
       it.
-- [ ] 1.6.2 Same for `Suffix.consumed` (`:134`): its docstring says it exists so
+
+      **Landed: proved, not deleted.** Deleting would have removed the prefix
+      counterpart of a `bdrop` that has 19 lemmas, and §1.8's def-check would then
+      have had nothing to say about it. Four laws: `btake_apply` (the advertised
+      `btake m s i = s i` for `i < m`), `btake_agree` (the same at every index of
+      the `min m n` domain), `btake_zero`, `btake_btake` (composition, stated
+      pointwise so no length cast is needed) plus `min_rotate` for the
+      `min (min m k) n = min m (min k n)` rearrangement the last one names.
+      All `[propext, Quot.sound]`-only. `btake`'s docstring now names its laws.
+
+- [x] 1.6.2 Same for `Suffix.consumed` (`:134`): its docstring says it exists so
       consumers do not recompute the length, and nothing calls it. One-line law or
       delete.
 
+      **The premise was half wrong; the gap was real.** `Suffix.consumed` *is* used
+      — `Codec/Decode.lean` (`decode_genuine_suffix_pointwise` and its `seq` case)
+      and `Codec/DecodeOne.lean` cite it throughout, and `suffix_consumed_lt` is
+      already a gated law. What it lacked was a law of its **own name**: it appeared
+      only inside other people's proofs. Two one-line laws added —
+      `Suffix.consumed_id` (the identity suffix consumes nothing) and
+      `Suffix.consumed_trans` (`(t.trans r).consumed = n - r.remaining`), both
+      axiom-free. Deleting it, as the task offered, would have broken both modules.
+
 ### 1.7 Correct the Combines docstring's "free theorems" claim
 
-- [ ] 1.7.1 Rewrite `Combinators.lean:92-100`. It claims each derived
+- [x] 1.7.1 Rewrite `Combinators.lean:92-100`. It claims each derived
       combinator's `Rel` characterization is "a definitional consequence … no new
       induction" and that "the full laws (`decode_spec`, `bidir`, `roundtrip`)
       hold unconditionally via `Codec.Sound`". **False for all eight** at a
@@ -464,39 +486,121 @@ design.
       value and cannot close without the step law. State which values are proved,
       which are not, and why the three laws do not transfer.
 
+      **Landed**, in three numbered claims: (1) the `Rel` characterizations do hold
+      and are all proved here — but `Rel_manyUpTo` is **not** "no new induction", it
+      needed a `List.range`/`map` membership lemma and `Rel_count_succ` as a premise;
+      (2) "no new induction" was true only of `n = 0` until §1.1 supplied the step;
+      (3) `decode_spec`/`bidir`/`roundtrip` are `induction d` — structural on the
+      `Codec` **value** — and `count n p` is `iso` of `seq p (count (n-1) p)`, so the
+      induction reaches a smaller `n` with no `Rel` hypothesis and the case cannot
+      close. **No such law exists for any of the eight** (grepped: zero hits), and
+      the rewrite states that absence as a property of the derivation's shape, not
+      as a backlog item. It also places `sepBy`/`chainl1`/`chainr1`/`takeWhile` on
+      the other side: they are run-value triples over `relRepeat`, never `Codec`
+      values, so `Codec.Sound`'s laws are not even in scope for them.
+
 ### 1.8 Make the definition-level gap a build failure
 
-- [ ] 1.8.1 Add a public-`def` enumeration to `Axioms.lean` (alongside
+- [x] 1.8.1 Add a public-`def` enumeration to `Axioms.lean` (alongside
       `publicTheorems`) and a `run_cmd` that fails when a public `def` is mentioned
       by no gated theorem and is not in a `definitionSurfaceAllowlist`.
-- [ ] 1.8.2 State in the gate's header that the check is a **mention proxy**, not a
+
+      **Landed.** `isDerivedDefName` (the same last-name classifier status as
+      `isGeneratedAux`: a heuristic audited by the check, never an authority),
+      `publicDefs`, `mentionedByGated` and `definitionSurfaceAllowlist`, plus a third
+      `run_cmd` beside `partition`/`gateCoverage`. It reports **three** failures, not
+      one: a silent `def`; a name in **both** sets (a law that got pinned but stayed
+      allowlisted); and an allowlist entry that is not a public `def` (a stale name, or
+      compiler machinery). The third is what stops the list becoming a dumping ground.
+
+- [x] 1.8.2 State in the gate's header that the check is a **mention proxy**, not a
       guarantee of law strength — its property is that no public definition can be
       covered by silence. Do not let it read as soundness.
-- [ ] 1.8.3 Run it against the tree and confirm it names the definitions the audit
+
+      **Landed** as its own header section ("The definition-coverage check, and what
+      it is NOT"), stating the property verbatim, the vacuity limit (a theorem that
+      mentions the name trivially passes), and that it is the same escalating-proxy
+      discipline the footprint gate already uses — **not** soundness.
+
+- [x] 1.8.3 Run it against the tree and confirm it names the definitions the audit
       found (`btake`, `maybe`, `manyUpTo`, `seqRight`, `seqLeft`, `between`, …).
       That list is the check working, not a regression.
-- [ ] 1.8.4 Every remaining allowlist entry carries its reason in place.
+
+      **The audit's list is empty by the time the check exists, and that is the
+      correct outcome, not a failure of the check.** §1.1–§1.7 gave `count`,
+      `manyUpTo`, `seqRight`, `seqLeft`, `between`, `optional`/`maybe` their laws and
+      §1.6 gave `btake` its own, so every name on the audit's list is now *mentioned*.
+      The check additionally surfaced two `def`s the audit had not: `decodeArrayFast`
+      and `decodeWholeOneBytes`, contract-only aliases; both got their one-line `rfl`
+      law rather than an allowlist entry. **Load-bearing verified by probe:**
+      a throwaway `Codec.silentProbeDef` in `Codec/Packed.lean` fails the build with
+      `public definitions with no law naming them: Codec.silentProbeDef`; removed.
+
+- [x] 1.8.4 Every remaining allowlist entry carries its reason in place.
+
+      **29 entries, five reason groups, each reason in place**: `Iso` combinators whose
+      correctness is the `law` **structure field** proved at the definition site (the
+      proxy cannot see a field proof) — this group also holds `Iso.foldl`/`Iso.foldr`/
+      `Iso.nil`, which the check found; `Iso` fold plumbing; the `Type`-level
+      `List.cast` aliases (`candsAt`/`candsRoot`/`retypeCands`, whose whole content is
+      definitionally the identity); internal witnesses (`uniqSeq*`, `reconsLeft`/
+      `reconsRight`); computed instances (`instDecidableEqBytes`, `instInhabited`).
+      `Iso.«term_≫_»` did **not** get an entry — it is `Infixr "≫" => Iso.trans`, so it
+      is a notation token, not an authorial `def`, and it went into
+      `isDerivedDefName` instead.
 
 ### 1.9 Generate the footprint table
 
-- [ ] 1.9.1 Emit the footprint distribution from `scripts/gen-axioms.lean` so the
+- [x] 1.9.1 Emit the footprint distribution from `scripts/gen-axioms.lean` so the
       header is generated rather than transcribed. Nothing currently checks the
       counts — `partition`/`gateCoverage` compare set membership only — so a stale
       table would be silent. (The audit claimed this table was _wrong_; design D1
       refutes that — it is correct today. This task is anti-drift, not a fix.)
-- [ ] 1.9.2 Regenerate and confirm the generated table equals the current
+
+      **Landed.** `renderDistribution` counts the `collectAxioms` **name lists** the
+      `#guard_msgs` blocks already pin, and splices the table between
+      `BEGIN/END GENERATED distribution` markers. It keys on names, so the audit's own
+      parser bug (truncation at the `?` in `Codec.attach_getElem?_corr`) cannot recur.
+      A row outside the four known footprints is printed **by name with its footprint**
+      rather than folded into a total, and the renderer throws if the rows do not add up
+      to the gated count. The theorem/definition *counts* stay asserted by
+      `headerNumbers`, which now also checks the definition counts (`139 = 110 + 29`) —
+      two mechanisms because they have different failure modes.
+
+- [x] 1.9.2 Regenerate and confirm the generated table equals the current
       hand-written one (`197 / 61 / 4 / 30 = 292`). If it differs, the hand-written
       one was stale and that is the finding.
 
+      **It equals it: `209 / 78 / 4 / 34 = 325`.** (The task's `197 / 61 / 4 / 30 = 292`
+      was the figure at authoring time; the gated set has grown by §1.1–§1.8.) No
+      finding — D1's "the table is correct today" is now re-confirmed **by the
+      compiler** rather than by re-reading the prose, which is what §1.9 was for.
+
 ### 1.10 Part 1 gates
 
-- [ ] 1.10.1 `nix develop --command lake build` — zero `sorry`, zero warnings,
+- [x] 1.10.1 `nix develop --command lake build` — zero `sorry`, zero warnings,
       both partition checks green.
-- [ ] 1.10.2 `nix develop --command lake build bench` — compiles and links.
-- [ ] 1.10.3 `nix develop --command openspec validate --all`.
-- [ ] 1.10.4 Commit per task family (basen gate / count+manyUpTo / seq* / the two
+
+      **Green, 15 jobs.** FOUR lines now, not two — the definition-coverage check is
+      the fourth: `325 public theorems covered (0 exclusion(s))` /
+      `398 public theorems partitioned, 325 gated and 73 allowlisted` /
+      `139 public definitions covered, 110 mentioned and 29 allowlisted (mention
+      proxy)` / `header numbers verified (398 = 325 + 73; defs 139 = 110 + 29)`.
+
+- [x] 1.10.2 `nix develop --command lake build bench` — compiles and links.
+      **Green, 28 jobs.** (`ld` prints macOS deployment-target warnings for
+      `ByteSlice.o`/`CRef.o`; those are pre-existing and not Lean warnings.)
+- [x] 1.10.3 `nix develop --command openspec validate --all`.
+      **10 passed, 0 failed.** The one warning (`spec/template` requirement text >500 chars) is pre-existing, not introduced here.
+- [x] 1.10.4 Commit per task family (basen gate / count+manyUpTo / seq* / the two
       triples / def-check / docstring), individual files only, printing
       `git diff --cached --name-only` before each.
+
+      **Done.** Committed individually, each with `git diff --cached --name-only`
+      printed first: `83133ae` Combinators §1.5, `d6aa551` Axioms, `879af74` README,
+      `bdebf35` openspec; `424e7b7` Codec §1.6, `8dd3c06` Axioms; `1ed8ada`
+      Combinators §1.7; `8574215` Packed, `5a5da62` Axioms §1.8; `29b26e2`
+      gen-axioms, `16741a7` Axioms §1.9.
 
 ---
 
