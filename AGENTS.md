@@ -19,13 +19,22 @@ Guidance for AI coding agents working in this repository.
 > it holds the **stable** part — how to work here, what the gates are, and the traps
 > that have cost sessions. Status is computed from `openspec/`, never recorded here.
 >
-> **Where the next session starts, exactly.** §1.0–§1.4 are landed and gated
-> (16/56). Begin at **`tasks.md` §1.5** — the `sepBy`/`takeWhile` decode→encode
-> halves (`encodeSepBy_of_decode`, `encodeSepBy_ne_none`, and the `takeWhile`
-> twins), mirroring the already-proved `encodeChainl1_of_decode` /
-> `encodeChainl1_ne_none` in `Codec/Combinators.lean`. Locate them by name
-> (`grep -n 'theorem encodeChainl1_' Codec/Combinators.lean`), never by line number:
-> this file and the ledger both carried stale `:693,/646` figures within one session.
+> **Where the next session starts, exactly.** §1.0-§1.4 are landed and gated
+> (16/56), and the round-four audit's fixes are applied on top (see the ledger's
+> "Round-four audit" section). Begin at **`tasks.md` §1.5** — the
+> `sepBy`/`takeWhile` decode→encode halves (`encodeSepBy_of_decode`,
+> `encodeSepBy_ne_none`, and the `takeWhile` twins), mirroring the already-proved
+> `encodeChainl1_of_decode` / `encodeChainl1_ne_none` in `Codec/Combinators.lean`.
+> Locate them by name (`grep -n 'theorem encodeChainl1_' Codec/Combinators.lean`),
+> never by line number: this file and the ledger both carried stale `:693,/646`
+> figures within one session.
+>
+> **Do §1.5, then §1.6-§1.10, then §2.** §2's prose claims are worthless before the
+> laws exist. Three things are recorded as **open** and must not be re-opened as if
+> they were unfinished work: basen's three `native_decide` bench uses (annotated with
+> the exact route that removes them — needs a `b32TailApply_b32MZTA_chars`-shaped
+> lemma that does not exist yet), the general arity rejection for the fixed-width
+> bases (needs a `decodeFull`-length lemma), and `LengthDet → RelAligned`.
 >
 > **Round two is archived.** `2026-11-05-codec-audit-round-two` (42/42 tasks, its
 > three spec deltas synced into `openspec/specs/` and verified scenario-by-scenario)
@@ -54,7 +63,13 @@ Guidance for AI coding agents working in this repository.
   the order is not negotiable. **Read its `tasks.md` for the next task — not this
   file.** Done so far: §1.0 (basen gate parity), §1.1 (`count` step), §1.2
   (`manyUpTo`), §1.3 (`seq*`/`between`), §1.4 (`optional`/`maybe`/`choice`).
-  **Next: §1.5.**
+  **Next: §1.5** (`sepBy`/`takeWhile` decode→encode halves).
+- A **round-four audit** (three read-only reviewers, 2026-11-05; `/tmp/r4-*.md`) ran
+  on top of that and its findings are **applied and pushed** — see the ledger's
+  "Round-four audit" section for what was fixed, what was refuted, and what is open.
+  Its two structural additions are worth knowing before touching a gate: both
+  `Axioms.lean` headers are now **asserted** by a `headerNumbers` `run_cmd` (a stale
+  count is a build failure), and the template finally enforces `warningAsError`.
 - `codec-audit-round-two` — **archived** 2026-11-05 as
   `openspec/changes/archive/2026-11-05-codec-audit-round-two/` (42/42 tasks, all
   gates green, three spec deltas synced and verified). Do not reopen it; read its
@@ -170,6 +185,14 @@ before starting §1.
   `count` (matches on `n`) and `relRepeat` (matches on the list) both stay opaque, so
   `Rel_iso`/`Rel_seq`/`relRepeat_cons` cannot fire. State the recursion equation as
   its own `rfl` lemma (`count_succ`) or `cases` on the matched argument first.
+- **A gate whose _prose_ quotes counts needs the counts asserted, or the prose rots
+  while the gate stays green.** Both `Axioms.lean` files had a header table that was
+  stale by a full regeneration (`292` vs `310` in codec; `446 / 437 / 9` vs
+  `483 / 437 / 46` in basen — the `9` was a genuine authoring error, not drift),
+  because `partition`/`gateCoverage` compare set _membership_ and never read prose.
+  Both files now carry a `headerNumbers` `run_cmd` asserting the table's numbers and
+  their sum. **When you regenerate, the header check fires — update the table and the
+  `expected*` constants together.** Do not weaken it to a `logInfo`.
 - **The gate catches your own new laws, by design — regenerate, do not investigate.**
   Every law added in §1 fails `lake build` with `not pinned by this gate` until
   `scripts/gen-axioms.lean` is run. That is §1.1 doing its job, not a regression.
@@ -323,11 +346,12 @@ nix develop --command lake env lean /tmp/c.lean    # expect [propext, Quot.sound
 ```
 
 **Since §1.0 it also has a _mechanism_, not just blocks.** `lake build` now prints
-two lines and fails if either disagrees with the environment:
+three lines and fails if any disagrees with the environment:
 
 ```
-info: basen axiom gate: 446 public theorems covered (0 explicit exclusion(s))
-info: basen axiom gate: 483 public theorems partitioned, 437 pinned and 46 allowlisted
+info: basen axiom gate: 438 pinned + 46 allowlisted = 447 of 484 public theorems (0 explicit exclusion(s))
+info: basen axiom gate: 484 public theorems partitioned, 438 pinned and 46 allowlisted
+info: basen axiom gate: header numbers verified (484 = 438 + 46)
 ```
 
 So a new `BaseN` law fails the build until it is pinned, and a stale pin fails too.
