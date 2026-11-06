@@ -1028,7 +1028,12 @@ precondition, not a restatement of anything already in the tree.
 
 **`huniq` does NOT follow from `relUnambiguous` plus productivity.** That was the
 belief when the gap was first recorded (task 2.6 of `codec-review-remediation`), and
-it is **false** — machine-checked below as `huniq_not_derivable`. The counterexample
+it is **false** — machine-checked below as `huniq_not_derivable_full`, which states it
+in the form a reader can act on: `∃ R, relUnambiguous R ∧ (∀ a {m} (t : Bytes m),
+R a t → m ≠ 0) ∧ ¬ (two distinct fully-consuming lists exist)`. (`huniq_not_derivable`
+is the same failure as a single `n = 2` witness — it never mentions `relUnambiguous`
+or productivity, so `#print axioms` on *it* only says "two lists here differ".) The
+counterexample
 (`uniqCounterexampleRel`) relates one value to every 2-byte string and another to
 every 1-byte string. It is unambiguous (`uniqCounterexample_unambiguous`, one value
 per string at a fixed length) and productive (`uniqCounterexample_productive`, no
@@ -1116,12 +1121,39 @@ Note what it does **not** say: it does not pin the length of a *list* of steps �
 values may each sit at one length while a list of them has any number of elements.
 Pinning the list length needs the stronger, constant-length form `LengthConst`
 (defined and used below), and the usable chain is `LengthConst → LengthDet`, proved
-as `lengthDet_of_lengthConst`. `LengthDet → RelAligned` is **open**: it may or may
-not hold, and no theorem settles it either way. (An earlier revision stated that it
-"would need a `DecidableEq α`, i.e. a classical axiom, and is deliberately not
-proved" — that is a claim about a proof route the authors tried, not a fact about the
-implication, and no theorem supports either half. Recorded as open rather than as a
-deliberate omission.) -/
+as `lengthDet_of_lengthConst`.
+
+**The relationship to `RelAligned` is *incomparability*, and it is proved, not
+assumed.** An earlier revision recorded `LengthDet → RelAligned` as **open** — "it may
+or may not hold, and no theorem settles it either way" — and a revision before that
+attributed the difficulty to needing a `DecidableEq α` / classical axiom. **Both were
+wrong**, and the witness was already in this file: `relUnambAlignedWitness` is
+`LengthDet` (`lengthDet_relUnambAlignedWitness`, `[propext]`-only) and not
+`RelAligned` (`lengthDet_not_implies_relAligned`, `[propext]`-only), *even with
+productivity added* (`lengthDet_not_implies_relAligned_productive`). The converse
+fails too (`relAligned_not_implies_lengthDet`, `[propext, Quot.sound]`-only). A claim
+of the form "no theorem settles it either way" is itself falsifiable, and its falsity
+tells a reader not to go looking for a witness that is already present — which is why
+it survived three archive rounds: every gate checks theorems, and this was a claim
+about the *absence* of one.
+
+The honest record is therefore the whole four-way diagram, both proved directions and
+both refutations:
+
+| implication                   | status                                                          |
+| ----------------------------- | --------------------------------------------------------------- |
+| `LengthConst → LengthDet`     | proved (`lengthDet_of_lengthConst`)                             |
+| `RelAligned → relUnambiguous` | proved (`relUnambiguous_of_relAligned`)                         |
+| `relUnambiguous ↛ RelAligned` | proved (`relUnambiguous_not_implies_relAligned`)                |
+| `relUnambiguous ↛ LengthDet`  | proved (`lengthDet_not_implied_by_unamb`)                       |
+| `LengthDet ↛ RelAligned`      | proved (`lengthDet_not_implies_relAligned`)                     |
+| `RelAligned ↛ LengthDet`      | proved (`relAligned_not_implies_lengthDet`)                     |
+
+**Why the pair still has to be carried together.** In `relRepeat_cons_eq` the two
+hypotheses are used at different moments and neither can be replaced by the other:
+`hal` identifies the two first-step values (`hxy : a₀ = b₀`), and only **after** that
+does `hld` conclude that their step lengths agree (`hmm : m = m'`, from
+`hld a a' hRa (hxy ▸ hRa')`). Incomparability is not a redundancy. -/
 def LengthDet {α : Type} (R : α → {m : Nat} → Bytes m → Prop) : Prop :=
   ∀ ⦃a : α⦄ {m₁ m₂ : Nat} (t₁ : Bytes m₁) (t₂ : Bytes m₂), R a t₁ → R a t₂ → m₁ = m₂
 
@@ -1130,7 +1162,11 @@ strings that agree on the shorter one are equal. This is `relUnambiguous` *exten
 across lengths*: at equal lengths it is exactly unambiguity, and the extra content is
 that a value cannot be distinguished by bytes beyond its own step length. It is what
 lets the uniqueness induction compare the two decompositions' first steps when their
-lengths may differ. Satisfied by `byte` (`relUnambiguous` at `Bytes 1`).
+lengths may differ. Satisfied by `byte` — proved as `relAligned_byte`, from the
+prefix argument: both related strings are the one-byte `single`, so index `0` already
+determines the value. (An earlier revision cited a lemma `relUnambiguous` "at
+`Bytes 1`" that does not exist, and the at-one-length justification is precisely the
+length/unambiguity confusion the paragraph below retracts.)
 
 **The relationship to `relUnambiguous` is *incomparability*, and it is measured.**
 `RelAligned R → relUnambiguous R` holds (proved as `relUnambiguous_of_relAligned`,
@@ -1152,13 +1188,20 @@ advice: "prove `relUnambiguous`, it is enough". It is not —
 supplies neither, so a caller following that advice would prove a hypothesis the law
 does not use and lack one it needs. State what the law requires.
 
-**`LengthDet` is a third, separate family.** `LengthDet R → RelAligned R` is
-plausible but unproved here; an earlier revision attributed that to needing a
-`DecidableEq α` / classical axiom, which is a claim about a proof route the authors
-tried, not a fact about the implication, and no theorem supports either half. It is
-**open**, and recorded as open rather than as "deliberately not proved". The usable
-proved chain is `LengthConst → LengthDet`, as `lengthDet_of_lengthConst`
-(`codec-review-remediation` 2.6). -/
+**`LengthDet` is an independent family, and the relationship is measured
+*incomparability*.** An earlier revision called this "a third, separate family" and
+recorded `LengthDet R → RelAligned R` as "plausible but unproved here … open". It is
+**refuted** (`lengthDet_not_implies_relAligned`, `[propext]`-only), and so is the
+converse (`relAligned_not_implies_lengthDet`) — the two predicates constrain
+different things: `LengthDet` one value's possible lengths, `RelAligned` two values
+over a shared prefix. **The full four-way diagram is the table in `def LengthDet`'s
+docstring**; it is not repeated here.
+
+This is not pedantry, because the two are **jointly** load-bearing in
+`relRepeat_cons_eq` and neither can be dropped: `hal` identifies the two first-step
+values, and only *after* that does `hld` conclude that their step lengths agree (see
+the note at the end of `def LengthDet`'s docstring for the two proof lines). So
+incomparability does not mean "either will do"; it means a caller needs both. -/
 def RelAligned {α : Type} (R : α → {m : Nat} → Bytes m → Prop) : Prop :=
   ∀ ⦃a b : α⦄ {m₁ m₂ : Nat} (t₁ : Bytes m₁) (t₂ : Bytes m₂) (hle : m₁ ≤ m₂),
     R a t₁ → R b t₂ →
@@ -1211,6 +1254,136 @@ theorem relUnambiguous_not_implies_relAligned : ¬ RelAligned relUnambAlignedWit
   have := h (a := true) (b := false) (m₁ := 1) (m₂ := 2)
     (fun _ : Fin 1 => (0x41 : UInt8)) (fun _ : Fin 2 => (0x41 : UInt8)) hlen ha hb hpre
   exact absurd this (by decide)
+
+/-! ### `LengthDet` and `RelAligned` are incomparable
+
+This settles the claim both docstrings above used to record as **open** ("it may or
+may not hold, and no theorem settles it either way"): it is **refuted**, by a
+witness that was already in this file when the claim was written. A "neither proved
+nor refuted" record is itself falsifiable, and a reader who believes it will not go
+looking for a witness — which is exactly why the wrong record survived three archive
+rounds (every gate checks theorems, and this was a claim about the *absence* of one).
+
+`LengthDet` constrains **one** value's possible lengths; `RelAligned` constrains
+**two** values over a shared prefix. They are incomparable, and both directions are
+now theorems:
+
+* `LengthDet ↛ RelAligned` — `relUnambAlignedWitness` (`true` only at length 1,
+  `false` only at length 2) is `LengthDet`, but the two all-`0x41` strings share a
+  prefix while the values differ, so `RelAligned` fails. Proved as
+  `lengthDet_not_implies_relAligned`.
+* The same failure **survives productivity** (`lengthDet_not_implies_relAligned_productive`),
+  so a reader cannot attribute it to that premise's absence.
+* `RelAligned ↛ LengthDet` — `alignedNotLengthDetWitness` (one value, `true`, at
+  *two* lengths) is `RelAligned` because `alignedNotLengthDetWitness b` holds at only
+  one of the two lengths at a time, so no second value ever relates and the
+  conclusion `a = b` is discharged from `a = true` alone; it is plainly not
+  `LengthDet`. Proved as `relAligned_not_implies_lengthDet`.
+
+**Why the pair is jointly load-bearing.** In `relRepeat_cons_eq` the two hypotheses
+are used at *different moments* and neither can be dropped: `hal` identifies the two
+first-step values (`hxy : a₀ = b₀`), and only **after** that has happened does `hld`
+conclude that the two step lengths agree (`hmm : m = m'`, from
+`hld a a' hRa (hxy ▸ hRa')`). A `LengthDet` alone cannot compare the two values; a
+`RelAligned` alone cannot conclude the lengths are equal. -/
+
+/-- **`LengthDet` holds for `relUnambAlignedWitness`.** Each value sits at exactly one
+length (`true` at 1, `false` at 2), so two strings related to the same value have the
+same length. `[propext]`-only. -/
+theorem lengthDet_relUnambAlignedWitness : LengthDet relUnambAlignedWitness := by
+  intro a m₁ m₂ t₁ t₂ h₁ h₂
+  match m₁, t₁, h₁ with
+  | 1, _, h₁ =>
+      match m₂, t₂, h₂ with
+      | 1, _, _ => rfl
+      | 2, _, h₂ => exact absurd (h₁.symm.trans h₂) (by decide)
+      | 0, _, h₂ => exact absurd h₂ (by simp [relUnambAlignedWitness])
+      | _+3, _, h₂ => exact absurd h₂ (by simp [relUnambAlignedWitness])
+  | 2, _, h₁ =>
+      match m₂, t₂, h₂ with
+      | 1, _, h₂ => exact absurd (h₁.symm.trans h₂) (by decide)
+      | 2, _, _ => rfl
+      | 0, _, h₂ => exact absurd h₂ (by simp [relUnambAlignedWitness])
+      | _+3, _, h₂ => exact absurd h₂ (by simp [relUnambAlignedWitness])
+  | 0, _, h₁ => exact absurd h₁ (by simp [relUnambAlignedWitness])
+  | _+3, _, h₁ => exact absurd h₁ (by simp [relUnambAlignedWitness])
+
+/-- **`LengthDet` does not imply `RelAligned`.** The witness is
+`relUnambAlignedWitness`: determinate in its lengths, yet a length-1 and a length-2
+string with a shared prefix relate *different* values. This refutes the claim the two
+docstrings above recorded as open. `[propext]`-only. -/
+theorem lengthDet_not_implies_relAligned :
+    ¬ (∀ {α : Type} (R : α → {m : Nat} → Bytes m → Prop), LengthDet R → RelAligned R) :=
+  fun h => relUnambiguous_not_implies_relAligned
+    (h relUnambAlignedWitness lengthDet_relUnambAlignedWitness)
+
+/-- The witness above is also **productive**: it relates no value to the empty string,
+because it relates nothing at length 0. This is what lets the next theorem add
+productivity as a second hypothesis and still exhibit a failure — so the
+non-implication cannot be blamed on productivity's absence. `[propext]`-only. -/
+theorem prod_relUnambAlignedWitness :
+    ∀ a {m : Nat} (t : Bytes m), relUnambAlignedWitness a t → m ≠ 0 := by
+  intro a m t h
+  match m, t, h with
+  | 0, _, h => exact absurd h (by simp [relUnambAlignedWitness])
+  | 1, _, _ => decide
+  | 2, _, _ => decide
+  | _+3, _, h => exact absurd h (by simp [relUnambAlignedWitness])
+
+/-- **`LengthDet` does not imply `RelAligned`, even with productivity added.** The
+strong form of the refutation, and the one that matters: `relRepeat_unique_same_length`
+takes productivity as a third hypothesis, so a reader could reasonably guess that the
+pair suffices. It does not. `[propext]`-only. -/
+theorem lengthDet_not_implies_relAligned_productive :
+    ¬ (∀ {α : Type} (R : α → {m : Nat} → Bytes m → Prop),
+        LengthDet R → (∀ a {m : Nat} (t : Bytes m), R a t → m ≠ 0) → RelAligned R) := by
+  intro h
+  exact relUnambiguous_not_implies_relAligned
+    (h relUnambAlignedWitness lengthDet_relUnambAlignedWitness prod_relUnambAlignedWitness)
+
+/-- The other direction's witness: `true` sits at **two** lengths, `false` nowhere.
+`RelAligned` holds because at most one value is ever in play, so the conclusion `a = b`
+is discharged from the hypothesis `a = true` alone — no second value's length is ever
+compared. `LengthDet` fails at `true`/1 vs `true`/2. -/
+def alignedNotLengthDetWitness (a : Bool) : {m : Nat} → Bytes m → Prop
+  | 1, _ => a = true
+  | 2, _ => a = true
+  | _, _ => False
+
+/-- `RelAligned` holds for the witness: the premise `alignedNotLengthDetWitness a t₁`
+together with the second value's own premise forces both `a = true` and `b = true`. -/
+theorem aligned_alignedNotLengthDetWitness : RelAligned alignedNotLengthDetWitness := by
+  intro a b m₁ m₂ t₁ t₂ hle h₁ h₂ _
+  match m₁, t₁, h₁ with
+  | 1, _, h₁ => match m₂, t₂, h₂ with
+    | 1, _, h₂ => exact h₁.trans h₂.symm
+    | 2, _, h₂ => exact h₁.trans (h₂ ▸ rfl)
+    | 0, _, h₂ => exact absurd h₂ (by simp [alignedNotLengthDetWitness])
+    | _+3, _, h₂ => exact absurd h₂ (by simp [alignedNotLengthDetWitness])
+  | 2, _, h₁ => match m₂, t₂, h₂ with
+    | 1, _, _ => exact absurd hle (by omega)
+    | 2, _, h₂ => exact h₁.trans h₂.symm
+    | 0, _, h₂ => exact absurd h₂ (by simp [alignedNotLengthDetWitness])
+    | _+3, _, h₂ => exact absurd h₂ (by simp [alignedNotLengthDetWitness])
+  | 0, _, h₁ => exact absurd h₁ (by simp [alignedNotLengthDetWitness])
+  | _+3, _, h₁ => exact absurd h₁ (by simp [alignedNotLengthDetWitness])
+
+/-- `true` relates at both length 1 and length 2, so the witness is not `LengthDet`.
+`[propext, Quot.sound]`-only. -/
+theorem not_lengthDet_alignedNotLengthDetWitness : ¬ LengthDet alignedNotLengthDetWitness := by
+  intro h
+  have h1 : alignedNotLengthDetWitness true (m := 1) (fun _ => (0x41 : UInt8)) := rfl
+  have h2 : alignedNotLengthDetWitness true (m := 2) (fun _ => (0x41 : UInt8)) := rfl
+  have := h (a := true) (fun _ : Fin 1 => (0x41 : UInt8)) (fun _ : Fin 2 => (0x41 : UInt8)) h1 h2
+  omega
+
+/-- **`RelAligned` does not imply `LengthDet`** — the second half of the
+incomparability, completing the four-way diagram in `def LengthDet`'s docstring.
+`[propext, Quot.sound]`-only. -/
+theorem relAligned_not_implies_lengthDet :
+    ¬ (∀ {α : Type} (R : α → {m : Nat} → Bytes m → Prop), RelAligned R → LengthDet R) :=
+  fun h => not_lengthDet_alignedNotLengthDetWitness (h alignedNotLengthDetWitness
+    aligned_alignedNotLengthDetWitness)
 
 /-- **`RelAligned` does not compose under `seq` either.** The `Unambiguous`/`seq`
 counterexample above is also a witness against `RelAligned`: the two values
@@ -1282,12 +1455,36 @@ theorem uniqCounterexample_pair :
 /-- **`huniq` is not derivable from unambiguity + productivity.** Two distinct
 fully-consuming lists of the same string, for a step relation that is both
 unambiguous and productive. What is missing is `LengthDet`; the lists also differ in
-*length*, which is why the honest uniqueness law is length-indexed. -/
+*length*, which is why the honest uniqueness law is length-indexed.
+
+The small witness: this is the `n = 2` instance, kept because it is the shortest
+statement of the failure. It is **not** the form the prose above cites — it never
+mentions `relUnambiguous` or productivity, so `#print axioms` on it only says "these
+two lists here differ". The claim "huniq is not derivable from unambiguity plus
+productivity" is carried by `huniq_not_derivable_full`, immediately below. -/
 theorem huniq_not_derivable :
     ¬ (∀ (xs ys : List Bool), relRepeat uniqCounterexampleRel xs 2 (fun _ => 0) →
         relRepeat uniqCounterexampleRel ys 2 (fun _ => 0) → xs = ys) := by
   intro h
   have := h [true] [false, false] uniqCounterexample_single uniqCounterexample_pair
+  exact absurd this (by simp)
+
+/-- **`huniq` is not derivable from unambiguity + productivity — the `∃ R` form.**
+This is the statement the section prose above cites, and the one a reader can act on:
+it existentially quantifies the step relation, so the conclusion is about the
+hypothesis pair rather than about one hand-written witness. Packaging the three
+`uniqCounterexample_*` lemmas: `uniqCounterexampleRel` is unambiguous, is productive,
+and nevertheless admits two distinct fully-consuming lists of the same string.
+`[propext, Quot.sound]`-only. -/
+theorem huniq_not_derivable_full :
+    ∃ (R : Bool → {m : Nat} → Bytes m → Prop),
+      relUnambiguous R ∧ (∀ a {m : Nat} (t : Bytes m), R a t → m ≠ 0) ∧
+      ¬ (∀ (xs ys : List Bool) (n : Nat) (s : Bytes n),
+          relRepeat R xs n s → relRepeat R ys n s → xs = ys) := by
+  refine ⟨uniqCounterexampleRel, uniqCounterexample_unambiguous,
+    uniqCounterexample_productive, ?_⟩
+  intro h
+  have := h [true] [false, false] 2 (fun _ => 0) uniqCounterexample_single uniqCounterexample_pair
   exact absurd this (by simp)
 
 /-- `LengthDet` holds for `byte`: `Rel byte a s` forces `s` to be the one-byte string
@@ -1508,16 +1705,34 @@ theorem lengthDet_not_implied_by_unamb : ¬ LengthDet lengthDetWitness := by
   omega
 
 /-- `decodeRepeat` membership at full consumption, spelled as `relRepeat`, **at
-`Codec.byte`**. Deliberately specialised rather than general: the general form is
-just `decodeRepeat_spec` at `Suffix.empty`, and eliminating its `∃ s₀` needs
-`prepend_empty_self` — which is stated at `Codec.byte`'s step relation only because
-that is the only step relation whose `∃ s₀` collapses for free. Stating it generally
-would be a rename, not a theorem, so this is the useful specialisation and the
-docstring says so. `[propext, Quot.sound]`-only. -/
+`Codec.byte`**. This is a **convenience specialisation**, not a forced one: an earlier
+revision said the general form was impossible because `Codec.byte` is "the only step
+relation whose `∃ s₀` collapses for free", and that is **false** —
+`prepend_empty_self`'s statement mentions no step relation at all, so the collapse is
+uniform. The general form is `decodeRepeat_mem_iff_general`, immediately below. This
+instance is kept because it is the one `huniq_byte` consumes.
+`[propext, Quot.sound]`-only. -/
 theorem decodeRepeat_mem_iff {n : Nat} (s : Bytes n) (xs : List UInt8) :
     (xs, Suffix.empty n) ∈ decodeRepeat Codec.byte byteConsumesByte n s ↔
       relRepeat (Rel Codec.byte) xs n s := by
   rw [decodeRepeat_spec Codec.byte byteConsumesByte]
+  constructor
+  · rintro ⟨s₀, hs, hrel⟩
+    have hpre : (Suffix.empty n).prepend s₀ = s := hs.symm
+    rw [prepend_empty_self] at hpre
+    subst hpre
+    exact hrel
+  · intro hrel
+    exact ⟨s, (prepend_empty_self n s).symm, hrel⟩
+
+/-- **`decodeRepeat` membership at full consumption, in general.** The same statement
+at an arbitrary `Codec α` and an arbitrary value list: the `∃ s₀` collapses by
+`prepend_empty_self`, which says nothing about the step relation, so the
+specialisation above was never necessary. `[propext, Quot.sound]`-only. -/
+theorem decodeRepeat_mem_iff_general {α : Type} (p : Codec α) (h : ConsumesByte p)
+    {n : Nat} (s : Bytes n) (xs : List α) :
+    (xs, Suffix.empty n) ∈ decodeRepeat p h n s ↔ relRepeat (Rel p) xs n s := by
+  rw [decodeRepeat_spec p h]
   constructor
   · rintro ⟨s₀, hs, hrel⟩
     have hpre : (Suffix.empty n).prepend s₀ = s := hs.symm
