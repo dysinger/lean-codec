@@ -64,11 +64,11 @@ nix develop --command lake env lean scripts/gen-axioms.lean
 
 ## Current state
 
-**389** public theorems are covered, by a partition with no third route:
+**396** public theorems are covered, by a partition with no third route:
 
 | side | count | what it is |
 | --- | --- | --- |
-| gated (`gatedNames`) | **316** | footprint pinned by `#print axioms` |
+| gated (`gatedNames`) | **323** | footprint pinned by `#print axioms` |
 | allowlisted (`generatedAuxAllowlist`) | **73** | not a law; reason recorded in place |
 | un-gated and unlisted | **0** | a build failure, by construction |
 
@@ -76,10 +76,10 @@ Gated footprint distribution:
 
 | footprint | count |
 | --- | --- |
-| `[propext, Quot.sound]` | 203 |
+| `[propext, Quot.sound]` | 208 |
 | `[propext]` | 78 |
 | `[Quot.sound]` | 4 |
-| axiom-free | 31 |
+| axiom-free | 33 |
 | `[propext, Classical.choice, Quot.sound]` | **0** |
 
 **These numbers are asserted, not transcribed** (`headerNumbers`, at the end of this
@@ -354,6 +354,8 @@ def gatedNames : List Lean.Name := [
   ,`Codec.Rel_seq
   ,`Codec.Rel_seqLeft
   ,`Codec.Rel_seqRight
+  ,`Codec.Suffix.consumed_id
+  ,`Codec.Suffix.consumed_trans
   ,`Codec.Suffix.drop_zero
   ,`Codec.Suffix.eq_empty_of_remaining_zero
   ,`Codec.Suffix.ext
@@ -382,6 +384,10 @@ def gatedNames : List Lean.Name := [
   ,`Codec.blitBytes_spec
   ,`Codec.bpush_data
   ,`Codec.brecOn.eq
+  ,`Codec.btake_agree
+  ,`Codec.btake_apply
+  ,`Codec.btake_btake
+  ,`Codec.btake_zero
   ,`Codec.byteConsumesByte
   ,`Codec.byteSlice_spec
   ,`Codec.bytesToArray_size
@@ -534,6 +540,7 @@ def gatedNames : List Lean.Name := [
   ,`Codec.mem_decodeArray_iff
   ,`Codec.mem_map_range_iff
   ,`Codec.mem_packedCands
+  ,`Codec.min_rotate
   ,`Codec.nil_append_size
   ,`Codec.nil_append_toList
   ,`Codec.not_productive_pure
@@ -728,8 +735,8 @@ run_cmd do
   let gated := gatedNames.length
   let allow := CodecAxioms.generatedAuxAllowlist.size
   -- Lockstep with "Current state" above.
-  let expectedPub := 389
-  let expectedGated := 316
+  let expectedPub := 396
+  let expectedGated := 323
   let expectedAllow := 73
   let mut bad : Array String := #[]
   if pub.size != expectedPub then
@@ -876,6 +883,12 @@ why it was fixed instead of documented.
 /-- info: 'Codec.Rel_seqRight' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Codec.Rel_seqRight
+/-- info: 'Codec.Suffix.consumed_id' does not depend on any axioms -/
+#guard_msgs in
+#print axioms Codec.Suffix.consumed_id
+/-- info: 'Codec.Suffix.consumed_trans' does not depend on any axioms -/
+#guard_msgs in
+#print axioms Codec.Suffix.consumed_trans
 /-- info: 'Codec.Suffix.drop_zero' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.Suffix.drop_zero
@@ -960,6 +973,18 @@ why it was fixed instead of documented.
 /-- info: 'Codec.brecOn.eq' does not depend on any axioms -/
 #guard_msgs in
 #print axioms Codec.brecOn.eq
+/-- info: 'Codec.btake_agree' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.btake_agree
+/-- info: 'Codec.btake_apply' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.btake_apply
+/-- info: 'Codec.btake_btake' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.btake_btake
+/-- info: 'Codec.btake_zero' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.btake_zero
 /-- info: 'Codec.byteConsumesByte' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.byteConsumesByte
@@ -1416,6 +1441,9 @@ why it was fixed instead of documented.
 /-- info: 'Codec.mem_packedCands' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.mem_packedCands
+/-- info: 'Codec.min_rotate' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.min_rotate
 /-- info: 'Codec.nil_append_size' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.nil_append_size
