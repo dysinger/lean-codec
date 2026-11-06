@@ -54,11 +54,15 @@ def arrayToBytes (a : Array UInt8) : Bytes a.size :=
 This is the **one** `Bytes n → Array` transport in the library, and it is stated
 here so that a caller does not invent its own. It goes through `List.ofFn`, which
 is the `Fin n`-indexed enumeration; the result's size is `n` by `List.ofFn`'s own
-length fact, so the round-trip `arrayToBytes (bytesToArray s) = s` is `rfl` by
-`funext`/`Fin.ext` and needs no `Array.extract`/`toList` machinery — which is the
-transport family `README.md`'s "Representations" section records as removed
-precisely because it was the `Classical.choice` source in the old `List`-carrier
-design. -/
+length fact, so the round-trip `arrayToBytes (bytesToArray s) = s` needs no
+`Array.extract`/`toList` machinery — which is the transport family `README.md`'s
+"Representations" section records as removed precisely because it was the
+`Classical.choice` source in the old `List`-carrier design.
+
+(An earlier revision of this docstring said that round-trip was "`rfl` by
+`funext`/`Fin.ext`". **It is not**: it needs `Array.getElem_toList` then
+`List.getElem_ofFn`, plus a size transport, and it is proved as
+`arrayToBytes_bytesToArray` next to `decodeWholeBytes_eq` rather than here.) -/
 def bytesToArray {n : Nat} (s : Bytes n) : Array UInt8 :=
   Array.mk (List.ofFn s)
 
@@ -608,20 +612,6 @@ def packedCands {α : Type} (d : Codec α) (h : ConsumesByte d)
     -- as `[]` rather than left to the `map`, because `decodeArray_consumes` (and
     -- hence the `PackedCand` construction) is only available at `k < a.size`.
     []
-
-/-- **`filterMap` never lengthens.** The measure-side fact the packed search's
-`termination_by` needs: `packedCands` is a `filterMap` of `(decodeArray d a k).attach`,
-so its length is bounded by the candidate count. Stated for a general list because
-the search's `decreasing_by` only ever needs the bound, never `packedCands`' body. -/
-theorem length_filterMap_le {β γ : Type} (l : List β) (f : β → Option γ) :
-    (l.filterMap f).length ≤ l.length := by
-  induction l with
-  | nil => simp
-  | cons hd tl ih =>
-    rw [List.filterMap_cons]
-    split
-    · simp only [List.length_cons]; omega
-    · simpa using ih
 
 /-- `packedCands` is no longer than the raw candidate list. -/
 theorem length_packedCands_le {α : Type} (d : Codec α) (h : ConsumesByte d)
@@ -1351,15 +1341,79 @@ def decodeWholeBytes {α : Type} (d : Codec α) (h : ConsumesByte d) {n : Nat}
     (s : Bytes n) : Option (List α) :=
   decodeWhole d h (bytesToArray s)
 
-/-- **`decodeWholeBytes` decodes exactly the specification, at the caller's own
-index.** The packed delegate's `a.size` is `n` (`bytesToArray_size`), so the right
-side is `decodeFull d h n` applied to the readback — i.e. the law a caller who
-started from `Bytes n` would state. `[propext, Quot.sound]`-only. -/
+/-- **`decodeWholeBytes` decodes the specification over the readback.** The packed
+delegate's `a.size` is `n` (`bytesToArray_size`), so the right side is `decodeFull`
+at that size applied to `arrayToBytes (bytesToArray s)`.
+
+**That is *not* the form a caller who started from `Bytes n` would state.** The form a
+`Bytes n` caller states is `decodeWholeBytes d h s = decodeFull d h n s` — the size
+argument being `n` and the buffer being `s` itself. Getting from here to there needs
+the readback to round-trip, which is `arrayToBytes_bytesToArray`, and it is
+**proved** as `decodeWholeBytes_spec`, immediately below. An earlier revision of this
+docstring advertised the by-index form as if it already were the caller's law;
+`[propext, Quot.sound]`-only. -/
 theorem decodeWholeBytes_eq {α : Type} (d : Codec α) (h : ConsumesByte d) {n : Nat}
     (s : Bytes n) :
     decodeWholeBytes d h s = decodeFull d h (bytesToArray s).size
       (arrayToBytes (bytesToArray s)) :=
   decodeWhole_eq d h (bytesToArray s)
+
+/-- **The readback is pointwise the identity.** Reading `arrayToBytes (bytesToArray s)` at
+index `i` gives `s i`, at `i`'s own value re-indexed by the size equation.
+
+This is the missing half of the round-trip the docstring above `bytesToArray` called
+"`rfl` by `funext`/`Fin.ext`" — **it is not**. The two bridge lemmas are
+`Array.getElem_toList` (the `Array` → `List` read bridge) and then `List.getElem_ofFn`.
+(`Array.getElem_mk` and `Array.getElem_eq_getElem_toList` do not exist in 4.35.0.)
+
+The bound is written `Nat.lt_of_lt_of_eq i.isLt (bytesToArray_size s)`, **not**
+`by simpa …`: a `simpa` on a dependent `Fin` bound reaches classical logic through the
+`Array`/`List` sizing simp set and makes the whole theorem depend on
+`Classical.choice`, with no compiler error. `[propext, Quot.sound]`-only. -/
+theorem arrayToBytes_bytesToArray_apply {n : Nat} (s : Bytes n)
+    (i : Fin (bytesToArray s).size) :
+    arrayToBytes (bytesToArray s) i
+      = s ⟨i.val, Nat.lt_of_lt_of_eq i.isLt (bytesToArray_size s)⟩ := by
+  have hiL : i.val < (List.ofFn s).length := by
+    rw [List.length_ofFn]; exact Nat.lt_of_lt_of_eq i.isLt (bytesToArray_size s)
+  show (Array.mk (List.ofFn s))[i.val] = s _
+  rw [← Array.getElem_toList]
+  exact List.getElem_ofFn (f := s) (i := i.val) (h := hiL)
+
+/-- **The readback round-trips**, in the `cast` form a caller can rewrite with:
+`arrayToBytes (bytesToArray s)` is `s` transported along the size equation.
+`[propext, Quot.sound]`-only. -/
+theorem arrayToBytes_bytesToArray {n : Nat} (s : Bytes n) :
+    arrayToBytes (bytesToArray s)
+      = cast (congrArg Bytes (bytesToArray_size s).symm) s := by
+  funext i
+  rw [cast_bytes_val_symm (e := (bytesToArray_size s)) (f := s) (i := i)]
+  exact arrayToBytes_bytesToArray_apply s i
+
+/-- Local helper: transporting the *size argument and the buffer together* along one
+length equation leaves `decodeFull` unchanged. The final step of
+`decodeWholeBytes_spec` is a rewrite **under a dependent argument**
+(`decodeFull h (size) (cast …)` → `decodeFull h n s`), which `rw`, `subst` and
+`generalize` all refuse with "Dependent elimination failed" or an unsolved bound.
+Carrying `hk : k = n` and `ha : a = cast …` as *hypotheses* gives `subst` the
+orientation it needs. `private`, so it is not public surface. -/
+private theorem decodeWholeBytes_spec_aux {α : Type} (d : Codec α) (h : ConsumesByte d)
+    {n : Nat} (s : Bytes n) (k : Nat) (hk : k = n)
+    (a : Bytes k) (ha : a = cast (congrArg Bytes hk.symm) s) :
+    d.decodeFull h k a = d.decodeFull h n s := by
+  subst hk; subst ha; rfl
+
+/-- **`decodeWholeBytes`'s law, at the caller's own index.**
+
+`decodeWholeBytes_eq` states the specification only up to `(bytesToArray s).size` and
+the readback `arrayToBytes (bytesToArray s)` — *not* the form a caller who started from
+`Bytes n` would state, which is this one: `decodeWholeBytes d h s = decodeFull d h n s`.
+The two bridge lemmas above close the gap. `[propext, Quot.sound]`-only. -/
+theorem decodeWholeBytes_spec {α : Type} (d : Codec α) (h : ConsumesByte d) {n : Nat}
+    (s : Bytes n) : decodeWholeBytes d h s = decodeFull d h n s := by
+  unfold decodeWholeBytes
+  rw [decodeWhole_eq]
+  exact decodeWholeBytes_spec_aux d h s _ (bytesToArray_size s) _ (arrayToBytes_bytesToArray s)
 
 /-- **The packed carrier is not a second spec.** The wired surface's input size is
 the caller's index: `(bytesToArray s).size = n`, so `decodeWholeBytes`'s specification
