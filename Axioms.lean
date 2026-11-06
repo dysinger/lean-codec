@@ -88,11 +88,11 @@ failure mode. **It is not soundness.**
 
 ## Current state
 
-**398** public theorems are covered, by a partition with no third route:
+**400** public theorems are covered, by a partition with no third route:
 
 | side | count | what it is |
 | --- | --- | --- |
-| gated (`gatedNames`) | **325** | footprint pinned by `#print axioms` |
+| gated (`gatedNames`) | **327** | footprint pinned by `#print axioms` |
 | allowlisted (`generatedAuxAllowlist`) | **73** | not a law; reason recorded in place |
 | un-gated and unlisted | **0** | a build failure, by construction |
 
@@ -103,12 +103,12 @@ Gated footprint distribution — **generated** from the same `collectAxioms` res
 
 | footprint | count |
 | --- | --- |
-| `[propext, Quot.sound]` | 209 |
-| `[propext]` | 78 |
+| `[propext, Quot.sound]` | 210 |
+| `[propext]` | 79 |
 | `[Quot.sound]` | 4 |
 | axiom-free | 34 |
 | anything else | 0 |
-| **total** | **325** |
+| **total** | **327** |
 
 `[propext, Classical.choice, Quot.sound]` rows: **0** — every gated law is
 inside the discipline.
@@ -118,8 +118,8 @@ Definitions, by the third check:
 
 | side | count | what it is |
 | --- | --- | --- |
-| public `def`s (after dropping compiler machinery) | **139** | the universe |
-| mentioned by a gated theorem's type | **110** | has a stated law, by the proxy |
+| public `def`s (after dropping compiler machinery) | **140** | the universe |
+| mentioned by a gated theorem's type | **111** | has a stated law, by the proxy |
 | `definitionSurfaceAllowlist` | **29** | no law; reason recorded in place |
 | silent | **0** | a build failure, by construction |
 
@@ -724,7 +724,9 @@ def gatedNames : List Lean.Name := [
   ,`Codec.huniq_not_derivable
   ,`Codec.isoConsumesByte
   ,`Codec.lengthConst_byte
+  ,`Codec.lengthDetWitness_unamb
   ,`Codec.lengthDet_byte
+  ,`Codec.lengthDet_not_implied_by_unamb
   ,`Codec.lengthDet_of_lengthConst
   ,`Codec.length_filterMap_le
   ,`Codec.length_packedCands_le
@@ -974,11 +976,11 @@ run_cmd do
   let gated := gatedNames.length
   let allow := CodecAxioms.generatedAuxAllowlist.size
   -- Lockstep with "Current state" above.
-  let expectedPub := 398
-  let expectedGated := 325
+  let expectedPub := 400
+  let expectedGated := 327
   let expectedAllow := 73
-  let expectedDefs := 139
-  let expectedMentioned := 110
+  let expectedDefs := 140
+  let expectedMentioned := 111
   let expectedDefAllow := 29
   let mut bad : Array String := #[]
   if pub.size != expectedPub then
@@ -1667,9 +1669,15 @@ why it was fixed instead of documented.
 /-- info: 'Codec.lengthConst_byte' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Codec.lengthConst_byte
+/-- info: 'Codec.lengthDetWitness_unamb' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Codec.lengthDetWitness_unamb
 /-- info: 'Codec.lengthDet_byte' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Codec.lengthDet_byte
+/-- info: 'Codec.lengthDet_not_implied_by_unamb' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.lengthDet_not_implied_by_unamb
 /-- info: 'Codec.lengthDet_of_lengthConst' does not depend on any axioms -/
 #guard_msgs in
 #print axioms Codec.lengthDet_of_lengthConst
