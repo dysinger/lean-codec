@@ -108,7 +108,10 @@ def bdrop (m : Nat) {n : Nat} (s : Bytes n) : Bytes (n - m) :=
     omega⟩
 
 /-- Take the first `m` bytes of a byte string: `btake m s i = s i` for `i < m`.
-The result has length `min m n`. -/
+The result has length `min m n`. Its laws are `btake_apply` (the index-reading
+statement this docstring advertises), `btake_agree`, `btake_zero` and
+`btake_btake`; until `codec-audit-round-three` §1.6 it had none, which is why §1.8
+adds a definition-coverage check to the axiom gate. -/
 def btake (m : Nat) {n : Nat} (s : Bytes n) : Bytes (min m n) :=
   fun i => s ⟨i.val, by
     have hlt : i.val < min m n := i.isLt
@@ -141,10 +144,25 @@ def Suffix.id (n : Nat) (s : Bytes n) : Suffix n :=
 def Suffix.drop {n : Nat} (m : Nat) (s : Bytes n) : Suffix n :=
   { remaining := n - m, hle := Nat.sub_le n m, bytes := bdrop m s }
 
+/-- The identity suffix consumes nothing. (`Suffix.consumed` had no law of its own
+until `codec-audit-round-three` §1.6; it was cited only inside other proofs. The
+report that it had no callers was **wrong** — `Codec/Decode.lean` and
+`Codec/DecodeOne.lean` use it throughout, so the entry is a law, not a deletion.) -/
+theorem Suffix.consumed_id {n : Nat} (s : Bytes n) : (Suffix.id n s).consumed = 0 := by
+  unfold Suffix.consumed Suffix.id
+  exact Nat.sub_self n
+
 /-- Compose two successive suffixes: the remaining buffer of `r` (a suffix of `t`)
 is a suffix of `n`. Threads the `≤` witness transitively. -/
 def Suffix.trans {n : Nat} (t : Suffix n) (r : Suffix t.remaining) : Suffix n :=
   { remaining := r.remaining, hle := Nat.le_trans r.hle t.hle, bytes := r.bytes }
+
+/-- Composed suffixes: consumed counts compose the same way `remaining` does, i.e.
+`(t.trans r).consumed` is the original `n` minus `r.remaining`. -/
+theorem Suffix.consumed_trans {n : Nat} (t : Suffix n) (r : Suffix t.remaining) :
+    (t.trans r).consumed = n - r.remaining := by
+  unfold Suffix.consumed Suffix.trans
+  rfl
 
 /-- The fully-consumed suffix: zero bytes remain. This is the "empty remaining
 buffer" a roundtrip names (`Bytes 0`, the length-indexed spelling of `[]`). -/
@@ -152,8 +170,7 @@ def Suffix.empty (n : Nat) : Suffix n :=
   { remaining := 0, hle := Nat.zero_le n, bytes := emptyBytes }
 
 /-- A suffix with zero remaining bytes is exactly the empty suffix. -/
-theorem Suffix.eq_empty_of_remaining_zero {n : Nat} (t : Suffix n) (h : t.remaining = 0) :
-    t = Suffix.empty n := by
+theorem Suffix.eq_empty_of_remaining_zero {n : Nat} (t : Suffix n) (h : t.remaining = 0) :    t = Suffix.empty n := by
   cases t with
   | mk remaining hle bytes =>
       simp only at h
@@ -602,6 +619,45 @@ theorem bdrop_bdrop {n : Nat} (s : Bytes n) (k m : Nat)
   apply Fin.ext
   show i.val + m + k = i.val + (k + m)
   omega
+
+/-! ## `btake`: the prefix counterpart of `bdrop`
+
+`btake m s` is the first `min m n` bytes of `s`. It had a definition and a docstring
+and **no theorem at all** until `codec-audit-round-three` §1.6 — it was in neither
+gated side of the axiom gate, because the gate's universe is theorems. These four
+laws give it the read/structural characterisation its docstring advertises; §1.8's
+definition-coverage check exists so the next such `def` is a build failure rather
+than a silent gap. All four are `[propext, Quot.sound]`-only. -/
+
+/-- **The law `btake`'s docstring advertises**: taking `m` bytes and reading index
+`i < m` returns `s i`. -/
+theorem btake_apply {n m : Nat} (s : Bytes n) (i : Fin m) (hi : i.val < n) :
+    btake m s ⟨i.val, by have := i.isLt; omega⟩ = s ⟨i.val, hi⟩ :=
+  rfl
+
+/-- Taking zero bytes yields the empty string. -/
+theorem btake_zero {n : Nat} (s : Bytes n) : btake 0 s = emptyBytes := by
+  apply Bytes.ext
+  intro i
+  exact absurd i.isLt (by have := i.isLt; simp [Nat.min_eq_left] at this)
+
+/-- `btake m s` agrees with `s` on its whole domain (`min m n` bytes) — the
+unrestricted-index form of `btake_apply`. -/
+theorem btake_agree {n m : Nat} (s : Bytes n) (i : Fin (min m n)) :
+    btake m s i = s ⟨i.val, Nat.lt_of_lt_of_le i.isLt (Nat.min_le_right m n)⟩ :=
+  rfl
+
+/-- `min (min m k) n = min m (min k n)` — the length rearrangement `btake_btake`
+names. `omega` cannot reach `Classical.choice` here (linear `Nat` arithmetic); the
+`#print axioms` pins in `Axioms.lean` confirm it for the laws that cite this. -/
+theorem min_rotate (n m k : Nat) : min (min m k) n = min m (min k n) := by omega
+
+/-- **`btake` composes.** Taking `k` then `m` reads the same byte as taking
+`min m k`, stated pointwise so no length cast is needed. -/
+theorem btake_btake {n m k : Nat} (s : Bytes n) (i : Fin (min (min m k) n)) :
+    btake m (btake k s) ⟨i.val, by have := i.isLt; omega⟩ =
+      btake (min m k) s i :=
+  rfl
 
 /-- Dropping the first `m` bytes of a `splice hm s₁ s₂` recovers the suffix `s₂`. This
 is the ``concat``/``splice`` counterpart of the old ``drop_append`` fact, used by
