@@ -25,8 +25,10 @@ Guidance for AI coding agents working in this repository.
 > **Next task: `tasks.md` §1.5** — the `sepBy`/`takeWhile` decode→encode halves
 > (`encodeSepBy_of_decode`, `encodeSepBy_ne_none` and the `takeWhile` twins),
 > mirroring the already-proved `encodeChainl1_of_decode` / `encodeChainl1_ne_none`.
-> After §1.5: §1.6, §1.7, §1.8, §1.9, §1.10, then §2. **Do not start §2 before
-> §1.10 is green** — §2's prose claims describe laws that must exist first.
+> Then §1.6 → §1.7 → §1.8 → §1.9 → §1.10, then the **remaining** §2 items (2.1.4,
+> 2.2.4, 2.3.5, 2.4.3, 2.4.4, 2.4.6, 2.4.7, 2.5.x). §2 is partly done — see
+> the ledger, not this sentence — and what is left of it is _scheduled_ after §1.10
+> because it describes laws that must exist first.
 >
 > **Re-derive the state; do not believe a number in prose.** Three commands:
 >
@@ -36,17 +38,20 @@ Guidance for AI coding agents working in this repository.
 > grep -n 'theorem encodeChainl1_\|theorem encodeSepBy_\|theorem encodeTakeWhile_' Codec/Combinators.lean
 > ```
 >
-> Expected today: **16 completed / 56 total**, and the grep shows `encodeSepBy_rel`
+> Expected today: **29 completed / 56 total**, and the grep shows `encodeSepBy_rel`
 > and `encodeTakeWhile_rel` (the `_rel` half only — **this is the gap §1.5 closes**)
 > next to `encodeChainl1_rel` / `_ne_none` / `_of_decode` (the model to copy). If the
 > grep already shows `encodeSepBy_of_decode`, §1.5 is part-done: read the ledger, not
 > this file.
 >
 > **`[x]` means "in the tree AND evidence recorded in the ledger" — never tick on
-> intent.** §2 is the one place this bites: several §2 tasks are _done in code_ but
-> deliberately left `[ ]` because they are scheduled after §1. Read the ledger's
-> "evidence / what remains" column before redoing anything in §2, or you will
-> re-implement `warningAsError` in the template for the third time.
+> intent, and never leave a finished task unticked.** A checkbox reports a fact; the
+> schedule is a separate sentence. So §2 tasks that the round-four audit closed are
+> ticked **even though §1.5 is unstarted** — leaving them `[ ]` made the ledger
+> report 16/56 while 28 were done. Before starting anything in §2, read its "evidence
+> / what remains" cell: some are already implemented (template `warningAsError`,
+> `master`, the arity renames, the `enrichHex`-style prose fixes) and redoing one is
+> the concrete cost of this confusion.
 >
 > **Three items are open in code, not as task numbers** — do not "discover" them as
 > bugs: basen's three `native_decide` bench uses (annotated with the route out,

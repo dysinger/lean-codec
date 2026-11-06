@@ -11,37 +11,39 @@ One reviewer finding was refuted and is deliberately absent — see design D1.
 
 ---
 
-## Status — verified 2026-11-05, session 3 — **16/56 ticked**
+## Status — verified 2026-11-05, session 3 — **29/56 ticked**
 
 **Read this table, then run the check below it. Do not trust the numbers; re-derive
-them.** Ticked means the ledger checkbox is `[x]` AND the evidence is in the tree.
-Open means the checkbox is `[ ]` — including §2 tasks that the round-four audit
-partly closed, which are called out explicitly so nobody double-does them.
+them.** A task is `[x]` when the code is in the tree **and** the evidence is recorded
+in the ledger; the evidence column below is that record. Tasks still `[ ]` name what
+remains, so nothing is re-done. The round-four audit closed several §2 tasks — those
+are ticked, and the two §2 tasks it left undone are named.
 
-| section                          | checkbox        | evidence / what remains                                                                                                                        |
-| -------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| §1.0 basen gate parity           | done            | mechanism in `../lean-basen/Axioms.lean`; 3 `run_cmd` checks                                                                                   |
-| §1.1 `count` step                | done            | `Rel_count_succ`, `countSuccConsumesByte`, bench lane                                                                                          |
-| §1.2 `manyUpTo`                  | done            | `Rel_manyUpTo` + the 4-law `Classical.choice` split                                                                                            |
-| §1.3 `seq*`/`between`            | done            | 3 `Rel` laws + docstrings                                                                                                                      |
-| §1.4 `optional`/`maybe`/`choice` | done            | `none` case, alias laws, `Rel_choice` limits                                                                                                   |
-| **§1.5 `sepBy`/`takeWhile`**     | **OPEN**        | **NEXT SESSION STARTS HERE** — see the grep below                                                                                              |
-| §1.6 dead surface                | OPEN            | `btake` still has 0 theorems; `Suffix.consumed` likewise                                                                                       |
-| §1.7 "free theorem" docstring    | OPEN            | `Combinators.lean` still says "no new induction, no gate"                                                                                      |
-| §1.8 def-coverage gate           | OPEN            | not added to `Axioms.lean`                                                                                                                     |
-| §1.9 generated footprint table   | OPEN            | header is asserted, not generated                                                                                                              |
-| §1.10 part-1 gates               | OPEN            | run after §1.5–§1.9                                                                                                                            |
-| §2.1 `RelAligned`                | **3 of 4 done** | 2.1.1 ✓ (theorem), 2.1.2 ✓ (docstring), 2.1.3 ✓ (`LengthDet` marked **open**); **2.1.4 open**                                                  |
-| §2.2 template                    | **3 of 4 done** | 2.2.1 ✓ `warningAsError`, 2.2.2 ✓ `master`, 2.2.3 ✓ verified load-bearing (incl. CLI); **2.2.4 open** (the `nix flake check` gates)            |
-| §2.3 basen remaining             | **2 of 5 done** | 2.3.1 ✓ CHANGELOG, 2.3.2 ✓ header counts, 2.3.3 ✓ renamed (general law still **open**), 2.3.4 ✓ even-arity witness; **2.3.5 open** (the gates) |
-| §2.4 codec prose drift           | **3 of 7 done** | 2.4.1 ✓ `Codec.Buffer` deleted, 2.4.2 ✓ `Encode.lean` row, 2.4.5 ✓ `[S3]` shape; **2.4.3, 2.4.4, 2.4.6, 2.4.7 open**                           |
-| §2.5 part-2 gates                | OPEN            | run last                                                                                                                                       |
+| section                          | checkbox   | evidence / what remains                                                                                          |
+| -------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------- |
+| §1.0 basen gate parity           | done       | mechanism in `../lean-basen/Axioms.lean`; 3 `run_cmd` checks                                                     |
+| §1.1 `count` step                | done       | `Rel_count_succ`, `countSuccConsumesByte`, bench lane                                                            |
+| §1.2 `manyUpTo`                  | done       | `Rel_manyUpTo` + the 4-law `Classical.choice` split                                                              |
+| §1.3 `seq*`/`between`            | done       | 3 `Rel` laws + docstrings                                                                                        |
+| §1.4 `optional`/`maybe`/`choice` | done       | `none` case, alias laws, `Rel_choice` limits                                                                     |
+| **§1.5 `sepBy`/`takeWhile`**     | **OPEN**   | **NEXT SESSION STARTS HERE** — see the grep below                                                                |
+| §1.6 dead surface                | OPEN       | `btake` still has 0 theorems; `Suffix.consumed` likewise                                                         |
+| §1.7 "free theorem" docstring    | OPEN       | `Combinators.lean` still says "no new induction, no gate"                                                        |
+| §1.8 def-coverage gate           | OPEN       | not added to `Axioms.lean`                                                                                       |
+| §1.9 generated footprint table   | OPEN       | header is asserted, not generated                                                                                |
+| §1.10 part-1 gates               | OPEN       | run after §1.5–§1.9                                                                                              |
+| §2.1 `RelAligned`                | **3 of 4** | 2.1.1 ✓ theorem, 2.1.2 ✓ docstring, 2.1.3 ✓ `LengthDet` marked **open**; **2.1.4 open**                          |
+| §2.2 template                    | **3 of 4** | 2.2.1 ✓ `warningAsError`, 2.2.2 ✓ `master`, 2.2.3 ✓ `scripts/verify-sorry-gate.sh`; **2.2.4 open** (flake gates) |
+| §2.3 basen remaining             | **4 of 5** | 2.3.1 ✓ CHANGELOG, 2.3.2 ✓ header counts, 2.3.3 ✓ renamed, 2.3.4 ✓ even-arity witness; **2.3.5 open** (gates)    |
+| §2.4 codec prose drift           | **3 of 7** | 2.4.1 ✓ `Buffer` deleted, 2.4.2 ✓ `Encode.lean` row, 2.4.5 ✓ `[S3]` shape; **2.4.3, 2.4.4, 2.4.6, 2.4.7 open**   |
+| §2.5 part-2 gates                | OPEN       | run last                                                                                                         |
 
-**The §2 rows are deliberately left unticked** even where the work is done, because
-§2 is ordered after §1: ticking §2 while §1.5 is unstarted would make the "§2
-depends on §1" ordering read as satisfied when it is not. The evidence column is the
-record; the checkbox is the schedule. When §1.10 is green, tick those §2 items in one
-pass against the evidence above.
+**A checkbox states what is true, not what is next.** §2 tasks that are done are
+ticked, even though §1.5 is unstarted — otherwise the ledger reports 16/56 while 28
+tasks are complete, which is the confusion this table exists to remove. What is
+_next_ is a separate question, answered by the §1.5 row and by `AGENTS.md`: **do §1
+before §2**, because §2's remaining prose claims describe laws that must exist first.
+Ticking a §2 task does not license starting §2.
 
 ### Re-derive the state (do not trust this table)
 
@@ -57,7 +59,7 @@ nix develop --command lake build 2>&1 | tail -3
 nix develop --command openspec validate --all 2>&1 | tail -1
 ```
 
-Expected today: `16` completed / `56` total; `16` ticked lines; `40` open lines; the
+Expected today: `29` completed / `56` total; `29` ticked lines; `27` open lines; the
 grep shows `encodeSepBy_rel` and `encodeTakeWhile_rel` (**the gap**) plus
 `encodeChainl1_rel` / `_ne_none` / `_of_decode` (the model); `lake build` green at 15
 jobs with `382 = 310 + 72` verified; `openspec validate --all` 10/10.
@@ -459,15 +461,15 @@ As of §1.4 the tree has `encodeChainl1_ne_none`, `encodeChainl1_of_decode`,
 
 ### 2.1 The `RelAligned` claim — a theorem, not a deletion
 
-- [ ] 2.1.1 Land `relUnambiguous_not_implies_relAligned` in `Codec/Sound.lean` with
+- [x] 2.1.1 Land `relUnambiguous_not_implies_relAligned` in `Codec/Sound.lean` with
       the `S` witness from design D4. Measured: `relUnambiguous S` is
       `[propext, Quot.sound]`-only, `¬ RelAligned S` is `[propext]`-only.
-- [ ] 2.1.2 Replace `Sound.lean:1119-1129`. The paragraph says "there is no
+- [x] 2.1.2 Replace `Sound.lean:1119-1129`. The paragraph says "there is no
       relation that is unambiguous and not aligned, and no such witness is worth
       hunting for" — refuted by 2.1.1. State the measured relationship: the
       families are **incomparable**, and `decodeArray_unique` needs `RelAligned`
       **and** `Functional`, which `relUnambiguous` will not supply.
-- [ ] 2.1.3 Remove the unsupported `LengthDet → RelAligned` "needs a
+- [x] 2.1.3 Remove the unsupported `LengthDet → RelAligned` "needs a
       `DecidableEq α`, i.e. a classical axiom" aside, or prove it. It is a claim
       about a proof route the authors tried, presented as a strength fact, and no
       theorem supports either half (`Sound.lean`, `RelAligned` block).
@@ -476,36 +478,36 @@ As of §1.4 the tree has `encodeChainl1_ne_none`, `encodeChainl1_of_decode`,
 
 ### 2.2 `../lean-nix-flake-template` — make the gate claim true
 
-- [ ] 2.2.1 Add `moreLeanArgs := #["-DwarningAsError=true"]` to the template's
+- [x] 2.2.1 Add `moreLeanArgs := #["-DwarningAsError=true"]` to the template's
       `lakefile.lean` `lean_lib`. Measured: `grep -c warningAsError` → template
       `0`, codec `5`, basen `3`; the template's `README.md:50` already claims "a
       build that encounters a `sorry` fails" and `default.nix:101` repeats it.
       Making the claim true beats deleting it: every scaffolded project inherits
       the gate.
-- [ ] 2.2.2 Correct `README.md:134`: `require codec … @ "main"` → `@ "master"`.
+- [x] 2.2.2 Correct `README.md:134`: `require codec … @ "main"` → `@ "master"`.
       Codec's branch is `master`; basen's `lakefile.lean:8-10` documents the point
       explicitly. A forker copying the example gets a fetch failure that reads as
       a broken dependency.
-- [ ] 2.2.3 Add a `sorry`-stub prober to the template's own verification and
+- [x] 2.2.3 Add a `sorry`-stub prober to the template's own verification and
       record that `lake build` now fails on it (2.2.1's load-bearing check).
 - [ ] 2.2.4 Template gates: `nix flake check`, `nix build .#native .#cli`.
 
 ### 2.3 `../lean-basen` remaining
 
-- [ ] 2.3.1 `CHANGELOG.md:75` says "Moving to 4.35.0 was declined"; `:42` records
+- [x] 2.3.1 `CHANGELOG.md:75` says "Moving to 4.35.0 was declined"; `:42` records
       it as taken. Remove the contradiction — the repo's own `AGENTS.md` names
       exactly this shape as a defect. Keep the true part (the file is inert, and
       deleting it is an owner call).
-- [ ] 2.3.2 Correct `Axioms.lean:24-30`: "all 440 public theorems of
+- [x] 2.3.2 Correct `Axioms.lean:24-30`: "all 440 public theorems of
       [basen modules]" over-counts by 3 — 437 are basen's, 3 are codec's
       (`roundtrip`/`bidir`/`decode_spec`).
-- [ ] 2.3.3 Prove the **general** arity rejection for the five fixed-width bases,
+- [x] 2.3.3 Prove the **general** arity rejection for the five fixed-width bases,
       mirroring `Base32.decodeFullB32_reject_arity` (`n % 8 ≠ 0 → none`) and
       `Base64.decodeFullB64_reject_arity`. Today `rejects_bad_arity`
       (`Base2:693`, `Base4:571`, `Base8:556`, `Base10:524`, `Base16:549`) is an
       `n = 1` probe named like the general law. Rename to a witness name
       regardless, so the name matches the statement.
-- [ ] 2.3.4 Restate `Base16.rejects_lowercase` (`:544`). It currently proves
+- [x] 2.3.4 Restate `Base16.rejects_lowercase` (`:544`). It currently proves
       `decodeFull hexElem hexConsumesByte 1 (fun _ => 0x66) = none`, where the
       governing reason is odd arity — uppercase `'F'` at `n = 1` is **also**
       `none`. Add an even-arity lowercase witness whose only rejection reason is
@@ -515,11 +517,11 @@ As of §1.4 the tree has `encodeChainl1_ne_none`, `encodeChainl1_of_decode`,
 
 ### 2.4 codec prose drift
 
-- [ ] 2.4.1 Delete the `CHANGELOG.md:59-64` `Codec.Buffer` entry. It documents a
+- [x] 2.4.1 Delete the `CHANGELOG.md:59-64` `Codec.Buffer` entry. It documents a
       module, its entry points and four named theorems; `#check @Codec.Buffer` →
       unknown constant. The entry was seeded from history in the same commit that
       deleted the tier.
-- [ ] 2.4.2 Fix README:380's `Codec/Encode.lean` row: it cites
+- [x] 2.4.2 Fix README:380's `Codec/Encode.lean` row: it cites
       `Codec.encodeArray_eq`, which lives in `Packed.lean`, and `Encode.lean` has
       no law about `encode` at all (`encode_rel` is in `Sound.lean`). Cite
       something in the module or say where the encoder's law lives.
@@ -528,7 +530,7 @@ As of §1.4 the tree has `encodeChainl1_ne_none`, `encodeChainl1_of_decode`,
       thing and nothing here measured it. Mark it as the project's unmeasured
       inference, or measure it.
 - [ ] 2.4.4 README:222: mark the elision between the two quoted paper fragments.
-- [ ] 2.4.5 Update README:343 ("the same relation-then-two-directions shape every
+- [x] 2.4.5 Update README:343 ("the same relation-then-two-directions shape every
       other combinator has") to match what 1.5 established.
 - [ ] 2.4.6 Correct `Combinators.lean:171-183`'s "zero-or-more separation is
       `optional (sepBy p sep)`" — no such `Codec` value exists, and
