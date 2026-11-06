@@ -223,8 +223,13 @@ without which the normalising decoder can fail on its own encoder's output.
 **[D5] `|` needs no prefix-disjointness condition — a _corollary of `[D3]`_, not an
 independent departure.** The foil is concrete and the paper names it: Parsec "provides
 a `|` combinator, but its semantics implements predictive parsing with a look ahead of
-1, whereas our implementation supports unlimited backtracking" (§4.4), so "with
-Parsec, `p | q` may fail, even if `q` would succeed". Designs like that require `|`'s
+1, whereas our implementation supports unlimited backtracking" (§4.4) … "with
+Parsec, `p | q` may fail, even if `q` would succeed". _(The ellipsis marks an elision:
+the paper continues between the two quoted fragments — "This means that … whereas the
+syntax description `p | q` should not be empty if `q` is nonempty" — which is a
+restatement of the same point in the paper's own framework rather than a third claim.
+An earlier revision spliced the two quotes with no marker, which made them read as
+adjacent text.)_ Designs like that require `|`'s
 branches to be _prefix-disjoint_ so at most one can match. `codec` requires none —
 and the checkable reason is that **`Codec.alt` carries no premise at all**: `[D3]`'s
 backtracking union tries the branches independently and concatenates their results,
@@ -479,8 +484,13 @@ decoder (`decodeRepeat`), and an encoder — rather than a single `many` value.
 `relChainr1`/`decodeChainr1`/`encodeChainr1` in the same §6.1 style; the paper
 defines none of these, so they are `codec`'s own faithful additions, not a
 reproduction. **`sepBy` here is one-or-more** (`relSepBy` is `False` on the empty
-list — it is `sepBy1`), as is `chainl1`; zero-or-more is `optional` of the
-one-or-more form. None of these exist as bare `Codec`-building symbols. This is the
+list — it is `sepBy1`), as is `chainl1`, and there is **no** zero-or-more triple: an
+earlier revision said "zero-or-more is `optional` of the one-or-more form", which is
+false — `optional` maps `α ↦ Option α`, so it would give `Option (List α)`, not a list
+of zero or more separated elements, and there is no `sepBy` `Codec` value to apply it
+to in the first place. Zero-or-more is the empty case of the _relation_ (the empty
+list), with no derived triple. None of these exist as bare `Codec`-building symbols.
+This is the
 same semantic content for `many`/`chainl1`, but it is a _representation_ difference
 (typeclass embedding vs. inductive value), not merely a cosmetic naming change.
 
@@ -602,8 +612,20 @@ admitted cost (§4.4): naive backtracking is exponential in the worst case **and
 applicability to large inputs". The space half does not arise here in the same form:
 `codec`'s `decode` returns a `Suffix n` carrying a length witness rather than a fresh
 string, so retaining a backtracking alternative retains an index and a shared `Bytes
-n`, not a copied suffix — the leak's _growth_ is in the result list, and the
-exponential bound is what limits applicability either way.
+n`, not a copied suffix. The exponential bound is what limits applicability either
+way.
+
+**Where the leak's growth actually is: unmeasured.** An earlier revision of this
+paragraph continued "… — the leak's _growth_ is in the result list", stated inside a
+passage introduced as the paper's own cost. The paper attributes the leak to no such
+thing (it names only "unlimited backtracking"), and nothing in this repository has
+measured it — no bench lane reports result-list allocation, and the memory figures
+that _do_ exist are about `packedCands` and the array read (see
+[Performance](#performance-and-what-it-costs)), not about `decode`'s
+`List (α × Suffix n)`. It is therefore recorded here as the project's **unmeasured
+inference**, not as a measurement and not as the paper's claim. Stated as an
+inference it is at least a plausible one — `decode` genuinely materializes a list —
+but a plausible inference is what this section exists to stop presenting as fact.
 
 ### `[D4]` lossless capture — why we cannot follow the paper's destructive constructor
 
