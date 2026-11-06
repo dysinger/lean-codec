@@ -2,10 +2,18 @@
 
 Guidance for AI coding agents working in this repository.
 
-> ## START HERE: there is no open change
+> ## START HERE: `openspec/changes/codec-audit-round-four/tasks.md`
 >
-> **All three audit rounds are archived.** `codec-audit-round-three` closed 56/56 and
-> archived 2026-11-06 as
+> **`codec-audit-round-four` is the open change** (authored 2026-11-06 from a third
+> adversarial review round; 37 numbered findings, `R5-01`…`R5-37`). Its `tasks.md` is
+> the ledger and the only direction — work top-down from §1.
+>
+> **This box names the change, never a task.** That is deliberate: it has gone stale
+> twice already (it said "§1.5 next" long after §1.5–§1.10 landed, and then said "no
+> open change" while `round-four` was open). If the change named here is not what
+> `openspec list` reports, **believe the command**.
+>
+> `codec-audit-round-three` closed 56/56 and archived 2026-11-06 as
 > `openspec/changes/archive/2026-11-06-codec-audit-round-three/` (7 requirements
 > added, 6 modified, 0 removed; `codec/law-coverage` is new with its `## Purpose`
 > carried across, and round two's three partition scenarios survived — verified
@@ -19,10 +27,10 @@ Guidance for AI coding agents working in this repository.
 > ```
 >
 > If a change is open, its `tasks.md` is the ledger and the only direction — open it
-> and work top-down. If none is open (today's state) **there is no queued work**, and
-> the next piece of work is an _owner decision_: author a new change under
-> `openspec/changes/` (the archived ledgers are models for _shape_, never a template
-> to resume). Do not invent one from this file.
+> and work top-down. If none is open **there is no queued work**, and the next piece of
+> work is an _owner decision_: author a new change under `openspec/changes/` (the
+> archived ledgers are models for _shape_, never a template to resume). Do not invent
+> one from this file.
 >
 > Do not work from this file; it holds the **stable** part — how to work here, what
 > the gates are, and the traps that have cost sessions. Status is computed from
@@ -42,8 +50,9 @@ Guidance for AI coding agents working in this repository.
 > ```
 >
 > `lake build` prints **four** gate lines — footprint, partition, definition
-> coverage, header numbers — and `openspec validate --all` is 10/10. Read those
-> numbers off the run, not off this page.
+> coverage, header numbers — and `openspec validate --all` is 11/11 (10 live
+> capabilities + the open change's delta). Read those numbers off the run, not off
+> this page.
 >
 > **`[x]` means "in the tree AND evidence recorded in the ledger" — never tick on
 > intent, and never leave a finished task unticked.** A checkbox reports a fact; the
@@ -58,7 +67,8 @@ Guidance for AI coding agents working in this repository.
 > bugs: basen's three `native_decide` bench uses (annotated with the route out,
 > which needs a `b32TailApply_b32MZTA_chars`-shaped lemma that does not exist), the
 > general arity rejection for the fixed-width bases (needs a `decodeFull`-length
-> lemma), and `LengthDet → RelAligned` (neither proved nor refuted).
+> lemma). **`LengthDet → RelAligned` is no longer open**: it is refuted, and
+> `round-four` §1 lands the refutation. Do not re-record it as open.
 >
 > **Never cite a line number in this file or the ledger.** Both carried stale
 > `:693`/`:646` figures for the same laws within a single session; cite the grep.
@@ -78,14 +88,20 @@ Guidance for AI coding agents working in this repository.
 
 | Question                       | Authoritative file                                                               |
 | ------------------------------ | -------------------------------------------------------------------------------- |
-| **What is the task right now** | nothing queued — `openspec list --json` returns no open change                   |
+| **What is the task right now** | `openspec/changes/codec-audit-round-four/tasks.md` (§1 first)                    |
 | Open changes + task counts     | `nix develop --command openspec list --json`                                     |
 | Are the spec deltas sound      | `nix develop --command openspec validate --all`                                  |
 | Archived history               | `openspec/changes/archive/<date>-<name>/tasks.md` (e.g. `2026-11-05-lean-basen`) |
 | Lessons (not direction)        | `openspec/lean-notes.md`                                                         |
 
-**No change is open; rounds two and three are archived history.**
+**One change is open (`codec-audit-round-four`); rounds two and three are archived
+history.**
 
+- `codec-audit-round-four` — **in-progress**, authored 2026-11-06 from a third
+  adversarial review round (three read-only workers; reports `/tmp/r5-*.md`, merged
+  ledger `/tmp/r5-SYNTHESIS.md`). 37 findings: 6 MUST / 14 SHOULD / 17 NITPICK.
+  **Read its `tasks.md` — not this file, not this bullet.** Every proof it needs is
+  inlined in its Appendix A and verified to compile, so no `/tmp` dependency remains.
 - `codec-audit-round-three` — **archived** 2026-11-06 as
   `openspec/changes/archive/2026-11-06-codec-audit-round-three/` (56/56 tasks). It
   came from the third audit (three read-only reviewers; reports in `/tmp/r3-*.md`):
