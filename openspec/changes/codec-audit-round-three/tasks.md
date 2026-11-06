@@ -620,8 +620,28 @@ design.
       `DecidableEq α`, i.e. a classical axiom" aside, or prove it. It is a claim
       about a proof route the authors tried, presented as a strength fact, and no
       theorem supports either half (`Sound.lean`, `RelAligned` block).
-- [ ] 2.1.4 Re-read the whole `RelAligned`/`LengthDet`/`LengthConst` block for
+- [x] 2.1.4 Re-read the whole `RelAligned`/`LengthDet`/`LengthConst` block for
       other prose-only ordering claims, and apply 2.1.2's rule to each.
+
+      **Two found; both fixed, one by theorem and one by withdrawal.**
+
+      1. `LengthDet`'s docstring asserted it "is *not* implied by" unambiguity, with
+         nothing behind it. Now proved: `lengthDetWitness` (`tt` at length 1 **and**
+         length 2) is `relUnambiguous` at each fixed length and not `LengthDet`, giving
+         `lengthDetWitness_unamb` (`[propext]`) and `lengthDet_not_implied_by_unamb`
+         (`[propext, Quot.sound]`). Worth noting the contrast with §2.1.1's witness:
+         that one needs two *values*, this one needs one value at two *lengths*.
+      2. `LengthDet`'s "It holds for `byte` … and for any codec whose leaves are
+         fixed-width in their *value*" — the generalisation has **no** theorem and is
+         not obvious (`pure` sits at `Bytes 0`, `byte` at `Bytes 1`, so a `seq` of them
+         is fixed-width per-value only, which is what `LengthDet` measures and nothing
+         has proved compositionally). **Withdrawn**, and the proved scope named:
+         `lengthDet_byte` plus `LengthConst → LengthDet` (`lengthDet_of_lengthConst`).
+
+      Re-checked and left alone because they *are* backed: "`Functional ∧ RelAligned`
+      is what `decodeArray_unique` consumes" (`DecodeOne.lean`, the hypothesis is
+      literally in the statement), `LengthConst → LengthDet` (proved), and
+      "`RelAligned → relUnambiguous`" (`relUnambiguous_of_relAligned`).
 
 ### 2.2 `../lean-nix-flake-template` — make the gate claim true
 
@@ -637,7 +657,12 @@ design.
       a broken dependency.
 - [x] 2.2.3 Add a `sorry`-stub prober to the template's own verification and
       record that `lake build` now fails on it (2.2.1's load-bearing check).
-- [ ] 2.2.4 Template gates: `nix flake check`, `nix build .#native .#cli`.
+- [x] 2.2.4 Template gates: `nix flake check`, `nix build .#native .#cli`.
+
+      **Green 2026-11-06.** `nix flake check` → `lean` and `formatting` both pass
+      (2 checks; the omitted-systems warning is the usual cross-system notice, not a
+      failure). `nix build .#native .#cli` → exit 0, both `demo-native` and
+      `demo-cli` derivations build. Repo clean at `64ce6ef`.
 
 ### 2.3 `../lean-basen` remaining
 
@@ -659,8 +684,14 @@ design.
       governing reason is odd arity — uppercase `'F'` at `n = 1` is **also**
       `none`. Add an even-arity lowercase witness whose only rejection reason is
       case, and rename or fold the `n = 1` one into `rejects_odd_arity`.
-- [ ] 2.3.5 `../lean-basen` gates: `lake build`, `lake build bench`,
+- [x] 2.3.5 `../lean-basen` gates: `lake build`, `lake build bench`,
       `nix build '.#bench'`.
+
+      **Green 2026-11-06**, repo clean at `68f2231`. `lake build` 25 jobs printing
+      `447 of 484` / `484 partitioned, 438 pinned and 46 allowlisted` / `header
+      numbers verified (484 = 438 + 46)`; `lake build bench` 45 jobs;
+      `nix build '.#bench'` exit 0 (its `installPhase` **runs** the executable, so the
+      known vectors were value-checked, not merely compiled).
 
 ### 2.4 codec prose drift
 
@@ -672,19 +703,59 @@ design.
       `Codec.encodeArray_eq`, which lives in `Packed.lean`, and `Encode.lean` has
       no law about `encode` at all (`encode_rel` is in `Sound.lean`). Cite
       something in the module or say where the encoder's law lives.
-- [ ] 2.4.3 README:577-582: "the leak's growth is in the result list" sits inside
+- [x] 2.4.3 README:577-582: "the leak's growth is in the result list" sits inside
       a paragraph introduced as the paper's own cost. The paper says no such
       thing and nothing here measured it. Mark it as the project's unmeasured
       inference, or measure it.
-- [ ] 2.4.4 README:222: mark the elision between the two quoted paper fragments.
+
+      **Marked as unmeasured, not measured.** `PAPER.md` §4.4 names only "a space leak
+      due to unlimited backtracking" — no attribution to the result list — and no lane
+      in this repo reports `decode`'s result-list allocation (the memory figures that
+      do exist are `packedCands` and the array read). The sentence is now labelled
+      "**Where the leak's growth actually is: unmeasured**", states that the earlier
+      revision presented it as the paper's claim and as fact, keeps the inference but
+      names it as one, and points at the measured numbers by name.
+
+- [x] 2.4.4 README:222: mark the elision between the two quoted paper fragments.
+
+      **Done.** The `[D5]` paragraph ran one §4.4 quote straight into a later one; the
+      paper has a full sentence between them ("This means that … whereas the syntax
+      description `p | q` should not be empty if `q` is nonempty"). The two fragments
+      are now separated by an explicit `…`, the dropped clause is quoted in situ in a
+      parenthesis, and the parenthesis says the elision was previously unmarked.
+
 - [x] 2.4.5 Update README:343 ("the same relation-then-two-directions shape every
       other combinator has") to match what 1.5 established.
-- [ ] 2.4.6 Correct `Combinators.lean:171-183`'s "zero-or-more separation is
+- [x] 2.4.6 Correct `Combinators.lean:171-183`'s "zero-or-more separation is
       `optional (sepBy p sep)`" — no such `Codec` value exists, and
       `optional (sepBy …)` would be `Option (List α)`, not zero-or-more lists.
-- [ ] 2.4.7 Re-read `AGENTS.md` and `README.md` for stale counts and job numbers
+
+      **Corrected in both places** (`relSepBy`'s docstring and the README paragraph
+      that said "zero-or-more is `optional` of the one-or-more form"). Both now state
+      the two separate reasons it is false — no `sepBy` `Codec` value exists to apply
+      `optional` to, and `optional` maps `α ↦ Option α` so the result would be
+      `Option (List α)`, either absent or one whole list — and say what zero-or-more
+      actually is: the **empty case of the relation** (`relRepeat` of the step over
+      `[]`), with no derived `sepBy0` triple and no claim that one exists.
+
+- [x] 2.4.7 Re-read `AGENTS.md` and `README.md` for stale counts and job numbers
       (`AGENTS.md:44`'s "418/418", `:176`'s "13 jobs" both predate the current
       tree) and restamp or drop them.
+
+      **The two cited figures no longer exist** (the file was rewritten after
+      authoring); what did go stale is worse, and is what the task's *intent* covers.
+      `AGENTS.md`'s START HERE box still said "Next task: `tasks.md` §1.5" and
+      "Expected today: **29 completed / 56 total**" long after §1.5–§1.10 had all
+      landed — exactly the status-in-prose defect the file's own rule forbids. The box
+      now **names no task at all**, gives only the re-derive commands (with
+      `grep -nE '^- \[ \] [0-9.]+'` as the way to list what is actually open), and
+      says why a pointer must not be reintroduced; the `Current state` bullet's
+      "16/56" and "Next: §1.5" are gone. The two gate traps
+      ("a `def` is invisible", "free theorems are false") are rewritten in the past
+      tense with what §1.7/§1.8 landed, including that the definition check is a
+      mention proxy that can be satisfied vacuously. `README.md` carries **no**
+      theorem/gate counts (checked by grep), so nothing to restamp there; its job
+      counts are bench-lane rows run in-session and were left alone.
 
 ### 2.5 Part 2 gates
 
