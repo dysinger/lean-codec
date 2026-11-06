@@ -2,16 +2,26 @@
 
 Guidance for AI coding agents working in this repository.
 
-> ## START HERE: `openspec/changes/codec-audit-round-four/tasks.md`
+> ## START HERE: `openspec list --json`
 >
-> **`codec-audit-round-four` is the open change** (authored 2026-11-06 from a third
-> adversarial review round; 37 numbered findings, `R5-01`…`R5-37`). Its `tasks.md` is
-> the ledger and the only direction — work top-down from §1.
+> **There is no open change.** `codec-audit-round-four` closed 52/52 and archived
+> 2026-11-07 as `openspec/changes/archive/2026-11-07-codec-audit-round-four/`
+> (37 findings, `R5-01`…`R5-37`; four MODIFIED requirements, **all additive** —
+> +3 `basen`, +1 `codec/axiom-gate`, +2 `codec/law-coverage`, +2
+> `codec/review-remediation` scenarios, zero dropped, verified by matching scenario
+> _names_ against HEAD before and after the sync). `openspec validate --all` is
+> **10/10** live capabilities; the gate is at 410 theorems / 337 gated / 73
+> allowlisted and 141 defs / 112 mentioned / 29 allowlisted.
+>
+> **So the next piece of work is an _owner decision_: author a new change** under
+> `openspec/changes/` (the archived ledgers are models for _shape_, never a template
+> to resume). Do not invent one from this file.
 >
 > **This box names the change, never a task.** That is deliberate: it has gone stale
-> twice already (it said "§1.5 next" long after §1.5–§1.10 landed, and then said "no
-> open change" while `round-four` was open). If the change named here is not what
-> `openspec list` reports, **believe the command**.
+> **three** times now (it said "§1.5 next" long after §1.5–§1.10 landed, then said "no
+> open change" while `round-four` was open, and then still named `round-four` after
+> it archived). If the change named here is not what `openspec list` reports,
+> **believe the command**.
 >
 > `codec-audit-round-three` closed 56/56 and archived 2026-11-06 as
 > `openspec/changes/archive/2026-11-06-codec-audit-round-three/` (7 requirements
@@ -27,10 +37,7 @@ Guidance for AI coding agents working in this repository.
 > ```
 >
 > If a change is open, its `tasks.md` is the ledger and the only direction — open it
-> and work top-down. If none is open **there is no queued work**, and the next piece of
-> work is an _owner decision_: author a new change under `openspec/changes/` (the
-> archived ledgers are models for _shape_, never a template to resume). Do not invent
-> one from this file.
+> and work top-down. If none is open **there is no queued work**.
 >
 > Do not work from this file; it holds the **stable** part — how to work here, what
 > the gates are, and the traps that have cost sessions. Status is computed from
@@ -50,9 +57,9 @@ Guidance for AI coding agents working in this repository.
 > ```
 >
 > `lake build` prints **four** gate lines — footprint, partition, definition
-> coverage, header numbers — and `openspec validate --all` is 11/11 (10 live
-> capabilities + the open change's delta). Read those numbers off the run, not off
-> this page.
+> coverage, header numbers — and `openspec validate --all` is **10/10** live
+> capabilities with no change open (11/11 while a change is open: +its delta).
+> Read those numbers off the run, not off this page.
 >
 > **`[x]` means "in the tree AND evidence recorded in the ledger" — never tick on
 > intent, and never leave a finished task unticked.** A checkbox reports a fact; the
