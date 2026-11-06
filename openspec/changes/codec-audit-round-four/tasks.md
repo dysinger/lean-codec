@@ -352,12 +352,31 @@ reader.
       `e1d8d124ea928f35cdef98533b40b036ca20293f`, 27 commits, ancestor confirmed. The
       27 commits add law families and _withdraw a prose claim_ (`99526b4`); none changes
       a type `basen` imports.
+
+      **DONE.** Bumped `eb1d77a` → `a12ac65` (`flake.lock` `f7d06b0`), then
+      `lake update codec`. **The ledger's numbers had drifted**: at bump time the
+      gap was **40** commits and HEAD was `a12ac65`, not the `27`/`e1d8d12` recorded
+      above — re-derived, not assumed, exactly as this file's rule requires. Every
+      gate was **run**, not predicted: `lake build` green (`486 = 440 + 46`),
+      `lake build bench` green, `nix build '.#bench'` builds and its
+      `installPhase` ran the executable (exit 0). No source change was needed in
+      `basen`.
+
 - [x] 6.2 **Delete the eight dead `*Run` values.** `bitRun`, `quartetRun`, `octRun`,
       `digRun`, `b32Run`, `b64Run`, `b32TailRun`, `b64TailRun` — each occurs **exactly
       once** in the tree (its own `def`); ✔verified. Keep `hexRun` (5 occurrences,
       genuinely used by base16's fold proofs). **R5-36**, design §D5. Also check
       `decodeBit`-style orphans: `decodeBit` has 2 hits (def + docstring) and
       `roundtrip` calls `decodeFull …` directly.
+
+      **DONE, and wider than written.** `grep -c` confirmed all eight at exactly 1
+      before deletion, and `hexRun` at 5 (kept). The `decodeBit`-style probe the
+      task asked for found **five** such orphans, not one: `decodeBit`,
+      `decodeQuartet`, `decodeOct`, `decodeDig`, `decodeHex` (all 2 hits = def +
+      docstring). All five **deleted** rather than allowlisted, on the same
+      reasoning as the eight. Gate stayed green throughout: these were `def`s, so the
+      theorem counts did not move.
+
 - [x] 6.3 **Port the definition-coverage check** into `basen/Axioms.lean`: `publicDefs`,
       `mentionedByGated`, `isDerivedDefName`, `definitionSurfaceAllowlist` and the
       `run_cmd`, mirroring `codec/Axioms.lean`. Widen the namespace predicate to
@@ -380,11 +399,37 @@ reader.
       not a failure — record it and move on. Do not tune `isDerivedDefName` to shrink
       the list; that is the dumping ground the allowlist's reasons exist to avoid.
 
+      **DONE — and the result was *not* zero, so the procedure ran to completion.**
+      The ported check first named **20** silent defs (a different set from the
+      auditor's 28, as predicted), then **15** after §6.2's deletions. **137 public
+      defs = 122 mentioned + 15 allowlisted, 0 silent.** Classification:
+      10 `Iso`-law-as-field (`bitBlockIso`, `quartetBlockIso`, `octBlockIso`,
+      `digBlockIso`, `hexBlockIso`, `hexBlockIsoF`, `b32BlockIso`, `b32TailIso`,
+      `b64BlockIso`, `b64TailIso`), 2 whose law is stated in unfolded form
+      (`bitsOf` under `bitsVal_bitsOf`, `quartetsOf` under `quartetsVal_quartetsOf`),
+      and the 3 `Run` part-functions (`Run.decode`/`encode`/`rel`). Every reason is in
+      place at its entry, and a stale allowlist entry is itself a build failure.
+      Verified load-bearing by adding a `def deadProbe` to `BaseN/Base2.lean` — the
+      build failed naming it.
+
 - [x] 6.4 **Correct the prose counts and gate the paragraph.** `Axioms.lean:32–40` says
       `440 pins / 437 / 483`; reality is `441 / 438 / 484` (✔verified by grep:
       438 `BaseN` pins + 3 `Codec` pins = 441; `484 = 438 + 46`). Same at
       `:1655–1656`. Then extend `headerNumbers` to compute so many constants that the
       paragraph cannot rot — design §D7. **R5-34.**
+
+      **DONE.** Counts re-derived by **parsing every `#guard_msgs` footprint block**
+      rather than by arithmetic: 441 pins = 438 `BaseN` + 3 `Codec`; the 438 split
+      `375 [propext, Quot.sound]` / `48 [propext]` / `15` axiom-free; all 3 `Codec`
+      pins are `[propext, Quot.sound]` (a first draft of this paragraph claimed one
+      was `[Quot.sound]`-only — wrong, and caught by re-deriving). `headerNumbers`
+      now computes the `BaseN` pin count, asserts the three `Codec.*` pin names
+      exist, and asserts the total, so the paragraph cannot rot behind a green
+      table. Verified load-bearing by perturbing the expected total — the build
+      fails with "the prose paragraph is stale". **These numbers moved again under
+      §6.6** (two laws added): final is `443 = 440 + 3` pins, universe
+      `486 = 440 + 46`. The gate prints all of it.
+
 - [x] 6.5 **Fix the log line's arithmetic.** `"438 pinned + 46 allowlisted = 447 of
 484"` — `447` is the _kept_ side of `partitionInto` (`484 − 37 suffix-dropped`),
       not `438 + 46`. The checks are correct; the message conflates two sets in one
@@ -469,17 +514,56 @@ recorded as prose, which is what "recorded" meant.
 
 ## 9. Gates (run all three repos; they are different flakes)
 
-- [ ] 9.1 `codec`: `lake build` (zero `sorry`, four gate lines, all counts moved in
+- [x] 9.1 `codec`: `lake build` (zero `sorry`, four gate lines, all counts moved in
       lockstep), `lake build bench`, `openspec validate --all`,
       `nix flake check` (detached with `nohup`, never foregrounded — and **`nix fmt`
       first**, or `checks.formatting` fails on the uncommitted ledger).
-- [ ] 9.2 `basen`: `lake build`, `lake build bench`, `nix build '.#bench'` (its
+
+      **DONE, all four, and `nix flake check` (detached) reports
+      `checks.<sys>.openspec` ✅, `formatting` ✅ and `lean` ✅.** `lake build` prints
+      the four gate lines (`337 covered / 410 partitioned / 141 defs / header numbers
+      verified (410 = 337 + 73; defs 141 = 112 + 29)`) with zero `sorry`;
+      `lake build bench` links `CRef.c` and completes. `nix fmt` ran **before** the
+      commits and reported `0 changed` on every one, so the hook never rejected.
+
+- [x] 9.2 `basen`: `lake build`, `lake build bench`, `nix build '.#bench'` (its
       `installPhase` **runs** the executable, so the vectors are value-checked).
-- [ ] 9.3 `template`: `nix flake check`, `nix build .#native .#cli`.
-- [ ] 9.4 Commit per task family, individual files only, printing
+
+      **DONE, run not predicted.** `lake build` green with all four gate lines
+      (`486 = 440 + 46` theorems; `137 = 122 + 15` defs); `lake build bench` green;
+      `nix build '.#bench'` produced
+      `/nix/store/z5gl4nlhi8waw8scciy1kgh0032kkggn-basen-bench-0.1.0` and its
+      executable exits 0.
+
+- [x] 9.3 `template`: `nix flake check`, `nix build .#native .#cli`.
+
+      **DONE.** `nix flake check` passes (`checks.<sys>.lean` and `formatting`);
+      `nix build .#native .#cli` exits 0 and resolves `demo-native-0.1.0` /
+      `demo-cli-0.1.0`. No change was needed there — this change touches neither
+      repo.
+
+- [x] 9.4 Commit per task family, individual files only, printing
       `git diff --cached --name-only` before each. The pre-commit hook runs `nix fmt`
       and rejects a reformatted staged file; re-add and commit again.
-- [ ] 9.5 Verify every new law's footprint by hand:
+
+      **DONE.** Nine commits, each staging **one file group printed with
+      `git diff --cached --name-only` first** (`codec`: Sound / Packed / the five
+      docstring modules / README / Axioms / AGENTS / the two ledgers; `basen`:
+      flake.lock / the six BaseN modules / Base16 / Bench / Axioms). The hook
+      reformatted nothing, so no commit was rejected and none needed re-adding.
+
+- [x] 9.5 Verify every new law's footprint by hand:
+      **DONE — all 14 new laws.** `codec` (12): `lengthDet_relUnambAlignedWitness`,
+      `lengthDet_not_implies_relAligned`, `prod_relUnambAlignedWitness`,
+      `lengthDet_not_implies_relAligned_productive` — `[propext]`;
+      `aligned_alignedNotLengthDetWitness`, `not_lengthDet_alignedNotLengthDetWitness`,
+      `relAligned_not_implies_lengthDet`, `decodeRepeat_mem_iff_general`,
+      `huniq_not_derivable_full`, `arrayToBytes_bytesToArray_apply`,
+      `arrayToBytes_bytesToArray`, `decodeWholeBytes_spec` — `[propext, Quot.sound]`.
+      `basen` (2): `encodeHex_6F`, `decodes_6F` — `[propext, Quot.sound]`. **Zero
+      `Classical.choice` anywhere**, so no footprint is a defect. The `codec` half
+      matches Appendix A.1's measured table row for row.
+
       `printf 'import Codec\n#print axioms Codec.<n>\n' > /tmp/c.lean` →
       expect `[propext, Quot.sound]` or cleaner. `Classical.choice` is a defect.
 
