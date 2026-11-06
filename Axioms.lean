@@ -96,7 +96,10 @@ failure mode. **It is not soundness.**
 | allowlisted (`generatedAuxAllowlist`) | **73** | not a law; reason recorded in place |
 | un-gated and unlisted | **0** | a build failure, by construction |
 
-Gated footprint distribution:
+Gated footprint distribution — **generated** from the same `collectAxioms` results the
+`#guard_msgs` blocks pin (`scripts/gen-axioms.lean`; task §1.9), not transcribed:
+
+-- BEGIN GENERATED distribution
 
 | footprint | count |
 | --- | --- |
@@ -104,7 +107,12 @@ Gated footprint distribution:
 | `[propext]` | 78 |
 | `[Quot.sound]` | 4 |
 | axiom-free | 34 |
-| `[propext, Classical.choice, Quot.sound]` | **0** |
+| anything else | 0 |
+| **total** | **325** |
+
+`[propext, Classical.choice, Quot.sound]` rows: **0** — every gated law is
+inside the discipline.
+-- END GENERATED distribution
 
 Definitions, by the third check:
 
@@ -115,13 +123,21 @@ Definitions, by the third check:
 | `definitionSurfaceAllowlist` | **29** | no law; reason recorded in place |
 | silent | **0** | a build failure, by construction |
 
-**These numbers are asserted, not transcribed** (`headerNumbers`, at the end of this
-file): a stale table is a build failure. That is not decoration — this table said
-`364 / 292` and `197 / 61 / 4 / 30` after the gated set had already reached
-`382 / 310` and `201 / 74 / 4 / 31`, because `partition`/`gateCoverage` compare set
-*membership* and never read the prose. `codec-audit-round-three` §1.9 tracks
-generating the distribution from the compiler instead of restating it; until then the
-assertion keeps it honest.
+**The theorem/definition counts are asserted, and the footprint table is
+generated** — two mechanisms, because they have different failure modes.
+
+* The *counts* are asserted by `headerNumbers` at the end of this file: a stale table
+  is a build failure. That is not decoration — this table said `364 / 292` and
+  `197 / 61 / 4 / 30` after the gated set had already reached `382 / 310` and
+  `201 / 74 / 4 / 31`, because `partition`/`gateCoverage` compare set *membership* and
+  never read the prose.
+* The *footprint distribution* is now **generated** by `scripts/gen-axioms.lean`
+  (`codec-audit-round-three` §1.9), counting the `collectAxioms` name lists rather than
+  parsing renderered prose. It keys on names, so the audit's own failure mode — a
+  parser truncating at the `?` in `Codec.attach_getElem?_corr` — cannot recur (design
+  D1). On the regeneration that introduced it the generated table **equalled the
+  hand-written one** (`209 / 78 / 4 / 34 = 325`), which is D1's "the table is correct
+  today" re-confirmed by the compiler rather than by re-reading it.
 
 `Codec.Nat.eq_irrel` is one of the axiom-free 34, and it is in the gated set only
 since `codec-audit-round-two`: the suffix classifier had been dropping it as an
