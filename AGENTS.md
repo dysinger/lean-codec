@@ -22,27 +22,25 @@ Guidance for AI coding agents working in this repository.
 > **Where the next session starts, exactly.** The ledger's `## Status — verified`
 > table is the authoritative state; this box only says how to use it.
 >
-> **Next task: `tasks.md` §1.5** — the `sepBy`/`takeWhile` decode→encode halves
-> (`encodeSepBy_of_decode`, `encodeSepBy_ne_none` and the `takeWhile` twins),
-> mirroring the already-proved `encodeChainl1_of_decode` / `encodeChainl1_ne_none`.
-> Then §1.6 → §1.7 → §1.8 → §1.9 → §1.10, then the **remaining** §2 items (2.1.4,
-> 2.2.4, 2.3.5, 2.4.3, 2.4.4, 2.4.6, 2.4.7, 2.5.x). §2 is partly done — see
-> the ledger, not this sentence — and what is left of it is _scheduled_ after §1.10
-> because it describes laws that must exist first.
+> **Nothing in this file names the next task — that is deliberate.** Sessions have
+> repeatedly let a prose "next task" go stale while the ledger moved on (this box
+> said "§1.5 next" long after §1.5, §1.6, §1.7, §1.8, §1.9 and §1.10 had all landed).
+> Do not reintroduce a task pointer here, and do not trust one if you find one.
 >
 > **Re-derive the state; do not believe a number in prose.** Three commands:
 >
 > ```bash
 > nix develop --command openspec list --json | grep -E 'completedTasks|totalTasks'
 > grep -oE '^- \[x\] [0-9.]+' openspec/changes/codec-audit-round-three/tasks.md | wc -l
-> grep -n 'theorem encodeChainl1_\|theorem encodeSepBy_\|theorem encodeTakeWhile_' Codec/Combinators.lean
+> grep -nE '^- \[ \] [0-9.]+' openspec/changes/codec-audit-round-three/tasks.md
 > ```
 >
-> Expected today: **29 completed / 56 total**, and the grep shows `encodeSepBy_rel`
-> and `encodeTakeWhile_rel` (the `_rel` half only — **this is the gap §1.5 closes**)
-> next to `encodeChainl1_rel` / `_ne_none` / `_of_decode` (the model to copy). If the
-> grep already shows `encodeSepBy_of_decode`, §1.5 is part-done: read the ledger, not
-> this file.
+> The third lists the **only** tasks that are actually open. Part 1 (§1.0–§1.10) is
+> closed and its laws exist, so §2's prose tasks are now scheduled on their own
+> merits rather than blocked behind law coverage. `lake build` prints **four** gate
+> lines (footprint, partition, definition coverage, header numbers) and
+> `openspec validate --all` should be 10/10 — but read the numbers off the run, not
+> off this page.
 >
 > **`[x]` means "in the tree AND evidence recorded in the ledger" — never tick on
 > intent, and never leave a finished task unticked.** A checkbox reports a fact; the
@@ -83,19 +81,22 @@ Guidance for AI coding agents working in this repository.
 
 **One change is open; round two is archived history.**
 
-- `codec-audit-round-three` — **16/56 tasks**, `in-progress`. Authored 2026-11-05 from
-  the third audit (three read-only reviewers; reports in `/tmp/r3-*.md`). §1 makes
-  law coverage structural and §2 fixes prose; §2's claims depend on §1's laws, so
-  the order is not negotiable. **Read its `tasks.md` for the next task — not this
-  file.** Done so far: §1.0 (basen gate parity), §1.1 (`count` step), §1.2
-  (`manyUpTo`), §1.3 (`seq*`/`between`), §1.4 (`optional`/`maybe`/`choice`).
-  **Next: §1.5** (`sepBy`/`takeWhile` decode→encode halves).
+- `codec-audit-round-three` — `in-progress`. Authored 2026-11-05 from the third audit
+  (three read-only reviewers; reports in `/tmp/r3-*.md`). §1 makes law coverage
+  structural and §2 fixes prose; §2's claims depended on §1's laws, which is why the
+  order was not negotiable — and §1 is now closed. **Read its `tasks.md` for what is
+  open — not this file, and not this bullet.**
 - A **round-four audit** (three read-only reviewers, 2026-11-05; `/tmp/r4-*.md`) ran
   on top of that and its findings are **applied and pushed** — see the ledger's
   "Round-four audit" section for what was fixed, what was refuted, and what is open.
   Its two structural additions are worth knowing before touching a gate: both
   `Axioms.lean` headers are now **asserted** by a `headerNumbers` `run_cmd` (a stale
   count is a build failure), and the template finally enforces `warningAsError`.
+  Round three then went further: codec's `Axioms.lean` gained a **third** check
+  (definition coverage, §1.8) and its footprint _distribution_ table became
+  **generated** by `scripts/gen-axioms.lean` (§1.9) — so in codec the counts are
+  asserted and the distribution is emitted, and the two must not be confused when
+  updating the header.
 - `codec-audit-round-two` — **archived** 2026-11-05 as
   `openspec/changes/archive/2026-11-05-codec-audit-round-two/` (42/42 tasks, all
   gates green, three spec deltas synced and verified). Do not reopen it; read its
@@ -222,19 +223,25 @@ before starting §1.
 - **The gate catches your own new laws, by design — regenerate, do not investigate.**
   Every law added in §1 fails `lake build` with `not pinned by this gate` until
   `scripts/gen-axioms.lean` is run. That is §1.1 doing its job, not a regression.
-- **A `def` with no law is invisible to every gate.** `Axioms.lean`'s universe is
-  `thmInfo` only, so a public `def` is in neither `gatedNames` nor
-  `generatedAuxAllowlist` — it is not "un-gated", it is _outside the partition_.
-  That is why `btake`, `maybe`, `manyUpTo`, `seqRight`, `seqLeft`, `between` shipped
-  with zero theorems while the gate was green. When you add a `def`, grep for a
-  theorem mentioning it before believing it has a law. §1.8 makes this a build
-  failure so it cannot recur.
-- **"Free theorem" claims in `Codec/Combinators.lean` are false at a variable `n`.**
-  The docstring says the derived combinators' characterizations are definitional
-  consequences and that `decode_spec`/`bidir`/`roundtrip` "hold unconditionally via
-  `Codec.Sound`". Those are **structural inductions on the `Codec` value**; the
-  `count n p` case has no `Rel` to rewrite through, so they do not close. Prove the
-  step law (§1.1) before repeating the claim anywhere.
+- **A `def` with no law used to be invisible to every gate — §1.8 closed that, but
+  only as a _mention proxy_.** `Axioms.lean`'s theorem partition is `thmInfo` only,
+  so a public `def` was in neither `gatedNames` nor `generatedAuxAllowlist` — not
+  "un-gated", _outside the partition_ — which is why `btake`, `maybe`, `manyUpTo`,
+  `seqRight`, `seqLeft`, `between` shipped with zero theorems while the gate was
+  green. There is now a third `run_cmd` requiring every public `def` to be mentioned
+  by some gated theorem's **type** or listed in `definitionSurfaceAllowlist` with a
+  reason, and the header asserts the counts (`140 = 111 + 29`). Read it as the proxy
+  it is: it cannot be satisfied by _silence_, and it **can** be satisfied vacuously.
+  When you add a `def`, still grep for a theorem mentioning it before believing the
+  law is worth having.
+- **"Free theorem" claims used to live in `Codec/Combinators.lean` and were false at a
+  variable `n`; §1.7 rewrote them.** The docstring claimed the derived combinators'
+  characterizations were definitional consequences and that
+  `decode_spec`/`bidir`/`roundtrip` "hold unconditionally via `Codec.Sound`". Those
+  three are **structural inductions on the `Codec` value** and `count n p` is
+  `iso` of `seq p (count (n-1) p)`, so the case cannot close — no such law exists for
+  any of the eight derived values, and that is a fact about the derivation's shape,
+  not a backlog item. Do not reintroduce the claim.
 - **`List.ofFn` equality is not `rfl` across two different functions.** In the
   base32 §3.5 work, `List.ofFn sb₁ = List.ofFn s₀` needed `congr 1; funext i;
 exact hsb_eq i.1 i.2`. `cases`/`decide` on the whole goal also works when the
