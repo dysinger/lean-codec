@@ -91,6 +91,47 @@ def splice (src begin end_ body : String) : Except String String := do
   let after := String.intercalate end_ parts2.tail!
   return s!"{before}{begin}{body}{end_}{after}"
 
+/-- The footprint distribution, counted from the same `collectAxioms` output the
+`#guard_msgs` blocks pin. Emitted into `Axioms.lean`'s header between markers so the
+table is **generated rather than transcribed** — see `codec-audit-round-three` §1.9.
+
+The renderer keys on the `collectAxioms` *name list* rather than by parsing prose, which
+is precisely the check design D1 says the audit's own parser got wrong (it truncated at
+the `?` in `Codec.attach_getElem?_corr` and `Codec.map_toList_eq_ofFn_none_iff`). Here
+the names come straight from the elaborator, so there is nothing to truncate. -/
+def renderDistribution (thms : List Name) : CommandElabM String := do
+  let mut pq := 0
+  let mut p := 0
+  let mut q := 0
+  let mut none_ := 0
+  let mut other : Array (Name × List Name) := #[]
+  for n in thms do
+    let ax := (← Lean.collectAxioms n).toList
+    if ax.isEmpty then none_ := none_ + 1
+    else if ax == [``propext, ``Quot.sound] then pq := pq + 1
+    else if ax == [``propext] then p := p + 1
+    else if ax == [``Quot.sound] then q := q + 1
+    else other := other.push (n, ax)
+  let total := thms.length
+  let mut out := "\n"
+  out := out ++ s!"| footprint | count |\n| --- | --- |\n"
+  out := out ++ s!"| `[propext, Quot.sound]` | {pq} |\n"
+  out := out ++ s!"| `[propext]` | {p} |\n"
+  out := out ++ s!"| `[Quot.sound]` | {q} |\n"
+  out := out ++ s!"| axiom-free | {none_} |\n"
+  out := out ++ s!"| anything else | {other.size} |\n"
+  out := out ++ s!"| **total** | **{total}** |\n"
+  if other.isEmpty then
+    out := out ++ s!"\n`[propext, Classical.choice, Quot.sound]` rows: **0** — every gated law is\ninside the discipline.\n"
+  else
+    out := out ++ s!"\n**OUTSIDE THE DISCIPLINE** ({other.size}) — fix or exclude with a reason:\n\n"
+    for (n, ax) in other do
+      out := out ++ s!"* `{Name.toString n}` — `[{String.intercalate ", " (ax.map Name.toString)}]`\n"
+  if pq + p + q + none_ + other.size != total then
+    throwError "distribution does not add up to the gated count"
+  return out
+
+open Lean Elab Command in
 run_cmd do
   let env ← getEnv
   let thms := localGatedTheorems env |>.toList
@@ -105,5 +146,8 @@ run_cmd do
     | throwError "gatedNames splice failed"
   let .ok src := splice src "-- BEGIN GENERATED body\n" "-- END GENERATED body\n" body
     | throwError "body splice failed"
+  let dist ← renderDistribution thms
+  let .ok src := splice src "-- BEGIN GENERATED distribution\n" "-- END GENERATED distribution\n" dist
+    | throwError "distribution splice failed"
   IO.FS.writeFile path src
-  logInfo s!"Axioms.lean: rewrote {thms.length} gates"
+  logInfo s!"Axioms.lean: rewrote {thms.length} gates and the distribution table"
