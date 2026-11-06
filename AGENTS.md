@@ -480,6 +480,16 @@ in `../lean-basen`. Never "fix" it by editing the importing Lean file.
 - **All codecs are pure Lean.** C is only generic bulk byte movement
   (`memcpy`/`memchr` shapes). **No per-format C, no C that parses digits, numbers,
   fields, or format structure.** That is a hard design rule.
+
+  **`Codec/`'s directory holds exactly one file that is not part of the library:**
+  `Codec/CRef.c`, the bench reference parser. It _does_ parse bytes (and says so in
+  its own header), so it is deliberately outside that design rule — it is
+  **bench-only**, has **no `@[extern]`**, is **not in the axiom gate**, and is not
+  reachable from any `Codec` module. It exists as the honest yardstick for the
+  performance claims (`AGENTS.md`, "Speed" below). Do not add a second such file,
+  and do not move or delete this one: `lakefile.lean`'s `moreLinkObjs` and the `.c`
+  path in `default.nix` both name it.
+
 - **Speed: get as close to C as possible, with no set threshold — and attribute
   the gap to named causes, never to "boxed scalars".** The owner has explicitly
   set **no ratio to hit**; the requirement is to make the per-element loop as fast
