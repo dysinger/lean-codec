@@ -1107,8 +1107,12 @@ Note what it does **not** say: it does not pin the length of a *list* of steps �
 values may each sit at one length while a list of them has any number of elements.
 Pinning the list length needs the stronger, constant-length form `LengthConst`
 (defined and used below), and the usable chain is `LengthConst → LengthDet`, proved
-as `lengthDet_of_lengthConst`. `LengthDet → RelAligned` would need a `DecidableEq α`
-and is deliberately not proved. -/
+as `lengthDet_of_lengthConst`. `LengthDet → RelAligned` is **open**: it may or may
+not hold, and no theorem settles it either way. (An earlier revision stated that it
+"would need a `DecidableEq α`, i.e. a classical axiom, and is deliberately not
+proved" — that is a claim about a proof route the authors tried, not a fact about the
+implication, and no theorem supports either half. Recorded as open rather than as a
+deliberate omission.) -/
 def LengthDet {α : Type} (R : α → {m : Nat} → Bytes m → Prop) : Prop :=
   ∀ ⦃a : α⦄ {m₁ m₂ : Nat} (t₁ : Bytes m₁) (t₂ : Bytes m₂), R a t₁ → R a t₂ → m₁ = m₂
 
