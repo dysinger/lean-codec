@@ -62,13 +62,37 @@ Regenerate with:
 nix develop --command lake env lean scripts/gen-axioms.lean
 ```
 
+## The definition-coverage check, and what it is NOT
+
+The two checks above partition the **theorems**. A public `def` is in neither side —
+the gate's universe is `thmInfo`, so a definition is not "un-gated", it is *outside
+the partition*. That is why `btake`, `maybe`, `manyUpTo`, `seqRight`, `seqLeft` and
+`between` shipped with zero theorems while every gate was green.
+
+The third check closes that: every public `def` must be mentioned by the **type** of
+some gated theorem, or be in `definitionSurfaceAllowlist` with its reason in place.
+
+**Read that as a MENTION PROXY, never as a strength guarantee.** "Does this `def`
+have a law?" is not decidable; "does any gated theorem's type mention this constant"
+is. The property the check actually has is the narrow one:
+
+> no public definition can be covered by **silence**.
+
+A `def` some theorem mentions has at least been reasoned about; a `def` no theorem
+mentions has no stated law. It can be satisfied **vacuously** — a theorem whose
+statement mentions the name trivially passes — and it says nothing about whether the
+resulting law is strong, useful, or true of the intended semantics. It is the same
+escalating-proxy discipline the footprint gate already uses (that one proxies "is
+this a law" by "is this a `thmInfo`"), and it exists because silence was the actual
+failure mode. **It is not soundness.**
+
 ## Current state
 
-**396** public theorems are covered, by a partition with no third route:
+**398** public theorems are covered, by a partition with no third route:
 
 | side | count | what it is |
 | --- | --- | --- |
-| gated (`gatedNames`) | **323** | footprint pinned by `#print axioms` |
+| gated (`gatedNames`) | **325** | footprint pinned by `#print axioms` |
 | allowlisted (`generatedAuxAllowlist`) | **73** | not a law; reason recorded in place |
 | un-gated and unlisted | **0** | a build failure, by construction |
 
@@ -76,11 +100,20 @@ Gated footprint distribution:
 
 | footprint | count |
 | --- | --- |
-| `[propext, Quot.sound]` | 208 |
+| `[propext, Quot.sound]` | 209 |
 | `[propext]` | 78 |
 | `[Quot.sound]` | 4 |
-| axiom-free | 33 |
+| axiom-free | 34 |
 | `[propext, Classical.choice, Quot.sound]` | **0** |
+
+Definitions, by the third check:
+
+| side | count | what it is |
+| --- | --- | --- |
+| public `def`s (after dropping compiler machinery) | **139** | the universe |
+| mentioned by a gated theorem's type | **110** | has a stated law, by the proxy |
+| `definitionSurfaceAllowlist` | **29** | no law; reason recorded in place |
+| silent | **0** | a build failure, by construction |
 
 **These numbers are asserted, not transcribed** (`headerNumbers`, at the end of this
 file): a stale table is a build failure. That is not decoration — this table said
@@ -90,7 +123,7 @@ file): a stale table is a build failure. That is not decoration — this table s
 generating the distribution from the compiler instead of restating it; until then the
 assertion keeps it honest.
 
-`Codec.Nat.eq_irrel` is one of the axiom-free 31, and it is in the gated set only
+`Codec.Nat.eq_irrel` is one of the axiom-free 34, and it is in the gated set only
 since `codec-audit-round-two`: the suffix classifier had been dropping it as an
 `eq_irrel`-shaped auxiliary, which is what motivated the partition.
 
@@ -167,6 +200,149 @@ because the generator script mirrors *it*, and because "what the classifier keep
 "what `generatedAuxAllowlist` declares" are the two halves the `partition` check
 compares. -/
 def gatedTheorems (env : Environment) : Array Name := partitionInto env |>.1
+
+/-! ## The definition-coverage check
+
+The axiom gate's universe is `thmInfo` constants only, so a public `def` sits in
+**neither** side of the partition above — it is not "un-gated", it is *outside the
+partition*. That is why `btake`, `maybe`, `manyUpTo`, `seqRight`, `seqLeft` and
+`between` shipped with zero theorems while every gate was green.
+
+**The check is a MENTION proxy, and must be read as one.** "Does this `def` have a
+law?" is not decidable — provability is not a property you can grepping for. What *is*
+decidable is whether any gated theorem's **type** mentions the constant. The property
+this check has is therefore exactly:
+
+> no public definition can be covered by **silence**.
+
+A `def` some theorem mentions has at least been reasoned about; a `def` no theorem
+mentions has no stated law. It can still be satisfied *vacuously* — a theorem whose
+statement mentions the name trivially would pass — and it is **not** a soundness
+claim, not a strength requirement, and not "every `def` has a law worth having". It
+closes the failure mode that is actually present (silence) and is stated as a proxy,
+never as a guarantee. This is the same escalating-proxy discipline the footprint gate
+already uses (it proxies "is this a law" by "is this a `thmInfo`").
+
+The same last-name classifier as `isGeneratedAux` decides which `def`s are *not*
+surface: an inductive's derived companions (`recOn`, `casesOn`, `noConfusion`,
+`ctorIdx`, `ctorElim`, `brecOn`, `below`, `rec`) are machinery Lean emits, not
+definitions anyone wrote. Everything else is either mentioned by a gated theorem or
+listed in `definitionSurfaceAllowlist` **with its reason in place**. -/
+
+/-- Default classifier for `def` names that are **not** authorial surface: the
+companions Lean emits for every inductive and structure. Same status as
+`isGeneratedAux` — a heuristic, audited by the check below, never an authority. -/
+def isDerivedDefName (n : Name) : Bool := Id.run do
+  let last := n.components.getLast!.toString
+  return last == "casesOn" || last == "recOn" || last == "rec" || last == "elim" ||
+    last == "noConfusion" || last == "noConfusionType" || last == "ctorIdx" ||
+    last == "ctorElim" || last == "ctorElimType" || last == "below" ||
+    last == "brecOn" || last == "brecOn.go" || last == "mk" || last == "prod" ||
+    last == "sizeOf" || last == "sizeOf_spec" ||
+    -- Notation aliases: a token bound to an existing declaration, so the *declaration*
+    -- is what has (or lacks) a law, not the token. `Iso.«term_≫_»` is `Infixr "≫" =>
+    -- Iso.trans`, whose law is `Iso.trans`'s own `law` field.
+    last == "«term_≫_»"
+
+/-- Every public `def` in the `Codec`/`Iso` namespaces, **after** dropping compiler
+machinery and non-public names. This is the universe `definitionSurfaceAllowlist`
+and "mentioned by a gated theorem" must partition. -/
+def publicDefs (env : Environment) : Array Name := Id.run do
+  let mut ds : Array Name := #[]
+  for (name, ci) in env.constants.toList do
+    if (`Codec).isPrefixOf name || (`Iso).isPrefixOf name then
+      match ci with
+      | .defnInfo _ =>
+        if ci.isUnsafe || isPrivateName name || name.isInternalDetail ||
+            isDerivedDefName name then
+          pure ()
+        else
+          ds := ds.push name
+      | _ => pure ()
+  return ds.qsort (fun a b => Name.toString a < Name.toString b)
+
+/-- The names mentioned by at least one gated theorem's **type**. The other half of
+the definition-coverage partition; the mention proxy's whole measurement. -/
+def mentionedByGated (env : Environment) : Std.HashSet Name := Id.run do
+  let mut s : Std.HashSet Name := {}
+  for t in gatedTheorems env do
+    match env.find? t with
+    | some (.thmInfo ti) =>
+      for c in ti.type.getUsedConstants do
+        s := s.insert c
+    | _ => pure ()
+  return s
+
+/-- Public `def`s with **no** law naming them, listed by name with the reason the
+absence is deliberate.
+
+Each entry is one of three shapes, and the reason is in place at the entry:
+
+* an `Iso` combinator whose correctness is the `law` **structure field**, proved at its
+own definition site (so the kernel checks it at construction) and therefore stated by
+no separate theorem — the mention proxy cannot see a field proof;
+* a `Type`-level alias (`candsAt`/`candsRoot`/`retypeCands`) whose whole content is a
+list-cast that is definitionally the identity;
+* an internal witness or instance (`uniqSeqBt`, `instDecidableEqBytes`, …) that exists
+to make another proof go through, not to be a codec a caller uses.
+
+Keep the reason next to the entry: a bare name here would be the dumping ground this
+list exists to avoid. -/
+def definitionSurfaceAllowlist : Array Name := #[
+  -- **`Iso` combinators: correctness is the `law` structure field**, proved at the
+  -- definition site (`law := by …`), so the kernel checks it at construction and no
+  -- separate theorem names it. The mention proxy cannot see a field proof.
+  `Iso.associate,
+  `Iso.commute,
+  `Iso.element,
+  `Iso.id,
+  `Iso.inverse,
+  `Iso.ofTotal,
+  `Iso.optionSome,
+  `Iso.subset,
+  `Iso.trans,
+  `Iso.unit,
+  -- `Iso.foldl`/`Iso.foldr`/`Iso.nil` are `Iso` structures too: their `law` field is
+  -- proved at the definition site (the fold/unfold bijection on terminal seeds; the
+  -- `Unit`↔`[]` bijection).
+  `Iso.foldl,
+  `Iso.foldr,
+  `Iso.nil,
+
+  -- **`Iso` fold plumbing** (`foldApply`/`foldUnapply`/`foldrApply`/`foldrUnapply`):
+  -- the `Option`-returning halves the `Unfold` structure is built from. What they are
+  -- *for* is proved about `Unfold`/`foldl`/`foldr` (`Iso.unfoldBy_eq`,
+  -- `Iso.foldRec_append`, `Iso.unfoldBy_sound`), not about these part-functions.
+  `Iso.foldApply,
+  `Iso.foldUnapply,
+  `Iso.foldrApply,
+  `Iso.foldrUnapply,
+  `Iso.MeasureDecreases.toUnfold,
+  `Iso.MeasureDecreasesR.toUnfold,
+
+  -- **`Type`-level aliases**: the whole content is a `List.cast` that is
+  -- definitionally the identity. There is no law to state (see `retypeCands`'s
+  -- docstring: "`List.cast` is definitionally the identity here; it exists only to
+  -- name the type").
+  `Codec.candsAt,
+  `Codec.candsRoot,
+  `Codec.retypeCands,
+
+  -- **Internal witnesses** built to make one specific proof go through, not codecs.
+  -- `uniqSeq*` are the `Unambiguous`-counterexample description values (their
+  -- witnesses `uniqSeqBt_*` are gated laws); the recons halves are the `foldl`/`foldr`
+  -- step functions those proofs supply.
+  `Codec.uniqSeqBt,
+  `Codec.uniqSeqIso,
+  `Codec.uniqSeqUnitIso,
+  `Iso.reconsLeft,
+  `Iso.reconsRight,
+
+  -- **Computed instances**: `DecidableEq`/`Inhabited` for `Bytes n`, used by `decide`
+  -- and by `Option`/`Array` plumbing. Instances, not surface a caller writes against.
+  `Codec.instDecidableEqBytes,
+  `Codec.instInhabited,
+]
 
 /-- Declarations knowingly excluded from the `[propext, Quot.sound]`-only discipline,
 by name. Each must also appear in the "Explicit exclusion" section at the end of
@@ -417,6 +593,7 @@ def gatedNames : List Lean.Name := [
   ,`Codec.countToRelRepeat
   ,`Codec.count_succ
   ,`Codec.cursor_bridge
+  ,`Codec.decodeArrayFast_eq
   ,`Codec.decodeArray_bounded
   ,`Codec.decodeArray_bounded_upper
   ,`Codec.decodeArray_consumes
@@ -466,6 +643,7 @@ def gatedNames : List Lean.Name := [
   ,`Codec.decodeTakeWhile_spec
   ,`Codec.decodeWholeBytes_eq
   ,`Codec.decodeWholeBytes_size
+  ,`Codec.decodeWholeOneBytes_eq
   ,`Codec.decodeWholeOne_eq
   ,`Codec.decodeWhole_eq
   ,`Codec.decode_cast
@@ -718,6 +896,51 @@ run_cmd do
     throwError msg
   logInfo m!"axiom gate: {pub.size} public theorems partitioned, {gatedNames.length} gated and {CodecAxioms.generatedAuxAllowlist.size} allowlisted"
 
+/-! **Definition-coverage check**, run on every `lake build`. The two checks above
+partition the *theorems*; a public `def` is in neither side, because the gate's
+universe is `thmInfo`. This check closes that hole: every public `def` must be
+mentioned by the **type** of some gated theorem, or be in
+`definitionSurfaceAllowlist` with its reason in place.
+
+**This is a mention proxy, not a strength guarantee** (see the section above
+`isDerivedDefName`). Its property is the narrow one it can actually have: *no public
+definition can be covered by silence.* A `def` some theorem mentions has been
+reasoned about; a `def` no theorem mentions has no stated law. It can be satisfied
+vacuously by a theorem that mentions the name trivially, and it says nothing about
+whether the resulting law is strong — only that the name is not absent from the proof
+surface.
+
+Three failures, each naming what is wrong:
+
+* a public `def` in **neither** set — a definition with no law and no recorded reason;
+* a name in **both** — the check's own record contradicts itself;
+* an allowlist entry that is public, not machinery, **and** already mentioned — a
+  stale entry, or an attempt to exempt a `def` that did get a law. Keep the list
+  shrinking. -/
+open Lean Elab Command in
+run_cmd do
+  let env ← getEnv
+  let defs := CodecAxioms.publicDefs env
+  let allow := Std.HashSet.ofList CodecAxioms.definitionSurfaceAllowlist.toList
+  let mentioned := CodecAxioms.mentionedByGated env
+  let silent := defs.filter fun n => !mentioned.contains n && !allow.contains n
+  let both := defs.filter fun n => mentioned.contains n && allow.contains n
+  let stale := CodecAxioms.definitionSurfaceAllowlist.filter fun n =>
+    !defs.contains n
+  if !silent.isEmpty || !both.isEmpty || !stale.isEmpty then
+    let mut msg : MessageData := ""
+    if !silent.isEmpty then
+      msg := msg ++ m!"public definitions with no law naming them (prove one, or allowlist with a reason):\n" ++
+        m!"{String.join (silent.toList.map fun n => s!"  {Name.toString n}\n")}"
+    if !both.isEmpty then
+      msg := msg ++ m!"definitions that HAVE a gated law but are also allowlisted (drop the entry):\n" ++
+        m!"{String.join (both.toList.map fun n => s!"  {Name.toString n}\n")}"
+    if !stale.isEmpty then
+      msg := msg ++ m!"allowlist entries that are not public definitions (stale name, or machinery):\n" ++
+        m!"{String.join (stale.toList.map fun n => s!"  {Name.toString n}\n")}"
+    throwError msg
+  logInfo m!"axiom gate: {defs.size} public definitions covered, {defs.size - CodecAxioms.definitionSurfaceAllowlist.size} mentioned and {CodecAxioms.definitionSurfaceAllowlist.size} allowlisted (mention proxy)"
+
 /-! **Header check**, run on every `lake build`. The "Current state" tables at the top
 of this file are prose, and `partition`/`gateCoverage` compare set *membership* — so a
 regeneration leaves them stale silently. It happened: the tables read
@@ -735,9 +958,12 @@ run_cmd do
   let gated := gatedNames.length
   let allow := CodecAxioms.generatedAuxAllowlist.size
   -- Lockstep with "Current state" above.
-  let expectedPub := 396
-  let expectedGated := 323
+  let expectedPub := 398
+  let expectedGated := 325
   let expectedAllow := 73
+  let expectedDefs := 139
+  let expectedMentioned := 110
+  let expectedDefAllow := 29
   let mut bad : Array String := #[]
   if pub.size != expectedPub then
     bad := bad.push s!"public theorems: table says {expectedPub}, environment has {pub.size}"
@@ -747,9 +973,17 @@ run_cmd do
     bad := bad.push s!"allowlisted: table says {expectedAllow}, generatedAuxAllowlist has {allow}"
   if gated + allow != pub.size then
     bad := bad.push s!"table does not add up: {gated} + {allow} != {pub.size}"
+  let defs := CodecAxioms.publicDefs env
+  let defAllow := CodecAxioms.definitionSurfaceAllowlist.size
+  if defs.size != expectedDefs then
+    bad := bad.push s!"public defs: table says {expectedDefs}, environment has {defs.size}"
+  if defAllow != expectedDefAllow then
+    bad := bad.push s!"definitions allowlisted: table says {expectedDefAllow}, list has {defAllow}"
+  if defs.size - defAllow != expectedMentioned then
+    bad := bad.push s!"definitions mentioned: table says {expectedMentioned}, environment implies {defs.size - defAllow}"
   if !bad.isEmpty then
     throwError m!"the \"Current state\" table is stale (update it and expected* here):\n{String.join (bad.toList.map fun s => s!"  {s}\n")}"
-  logInfo m!"axiom gate: header numbers verified ({expectedPub} = {expectedGated} + {expectedAllow})"
+  logInfo m!"axiom gate: header numbers verified ({expectedPub} = {expectedGated} + {expectedAllow}; defs {expectedDefs} = {expectedMentioned} + {expectedDefAllow})"
 
 end CodecAxioms
 
@@ -1072,6 +1306,9 @@ why it was fixed instead of documented.
 /-- info: 'Codec.cursor_bridge' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.cursor_bridge
+/-- info: 'Codec.decodeArrayFast_eq' does not depend on any axioms -/
+#guard_msgs in
+#print axioms Codec.decodeArrayFast_eq
 /-- info: 'Codec.decodeArray_bounded' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.decodeArray_bounded
@@ -1219,6 +1456,9 @@ why it was fixed instead of documented.
 /-- info: 'Codec.decodeWholeBytes_size' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Codec.decodeWholeBytes_size
+/-- info: 'Codec.decodeWholeOneBytes_eq' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.decodeWholeOneBytes_eq
 /-- info: 'Codec.decodeWholeOne_eq' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.decodeWholeOne_eq
