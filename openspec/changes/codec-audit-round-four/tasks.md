@@ -42,8 +42,11 @@ build red, keeping a compile check on the _single module_ rather than the whole 
 nix develop --command lake env lean Codec/Sound.lean     # type/elaboration check
 ```
 
-Then run `scripts/gen-axioms.lean` and fix the two header tables + six `expected*`
-constants (§7.1) **once**, after §1–§3, and from then on `lake build` is the gate again.
+Do this **once, after §1–§5** (§7.1): run `scripts/gen-axioms.lean`, then move the two
+header tables and the six `expected*` constants in lockstep. From then on `lake build` is
+the gate again. (§4 and §5 add no laws, so regenerating before or after them is
+equivalent — but §7.1 is the single stated endpoint, so use it and do not invent a
+second one.)
 Do **not** regenerate after every individual law — the generator rewrites the whole
 file and the header constants have to be recomputed each time. Do **not** tick §1.1
 believing the build is supposed to be green; §9 is where green is required.
@@ -220,7 +223,7 @@ docstring repair.
       `∃ (R : Bool → {m : Nat} → Bytes m → Prop), relUnambiguous R ∧
  (∀ a {m} (t : Bytes m), R a t → m ≠ 0) ∧
  ¬ (∀ (xs ys : List Bool) (n : Nat) (s : Bytes n),
-   relRepeat R xs n s → relRepeat R ys n s → xs = ys)`.
+ relRepeat R xs n s → relRepeat R ys n s → xs = ys)`.
       Keep the existing `n = 2` version as the small witness. **R5-05.**
 - [ ] 3.2 Point the section header's "machine-checked below as `huniq_not_derivable`" at
       the strengthened name. The existing theorem never mentions `relUnambiguous` or
@@ -257,9 +260,13 @@ Maybe String` takes an explicit _pretty-printer implementation_ value. The
       `Iso.ofTotal` and `decodeWholeOne` are genuinely caller-free. Rewrite to
       distinguish the three. **R5-18.**
 - [ ] 4.5 **`[S3]` "complete core `Codec`-value inventory".** The `Normal` row
-      (`fill`, `decodeNormal`) contains **zero** `Codec` values. Either drop the row
-      (the table is otherwise exactly the 15 `Codec`-valued definitions — verified) or
-      retitle to "core values a porter must reproduce" with a `kind` column. **R5-19.**
+      (`fill`, `decodeNormal`) contains **zero** `Codec` values. **Take the first
+      option — drop the row** and add one sentence after the table: "every `Codec`-valued
+      definition in the tree is one of these fifteen; `Normal`'s `fill`/`decodeNormal`
+      are not `Codec` values and are documented in `[D4]` instead." That keeps the
+      table's literal title true and needs no new column. (Do _not_ retitle to "core
+      values a porter must reproduce" — that invites the next row, and the anchor's
+      whole point is a finite, checkable list.) **R5-19.**
 - [ ] 4.6 **`[D2]` "the paper has two values, not one".** Scope it: the paper has two
       _decoder-side_ values; `print` is a third interpreter. **R5-23.**
 - [ ] 4.7 **`[D4]` "realized by repetition over a `subset p byte` step".** The step is
@@ -325,9 +332,8 @@ reader.
       box in this ledger is ticked or the change does not archive, and an "optional" box
       is the one that gets skipped silently. Do the cheap version: leave the statement
       alone (the `∃ k` form is _correct_ and shows the bound's provenance via
-      `count k p`) and add **one sentence** to its docstring saying so. Only add the
-      `∃`-free corollary as a real theorem if a caller wants it — do not invent a
-      consumer. **R5-08.**
+      `count k p`) and add **one sentence** to its docstring saying so. **Default: do not add the corollary.** There is no caller today, and inventing
+      one is how a dead lemma gets born (see §6.2). **R5-08.**
 - [ ] 5.11 **`Axioms.lean` defs table (R5-03, R5-10).** Change "has a stated law, by the
       proxy" to "named by a gated theorem's type — the proxy's whole measurement (a
       mention, not a strength claim)", and name the two vacuous cases
@@ -408,10 +414,13 @@ reader.
 - [ ] 7.2 **`CRef.c` placement (R5-37).** Nitpick, but the rule's letter matters: the
       file's own header concedes it "parses bytes and is therefore deliberately outside
       `Codec/`'s design rule". It is bench-only, not `@[extern]`, not in the gate.
-      Decide and record: either move it to `bench/CRef.c`, or keep it and add one
-      sentence to `AGENTS.md` saying the `Codec/` **directory** holds one bench-only
-      file that is not part of the library. Do not delete — it is the C reference the
-      perf claims are measured against.
+      **Take the second option: keep it where it is and document it.** Add one sentence
+      to `AGENTS.md`'s ecosystem-rules section saying the `Codec/` **directory** holds
+      exactly one file that is not part of the library — `CRef.c`, the bench reference
+      parser, bench-only, no `@[extern]`, outside the gate. (Do not move it:
+      `lakefile.lean`'s `moreLinkObjs` and the `.c` path in `default.nix` both name it,
+      so a move is a build-system change for a nitpick. Do not delete it — it is the C
+      reference the performance claims are measured against.) **R5-37.**
 - [x] 7.3 Update `openspec/lean-notes.md` with the two new lessons: (a) **a dependent
       `Fin`/`Array` bound reached by `simpa` leaks `Classical.choice`** — state the
       bound explicitly instead; (b) **a dependent rewrite under `decode d h (size) ∘
@@ -644,7 +653,9 @@ authored against the **post-sync** text. Before archiving:
    `basen` "conformance laws are gated" 3 → 6. **Nothing may be dropped.** These are
    additive-only deltas; if the diff shows a drop, the delta was authored from the
    wrong base.
-2. `openspec validate --all` after the archive; confirm it stays 10/10.
+2. `openspec validate --all` after the archive; confirm it stays green (it is 11/11
+   while this change is open — one item is the change itself — and should be 10/10 live
+   capabilities once archived).
 3. No new capability is created by this change — all four are MODIFIED-existing.
 
 ## Known OPEN work that is NOT a task number

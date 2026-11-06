@@ -97,7 +97,7 @@ failure mode. **It is not soundness.**
 | un-gated and unlisted | **0** | a build failure, by construction |
 
 Gated footprint distribution — **generated** from the same `collectAxioms` results the
-`#guard_msgs` blocks pin (`scripts/gen-axioms.lean`; task §1.9), not transcribed:
+`#guard_msgs` blocks pin (`scripts/gen-axioms.lean`), not transcribed:
 
 -- BEGIN GENERATED distribution
 
@@ -966,9 +966,12 @@ regeneration leaves them stale silently. It happened: the tables read
 `382 / 310` and `201 / 74 / 4 / 31`. This check makes the numbers **asserted**:
 a mismatch fails the build naming both sides.
 
-Keep these constants in lockstep with the tables above. `codec-audit-round-three`
-§1.9 tracks replacing the constants with compiler-emitted output; until then this is
-what keeps the transcription honest. -/
+Keep these constants in lockstep with the tables above. **This is the settled design,
+not a stopgap**: `codec-audit-round-three` §1.9 generated the *footprint distribution*
+and deliberately left these *counts* asserted by hand, because the two have different
+failure modes — a generated table cannot be stale, while these constants are the
+independent second opinion that catches a generator bug. Do not "finish" §1.9 by
+computing them. -/
 open Lean Elab Command in
 run_cmd do
   let env ← getEnv

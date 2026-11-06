@@ -261,6 +261,15 @@ hk.symm s)` — and `subst hk; subst ha`.
   Both files now carry a `headerNumbers` `run_cmd` asserting the table's numbers and
   their sum. **When you regenerate, the header check fires — update the table and the
   `expected*` constants together.** Do not weaken it to a `logInfo`.
+
+  **Three triples of "basen's numbers" float around the ecosystem and only one is
+  current — do not grep for them, read the gate output.** The history above is
+  `446 / 437 / 9`; `../lean-basen/Axioms.lean`'s prose paragraph still says
+  `440 / 437 / 483` (it is stale, and `round-four` §6.4 fixes it); the truth is what
+  `lake build` prints, which at 2026-11-06 is `441 / 438 / 484` = 438 `BaseN` pins +
+  3 `Codec` pins, against 438 gated + 46 allowlisted. **Quote the gate, never a number
+  written in a file.**
+
 - **The gate catches your own new laws, by design — regenerate, do not investigate.**
   Every law added in §1 fails `lake build` with `not pinned by this gate` until
   `scripts/gen-axioms.lean` is run. That is §1.1 doing its job, not a regression.
