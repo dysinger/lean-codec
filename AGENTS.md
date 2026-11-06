@@ -20,14 +20,26 @@ Guidance for AI coding agents working in this repository.
 > that have cost sessions. Status is computed from `openspec/`, never recorded here.
 >
 > **Where the next session starts, exactly.** §1.0-§1.4 are landed and gated
-> (16/56), and the round-four audit's fixes are applied on top (see the ledger's
+> (16/56), and the round-four audit's fixes are pushed on top (see the ledger's
 > "Round-four audit" section). Begin at **`tasks.md` §1.5** — the
-> `sepBy`/`takeWhile` decode→encode halves (`encodeSepBy_of_decode`,
-> `encodeSepBy_ne_none`, and the `takeWhile` twins), mirroring the already-proved
-> `encodeChainl1_of_decode` / `encodeChainl1_ne_none` in `Codec/Combinators.lean`.
-> Locate them by name (`grep -n 'theorem encodeChainl1_' Codec/Combinators.lean`),
-> never by line number: this file and the ledger both carried stale `:693,/646`
-> figures within one session.
+> `sepBy`/`takeWhile` decode→encode halves, mirroring the already-proved chain pair.
+>
+> **Confirm that baseline in one command before writing a proof** — do not take it
+> from this paragraph:
+>
+> ```bash
+> grep -n 'theorem encodeChainl1_\|theorem encodeSepBy_\|theorem encodeTakeWhile_' Codec/Combinators.lean
+> ```
+>
+> Expected today: `encodeSepBy_rel` and `encodeTakeWhile_rel` (the `_rel` half only,
+> i.e. the gap §1.5 closes) and, as the model to copy, `encodeChainl1_rel`,
+> `encodeChainl1_ne_none`, `encodeChainl1_of_decode` (plus the `_injective` and
+> `chainr1` twins). §1.5.1/§1.5.2 add `encode*_of_decode` + `encode*_ne_none` for
+> `sepBy` and `takeWhile`.
+>
+> **Never cite a line number in this file or the ledger.** Both carried stale
+> `:693`/`:646` figures for those laws within a single session; the grep above is
+> the citation.
 >
 > **Do §1.5, then §1.6-§1.10, then §2.** §2's prose claims are worthless before the
 > laws exist. Three things are recorded as **open** and must not be re-opened as if
