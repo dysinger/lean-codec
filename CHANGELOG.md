@@ -56,11 +56,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Codec.Sound`: `relFunctional`/`relUnambiguous` (the relation-level forms of
   `Functional`/`Unambiguous`) and `encodeRepeat_ne_none` (`relRepeat`-level
   encoder completeness).
-- `Codec.Buffer`: the packed, `ByteArray`-backed transport surface — `Buffer`
-  (newtype over `ByteArray`), `toBytes`/`ofBytes` (routed through
-  `ByteArray.data`, the reducible `Array`), and the transported interpreters
-  `decodeBuffer`/`encodeBuffer` with the bar-transferred laws
-  (`decodeBuffer_eq`/`encodeBuffer_eq`/`decodeBuffer_spec`/`roundtripBuffer`).
 - `Bytes` (`abbrev Bytes (n : Nat) : Type := Fin n → UInt8`) as the named
   **length-indexed** proof substrate — one byte-string type for both the spec and
   its scalar-read run-model, with no second `List`/`Array`/`ByteArray` carrier for
