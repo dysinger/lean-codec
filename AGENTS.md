@@ -211,6 +211,19 @@ before starting §1.
   the leak appeared only when the recursive call carried the equation. **The fix:
   recurse on the _list_ and let the length be `xs.length` derived from the term**
   (`relRepeatToCount`). Applies to every `count`/length-shaped law still to come.
+- **Never let `simp`/`simpa` discharge a dependent `Fin`/`Array`/`List` index bound —
+  it leaks `Classical.choice`.** Proven this round: the same pointwise transport of
+  `arrayToBytes (bytesToArray s)` is `[propext, Classical.choice, Quot.sound]` with
+  `by simpa using hi` and `[propext, Quot.sound]` with the bound written as
+  `Nat.lt_of_lt_of_eq i.isLt (bytesToArray_size s)`. It compiles clean either way, so
+  only `#print axioms` catches it. Also: `Array.getElem_mk` and
+  `Array.getElem_eq_getElem_toList` **do not exist** in 4.35.0 — the bridge is
+  `Array.getElem_toList` then `List.getElem_ofFn`.
+- **A rewrite under a dependent `decode d h (size) (cast …)` argument is not a `rw`,
+  a `subst` or a `generalize`.** All three fail (motive-does-not-typecheck /
+  dependent-elimination / occurrence-not-captured). Prove a helper with **abstract**
+  arguments instead — `(k : Nat) (hk : k = n) (a : Bytes k) (ha : a = cast …
+hk.symm s)` — and `subst hk; subst ha`.
 - **A `simp only` set that does not fire leaves `sorryAx`, not an error.** For
   `seqRight`'s composite `Iso`, `Option.some.injEq` does not match the
   `(some (y,u)).bind … = some x` shape, and an attempt that dropped the `simp`
