@@ -243,14 +243,22 @@ way it is has no gate; check it with a grep before believing it._
 
 ## Migration Plan
 
-1. `Codec/Sound.lean` maths (§1): the independence proofs first, because four prose
-   sites depend on them existing.
-2. `Codec/Packed.lean` + `Codec/Combinators.lean` laws (§2, §3), with the proof notes
-   from §D3.
-3. `basen` (§5, §6): delete dead defs, port the check, bump the pin, run every gate.
-4. Prose (§4 README anchors, §7 Axioms, §8 lessons) — after the code, so every
-   corrected sentence points at something that now exists.
-5. Gates everywhere, then archive.
+**Section numbers below are `tasks.md`'s and are authoritative; this plan is the
+ordering rationale, not a second schedule.** If the two disagree, believe `tasks.md`.
+
+1. `Codec/Sound.lean` maths (**tasks §1**): the independence proofs first, because four
+   prose sites depend on them existing.
+2. `Codec/Packed.lean` + `Codec/Sound.lean` laws (**tasks §2, §3**), with the proof
+   notes from §D3 and the bodies in `tasks.md` Appendix A.
+3. `Codec/` docstring necessity claims (**tasks §5**) — cheap, and several are
+   self-contradictions inside one file.
+4. `basen` (**tasks §6**): delete dead `*Run` defs, port the check, bump the pin, correct
+   the prose counts.
+5. Prose — `README.md` anchors (**tasks §4**) and the `Axioms.lean` tables
+   (**tasks §7**) — after the code, so every corrected sentence points at something
+   that now exists.
+6. Gates (**tasks §9**), then archive. **tasks §8 is the deliberately-not-fixed list**;
+   it is not work and must not be ticked as if it were.
 
 ## Open Questions
 

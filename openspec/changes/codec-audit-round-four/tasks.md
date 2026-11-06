@@ -5,6 +5,15 @@ audit. Every one is listed below with its location, its evidence, and the fix. N
 is dropped, including the 17 nitpicks — a nitpick left in the code is how the next
 round's MUST-FIX starts.
 
+**Two numbering systems, and they are off by one — this is not a typo.**
+`codec-audit-round-four` is the **change** name (the fourth audit _change_); its
+findings come from the **fifth review round** (rounds one to three produced
+`codec-audit-remediation`, `-round-two`, `-round-three`; the fourth review fed
+`-round-three` as a follow-up, so this review is the fifth). Hence the change is
+`round-four` and the ids are `R5-nn`. When this archives it will be
+`<date>-codec-audit-round-four`, and the _next_ review's findings will be `R6-nn` in a
+change called `round-five`.
+
 Evidence base: `/tmp/r5-a-vacuity.md` (910 lines), `/tmp/r5-b-departures.md` (1658
 lines), `/tmp/r5-c-cross.md` (521 lines), merged ledger `/tmp/r5-SYNTHESIS.md`.
 Main-agent verification probes: `/tmp/verify/*.lean`.
@@ -87,9 +96,9 @@ _absence_ of one.
       §D1. Needs two more terms, both transcribed verbatim from the auditor's probe
       `/tmp/r5a/p2.lean` (still on disk; do not re-derive):
       `prod_relUnambAlignedWitness : ∀ a {m} (t : Bytes m), relUnambAlignedWitness a t →
-  m ≠ 0` (a `match` on `m`, four arms), and
+m ≠ 0` (a `match` on `m`, four arms), and
       `lengthDet_not_implies_relAligned_productive :
-  ¬ (∀ {α} (R), LengthDet R → (∀ a {m} (t : Bytes m), R a t → m ≠ 0) → RelAligned R)`,
+¬ (∀ {α} (R), LengthDet R → (∀ a {m} (t : Bytes m), R a t → m ≠ 0) → RelAligned R)`,
       closed by `relUnambiguous_not_implies_relAligned` applied to the two witnesses.
       Method that works: copy `p2.lean`'s bodies — they are `match`-on-`m` throughout;
       a `match` on `t` as well as `m` fails to refine the hypothesis (see 1.3's note).
@@ -181,9 +190,9 @@ docstring repair.
       (`/tmp/verify/s3.lean`), `[propext, Quot.sound]`-only, by packaging the three
       existing `uniqCounterexample_*` lemmas:
       `∃ (R : Bool → {m : Nat} → Bytes m → Prop), relUnambiguous R ∧
-   (∀ a {m} (t : Bytes m), R a t → m ≠ 0) ∧
-   ¬ (∀ (xs ys : List Bool) (n : Nat) (s : Bytes n),
-       relRepeat R xs n s → relRepeat R ys n s → xs = ys)`.
+ (∀ a {m} (t : Bytes m), R a t → m ≠ 0) ∧
+ ¬ (∀ (xs ys : List Bool) (n : Nat) (s : Bytes n),
+     relRepeat R xs n s → relRepeat R ys n s → xs = ys)`.
       Keep the existing `n = 2` version as the small witness. **R5-05.**
 - [ ] 3.2 Point the section header's "machine-checked below as `huniq_not_derivable`" at
       the strengthened name. The existing theorem never mentions `relUnambiguous` or
@@ -378,7 +387,7 @@ reader.
 - [x] 7.3 Update `openspec/lean-notes.md` with the two new lessons: (a) **a dependent
       `Fin`/`Array` bound reached by `simpa` leaks `Classical.choice`** — state the
       bound explicitly instead; (b) **a dependent rewrite under `decode d h (size) ∘
-  cast` cannot be `rw`/`subst`/`generalize`** — carry `hk : k = n` and
+cast` cannot be `rw`/`subst`/`generalize`** — carry `hk : k = n` and
       `ha : a = cast …` as hypotheses and `subst` twice.
 
       **DONE in the authoring session** (`722a69f`, 2026-11-06), together with the

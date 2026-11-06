@@ -72,7 +72,7 @@ RFC 4648 vector, and the C discipline. Those are recorded as passes, not tasks.
   `Axioms.lean`, `README.md`, `AGENTS.md`, `scripts/gen-axioms.lean`;
   `../lean-basen/{Axioms.lean, Bench.lean, BaseN/Base16.lean, flake.lock}`.
 - Every new law is gated: the def-coverage check and `headerNumbers` both fire, so the
-  counts in `Axioms.lean` must move in lockstep (§7.6).
+  counts in `Axioms.lean` must move in lockstep — see `tasks.md` §7.1.
 
 ## Evidence base
 
