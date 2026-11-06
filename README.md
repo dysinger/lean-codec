@@ -346,12 +346,16 @@ three are not cosmetic and should not be ported as if they were:
 `byte`, `satisfy` — plus the non-leaf `pure` (a value-equality check, not a
 format), **and one derived byte-run combinator, the `takeWhile` triple**. It ships
 as `relTakeWhile` / `decodeTakeWhile` / `encodeTakeWhile` (`Codec/Combinators.lean`),
-with `decodeTakeWhile_spec` and `encodeTakeWhile_rel` its laws. **Stated precisely,
-because an earlier revision called this "the same shape every other combinator has"
-and that is false:** `chainl1`/`chainr1` have **four** laws each
-(`decode…_spec`, `encode…_rel`, `encode…_ne_none`, `encode…_of_decode`), while
-`takeWhile` and `sepBy` have **two** — the decode→encode half is absent, which is
-open work in `openspec/changes/codec-audit-round-three` §1.5. And `takeWhile` is a
+with `decodeTakeWhile_spec`, `encodeTakeWhile_rel`, `encodeTakeWhile_ne_none` and
+`encodeTakeWhile_of_decode` its laws. **Stated precisely, because an earlier revision
+called this "the same shape every other combinator has" and that is false:**
+`chainl1`/`chainr1` have **four** laws each (`decode…_spec`, `encode…_rel`,
+`encode…_ne_none`, `encode…_of_decode`), and since
+`openspec/changes/codec-audit-round-three` §1.5 so do `takeWhile` and `sepBy`. The
+fourth law is _conditional_ in every case — `encode…_of_decode` needs the
+relation-level `relFunctional` hypothesis, because the encoders are only
+right-inverses of the decoders on functional descriptions — so "four laws" is the
+same shape as `chainl1`, not an unconditional bijection. And `takeWhile` is a
 _run-value triple_ like `relRepeat`, not one of the bounded-eight `Codec` values:
 its bound is the **input length**, not part of the description (`[S6]`). (An earlier revision
 cited the symbol `Codec.takeWhile`, **which does not exist** — `#check` reports an
