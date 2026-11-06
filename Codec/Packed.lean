@@ -119,6 +119,15 @@ happens once at the call site, if the caller ever commits a cursor. -/
 def decodeArrayFast {α : Type} (d : Codec α) (a : Array UInt8) (i : Nat) : List (α × Nat) :=
   decodeArray d a i
 
+/-- `decodeArrayFast` is `decodeArray`: the name exists to state the
+partial-remainder contract, not to change the decoder. A `rfl` law, recorded because
+§1.8's definition-coverage check treats an unmentioned `def` as a gap — and a
+contract-only alias deserves to have its contract *stated*, not only written in a
+docstring. -/
+theorem decodeArrayFast_eq {α : Type} (d : Codec α) (a : Array UInt8) (i : Nat) :
+    decodeArrayFast d a i = decodeArray d a i :=
+  rfl
+
 /-! ## The packed full-consumption result -/
 
 /-- The packed full-consumption decoder: a single suffix copy, never
@@ -1390,7 +1399,6 @@ def decodeWholeOneBytes {α : Type} (d : Codec α) (h : ConsumesByte d) {n : Nat
   decodeWholeOne d h (bytesToArray s)
 
 /-- **`decodeWholeOne` is the `decodeWhole` singleton, hence the spec's.**
-
 `some x` exactly when the specification decodes the whole buffer to exactly the list
 `[x]`. Stated against `decodeFull` (via `decodeWhole_eq`) so a caller gets the
 specification link without re-deriving anything; `[propext, Quot.sound]`-only. -/
@@ -1407,6 +1415,16 @@ theorem decodeWholeOne_eq {α : Type} (d : Codec α) (h : ConsumesByte d)
     | cons y ys => cases ys with
       | nil => simp
       | cons z zs => simp
+
+/-- `decodeWholeOneBytes` is `decodeWholeOne` on the packed view of the bytes — the
+one-line law tying the `Bytes`-indexed wrapper to the entry point it wraps. It is its
+**own** law because §1.8's definition-coverage check is a *mention* proxy: a thin
+wrapper no theorem names is indistinguishable, to that check, from a `def` nothing has
+reasoned about. -/
+theorem decodeWholeOneBytes_eq {α : Type} (d : Codec α) (h : ConsumesByte d) {n : Nat}
+    (s : Bytes n) :
+    decodeWholeOneBytes d h s = decodeWholeOne d h (bytesToArray s) :=
+  rfl
 
 /-- The packed full-consumption decoder equals the *first* spec `decode` result,
 with its suffix packed as a `ByteArray` and its consumed count read back. (The
