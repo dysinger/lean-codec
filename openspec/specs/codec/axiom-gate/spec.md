@@ -90,3 +90,53 @@ docstring SHALL state the measured footprint rather than an aspirational one.
 - **THEN** the gate lists that declaration by name with its measured footprint and
   the reason, so a reader can distinguish "excluded by decision" from "never
   checked".
+
+### Requirement: The partition extends to public definitions, not only theorems
+
+The gate's universe SHALL include public `def`s, not only public theorems. A public
+`def` with no proof about it is a hole of the same kind as an un-gated law, and it
+SHALL be covered by the same partition: every public `def` in the gated namespaces
+SHALL either be mentioned by the statement of at least one gated theorem, or be
+listed by name in an explicit definition-surface allowlist with a recorded reason.
+The build SHALL fail when a public `def` satisfies neither condition, printing the
+name.
+
+Because "has a law" is not decidable, the mechanism SHALL check the decidable proxy
+— whether a gated theorem's _type_ mentions the definition — and the gate's
+documentation SHALL state that this is a proxy, so it is never read as a guarantee
+that the law is strong. The proxy's guarantee is that no public definition can be
+covered by _silence_, which is the failure mode the partition exists to prevent.
+
+#### Scenario: A public definition with no law fails the build
+
+- **WHEN** a public `def` is added to `Codec`/`Iso` and no gated theorem mentions it
+- **THEN** `lake build` fails and prints the definition's name, so it cannot ship as
+  public surface with no statement about it.
+
+#### Scenario: A definition allowlisted with a reason passes
+
+- **WHEN** a public `def` is deliberately shipped without a law (for example a
+  convenience alias) and is listed in the definition-surface allowlist with a reason
+- **THEN** the build passes, so the decision to omit a law is on the record rather
+  than an accident.
+
+#### Scenario: The definition check finds the gaps the theorem partition cannot
+
+- **WHEN** the definition check is first run against the existing tree
+- **THEN** it names every public `def` with no gated law — the derived
+  combinators among them — so the enumeration is performed by the mechanism rather
+  than by a reviewer reading the source.
+
+### Requirement: The reported footprint distribution is generated, not remembered
+
+The gate's header SHALL report the axiom-footprint distribution of the gated set,
+and that distribution SHALL be produced by the generator from the environment it
+compiled, rather than transcribed by hand. A hand-written table can drift from the
+body it summarizes without any check noticing, because the partition and coverage
+checks compare set membership and not counts.
+
+#### Scenario: The reported counts match the body
+
+- **WHEN** the generated body and the header's footprint table are compared
+- **THEN** the per-footprint counts agree, because both are emitted by the same
+  generation step rather than one being maintained alongside the other.
