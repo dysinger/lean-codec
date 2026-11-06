@@ -11,7 +11,7 @@ One reviewer finding was refuted and is deliberately absent — see design D1.
 
 ---
 
-## Status — verified 2026-11-05, session 3 — **29/56 ticked**
+## Status — verified 2026-11-06, session 4 — **32/56 ticked**
 
 **Read this table, then run the check below it. Do not trust the numbers; re-derive
 them.** A task is `[x]` when the code is in the tree **and** the evidence is recorded
@@ -26,7 +26,7 @@ are ticked, and the two §2 tasks it left undone are named.
 | §1.2 `manyUpTo`                  | done       | `Rel_manyUpTo` + the 4-law `Classical.choice` split                                                              |
 | §1.3 `seq*`/`between`            | done       | 3 `Rel` laws + docstrings                                                                                        |
 | §1.4 `optional`/`maybe`/`choice` | done       | `none` case, alias laws, `Rel_choice` limits                                                                     |
-| **§1.5 `sepBy`/`takeWhile`**     | **OPEN**   | **NEXT SESSION STARTS HERE** — see the grep below                                                                |
+| **§1.5 `sepBy`/`takeWhile`**     | done       | +4 laws, +2 `rel…_cast`; gate 389 = 316 + 73                                                                     |
 | §1.6 dead surface                | OPEN       | `btake` still has 0 theorems; `Suffix.consumed` likewise                                                         |
 | §1.7 "free theorem" docstring    | OPEN       | `Combinators.lean` still says "no new induction, no gate"                                                        |
 | §1.8 def-coverage gate           | OPEN       | not added to `Axioms.lean`                                                                                       |
@@ -59,10 +59,11 @@ nix develop --command lake build 2>&1 | tail -3
 nix develop --command openspec validate --all 2>&1 | tail -1
 ```
 
-Expected today: `29` completed / `56` total; `29` ticked lines; `27` open lines; the
-grep shows `encodeSepBy_rel` and `encodeTakeWhile_rel` (**the gap**) plus
-`encodeChainl1_rel` / `_ne_none` / `_of_decode` (the model); `lake build` green at 15
-jobs with `382 = 310 + 72` verified; `openspec validate --all` 10/10.
+Expected today: `32` completed / `56` total; `32` ticked lines; `24` open lines; the
+grep shows **all four laws for all four relations** (`encodeSepBy_` and
+`encodeTakeWhile_` each now have `_rel` / `_ne_none` / `_of_decode` beside
+`encodeChainl1_`/`encodeChainr1_`) — §1.5's gap is closed; `lake build` green at 15
+jobs with `389 = 316 + 73` verified; `openspec validate --all` 10/10.
 
 ### Known OPEN work that is NOT a §-task number
 
@@ -75,7 +76,7 @@ ticked as if done:
   `rejects_single_char` honestly; the general law needs a `decodeFull`-length lemma.
 - `LengthDet → RelAligned`: **open**, neither proved nor refuted (see `Sound.lean`).
 
-Gate state: codec **310** gated / 72 allowlisted / 382 partitioned; `../lean-basen`
+Gate state: codec **316** gated / 73 allowlisted / 389 partitioned; `../lean-basen`
 green at 25 jobs on the codec pin in its `flake.lock`: **438 + 46 = 447 of 484**,
 header verified. (Check the pin with `nix flake metadata --json | grep -A2 codec`
 rather than trusting a hash written here.)
@@ -379,8 +380,7 @@ Axioms.lean` → `0`, and 437 theorems vs 440 pins agree only by discipline.
 
 ### 1.5 The under-covered triples: `sepBy`, `takeWhile`
 
-**NEXT SESSION STARTS HERE.** §1.0–§1.4 are landed and gated (16/56); this is the
-first unstarted family. Locate the model laws **by name**, not by line number — this
+**CLOSED 2026-11-06.** Locate the model laws by name, not by line number — this
 ledger and `AGENTS.md` both carried stale `:693`/`:646` figures within one session:
 
 ```bash
@@ -388,18 +388,61 @@ cd /Users/user/_/lean-codec
 grep -n 'theorem encodeChainl1_\|theorem encodeSepBy_\|theorem encodeTakeWhile_\|theorem encodeChainr1_' Codec/Combinators.lean
 ```
 
-As of §1.4 the tree has `encodeChainl1_ne_none`, `encodeChainl1_of_decode`,
-`encodeChainr1_ne_none`, `encodeChainr1_of_decode`, `encodeSepBy_rel` (only),
-`encodeTakeWhile_rel` (only) — i.e. `sepBy`/`takeWhile` need the other two each.
+The tree now has all four laws for all four relations. The audit's claim that
+`sepBy`/`takeWhile` were two-law triples against `chainl1`'s four is **closed by the
+proof, not by a note**: both missing halves turned out to be instances of
+`encodeRepeat_ne_none` / `encode_ne_none` plus the same `rel…_cast` step the chain
+family already used, so the asymmetry was an absence of work, never a gap in the
+design.
 
-- [ ] 1.5.1 Add `encodeSepBy_of_decode` and `encodeSepBy_ne_none`, mirroring
+- [x] 1.5.1 Add `encodeSepBy_of_decode` and `encodeSepBy_ne_none`, mirroring
       `encodeChainl1_of_decode` / `encodeChainl1_ne_none`.
-- [ ] 1.5.2 Add the `takeWhile` twins (`encodeTakeWhile_of_decode`,
+
+      **Landed 2026-11-06.** `encodeSepBy_ne_none` is structural on the value list
+      (head via `encode_ne_none`, tail via `encodeRepeat_ne_none`) and needs no
+      productivity witness. `encodeSepBy_of_decode` mirrors `encodeChainl1_of_decode`
+      exactly: `decodeSepBy_spec` at `r = Suffix.empty n`, `prepend_empty` to cast
+      the split back to the input length, then `encodeSepBy_ne_none` + `hd` for the
+      `Sigma` equality. One support lemma was needed that the chain family keeps
+      for itself: **`relSepBy_cast`**, the `relSepBy` analogue of `relChainl1_cast`
+      (`cases e; rfl` — every conjunct transports definitionally). `sepBy` also
+      needed one shape difference from `chainl1`: the `[]` case has to be closed by
+      rewriting `relSepBy.eq_def` (not `relSepBy`, which is a `match` on the list
+      and so does not `rw`), then `exact hrel.elim`.
+
+- [x] 1.5.2 Add the `takeWhile` twins (`encodeTakeWhile_of_decode`,
       `encodeTakeWhile_ne_none`).
-- [ ] 1.5.3 If a decode→encode law is not obtainable for either triple, record the
+
+      **Landed.** Both are one-line `relRepeat` instantiations:
+      `encodeRepeat_ne_none` and `encodeRepeat_rel`'s dual. The `_of_decode` direction
+      needs `relTakeWhile_cast` (a `relRepeat_cast` instance) for the same
+      cast-to-input-length step `sepBy` needed, hence the total of three support
+      lemmas for four laws. **`takeWhile` is `encodeRepeat` at one step**, so the
+      family now has the same four-law shape as `chainl1`/`chainr1` without a single
+      new induction — the docstring section that claimed "zero new induction" for
+      **two** laws was rewritten to say so for the correct number.
+
+- [x] 1.5.3 If a decode→encode law is not obtainable for either triple, record the
       asymmetry at `Combinators.lean` and in the README rather than presenting the
       triples as "the same shape every other combinator has" — `chainl1`/`chainr1`
       have four laws each; `sepBy`/`takeWhile` have two.
+
+      **Condition not met — nothing to record as an asymmetry.** Both laws were
+      obtainable for both triples, so all four relations now carry the same four laws
+      (`decode…_spec`, `encode…_rel`, `encode…_ne_none`, `encode…_of_decode`). The
+      README's `[S3]` anchor and the `takeWhile` section docstring were still updated,
+      because they stated the *gap* as a fact ("`takeWhile` and `sepBy` have two —
+      the decode→encode half is absent, which is open work in §1.5"); left alone they
+      would have been stale in the opposite direction. The new text keeps the honest
+      qualifier: the fourth law is **conditional on `relFunctional`** in every family,
+      so "four laws" is a shape match, not an unconditional bijection.
+
+      **Gate consequences (expected, §1.1 working):** six new theorems plus
+      `Codec.relSepBy.eq_def` (a `def`'s unfolding equation, allowlisted under the
+      existing `eq_def` reason group) — 382 → **389** public, 310 → **316** gated,
+      72 → **73** allowlisted, header distribution 201/74/4/31 → **203/78/4/31**.
+      All six new laws are `[propext, Quot.sound]`-only or cleaner; `Classical.choice`
+      still appears in no law.
 
 ### 1.6 Dead public surface
 
