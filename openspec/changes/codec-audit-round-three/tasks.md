@@ -24,9 +24,10 @@ One reviewer finding was refuted and is deliberately absent — see design D1.
 | §1.6–§1.10                       | not started                                                         |
 | §2.1–§2.5                        | not started (depends on §1)                                         |
 
-Gate state at this point: `lake build` green, **308** gated / 72 allowlisted / 380
-partitioned; `openspec validate --all` 10/10. `../lean-basen` green at 25 jobs
-(446 covered, 483 partitioned).
+Gate state at this point: `lake build` green, **310** gated / 72 allowlisted / 382
+partitioned (plus 2 new laws from the round-four audit, already pinned);
+`openspec validate --all` 10/10. `../lean-basen` green at 25 jobs on codec
+`add3ce4`: **438 pinned + 46 allowlisted = 447 of 484**, header numbers verified.
 
 **Do not count families, count tasks.** Each of §1.1–§1.4 cost several laws beyond
 the one the task names (`Rel_count_succ` needed `count_succ` plus two productivity
