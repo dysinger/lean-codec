@@ -118,16 +118,14 @@ words); and (d) a value that overflows the reconstructed byte (e.g. a base8/10
 digit triple `> 255`). The rejection SHALL be proved (`… = none`),
 `[propext, Quot.sound]`-only, as an **inequation over the composition** — the
 whole-input decoder is `List.head? ((decodeRepeat {x}Elem …).filterMap (decodeFull
-{x}TailElem …))` over the byte-list value, so `= none` follows by the
-pad-dichotomy: a full block never contains `=` (so the run cannot consume the
-trailing-data block), and a terminal-tail block must contain `=` (so the leftover
-alphabet-only bytes cannot decode as a tail). The `B32`/`B64` terminal-tail value
-types are the **canonical block/tail spine** — a proved total bijection with
-`List UInt8` whose tails are terminal (no constructor continues after a tail).
-Because they are canonical, the malformed shape has no inhabitant, and
-`decodeFullB{64,32}_char_via_type` proves the decoder's image is exactly the image
-of `encodeB{64,32} ∘ b{64,32}BytesOf`: the inequation above and the type-level fact
-agree, rather than the type being merely decorative.
+…
+
+A rejection theorem's **scope SHALL match its name and its documentation**. A
+theorem stated at one concrete input length SHALL be named and documented as a
+witness, not as the general law; where a sibling base proves the general form
+(for example an arity rejection quantified over every input whose length is not a
+whole number of code words), each base SHALL either prove the general form or
+record, at the witness, that the general form is unproved.
 
 #### Scenario: A byte outside the alphabet is rejected
 
@@ -188,6 +186,20 @@ theorems are that quantifier — not a collection of named examples. For each of
   not)
 - **THEN** the result is `none`. (Base2/4/16 cannot overflow a byte by
   construction; no such theorem is needed for them.)
+
+#### Scenario: A single-witness rejection is not presented as the general law
+
+- **WHEN** a base's arity-rejection theorem is stated at one concrete input
+- **THEN** its name and docstring present it as a witness, and the general
+  quantified form is either proved for that base or recorded as unproved.
+
+#### Scenario: A witness does not stand for a property it does not exercise
+
+- **WHEN** a rejection theorem is named for a property (for example rejecting
+  lowercase) but its input is rejected by an independent reason at that input
+  (for example odd arity)
+- **THEN** the theorem does not carry that name, and the named property is stated
+  by a theorem whose input actually exercises it.
 
 ### Requirement: The encoder is canonical
 
@@ -251,12 +263,34 @@ with only `propext` and `Quot.sound`, zero `sorry`, no `Classical.choice`, and
 SHALL be covered by a bench-lane vector (an `example` or `#eval`) so the gate
 exercises them, matching the F* reference's `decode_*_invalid` vector set.
 
+The gate's coverage SHALL be a property of the mechanism, not of a list a
+maintainer remembers to update. The package SHALL contain a build-time check over
+the compiled environment that fails the build — printing the offending name — when
+a public theorem is not gated, and when a pinned name has no matching theorem. A
+gate whose population depends on remembering to add a line SHALL NOT be described
+as covering the package's laws: it covers exactly the laws someone listed, and one
+added theorem makes that claim false without any build failing.
+
 #### Scenario: The gate covers the new laws
 
 - **WHEN** `lake build` and `#print axioms` run on the conformance laws
 - **THEN** the build has zero `sorry`/warnings, `#print axioms` reports only
   `[propext, Quot.sound]` for each new theorem, and the bench lane value-checks
   each rejection/canonical vector byte-for-byte.
+
+#### Scenario: A law added without a gate entry fails the build
+
+- **WHEN** a public theorem is added to a `BaseN` module and no corresponding
+  footprint check is added
+- **THEN** `lake build` fails and prints that theorem's name, so the gate cannot go
+  green while a law is unchecked.
+
+#### Scenario: A stale gate entry fails the build
+
+- **WHEN** a pinned name in the gate has no matching theorem in the environment
+  (a rename, or a deletion)
+- **THEN** `lake build` fails naming it, so the gate cannot rot into a snapshot of a
+  past tree.
 
 ### Requirement: Base16 decoding accepts both cases (RFC 4648 §8)
 
@@ -278,8 +312,9 @@ uppercase bijection and the widening is confined to decoding.
 
 - **WHEN** lowercase input is fed to the strict `Codec`-value decoder
   `decodeFull hexElem hexConsumesByte`
-- **THEN** it returns `none` — the canonical bijection is unchanged
-  (`rejects_lowercase`), and this is **not** a §8 divergence because the
+- **THEN** it returns `none` at an input where case is the **only** reason for
+  rejection (an even-length input asserting the arithmetic is even, so the arity
+  gate cannot be the cause), and this is **not** a §8 divergence because the
   conformant surface is the separate `decodeHexFold`. The earlier
   "a case-insensitive alphabet would break `Unambiguous`" rationale is withdrawn:
   the constraint is the canonicality of encode.
@@ -298,8 +333,6 @@ uppercase bijection and the widening is confined to decoding.
 - **THEN** it maps `a`–`f` **up** to `A`–`F` (so the canonical uppercase encoding
   is a fixed point) and is idempotent (`foldByte_idem`, `foldList_idem`), which is
   the `Normalizer` law that makes the quotient type well-formed. It is
-  length-preserving by construction (`Bytes n → Bytes n`), which is the class of
-  variation `Codec.Normal` is specified for.
 
 ### Requirement: One package covers all seven bases
 
