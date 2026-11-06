@@ -2,7 +2,12 @@
 
 ## Purpose
 
-TBD - created by archiving change codec-review-remediation. Update Purpose after archive.
+Constraints that keep this repository's _proof and prose_ honest after a review
+round: the build fails on an incomplete proof instead of merely warning; a rule a
+future author needs is recorded once, at the point of use; documentation
+distinguishes what it _quotes_ from what it _derives_; and agent-facing instructions
+name the correct repository for each command. These are the requirements whose breach
+is invisible to the compiler, which is why they are written down rather than assumed.
 
 ## Requirements
 
