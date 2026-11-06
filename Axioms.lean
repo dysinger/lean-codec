@@ -64,20 +64,20 @@ nix develop --command lake env lean scripts/gen-axioms.lean
 
 ## Current state
 
-**382** public theorems are covered, by a partition with no third route:
+**389** public theorems are covered, by a partition with no third route:
 
 | side | count | what it is |
 | --- | --- | --- |
-| gated (`gatedNames`) | **310** | footprint pinned by `#print axioms` |
-| allowlisted (`generatedAuxAllowlist`) | **72** | not a law; reason recorded in place |
+| gated (`gatedNames`) | **316** | footprint pinned by `#print axioms` |
+| allowlisted (`generatedAuxAllowlist`) | **73** | not a law; reason recorded in place |
 | un-gated and unlisted | **0** | a build failure, by construction |
 
 Gated footprint distribution:
 
 | footprint | count |
 | --- | --- |
-| `[propext, Quot.sound]` | 201 |
-| `[propext]` | 74 |
+| `[propext, Quot.sound]` | 203 |
+| `[propext]` | 78 |
 | `[Quot.sound]` | 4 |
 | axiom-free | 31 |
 | `[propext, Classical.choice, Quot.sound]` | **0** |
@@ -313,6 +313,7 @@ def generatedAuxAllowlist : Array Name := #[
   `Codec.findFrom.eq_def,
   `Codec.pushBytesFrom.eq_def,
   `Codec.relRepeat.eq_def,
+  `Codec.relSepBy.eq_def,
   `Iso.foldRec.eq_def,
 ]
 
@@ -486,7 +487,11 @@ def gatedNames : List Lean.Name := [
   ,`Codec.encodeChainr1_rel
   ,`Codec.encodeRepeat_ne_none
   ,`Codec.encodeRepeat_rel
+  ,`Codec.encodeSepBy_ne_none
+  ,`Codec.encodeSepBy_of_decode
   ,`Codec.encodeSepBy_rel
+  ,`Codec.encodeTakeWhile_ne_none
+  ,`Codec.encodeTakeWhile_of_decode
   ,`Codec.encodeTakeWhile_rel
   ,`Codec.encodeWholeBytes_toList
   ,`Codec.encodeWholeRepeatAcc_eq_fold
@@ -572,6 +577,8 @@ def gatedNames : List Lean.Name := [
   ,`Codec.relRepeat_suffix_inj
   ,`Codec.relRepeat_unbounded_of_empty
   ,`Codec.relRepeat_unique_same_length
+  ,`Codec.relSepBy_cast
+  ,`Codec.relTakeWhile_cast
   ,`Codec.relUnambAlignedWitness_unamb
   ,`Codec.relUnambiguous_not_implies_relAligned
   ,`Codec.relUnambiguous_of_relAligned
@@ -721,9 +728,9 @@ run_cmd do
   let gated := gatedNames.length
   let allow := CodecAxioms.generatedAuxAllowlist.size
   -- Lockstep with "Current state" above.
-  let expectedPub := 382
-  let expectedGated := 310
-  let expectedAllow := 72
+  let expectedPub := 389
+  let expectedGated := 316
+  let expectedAllow := 73
   let mut bad : Array String := #[]
   if pub.size != expectedPub then
     bad := bad.push s!"public theorems: table says {expectedPub}, environment has {pub.size}"
@@ -1268,9 +1275,21 @@ why it was fixed instead of documented.
 /-- info: 'Codec.encodeRepeat_rel' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.encodeRepeat_rel
+/-- info: 'Codec.encodeSepBy_ne_none' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Codec.encodeSepBy_ne_none
+/-- info: 'Codec.encodeSepBy_of_decode' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.encodeSepBy_of_decode
 /-- info: 'Codec.encodeSepBy_rel' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.encodeSepBy_rel
+/-- info: 'Codec.encodeTakeWhile_ne_none' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Codec.encodeTakeWhile_ne_none
+/-- info: 'Codec.encodeTakeWhile_of_decode' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.encodeTakeWhile_of_decode
 /-- info: 'Codec.encodeTakeWhile_rel' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.encodeTakeWhile_rel
@@ -1526,6 +1545,12 @@ why it was fixed instead of documented.
 /-- info: 'Codec.relRepeat_unique_same_length' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.relRepeat_unique_same_length
+/-- info: 'Codec.relSepBy_cast' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Codec.relSepBy_cast
+/-- info: 'Codec.relTakeWhile_cast' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Codec.relTakeWhile_cast
 /-- info: 'Codec.relUnambAlignedWitness_unamb' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Codec.relUnambAlignedWitness_unamb
