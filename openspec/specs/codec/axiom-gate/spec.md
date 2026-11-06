@@ -93,39 +93,46 @@ docstring SHALL state the measured footprint rather than an aspirational one.
 
 ### Requirement: The partition extends to public definitions, not only theorems
 
-The gate's universe SHALL include public `def`s, not only public theorems. A public
-`def` with no proof about it is a hole of the same kind as an un-gated law, and it
-SHALL be covered by the same partition: every public `def` in the gated namespaces
-SHALL either be mentioned by the statement of at least one gated theorem, or be
-listed by name in an explicit definition-surface allowlist with a recorded reason.
-The build SHALL fail when a public `def` satisfies neither condition, printing the
-name.
+The axiom gate's universe SHALL be the public **theorems** _and_ the public
+**definitions**, and a definition that no gated theorem names SHALL be a build
+failure unless it is listed in a definition-surface allowlist with its reason in
+place.
 
-Because "has a law" is not decidable, the mechanism SHALL check the decidable proxy
-— whether a gated theorem's _type_ mentions the definition — and the gate's
-documentation SHALL state that this is a proxy, so it is never read as a guarantee
-that the law is strong. The proxy's guarantee is that no public definition can be
-covered by _silence_, which is the failure mode the partition exists to prevent.
+The check SHALL be documented as a **mention proxy**, and its documented property
+SHALL be stated as the narrow one it has: no public definition can be covered by
+silence. The documentation SHALL state that the proxy can be satisfied vacuously by
+a theorem whose statement mentions the constant trivially, and SHALL NOT present the
+check as a guarantee of law strength or as soundness.
+
+The reported counts SHALL distinguish what the proxy measured from what it did not:
+a definition named by a gated theorem's type SHALL NOT be described as "having a
+stated law", because an identity unfold (`def f := g; theorem f_eq : f = g := rfl`)
+satisfies the proxy while stating nothing about behaviour.
 
 #### Scenario: A public definition with no law fails the build
 
-- **WHEN** a public `def` is added to `Codec`/`Iso` and no gated theorem mentions it
-- **THEN** `lake build` fails and prints the definition's name, so it cannot ship as
-  public surface with no statement about it.
+- **WHEN** a public definition in the library namespace is named by no gated
+  theorem's type and is absent from the allowlist
+- **THEN** the build fails, naming the definition.
 
 #### Scenario: A definition allowlisted with a reason passes
 
-- **WHEN** a public `def` is deliberately shipped without a law (for example a
-  convenience alias) and is listed in the definition-surface allowlist with a reason
-- **THEN** the build passes, so the decision to omit a law is on the record rather
-  than an accident.
+- **WHEN** a public definition is named by no gated theorem but appears in the
+  definition-surface allowlist together with a reason it is not a law
+- **THEN** the build passes, and the reason is readable in place next to the entry.
 
 #### Scenario: The definition check finds the gaps the theorem partition cannot
 
-- **WHEN** the definition check is first run against the existing tree
-- **THEN** it names every public `def` with no gated law — the derived
-  combinators among them — so the enumeration is performed by the mechanism rather
-  than by a reviewer reading the source.
+- **WHEN** a public definition exists that the theorem partition cannot see,
+  because the gate's theorem universe is `thmInfo` only
+- **THEN** the definition check names it rather than staying green by omission.
+
+#### Scenario: The reported counts do not overstate what the proxy measured
+
+- **WHEN** the gate's header table reports how many definitions the check covers
+- **THEN** the column describes a _mention_ rather than a characterized law, and the
+  header names any definition whose only naming theorem is an identity unfold, so a
+  reader cannot read the count as "this many definitions have real laws".
 
 ### Requirement: The reported footprint distribution is generated, not remembered
 

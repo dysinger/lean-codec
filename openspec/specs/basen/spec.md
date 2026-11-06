@@ -271,6 +271,19 @@ gate whose population depends on remembering to add a line SHALL NOT be describe
 as covering the package's laws: it covers exactly the laws someone listed, and one
 added theorem makes that claim false without any build failing.
 
+The gate SHALL partition **definitions** as well as theorems: the package's gate
+SHALL match the dependency's, so that a public definition named by no theorem is a
+build failure unless listed with a reason. A gate that partitions theorems only
+leaves a public definition invisible — neither gated nor computed — and a definition
+that no theorem and no proof line consumes is then dead surface that the gate cannot
+report.
+
+The gate's **prose** SHALL be gated too. Where the gate's module documentation states
+counts, those counts SHALL be asserted by a build-time check, or the prose SHALL be
+deleted. A header table that is asserted while the paragraph beside it is remembered
+is not gated: the paragraph can be falsified by a regeneration that updates the table
+and leaves the prose stale, with every check green.
+
 #### Scenario: The gate covers the new laws
 
 - **WHEN** `lake build` and `#print axioms` run on the conformance laws
@@ -291,6 +304,26 @@ added theorem makes that claim false without any build failing.
   (a rename, or a deletion)
 - **THEN** `lake build` fails naming it, so the gate cannot rot into a snapshot of a
   past tree.
+
+#### Scenario: A public definition with no law fails the build
+
+- **WHEN** a public `BaseN` definition is named by no gated theorem's type and is
+  absent from the definition-surface allowlist
+- **THEN** `lake build` fails naming it, matching the behaviour the `codec`
+  dependency already has.
+
+#### Scenario: Gate prose stating counts is asserted, not remembered
+
+- **WHEN** the gate's module documentation states how many theorems are pinned,
+  allowlisted, or total
+- **THEN** a build-time check compares those figures with the compiled environment,
+  or the prose is removed, so a stale paragraph cannot survive a regeneration.
+
+#### Scenario: The gate's error messages are arithmetically true
+
+- **WHEN** a gate check reports counts in a message
+- **THEN** any equation it prints holds of the sets it names, rather than combining
+  figures from two different sets into one line.
 
 ### Requirement: Base16 decoding accepts both cases (RFC 4648 §8)
 
