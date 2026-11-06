@@ -61,7 +61,7 @@ is not real work (§8 explains why it has none).
   advertised. Fourteen findings.
 - **NITPICK** — a wording error, a dead lemma, a mis-citation. Seventeen findings.
 
-## Issue ledger (the index — every id appears in exactly one section below)
+## Issue ledger (the index — every id is fixed by at least one task below)
 
 | id    | sev     | repo  | location                                               | one-line                                                                                    |
 | ----- | ------- | ----- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
@@ -323,8 +323,12 @@ reader.
       `Type → Type`. The real reason (given correctly at README:697–700) is that a
       typeclass gives no finite case list to induct over.
 - [ ] 5.8 **`Normal.lean:41–49` (R5-30).** "for a **decidable** idempotent `norm`" —
-      `Normalizer` carries no `Decidable` field. Either add the field or state the
-      sentence as describing an intended instantiation.
+      `Normalizer` carries no `Decidable` field. **Default: state the sentence as
+      describing an intended instantiation — do not add a field.** `Normalizer` has
+      exactly one field (`idem`), and adding `Decidable` would put a new hypothesis on
+      the `fill`/`fixed` interface, which is the opposite of the file's stated rationale
+      for using a fixed-point subtype. The two options are not cost-symmetric, so there
+      is no real choice here. **R5-30.**
 - [ ] 5.9 **`Rel_seqLeft` docstring (R5-09).** Its twin has a long docstring that
       explicitly warns the proof recipe does **not** transfer between the two halves;
       `Rel_seqLeft` has none. Add two lines.
@@ -360,8 +364,8 @@ reader.
       `BaseN` (codec's checks `Codec`/`Iso`; basen's must check `BaseN` only — `Codec.*`
       names are the dependency's and stay outside). **R5-36.**
 
-      **The outcome is open on purpose, and here is how to handle it, so the session does
-      not stall.** The auditor's "28 substantive defs" came from a `/tmp` mirror
+      **The *result* is open on purpose; the *procedure* below is fixed**, so the session
+      cannot stall — every branch ends in a tick. The auditor's "28 substantive defs" came from a `/tmp` mirror
       (`/tmp/probe-basen/ProbeDefs.lean`) with 38 machinery names filtered by hand, not
       from the ported check; expect a *different* set. Procedure: (a) run the ported
       check and let it print the silent set; (b) for each name, classify into exactly one
@@ -569,9 +573,22 @@ theorem relAligned_not_implies_lengthDet :
     aligned_alignedNotLengthDetWitness)
 ```
 
-Measured: `lengthDet_relUnambAlignedWitness` and `lengthDet_not_implies_relAligned`
-`[propext]`; `aligned_alignedNotLengthDetWitness` and `relAligned_not_implies_lengthDet`
-`[propext, Quot.sound]`.
+Measured, per theorem (re-measured 2026-11-06; **an earlier draft of this line claimed
+the last one was axiom-free and that was wrong** — a reminder that these lines are
+claims, not decoration):
+
+| theorem                                       | footprint               |
+| --------------------------------------------- | ----------------------- |
+| `lengthDet_relUnambAlignedWitness`            | `[propext]`             |
+| `prod_relUnambAlignedWitness`                 | `[propext]`             |
+| `lengthDet_not_implies_relAligned`            | `[propext]`             |
+| `lengthDet_not_implies_relAligned_productive` | `[propext]`             |
+| `aligned_alignedNotLengthDetWitness`          | `[propext, Quot.sound]` |
+| `not_lengthDet_alignedNotLengthDetWitness`    | `[propext, Quot.sound]` |
+| `relAligned_not_implies_lengthDet`            | `[propext, Quot.sound]` |
+
+No `Classical.choice` anywhere. `Axioms.lean` pins these itself once §7.1 runs; this
+table is the pre-flight cross-check (§9.5), not a substitute for the gate.
 
 ### A.2 — §2.1 (`Codec/Packed.lean`) — `[propext, Quot.sound]`
 

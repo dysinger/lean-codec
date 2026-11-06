@@ -56,12 +56,17 @@ Guidance for AI coding agents working in this repository.
 >
 > **`[x]` means "in the tree AND evidence recorded in the ledger" — never tick on
 > intent, and never leave a finished task unticked.** A checkbox reports a fact; the
-> schedule is a separate sentence. So §2 tasks that the round-four audit closed are
-> ticked **even though §1.5 is unstarted** — leaving them `[ ]` made the ledger
-> report 16/56 while 28 were done. Before starting anything in §2, read its "evidence
-> / what remains" cell: some are already implemented (template `warningAsError`,
-> `master`, the arity renames, the `enrichHex`-style prose fixes) and redoing one is
-> the concrete cost of this confusion.
+> schedule is a separate sentence.
+>
+> **Do not look in the open ledger for "already implemented" work.** An earlier
+> version of this paragraph told the reader to check a "`evidence / what remains`" cell
+> and to expect §2 items already done (`warningAsError`, `master`, the arity renames,
+> the `enrichHex` prose), citing `16/56` while `28` were complete. **All of that
+> describes `codec-audit-round-three`, which is archived** — round three's own ledger
+> records that it deleted exactly this prose as the `16/56` defect. It is recorded here
+> in the past tense only so the text is not re-invented: if a future ledger has a task
+> whose work predates it, tick it and say so _in that task's own evidence cell_, never
+> as a blanket instruction here.
 >
 > **Two items are open in code, not as task numbers** — do not "discover" them as
 > bugs: basen's three `native_decide` bench uses (annotated with the route out, which
