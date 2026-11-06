@@ -201,12 +201,48 @@ must know before choosing `decodeOne` as its decoder. -/
 def manyUpTo {α : Type} (n : Nat) (p : Codec α) : Codec (List α) :=
   choice ((List.range (n + 1)).map (fun k => count k p))
 
-/-! ## Soundness lemmas: the derived combinators are free theorems
+/-! ## `Rel` characterizations for the derived combinators
 
-Each derived combinator's `Rel` characterization is a *definitional* consequence
-of the primitives' `Rel_*` lemmas — no new induction, no gate. These
-representative lemmas pin down that claim; the full laws (`decode_spec`, `bidir`,
-`roundtrip`) hold unconditionally via `Codec.Sound`. -/
+Each derived combinator has a `Rel` characterization that is a rewrite through the
+primitives' `Rel_*` lemmas. **An earlier revision of this docstring called these
+"free theorems": "a *definitional* consequence of the primitives' `Rel_*` lemmas —
+no new induction, no gate… and the full laws (`decode_spec`, `bidir`, `roundtrip`)
+hold unconditionally via `Codec.Sound`." That is false, and the correction is
+recorded here rather than deleted, because a porter following the old text will plan
+the wrong work.**
+
+What is actually true, in three parts:
+
+1. **The `Rel` characterizations do hold, and each is proved here.** `Rel_seqRight`,
+   `Rel_seqLeft`, `Rel_between`, `Rel_optional_some`/`_none`,
+   `Rel_maybe_some`/`_none`, `Rel_count_zero`, `Rel_count_succ`,
+   `Rel_choice` and `Rel_manyUpTo`. Most are `Iso`/`seq` rewrites. **They are not
+   all "no new induction"**, and the exception is `Rel_manyUpTo`: it needs a
+   `List.range`/`map` membership lemma that did not exist, plus the `count` step
+   (`Rel_count_succ`) as a *premise* — see that theorem's docstring.
+2. **The `count` step was missing until `codec-audit-round-three` §1.1, and with it
+   the claim was vacuous at a variable `n`.** `count` is a `match`/`foldl` over `n`,
+   not a recursive `Codec` constructor, so "no new induction" was true only of the
+   `n = 0` case (`Rel_count_zero`). `Rel_count_succ` is where `Iso.cons` and
+   `Codec.seq` actually do their work, and it is an independent theorem, not a
+   consequence of the primitives.
+3. **`decode_spec`, `bidir` and `roundtrip` do NOT follow for these values.** Those
+   three laws in `Codec.Sound` are proved by `induction d` — a **structural
+   induction on the `Codec` value**. A derived combinator is *not* a new
+   constructor: `count n p` is `Codec.iso … (Codec.seq p (count (n-1) p))`, so the
+   induction reaches a call at a *smaller* `n` with no `Rel` hypothesis to rewrite
+   through, and the `count` case does not close. Hence: **there is no
+   `decode_spec`/`bidir`/`roundtrip` for `count`/`manyUpTo`/`optional`/`maybe`/
+   `choice`/`seqRight`/`seqLeft`/`between`, and the absence is a statement about the
+   shape of the derivation, not a backlog item.** What each of them does have is its
+   own `Rel` characterization above — which is what a consumer of a derived value
+   can actually use.
+
+So the honest summary is: the `Rel` layer is complete for the derived combinators;
+the *whole-description* laws are complete only for genuine `Codec` constructors.
+`sepBy`/`chainl1`/`chainr1`/`takeWhile` sit deliberately on the first side — they are
+`rel…`/`decode…`/`encode…` **triples** over `relRepeat`, never `Codec` values, so
+`Codec.Sound`'s laws are not even in scope for them. -/
 
 /-- `optional p` relates `Option.some x` iff `p` relates `x`.
 
