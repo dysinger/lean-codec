@@ -1100,8 +1100,17 @@ theorem relRepeat_suffix_inj {n m : Nat} (hm : m ≤ n)
 /-- A step relation is **length-determinate** when each value relates only to strings
 of a single length. It is one of the two hypotheses
 `relRepeat_unique_same_length` needs beyond unambiguity, and it is *not* implied by
-it. It holds for `byte` (which lives only at `Bytes 1`) and for any codec whose
-leaves are fixed-width in their *value*.
+it — proved, not asserted, as `lengthDet_not_implied_by_unamb` (the witness has one
+value at two lengths: unambiguous at each fixed length, plainly not `LengthDet`).
+
+It holds for `byte`, proved as `lengthDet_byte` (which lives only at `Bytes 1`). The
+generalisation "for any codec whose leaves are fixed-width in their *value*" was
+**prose and is withdrawn**: there is no such theorem, and it is not obvious — a
+`pure` leaf sits at `Bytes 0` while `byte` sits at `Bytes 1`, so a `seq` of them is
+fixed-width only per-value, which is what `LengthDet` measures but nothing has proved
+compositionally. Recorded as the honest scope: `LengthConst → LengthDet`
+(`lengthDet_of_lengthConst`) is the proved chain, and per-leaf fixed width is proved
+at `byte` only (`lengthDet_byte`).
 
 Note what it does **not** say: it does not pin the length of a *list* of steps — two
 values may each sit at one length while a list of them has any number of elements.
@@ -1458,6 +1467,45 @@ theorem lengthDet_of_lengthConst {α : Type} (R : α → {m : Nat} → Bytes m �
     (c : Nat) (hc : LengthConst R c) : LengthDet R := by
   intro a m₁ m₂ t₁ t₂ h₁ h₂
   rw [hc t₁ h₁, hc t₂ h₂]
+
+/-! ### `LengthDet` is not implied by `relUnambiguous`
+
+The docstring on `def LengthDet` claims it is "one of the two hypotheses
+`relRepeat_unique_same_length` needs beyond unambiguity, and it is *not* implied by
+it". The second half was prose; `codec-audit-round-three` §2.1.4 applies §2.1.2's
+rule ("state the measured relationship, not the assertion") and gives it a theorem.
+
+The witness is simpler than `RelAligned`'s: a relation that has **one value at two
+lengths** is unambiguous (at each fixed length there is at most one value) while
+plainly failing `LengthDet`. Note the contrast with
+`relUnambiguous_not_implies_relAligned`: that one needs two *values*, this one needs
+one value at two lengths. Both are `[propext]`-clean. -/
+
+/-- The witness for `LengthDet`'s independence: `tt` at length 1 **and** at length 2,
+`ff` nowhere. At each length at most one value relates (so `relUnambiguous`), but `tt`
+sits on two different lengths (so not `LengthDet`). -/
+def lengthDetWitness (a : Bool) : {m : Nat} → Bytes m → Prop
+  | 1, _ => a = true
+  | 2, _ => a = true
+  | _, _ => False
+
+/-- `relUnambiguous` holds for the witness: the length picks the only value. -/
+theorem lengthDetWitness_unamb : relUnambiguous lengthDetWitness := by
+  intro a b n s ha hb
+  match n, s, ha, hb with
+  | 1, _, ha, hb => exact ha.trans hb.symm
+  | 2, _, ha, hb => exact ha.trans hb.symm
+  | 0, _, h, _ => exact absurd h (by simp [lengthDetWitness])
+  | _ + 3, _, h, _ => exact absurd h (by simp [lengthDetWitness])
+
+/-- **`relUnambiguous` does not imply `LengthDet`** — so `LengthDet` is a genuine extra
+hypothesis, not a restatement of unambiguity. -/
+theorem lengthDet_not_implied_by_unamb : ¬ LengthDet lengthDetWitness := by
+  intro h
+  have h1 : lengthDetWitness true (m := 1) (fun _ => (0x41 : UInt8)) := rfl
+  have h2 : lengthDetWitness true (m := 2) (fun _ => (0x41 : UInt8)) := rfl
+  have := h (a := true) (fun _ : Fin 1 => (0x41 : UInt8)) (fun _ : Fin 2 => (0x41 : UInt8)) h1 h2
+  omega
 
 /-- `decodeRepeat` membership at full consumption, spelled as `relRepeat`, **at
 `Codec.byte`**. Deliberately specialised rather than general: the general form is
