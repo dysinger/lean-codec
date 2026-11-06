@@ -2,45 +2,48 @@
 
 Guidance for AI coding agents working in this repository.
 
-> ## START HERE: the next task is `openspec/changes/codec-audit-round-three/tasks.md`
+> ## START HERE: there is no open change
 >
-> **`codec-audit-round-three` is the open change.** Its `tasks.md` is the ledger and
-> the only direction — this file does not restate it. Read §1.0 first: it is
-> deliberately ordered ahead of everything else.
+> **All three audit rounds are archived.** `codec-audit-round-three` closed 56/56 and
+> archived 2026-11-06 as
+> `openspec/changes/archive/2026-11-06-codec-audit-round-three/` (7 requirements
+> added, 6 modified, 0 removed; `codec/law-coverage` is new with its `## Purpose`
+> carried across, and round two's three partition scenarios survived — verified
+> scenario-by-scenario at archive time, not assumed).
 >
 > **First action of the session, always:**
 >
 > ```bash
-> nix develop --command openspec list --json          # what is open, how far along
-> nix develop --command openspec status --change codec-audit-round-three --json
+> nix develop --command openspec list --json          # is anything open?
+> nix develop --command openspec validate --all       # are the deltas sound?
 > ```
 >
-> Then open that change's `tasks.md` and work top-down. Do not work from this file;
-> it holds the **stable** part — how to work here, what the gates are, and the traps
-> that have cost sessions. Status is computed from `openspec/`, never recorded here.
+> If a change is open, its `tasks.md` is the ledger and the only direction — open it
+> and work top-down. If none is open (today's state) **there is no queued work**, and
+> the next piece of work is an _owner decision_: author a new change under
+> `openspec/changes/` (the archived ledgers are models for _shape_, never a template
+> to resume). Do not invent one from this file.
 >
-> **Where the next session starts, exactly.** The ledger's `## Status — verified`
-> table is the authoritative state; this box only says how to use it.
+> Do not work from this file; it holds the **stable** part — how to work here, what
+> the gates are, and the traps that have cost sessions. Status is computed from
+> `openspec/`, never recorded here.
 >
-> **Nothing in this file names the next task — that is deliberate.** Sessions have
-> repeatedly let a prose "next task" go stale while the ledger moved on (this box
-> said "§1.5 next" long after §1.5, §1.6, §1.7, §1.8, §1.9 and §1.10 had all landed).
-> Do not reintroduce a task pointer here, and do not trust one if you find one.
+> **Nothing in this file names a task or a next task — that is deliberate.** Sessions
+> have repeatedly let a prose "next task" go stale while the ledger moved on (a
+> START-HERE box said "§1.5 next" long after §1.5–§1.10 had all landed). Do not
+> reintroduce a task pointer here, and do not trust one if you find one.
 >
-> **Re-derive the state; do not believe a number in prose.** Three commands:
+> **Re-derive the state; do not believe a number in prose.** Two commands, plus the
+> gates below:
 >
 > ```bash
 > nix develop --command openspec list --json | grep -E 'completedTasks|totalTasks'
-> grep -oE '^- \[x\] [0-9.]+' openspec/changes/codec-audit-round-three/tasks.md | wc -l
-> grep -nE '^- \[ \] [0-9.]+' openspec/changes/codec-audit-round-three/tasks.md
+> nix develop --command lake build 2>&1 | tail -5    # four gate lines, see below
 > ```
 >
-> The third lists the **only** tasks that are actually open. Part 1 (§1.0–§1.10) is
-> closed and its laws exist, so §2's prose tasks are now scheduled on their own
-> merits rather than blocked behind law coverage. `lake build` prints **four** gate
-> lines (footprint, partition, definition coverage, header numbers) and
-> `openspec validate --all` should be 10/10 — but read the numbers off the run, not
-> off this page.
+> `lake build` prints **four** gate lines — footprint, partition, definition
+> coverage, header numbers — and `openspec validate --all` is 10/10. Read those
+> numbers off the run, not off this page.
 >
 > **`[x]` means "in the tree AND evidence recorded in the ledger" — never tick on
 > intent, and never leave a finished task unticked.** A checkbox reports a fact; the
@@ -60,12 +63,14 @@ Guidance for AI coding agents working in this repository.
 > **Never cite a line number in this file or the ledger.** Both carried stale
 > `:693`/`:646` figures for the same laws within a single session; cite the grep.
 >
-> **Round two is archived.** `2026-11-05-codec-audit-round-two` (42/42 tasks, its
-> three spec deltas synced into `openspec/specs/` and verified scenario-by-scenario)
-> is history. Round three's delta was authored against the _pre_-sync text, so when
-> it archives it will replace `codec/axiom-gate`'s requirement again — re-run
-> `openspec validate --all` **after** that archive and re-check that round two's
-> three partition scenarios survived.
+> **Rounds two and three are both archived, and the hazard they shared is the one to
+> carry forward.** `2026-11-05-codec-audit-round-two` (42/42) and
+> `2026-11-06-codec-audit-round-three` (56/56) are history. Round three's delta was
+> authored against the _pre_-sync text, so it replaced `codec/axiom-gate`'s
+> requirement a second time; it was archived **after** a live-vs-delta scenario diff
+> and `openspec validate --all` was re-run **after** the archive — both green, and
+> round two's three partition scenarios survived. Do the same for any future change
+> that touches a requirement another change already rewrote.
 
 ## Current state
 
@@ -73,22 +78,26 @@ Guidance for AI coding agents working in this repository.
 
 | Question                       | Authoritative file                                                               |
 | ------------------------------ | -------------------------------------------------------------------------------- |
-| **What is the task right now** | `openspec/changes/codec-audit-round-three/tasks.md` (§1.0 first)                 |
+| **What is the task right now** | nothing queued — `openspec list --json` returns no open change                   |
 | Open changes + task counts     | `nix develop --command openspec list --json`                                     |
 | Are the spec deltas sound      | `nix develop --command openspec validate --all`                                  |
 | Archived history               | `openspec/changes/archive/<date>-<name>/tasks.md` (e.g. `2026-11-05-lean-basen`) |
 | Lessons (not direction)        | `openspec/lean-notes.md`                                                         |
 
-**One change is open; round two is archived history.**
+**No change is open; rounds two and three are archived history.**
 
-- `codec-audit-round-three` — `in-progress`. Authored 2026-11-05 from the third audit
-  (three read-only reviewers; reports in `/tmp/r3-*.md`). §1 makes law coverage
-  structural and §2 fixes prose; §2's claims depended on §1's laws, which is why the
-  order was not negotiable — and §1 is now closed. **Read its `tasks.md` for what is
-  open — not this file, and not this bullet.**
+- `codec-audit-round-three` — **archived** 2026-11-06 as
+  `openspec/changes/archive/2026-11-06-codec-audit-round-three/` (56/56 tasks). It
+  came from the third audit (three read-only reviewers; reports in `/tmp/r3-*.md`):
+  §1 made law coverage structural, §2 fixed prose. The pre-archive scenario diff found
+  **no live scenario dropped** (every MODIFIED requirement was a strict superset or
+  identical) and `codec/law-coverage` was created with its `## Purpose` carried
+  across. Do not reopen it; read its archived `tasks.md` as history.
 - A **round-four audit** (three read-only reviewers, 2026-11-05; `/tmp/r4-*.md`) ran
-  on top of that and its findings are **applied and pushed** — see the ledger's
-  "Round-four audit" section for what was fixed, what was refuted, and what is open.
+  on top of that and its findings are **applied and pushed** — see the archived
+  ledger's "Round-four audit" section in
+  `openspec/changes/archive/2026-11-06-codec-audit-round-three/tasks.md` for what was
+  fixed, what was refuted, and what is open.
   Its two structural additions are worth knowing before touching a gate: both
   `Axioms.lean` headers are now **asserted** by a `headerNumbers` `run_cmd` (a stale
   count is a build failure), and the template finally enforces `warningAsError`.
