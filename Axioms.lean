@@ -1457,19 +1457,47 @@ def namesSelf (env : Environment) (selfName : String) (ns : Name) (seg : String)
     | [] => []
   let rec dropT (cs : List Char) : List Char := (dropL cs.reverse).reverse
   let stripCh (x : String) : String := String.ofList (dropT (dropL x.toList))
-  -- Last backticked name in the prefix that resolves; none means "self's own claim".
-  let resolved := ((String.splitOn before "`").zipIdx.filterMap fun (p, i) =>
+  -- Backticked tokens in the prefix, last-first.
+  let toks := ((String.splitOn before "`").zipIdx.filterMap fun (p, i) =>
     if i % 2 == 1 then some (stripCh p) else none).filter fun p =>
       p != "FP_BOTH" && p != "FP_PROPEXT"
-  match resolved.reverse.head? with
-  | none => true
-  | some last =>
-      -- A resolvable declaration name in the prefix decides it: self only if it is self.
-      let n := last.toName
-      let ok := (env.find? n).isSome || (env.find? (ns ++ n)).isSome ||
-                (env.find? (`Codec ++ n)).isSome
-      if !ok then true
-      else (last.splitOn ".").getLast! == selfName
+  -- **A token is a *declaration name candidate* only if it looks like one**: a single
+  -- identifier (optionally dotted), no spaces, no arrow, no operator glyphs. Round
+  -- eight found that taking the last *resolving* token instead silently discarded real
+  -- claims: `Codec.Bytes.ext_iff`'s says "provable by `funext` (left) and `congrFun`
+  -- (right), both `[propext, Quot.sound]`-only", and because `funext` resolves the
+  -- claim was attributed away from the theorem it was written about. The same held for
+  -- `Codec.byteSlice_spec`. So: keep scanning leftwards past tokens that are not name
+  -- candidates, and attribute away only when a genuine *other* declaration is the
+  -- nearest name.
+  let isIdentChar (c : Char) : Bool :=
+    c.isAlphanum || c == '_' || c == '.' || c == '\''
+  let isNameTok (t : String) : Bool :=
+    !t.isEmpty && t.toList.all isIdentChar && !(t.splitOn ".").any (·.isEmpty)
+  -- **Self wins if it appears anywhere in the prefix.** Attribute the claim away only
+  -- when the prefix names a genuine *other* declaration and **never** names self. The
+  -- earlier rule took the nearest resolving name, which mis-fires on a docstring of the
+  -- form "provable by `funext` … and `congrFun` …, both `<footprint>`": the nearest
+  -- name is `congrFun`, a real declaration, so the claim was attributed away from the
+  -- theorem it describes. Two live sites were in exactly that state
+  -- (`Codec.Bytes.ext_iff`, `Codec.byteSlice_spec`), both silently unchecked.
+  -- **Only a *Codec/Iso theorem* can own a footprint claim.** A token that resolves to
+  -- a library lemma (`funext`, `congrFun`, `omega`) or to a `def` is an ingredient, not
+  -- a subject: nobody writes "`congrFun` is `[propext]`-only" as a claim about
+  -- `congrFun`. Restricting to `thmInfo` in this package's namespaces is what makes
+  -- "the segment names another declaration" mean what the rule intends.
+  let isOtherTheorem (t : String) : Bool :=
+    if !isNameTok t then false
+    else
+      let n := t.toName
+      let cand := [n, ns ++ n, `Codec ++ n, `Iso ++ n]
+      cand.any fun c =>
+        match env.find? c with
+        | some (.thmInfo _) => ((`Codec).isPrefixOf c || (`Iso).isPrefixOf c)
+        | _ => false
+  let names := toks.filter fun t => isNameTok t && (t.splitOn ".").getLast! == selfName
+  if !names.isEmpty then true
+  else !(toks.any isOtherTheorem)
 
 /-! **The stated-footprint check**, run on every `lake build` — `codec-audit-round-six`
 §1.1, R7-01/R7-02.
