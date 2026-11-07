@@ -243,11 +243,11 @@ performance figures` recounted: **four distinct quantities across fourteen
 
 - [x] 7.1 `nix fmt`, `lake build` (every gate line, counts in lockstep), `lake build
 bench`, `openspec validate --all`, `nix flake check` (detached with `nohup`).
-      **DONE, all five, same session — but with one correction that changes what "`nix
-    fmt` clean" means in this repo.** `nix fmt` in this dev shell has **no prettier**:
-      it formats `*.nix` only and prints "0 changed" for markdown it never touched. So
-      every "`nix fmt` clean" in this file's history (and in the archives) covered Lean
-      and Nix and **not markdown**. The real markdown gate is the flake formatter
+      **DONE, all five, same session — but with one correction that changes what a
+      clean `nix fmt` run means in this repo.** `nix fmt` in this dev shell has **no
+      prettier**: it formats `*.nix` only and prints "0 changed" for markdown it never
+      touched. So every clean `nix fmt` in this file's history (and in the archives)
+      covered Lean and Nix and **not markdown**. The real markdown gate is the flake formatter
       (`nix build .#formatter.…` → treefmt with the sandboxed prettier, cached per
       tree — `--clear-cache` after an out-of-band edit). That is what caught the
       archived round-six ledger (`185eebd`), a **pre-existing** red this change did not
