@@ -2,42 +2,60 @@
 
 Guidance for AI coding agents working in this repository.
 
-> ## START HERE: `openspec list --json` — no change is open
+> ## START HERE: `openspec/changes/codec-audit-round-six/tasks.md`
+>
+> **`codec-audit-round-six` is the open change, 6/32 tasks** (authored 2026-11-07
+> from the seventh review round; 33 numbered findings, `R7-01`…`R7-33`). Its
+> `tasks.md` is the ledger and the only direction — work top-down from §2.
+>
+> **§1 is closed; §2 is next.** §1 landed the seventh gate arm (a stated axiom
+> footprint is now compared with `collectAxioms` on every build) and corrected
+> **26** docstring footprint claims, not the 11 the reviewers reported. §2 is
+> `basen`'s gate. Do **not** re-litigate §1; read its four ticks for what was
+> measured.
+>
+> **Two traps §1 cost a session, both worth knowing before §2:**
+>
+> 1. **A new check that passes is not evidence it runs.** The footprint arm was
+>    green and would have stayed green forever: a backticked _footprint_
+>    (`` `[propext, Quot.sound]` ``) was parsed as a backticked _declaration name_,
+>    so every claim was attributed away from its own declaration. Only inserting a
+>    deliberately false claim and watching it **fail** found this. **Mutate every
+>    new check before believing it.**
+> 2. **`String.trim` does not exist** in this toolchain (`trimAscii` returns a
+>    `Slice`), and `String.join` takes only a `List String` — no separator
+>    argument. Both cost compile cycles in §1.
+>
+> **This box names the change, never a task.** That is deliberate: it has gone
+> stale **five** times (it said "§1.5 next" long after §1.5–§1.10 landed, then said
+> "no open change" while `round-four` was open, then still named `round-four` after
+> it archived, then still named `round-five` after it archived, then still said
+> "no change is open" with `round-six` open). If the change named here is not what
+> `openspec list` reports, **believe the command**. With no change open **there is
+> no queued work**; author a new change before coding.
+>
+> **The numbering is off by one from the change names, and that is not a typo.**
+> `round-six` is the sixth audit _change_ and its findings come from the
+> **seventh** review round, so its ids are `R7-nn`. The next review's ids will be
+> `R8-nn` in a change called `round-seven`.
 >
 > **`codec-audit-round-five` closed 46/46 and archived 2026-11-07** as
 > `openspec/changes/archive/2026-11-07-codec-audit-round-five/` (38 findings,
 > `R6-01`…`R6-38`; three MODIFIED requirements, **all additive** — +2 `basen`,
 > +2 `codec/axiom-gate`, +4 `codec/review-remediation` scenarios, zero dropped —
-> plus two ADDED `codec/axiom-gate` requirements). Read its archived `tasks.md`
-> as history; do not reopen it.
+> plus two ADDED `codec/axiom-gate` requirements). Its durable engine was the
+> **def-side audit arm** (`derivedDefDeclinationAudit`, `derivedDefPatternAudit`):
+> `isDerivedDefName` removed a name from the gate's universe _before_ any check
+> could see it, and it was dropping `Iso.prod` — the paper's own `×` — out of a
+> green gate. Round six has now added the third arm of the same family, for
+> **stated footprints**. **When you add a check, ask what removes things from its
+> input, and whether that removal is recorded.**
 >
-> **Its one durable engine is the def-side audit arm**, and it is worth knowing
-> before touching any gate. `codec`'s `Axioms.lean` now runs **six** `run_cmd`
-> checks; the two new ones (`derivedDefDeclinationAudit`, `derivedDefPatternAudit`)
-> exist because `isDerivedDefName` removed a name from the gate's universe
-> _before_ any check could see it, and it was dropping `Iso.prod` — the paper's
-> own `×` — out of a green gate. Every dropped name now needs a reason, and a
-> pattern matching nothing is a build failure. `basen` gained a matching
-> `nativeDecideCount` arm. **When you add a check, ask what removes things from
-> its input, and whether that removal is recorded.**
->
-> **This box names the change, never a task.** That is deliberate: it has gone
-> stale **four** times (it said "§1.5 next" long after §1.5–§1.10 landed, then said
-> "no open change" while `round-four` was open, then still named `round-four` after
-> it archived, then still named `round-five` after it archived). If the change
-> named here is not what `openspec list` reports, **believe the command**. With no
-> change open **there is no queued work**; author a new change before coding.
->
-> **The numbering is off by one from the change names, and that is not a typo.**
-> `round-five` was the fifth audit _change_ and its findings came from the
-> **sixth** review round, so its ids are `R6-nn`. The next review's ids will be
-> `R7-nn` in a change called `round-six`.
->
-> `codec-audit-round-four` closed 52/52 and archived 2026-11-07 as
-> `openspec/changes/archive/2026-11-07-codec-audit-round-four/` (37 findings,
-> `R5-01`…`R5-37`; four MODIFIED requirements, **all additive** — +3 `basen`, +1
-> `codec/axiom-gate`, +2 `codec/law-coverage`, +2 `codec/review-remediation` scenarios,
-> zero dropped).
+> > `codec-audit-round-four` closed 52/52 and archived 2026-11-07 as
+> > `openspec/changes/archive/2026-11-07-codec-audit-round-four/` (37 findings,
+> > `R5-01`…`R5-37`; four MODIFIED requirements, **all additive** — +3 `basen`, +1
+> > `codec/axiom-gate`, +2 `codec/law-coverage`, +2 `codec/review-remediation` scenarios,
+> > zero dropped).
 >
 > `codec-audit-round-three` closed 56/56 and archived 2026-11-06 as
 > `openspec/changes/archive/2026-11-06-codec-audit-round-three/` (7 requirements
@@ -69,15 +87,16 @@ Guidance for AI coding agents working in this repository.
 >
 > ```bash
 > nix develop --command openspec list --json | grep -E 'completedTasks|totalTasks'
-> nix develop --command lake build 2>&1 | tail -8    # six gate lines, see below
+> nix develop --command lake build 2>&1 | tail -9    # seven gate lines, see below
 > ```
 >
-> `lake build` prints **six** gate lines — footprint, partition, definition
-> coverage, **def-side declination audit**, **classifier pattern audit**, header
-> numbers (the last two added by `round-five` §1) — and `openspec validate --all`
-> is **10/10** live capabilities with no change open (11/11 while a change is open:
-> +its delta). Read those numbers off the run, not off this page: on 2026-11-07 the
-> codec gate printed `425 = 348 + 77` theorems and `140 = 115 + 25` defs.
+> `lake build` prints **seven** gate lines — footprint, partition, definition
+> coverage, def-side declination audit, classifier pattern audit, header numbers,
+> and (new in `round-six` §1) **stated footprints verified against the
+> environment**. `openspec validate --all` is **11/11** while a change is open
+> (10/10 with none: the change is the eleventh item). Read those numbers off the
+> run, not off this page: on 2026-11-07, after `round-six` §1, the codec gate
+> printed `426 = 349 + 77` theorems and `140 = 115 + 25` defs.
 >
 > **`[x]` means "in the tree AND evidence recorded in the ledger" — never tick on
 > intent, and never leave a finished task unticked.** A checkbox reports a fact; the
@@ -121,15 +140,26 @@ Guidance for AI coding agents working in this repository.
 
 | Question                       | Authoritative file                                                               |
 | ------------------------------ | -------------------------------------------------------------------------------- |
-| **What is the task right now** | `openspec/changes/<open>/tasks.md` — none open, so nothing                       |
+| **What is the task right now** | `openspec/changes/codec-audit-round-six/tasks.md` (§2 next)                      |
 | Open changes + task counts     | `nix develop --command openspec list --json`                                     |
 | Are the spec deltas sound      | `nix develop --command openspec validate --all`                                  |
 | Archived history               | `openspec/changes/archive/<date>-<name>/tasks.md` (e.g. `2026-11-05-lean-basen`) |
 | Lessons (not direction)        | `openspec/lean-notes.md`                                                         |
 
-**No change is open. `codec-audit-round-five` and everything before it are archived
-history.**
+**One change is open (`codec-audit-round-six`, 6/32); round five and everything
+before it are archived history.**
 
+- `codec-audit-round-six` — **in-progress**, 6/32, authored 2026-11-07 from the
+  seventh review round (three read-only workers; reports `/tmp/r7/{A,B,C}.md`,
+  merged ledger `/tmp/r7-SYNTHESIS.md`). 33 findings (`R7-nn`): 5 MUST / 12 SHOULD /
+  16 NITPICK, plus **10 refuted**. **Read its `tasks.md` — not this file.** Three
+  things about it are worth holding in mind before §2:
+  - **Zero soundness defects.** 502-constant sweep: no `Classical.choice`, no
+    `sorry`. Every MUST is a false claim _about_ the mathematics.
+  - **§1 found 26 footprint claims, not the 11 reported** — an environment walk
+    catches what a per-family `#print` sweep misses.
+  - **One reviewer figure is refuted** (`[S1]`'s count "should be 21"): the walk
+    returns 19, and only the decomposition was wrong. Recorded in its §9.
 - `codec-audit-round-five` — **archived** 2026-11-07 as
   `openspec/changes/archive/2026-11-07-codec-audit-round-five/` (46/46 tasks, all
   three repos gated). Authored 2026-11-07 from the sixth
