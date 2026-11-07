@@ -1032,8 +1032,16 @@ unsafe def benchDecodeShapes (n : Nat) (samples : Nat) (r : Nat) : IO Unit := do
   -- express it per byte sourced the wrong figure twice: once by dividing a
   -- whole-array build by `n` (gave ~12 ns/"step", below the decode it composes),
   -- and once by passing `bytes := 1`, which made the memcpy reference a 1-byte copy
-  -- and priced clock granularity. Measured directly: **~4.3 microseconds per call**,
-  -- because `attach.map` rebuilds `PackedCand`'s *proof terms* -- that is the cost.
+  -- and priced clock granularity. The cost is the `attach.map` rebuilding
+  -- `PackedCand`'s *proof terms*; the figure this lane prints is the row README's
+  -- table quotes as **430-650 ns/call**.
+  --
+  -- **An earlier revision of this comment said "~4.3 microseconds per call"**, a 10x
+  -- discrepancy against the same row's 430-650 two paragraphs below
+  -- (`codec-audit-round-eight` M-4). No committed run produced a microsecond figure;
+  -- it was a stale note from before the lane was rewritten to `printLane`. Do not
+  -- restate a number here -- **the lane prints it, and the README table is the
+  -- authority** (`AGENTS.md`: quote a figure only from the lane that produced it).
   do
     let arr := arrayAt 0
     let perStep (a : Array UInt8) : UInt8 :=
