@@ -8,7 +8,13 @@ import Codec.Iso
 
 A binary format often accepts more than one concrete spelling of the same value:
 RFC 4648 §8 requires a Base16 *decoder* to accept both `6F` and `6f`, because the
-case of a hexadecimal digit carries no information. README `[D4]` answered the
+case of a hexadecimal digit carries no information. **The same shape covers
+everything that is syntactically permitted and semantically inert** — a redundant
+leading zero in a numeral (`"01"` names the same value as `"1"`, so it is padding,
+not a digit), an overlong integer encoding, optional whitespace. In every case the
+question "is `"01"` a second image of `1`?" has the same answer: no — it is a lax
+*name* for the one canonical image, and the quotient below is what says so.
+README `[D4]` answered the
 paper's §3.1 remark ("the inverse invariant, read modulo equivalence classes") by
 *capturing* a permitted run and re-emitting it verbatim, so that no `Iso` is
 lossy. That conclusion is right, but its diagnosis was incomplete: the honest
