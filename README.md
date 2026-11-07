@@ -59,9 +59,14 @@ subsection we cite the subsection).
 ### Departures (observable-semantics changes)
 
 **[D1] `String`/`Char` → bytes — bytes become the base unit.**
-The paper's concrete syntax is textual. The decoder is `Parser (String → [(α,
-String)])` (§4.1) and the primitive token is `token` over `Char`; the value graph
-is given as `Rel :: [(α, String)]` (§4.3). `codec` targets binary, so the base
+The paper's concrete syntax is textual. The decoder is
+`newtype Parser α = Parser (String → [(α, String)])` (§4.1) and the primitive token
+is `token` over `Char`; the value graph is `data Rel α = Rel [(α, String)]` (§4.3) —
+quoted in full, because an earlier revision rendered the two declarations as the
+fragments `Parser (String → [(α, String)])` and `Rel :: [(α, String)]`, neither of
+which is what the paper says (the first drops the `newtype` head and the `α` binder,
+the second writes `Rel` as if it were a constructor rather than a `data` type).
+`[D2]` below quotes them correctly; the two anchors now agree. `codec` targets binary, so the base
 unit is `UInt8`, the base string is a byte sequence, and `byte : Codec UInt8` is
 the `token` analogue. Text/Unicode is rebuilt downstream (`lean-text`) on top of
 bytes, not in core. **One byte-string type, one job** (see
@@ -122,7 +127,10 @@ parse (Parser p) s = [x | (x, "") ← p s]
 
 — so the paper's `parse` is not even the full relation; its `Rel` is. `codec`'s
 `decode` returns the unfiltered pair list, i.e. a **superset** of what `parse`
-yields and exactly the paper's `Rel`. The **relation** is unchanged; the
+yields and exactly the paper's `Rel` **as a graph** — that is, as a set of
+`(value, string)` pairs, not as a multiset of derivations, so two parses reaching the
+same pair are one element of the relation (see the Multiplicity note under `[D3]`).
+The **relation** is unchanged; the
 **observation** is not — `[α]` and `[(α, String)]` are different results for the same
 input — which is why this is a departure and not a strengthening. It states the
 relationship to `parse` as a theorem rather than a definitional identity:
@@ -188,15 +196,21 @@ exactly one space** no matter how many (including zero) were parsed, and
 **`sepSpace` requires at least one blank on input and prints one space**. Because every `codec` combinator is a **strict** partial
 isomorphism — `Iso.law` is a field, `apply a = some b ↔ unapply b = some a` — we
 **cannot follow the paper's destructive constructor**: a lossy `ignore` cannot
-inhabit `Iso`, because its `apply` is **not injective**. `ignore x = Iso (fun _ =>
-Just ()) (fun () => Just x)` sends _every_ `a` to `()`, so the field would demand
-`apply a = some () ↔ unapply () = some a` — i.e. `True ↔ a = x` — for every `a` at
-once, which is false for any `a ≠ x`. (The paper says the same thing in its own
+inhabit `Iso`, because its `apply` is **constant** — it sends _every_ `a` to `()`,
+and the law is an `↔` quantified over **every** `a`. Concretely, `ignore x = Iso (fun
+_ => Just ()) (fun () => Just x)` would demand
+`apply a = some () ↔ unapply () = some a`, i.e. `True ↔ a = x`, for every `a` at
+once — false for any `a ≠ x`. (The paper says the same thing in its own
 words: "`ignore` is again not a strict partial isomorphism, because **all values of
-`α` are mapped to ()**".) Note what is _not_ the reason: the failure is not that
-"two distinct inputs map to one output, so `unapply` cannot choose" — `unapply` is
-free to pick either one; it fails because the law is an `↔` quantified over
-_every_ `a`, and a constant `apply` cannot satisfy it for two different `a`. So instead of relaxing the law to admit `ignore`, a run of
+`α` are mapped to ()**".) **The obstruction is constancy, not non-injectivity, and an
+earlier revision said the opposite in consecutive sentences** (`codec-audit-round-five`
+R6-17): its anchor sentence read "because its `apply` is **not injective**", and three
+sentences later the same paragraph correctly said "Note what is _not_ the reason: the
+failure is not that two distinct inputs map to one output, so `unapply` cannot
+choose". The first sentence was the error. Non-injectivity is a _consequence_ of
+constancy and is not by itself fatal: a partial iso whose `apply` merged two inputs
+could still satisfy the field if `unapply` picked the one the law demands, so what
+breaks is the `↔` over all `a`, not the merging. So instead of relaxing the law to admit `ignore`, a run of
 allowed bytes is _captured_ as a value and re-emitted verbatim — realized by
 repetition over a **`Codec.satisfy p`** step (`Codec/Combinators.lean`), not a new
 primitive. (An earlier revision wrote "a `subset p byte` step"; no code composes
@@ -243,12 +257,15 @@ without which the normalising decoder can fail on its own encoder's output.
 independent departure.** The foil is concrete and the paper names it: Parsec "provides
 a `|` combinator, but its semantics implements predictive parsing with a look ahead of
 1, whereas our implementation supports unlimited backtracking" (§4.4) … "with
-Parsec, `p | q` may fail, even if `q` would succeed". _(The ellipsis marks an elision:
-the paper continues between the two quoted fragments — "This means that … whereas the
-syntax description `p | q` should not be empty if `q` is nonempty" — which is a
-restatement of the same point in the paper's own framework rather than a third claim.
-An earlier revision spliced the two quotes with no marker, which made them read as
-adjacent text.)_ Designs like that require `|`'s
+Parsec, `p | q` may fail, even if `q` would succeed". _(The `…` marks an elision, and
+the material strictly between the two fragments is **three words** — "This means
+that", §4.4 — after which the paper's own sentence continues directly into the second
+quoted fragment. An earlier revision rendered the note as a quote-with-its-own-ellipsis
+("This means that … whereas the syntax description …"), i.e. it spliced the elision
+marker itself across the text it was describing; the span is quoted exactly here and no
+more (`codec-audit-round-five` R6-16). The point of the note is the marker, not the
+three words: without it the two fragments read as adjacent text, which they are not.)_
+Designs like that require `|`'s
 branches to be _prefix-disjoint_ so at most one can match. `codec` requires none —
 and the checkable reason is that **`Codec.alt` carries no premise at all**: `[D3]`'s
 backtracking union tries the branches independently and concatenates their results,
@@ -275,7 +292,16 @@ states, because `apply`-succeeds-iff-`unapply`-succeeds does not give
 precondition, and `codec` omits it rather than ship a subtly-unsound one. What is
 supplied instead is `Iso.foldl`/`Iso.foldr` directly, and the honest obligation they
 carry is a **`measure : α → Nat` plus a proof that each step strictly decreases it**
-(`MeasureDecreases`) — a termination witness, not a "chain-isolated in both
+— a termination witness. **Stated at the right type, because an earlier revision
+collapsed two different things** (`codec-audit-round-five` R6-24):
+`MeasureDecreases` is not "a measure with a proof field"; it is a structure
+**parameterised by the measure and the iso**, `MeasureDecreases (measure : α → Nat)
+(i : Iso (α × β) α)`, whose **only field is the proof** `dec : ∀ a a' b, i.unapply a
+= some (a', b) → measure a' < measure a`. So the measure is an _argument_ to the
+witness type, not a field of it — which is what makes one structure serve every fold.
+(That same anchor's later list gets this right: "a `measure : α → Nat` plus a proof"
+is two arguments, `MeasureDecreases measure f`, not one bundled value.) It is a
+termination witness, not a "chain-isolated in both
 directions" condition (that phrase has no counterpart in the paper and is not
 anything `codec` requires; it was invented in an earlier draft).
 
@@ -356,12 +382,45 @@ matters most for a porter: it turns two round-trip equations into the `law`, so 
 total bijection needs no hand-written inverse proof.
 
 `Iso.foldl` and `Iso.foldr` are **deliberately excluded** from that list, and the
-list is called "full" only of the _unconditional_ isos. Grepping `^def` in
-`Codec/Iso.lean` finds exactly two other `Iso`-valued definitions, and both of them
-hold their law only on the terminal-seed domain — strength (ii) below, with a
-`MeasureDecreases` witness the caller supplies. So the list is complete _as stated_
-rather than exhaustive of every `Iso` in the file, which is the distinction an
-earlier revision left a reader to infer wrongly.
+list is called "full" only of the _unconditional_ structural isos. **How the count
+is obtained matters, and an earlier revision got both the number and the method
+wrong** (`codec-audit-round-five` R6-04): it said "grepping `^def` in
+`Codec/Iso.lean` finds exactly two other `Iso`-valued definitions", which is wrong
+twice over — `grep '^def'` misses a multi-line signature, and the tree has **four**
+more, not two. A walk of the compiled environment (the same method `Axioms.lean`'s
+definition-coverage check uses) finds **19** public `Iso`-valued definitions: the 13
+above, plus `foldl`, `foldr`, `counterIso` and `counterIsoR`.
+
+Those four are not all in the same position, which is why "exactly two others" was
+misleading rather than merely off by two:
+
+- `Iso.foldl`/`Iso.foldr` hold their law only on the **terminal-seed domain** —
+  strength (ii) below, with a `MeasureDecreases` witness the caller supplies;
+- `Iso.counterIso`/`Iso.counterIsoR` hold it **unconditionally** — they are the
+  `MeasureDecreases` satisfiability witnesses (`counterMeasureDecreases`,
+  `counterMeasureDecreasesR`), structure literals whose `law` is proved at the
+  definition site like every entry in the list above. The earlier revision lumped
+  these in with the folds by saying both "hold their law only on the terminal-seed
+  domain", which is **false for `counterIso`/`counterIsoR`**.
+
+So the honest scope of the 13-value list is: it is the list of **structural**
+unconditional isos a porter reproduces, and it is complete _of that category_ — it is
+not an enumeration of every `Iso`-valued definition in the tree. The four omitted
+values are a fold pair with a domain restriction and two counterexample witnesses;
+none is a combinator a porting reader is missing.
+
+**Five of the thirteen have no in-tree caller at all, and that is expected rather
+than a defect** (`codec-audit-round-five` R6-30). Measured by an environment walk over
+referencing constants (ignoring the compiler's `.eq_1` unfoldings): `Iso.id`,
+`Iso.ofTotal` and `Iso.associate` are referenced by **nothing** — they are the
+category's identity and its two structural isos, shipped for a downstream author and
+required by `[S3]` only as _combinators a porter must reproduce_. (`Iso.element` and
+`Iso.subset` used to be in the same position; they are not any more, because
+`codec-audit-round-five` §2.3 gave them the **domain laws**
+`Iso.element_unapply_eq_some_iff` / `Iso.subset_apply_eq_some_iff` — the answer to
+`R6-07`. That is what "five" counted before those laws existed; do not re-derive it
+as five.) So the count is **3** of the 13 with no referencing constant, plus
+`element`/`subset` now referenced by their own domain laws.
 
 **Two strengths, stated separately, because they are not the same strength.**
 (i) For the **structural** isos in that list the law holds **unconditionally** — no
@@ -406,18 +465,37 @@ called this "the same shape every other combinator has" and that is false:**
 `encode…_ne_none`, `encode…_of_decode`), and since `codec-audit-round-three` §1.5
 (`openspec/changes/archive/2026-11-06-codec-audit-round-three/`) so do `takeWhile`
 and `sepBy`. The
-fourth law is _conditional_ in every case — `encode…_of_decode` needs the
-relation-level `relFunctional` hypothesis, because the encoders are only
-right-inverses of the decoders on functional descriptions — so "four laws" is the
-same shape as `chainl1`, not an unconditional bijection. And `takeWhile` is a
+fourth law takes a **`relFunctional`** hypothesis on the relation it transports —
+`encode…_of_decode` needs it because the encoders are only right-inverses of the
+decoders on functional descriptions. **How strong that obligation is, measured rather
+than asserted** (`codec-audit-round-five` §D6 / R6-15; an earlier revision said it was
+"conditional in **every** case" and that was too strong):
+
+| combinator          | the `relFunctional` obligation                                     |
+| ------------------- | ------------------------------------------------------------------ |
+| `takeWhile`         | **derivable — no hypothesis at all** (`relTakeWhile_functional`)   |
+| `sepBy`             | **derivable from `relFunctional (Rel p)`** (`relSepBy_functional`) |
+| `chainl1`/`chainr1` | a genuine caller obligation                                        |
+
+`takeWhile`'s step is `satisfy p`, whose bytes are determined by its _value_
+(`t = single b` at length 1), so the obligation follows from the leaf's shape. `sepBy`
+is a `Rel p` head plus a `takeWhile`-shaped tail: the tail is derivable, the **head is
+an arbitrary `Codec α`**, so its functionality is a hypothesis on `p`. `chainl1`/
+`chainr1` existentially quantify a seed and operand list and then require the fold's
+`apply` to land on `a`, so two different pairs can fold to the same `a` — that is an
+open question, not an obligation this package discharges or claims to. So "four laws"
+is still the same shape as `chainl1`'s, but the conditional is weaker than "in every
+case" for two of the three. And `takeWhile` is a
 _run-value triple_ like `relRepeat`, not one of the bounded-eight `Codec` values:
 its bound is the **input length**, not part of the description (`[S6]`). (An earlier revision
 cited the symbol `Codec.takeWhile`, **which does not exist** — `#check` reports an
 unknown identifier; there is no single `Codec`-valued `takeWhile`, only the triple.)
 
-**The complete core `Codec`-value inventory**, because this anchor is the one a
-porter reads to know what they must reproduce and an earlier revision listed only
-the leaves:
+**The fifteen a porting reader must reproduce**, because this anchor is the one a
+porter reads to know what they must build — and **the earlier revision called this
+"every `Codec`-valued definition in the tree", which is false**
+(`codec-audit-round-five` R6-05): an environment walk finds **four** more public
+`Codec` values that no row lists. See the second paragraph.
 
 | value                                                                                | at                                       | bounded?                                   |
 | ------------------------------------------------------------------------------------ | ---------------------------------------- | ------------------------------------------ |
@@ -426,11 +504,19 @@ the leaves:
 | `empty`, `alt` (`\|`), `seq` (`∗`), `iso`                                            | `Codec/Codec.lean`                       | structural                                 |
 | `count`, `manyUpTo`, `optional`, `maybe`, `choice`, `seqRight`, `seqLeft`, `between` | `Codec/Combinators.lean`                 | **bounded** — hence genuine `Codec` values |
 
-**Every `Codec`-valued definition in the tree is one of these fifteen**; the table's
-title is literal and the list is checkable. `Normal`'s `fill` and `decodeNormal` are
-**not** `Codec` values — an earlier revision kept them as a row here, and that row
-contained zero `Codec` values — they are the quotient layer's own entry points and
-are documented in `[D4]` instead.
+**This is the list a porter must reproduce** — seven `Codec` constructors plus eight
+bounded `Codec`-valued definitions. It is **not** an enumeration of every `Codec`
+value in the tree, and the earlier revision's "every `Codec`-valued definition is one
+of these fifteen" was false (`codec-audit-round-five` R6-05): a walk of the compiled
+environment (the method `Axioms.lean`'s definition check uses, not a `grep '^def'`)
+adds **four** public `Codec` values that exist only as **counterexample witnesses**
+for the hypothesis predicates — `uniqSeqBt`, `uniqSeqBo`, `uniqSeqD2`, `uniqSeqWhole`
+(`Codec/`). They are part of the environment and are _not_ part of the reproduction
+surface, which is exactly the distinction the completeness claim has to make.
+
+`Normal`'s `fill` and `decodeNormal` are **not** `Codec` values — an earlier revision
+kept them as a row here, and that row contained zero `Codec` values — they are the
+quotient layer's own entry points and are documented in `[D4]` instead.
 
 The bounded eight matter for two reasons. They are `Codec` values (so a porter must
 have them), and `[S6]` **relies on `optional`** — an unbounded `many` cannot be a
@@ -880,9 +966,13 @@ description — no solver, no per-combinator gate, no prefix-disjointness condit
 composed codec does not inherit its leaves' uniqueness.** `encode_of_decode`,
 `encode_injective_of_unambiguous`, `decodeArray_unique` and `decodeFull_spec` are each
 conditional on a family — `Unambiguous`, `Functional`, `RelAligned`, `LengthDet`,
-`LengthConst`, `huniq` — and core supplies each only at `Codec.byte`. That supplier
-establishes **satisfiability** (the predicate has an inhabitant, so the definition is
-not vacuous), **not congruence**: `Codec.Sound.uniqSeq_not_congruent` proves that
+`LengthConst`, `huniq` — and **each family has a supplier at `Codec.byte`**
+(`lengthDet_byte`, `relAligned_byte`, `lengthConst_byte`, `huniq_byte`, …). That
+supplier establishes **satisfiability**, **not congruence**; and it is **not the only
+supplier of every family** — `Unambiguous` has two composed suppliers,
+`uniqSeqBo_unambiguous` and `uniqSeqD2_unambiguous`, besides `unambiguous_byte`
+(`codec-audit-round-five` R6-18; an earlier revision said "only at `Codec.byte`" and
+that was false for `Unambiguous`). What is true, and is the point, is: `Codec.Sound.uniqSeq_not_congruent` proves that
 `Unambiguous d₁ → Unambiguous d₂ → Unambiguous (seq d₁ d₂)` is **false**, with a
 counterexample where both halves are unambiguous and `seq` relates two distinct
 values to one one-byte input. `uniqSeq_not_relAligned` refutes the same for
@@ -1188,7 +1278,13 @@ before timing, so a run that silently degenerates fails instead of reporting a
 number.
 
 Measured in one session, two consecutive `bench 4096 4096` runs at load ~2.9 on 10
-cores, burst medians, 512 steps per burst:
+cores, burst medians. **The burst span differs by row and the per-step figures each
+use their own:** `idealCursor` runs **4096** steps per burst (the full `n`), while
+`decodeFullArray` and `decodeFullArray k=2` run **512** (`n/8`, a different window
+decoded per call). An earlier revision captioned this table "512 steps per burst"
+and it was wrong for the `idealCursor` row by 8×, which made the floor look 8× worse
+than it is to a reader who divided by the caption instead of the row
+(`codec-audit-round-five` R6-26):
 
 | lane                        | run 1 (min / median / max) | run 2 (min / median / max) | ns/step         |
 | --------------------------- | -------------------------- | -------------------------- | --------------- |
@@ -1213,12 +1309,20 @@ so is any derivation from them.
 **What that says — the search is linear in `k`, and its cost is not all in
 `packedCands`.**
 
-- The second candidate costs **~25 ns/step** (52.4 − 27.4): roughly one whole extra
-  decode step, so the backtracking search runs at **~1.9×** the `k = 1` decode. The
-  ~10–11× headline is therefore a **lower bound** for a real backtracking codec; at
-  `k = 2` the gap to the floor is **~21×**.
+- The second candidate costs **~24–26 ns/step** — one whole extra decode step, so the
+  backtracking search runs at **~1.9×** the `k = 1` decode. **Derived from the
+  table above, both terms the same lane in the same run:** `54.9 − 28.5 = 26.4`
+  (run 1, medians) and `51.1 − 27.5 = 23.6` (run 2, medians). Quote it as that
+  range with its run number, never as a point. **An earlier revision said "~25
+  ns/step (52.4 − 27.4)" and both terms were wrong:** `52.4` appears nowhere else
+  in this document, and `27.4` belongs to the _first_ `bench 4096 4096` table (the
+  interleaved lane, run 1) — so the subtraction crossed both tables **and** runs,
+  which is exactly what the "same lane in the same run" rule three bullets below
+  forbids. The orphan is deleted (`codec-audit-round-five` R6-08). The ~10–11×
+  headline is therefore a **lower bound** for a real backtracking codec; at `k = 2`
+  the gap to the floor is **~20×** (run 1: `54.9 / 2.50`; run 2: `51.1 / 2.61`).
 - `packedCands` moves **86 → 106 ns/call** for the extra candidate: **~20 ns** of the
-  ~25 ns per-candidate cost. So **~5 ns/step is _not_ `packedCands`** — it is the
+  ~24–26 ns per-candidate cost. So **~4–6 ns/step is _not_ `packedCands`** — it is the
   `decodeArray` re-list plus the singleton `PackedCand` allocation in
   `decodeFullArraySearch`. That residue is what a rewrite would have to attack, and
   it is a measured number rather than a guess. (That ~20 ns is taken from the
@@ -1240,8 +1344,11 @@ That answers "how much per-step work does the codec do above the cheapest Lean
 loop", which is a real question — but not the one a reader asks, which is **how far
 is this from a hand-written C parser over the same bytes**. `AGENTS.md` has said for
 several revisions that a `memcpy` ratio is a category error here (it moves a byte;
-a parser does per-element work) and that "the honest reference is a hand-written C
-parser, which this repo does not yet measure". It now does.
+a parser does per-element work) and — **historically** — that "the honest reference
+is a hand-written C parser, which this repo does not yet measure". **That last clause
+is quoted as what `AGENTS.md` used to say, not as current text**
+(`codec-audit-round-five` R6-25): `AGENTS.md` now reads "This repo now measures
+one", so an unqualified quote reads as a claim the file still makes. It does not.
 
 `Codec/CRef.c` (+ `benchCReference`) is that reference. It is **not** Layer 2 and
 **not** a trust seam: no `@[extern]` in `Codec/`, nothing proven depends on it, it is
@@ -1263,7 +1370,7 @@ Three properties keep it honest rather than a straw man:
   closure can be folded away.
 
 Measured in one session, two consecutive runs, load ~1.4 on 10 cores, burst medians,
-`n/8` = 512 steps per burst:
+**512 steps per burst** (`n/8`, the window every row here decodes):
 
 | lane                           | run 1 (min / median / max, ns) | run 2 (min / median / max, ns) | ns/step         |
 | ------------------------------ | ------------------------------ | ------------------------------ | --------------- |
