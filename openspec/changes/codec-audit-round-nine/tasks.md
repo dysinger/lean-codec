@@ -37,7 +37,7 @@ gate), S-5 (`warningAsError` does not cover the exe root).
       `packedCands` already does. Keep a non-zero check too; they catch different folds.
       The error message must name the row and say the loop was invariant.
 - [ ] 1.4 Audit **every** `benchBurst` call site (`Bench.lean:914, 944, 983, 1022, 1233,
-    1234` and any added since) and confirm each now produces a varying sink under 1.3.
+1234` and any added since) and confirm each now produces a varying sink under 1.3.
       A row that still cannot vary must be documented as such, not silently passed.
 - [ ] 1.5 `benchCReference`: `| none, none => return ()` exits the whole function and
       silently skips **both** timed lanes. Change to `pure ()` so the loop continues, and
@@ -171,7 +171,7 @@ G-S1 (census scope).
       and allowlist the 12 known axioms by name. The repo's one authored `opaque`
       (`Codec.Bench.cRefByteMany`) currently sits outside the wire the census built.
 - [ ] 6.10 **[S] Print the projection arm's decomposition**: `bare projections =
-    listed + constant-headed`, two asserted numbers, so the `dec`-suffix exemption
+listed + constant-headed`, two asserted numbers, so the `dec`-suffix exemption
       (`Axioms.lean:1930`) is a number rather than a clause of an `unless`.
 - [ ] 6.11 Regenerate the header with `scripts/gen-axioms.lean`, then update the
       `expected*` constants **and** the prose paragraph together. The gate will fail
