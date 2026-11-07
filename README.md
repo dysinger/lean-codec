@@ -246,10 +246,21 @@ So the one thing the paper's `ignore` existed _for_ — discarding an arbitrary-
 blank run — is the one thing this layer cannot reproduce, and the layer says so at
 the point of use rather than in a later parenthesis. A codec using it also owes the
 per-instance fact that its encoder emits a normal form, without which the
-normalising decoder can fail on its own encoder's output. A format often accepts several spellings of one
-value (RFC 4648 §8: a Base16 decoder MUST accept both `6F` and `6f`, since case
-carries no information), so the quotient is `S/~` where `s ~ t ↔ norm s = norm t`
-for a total idempotent `norm`. `codec` puts that quotient in the **object** rather
+normalising decoder can fail on its own encoder's output. A format often accepts
+several spellings of one value — hexadecimal case is the example above, where the two
+spellings differ only in information that carries no value — so the quotient is `S/~`
+where `s ~ t ↔ norm s = norm t` for a total idempotent `norm`.
+
+**An earlier revision cited this as "(RFC 4648 §8: a Base16 decoder MUST accept both
+`6F` and `6f`)" and that was wrong on the standard's own text** (`codec-audit-round-eight`
+M-1). §8 says the opposite: _"Base 16 encoding does not require case insensitivity;
+however, Base 16 decoders MAY accept lowercase letters."_ Accepting both cases is a
+**permission**, not an obligation, so a decoder that rejects `6f` is conformant. The
+citation also mattered in the direction it was wrong: it invites a reader to generalise
+"case is free" to other formats, and for Base64 it is false — its alphabet uses all 64
+symbols, so `a`–`z` are 26 distinct values and uppercasing would turn valid input into a
+different value. The quotient argument does not need the RFC at all; it needs only that
+some spelling variation carries no information, which this paragraph now says. `codec` puts that quotient in the **object** rather
 than relaxing the law in the **morphism**, which is the one thing `[S1]` forbids:
 `Codec/Normal.lean` supplies `Normal S norm` (the fixed points of `norm`, a type)
 and `Normalizer S norm` (carrying `norm`'s idempotence), so
@@ -1271,7 +1282,7 @@ working set is **one buffer**: the call index is passed to the measured function
 the loop still varies its input (and cannot hoist) while `n` bytes — not `8n` — stay
 resident. The old 8-buffer rotation is still printed as `(burst@8buf)` for the record.
 
-Measured in one session, two consecutive `bench 4096 4096` runs, `n` = 4096, load
+Measured in one session (**run vintage: 2026-11-07, `lake build bench` + `bench 4096 4096`**), two consecutive runs, `n` = 4096, load
 average ~4.4 on 10 cores. Every burst row carries its own range across the two runs,
 because the decay between rounds is real and quoting one endpoint hides it:
 
@@ -1388,7 +1399,7 @@ lane **asserts its premise** (`packedCands` length is 1 at `k = 1` and 2 at `k =
 before timing, so a run that silently degenerates fails instead of reporting a
 number.
 
-Measured in one session, two consecutive `bench 4096 4096` runs at load ~2.9 on 10
+Measured in one session (**run vintage: 2026-11-07**), two consecutive `bench 4096 4096` runs at load ~2.9 on 10
 cores, burst medians. **The burst span differs by row and the per-step figures each
 use their own:** `idealCursor` runs **4096** steps per burst (the full `n`), while
 `decodeFullArray` and `decodeFullArray k=2` run **512** (`n/8`, a different window
@@ -1484,7 +1495,7 @@ Three properties keep it honest rather than a straw man:
   one L1-resident buffer, a different `n/8`-byte window decoded per call so neither
   closure can be folded away.
 
-Measured in one session, two consecutive runs, load ~1.4 on 10 cores, burst medians.
+Measured in one session (**run vintage: 2026-11-07**), two consecutive runs, load ~1.4 on 10 cores, burst medians.
 **The burst span is given per row**, because the three lanes do not share one:
 
 | lane                           | steps/burst | run 1 (min / median / max, ns) | run 2 (min / median / max, ns) | ns/step         |
