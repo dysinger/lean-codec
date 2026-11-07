@@ -2,64 +2,66 @@
 
 Guidance for AI coding agents working in this repository.
 
-> ## START HERE: `openspec list --json`
+> ## START HERE: `openspec/changes/codec-audit-round-eight/tasks.md`
 >
-> **Two changes are open, both in `basen`, and both PARKED by the owner**
-> (2026-11-07): the focus is **`codec` + `../fstar-codec`** first, then how to divvy
-> up the libraries. Do not start either `basen` change until that decision is made.
-> They are ordered, for when you do:
+> **`codec-audit-round-eight` is the open change in this repo, 0/22 tasks.** The
+> other two open changes (`basen-uppercase-prepass`, `basen-nat-iso`) are **parked**
+> by the owner pending a library-division decision — do not start them.
 >
-> 1. **`basen-uppercase-prepass` (0/20) — do this first.** It resolves a **false
->    normative claim** and the 24-theorem tier built on it. `Base16.lean:14` and
->    `:641` say _"RFC 4648 §8 requires a Base16 decoder to accept both cases"_. §8
->    actually says **`MAY`**, not `MUST`: "Base 16 encoding does not require case
->    insensitivity; however, Base 16 decoders MAY accept lowercase letters." Nothing
->    in the repo sources the RFC, so this was never checked. The fix is the owner's:
->    **uppercase the input, then decode** — a normaliser pre-pass, with the `Iso` from
->    _normalised text_ to the value. `Codec/Normal.lean` already supplies the
->    mechanism (`decodeNormal_encode`, stated for **any** `S`); `Base16` re-derived it
->    locally and its `hexBlockIsoF` has no caller.
-> 2. **`basen-nat-iso` (0/18) — BLOCKED, do not start.** Its premise is under review:
->    `basen` is "base-N byte encodings" and a **numeral** is not one. Read its §0.
+> **What it carries.** The eighth review round (three read-only workers, `codec`
+> only, reports `/tmp/r8-{paper,gates,numbers}.md`) returned 9 MUST / 15 SHOULD /
+> 18 NITPICK. **Five were fixed in the landing session and are NOT in scope:** the
+> footprint attribution rule (claim sites **145 → 146**, and the newly visible site was
+> a live false claim in `Codec.Bytes.ext_iff`); `Bench.lean`'s `~4.3 µs` note which
+> contradicted its own row's `430–650 ns` by 10×; `README`'s RFC `MUST`; three
+> run-vintage stamps. **Read its `tasks.md` — not this file.**
 >
-> **The one distinction that must not be lost, because getting it wrong corrupts
-> data:** uppercasing is sound **only** where the alphabet has no lowercase symbols.
-> Measured: base32's `b32ToVal` has no `97–122` branch, so it rejects lowercase and
-> uppercasing is safe; **base64's `b64ToVal` maps `97–122` → 26–51, so its lowercase
-> letters are DATA** — `TWFu` is `Man` and `twfu` is something else. **Base64 is
-> excluded from the pre-pass**, and the exclusion is a task with a test, not a comment.
+> **Two findings were REFUTED and are recorded there so they are not re-derived:**
 >
-> **The unifying statement, which is the durable part.** Uppercasing hex, stripping
-> leading zeros and dropping optional whitespace are **one operation**: a total
-> idempotent pre-pass `S → S` that removes _information-free variation_, after which
-> the strict decoder is a genuine `Iso`. `Codec/Normal.lean`'s header says exactly
-> this and its `decodeNormal_encode` is the theorem that generalises it. **When a value
-> has more than one permitted spelling, the answer is a quotient codomain — never a
-> relaxed law, and never a rejected spelling.** Weakening is a dead end: a law loose
-> enough to admit the input proves for _any_ decoder, one tight enough to mean
-> anything is false. `../fstar-codec` records the same class as `[D12]`/`[D13]`.
+> - **R8-01, "`filter` evaluates `!(a) || !(b)` as `&&`"** — the reviewer's own
+>   reproducer refutes it. Every element of `[1,2,3]` genuinely satisfies
+>   `!(n==2) || !(n==1)`, so `filter` returning `[1,2,3]` is **correct**. No toolchain
+>   bug. (`String.splitOn` _is_ a trap, but a different one — it splits on a
+>   **sequence**, not a char set.)
+> - **M-2, "`86 → 106` does not reproduce"** — the committed figures are internally
+>   consistent; the reviewer re-timed at 118 on another box, an 11 % cross-session
+>   difference of the kind `AGENTS.md`'s Speed section forbids comparing.
 >
-> **Why `basen` needs this at all is worth stating.** Compared with `../fstar-basen`
-> (2,033 lines, 4 RFC bases, base16 alone 216 lines with one roundtrip lemma),
-> `lean-basen` is 11,866 lines and 7 bases because **all seven are `Codec` values with
-> five law families** — that part is a genuine strengthening. But 24 of base16's 67
-> theorems are a **parallel implementation of a core mechanism**, not base-N
-> arithmetic, which is the honest reading of "half byte-stream, half hex/integer
-> codec".
+> **The three live gaps it does carry**, because they are all one shape — _a check
+> that reports nothing_: the gate's universe matches only `thmInfo`/`defnInfo` of
+> seven `ConstantInfo` constructors, so an `opaque` would be invisible to all eight
+> arms (`opaque = 0` today, measured); `propProjections`' docstring claims an invalid
+> entry "would fail" and no arm checks that (all four current entries _are_ genuine
+> projections, so it is latent); and the footprint arm prints how many claims it read
+> but not how many exist, so a narrowed vocabulary would be as invisible as the round
+> seven predicate bug was.
+>
+> **The lesson this repo keeps re-learning, now four times:** a check is only as good
+> as what _enters_ it. Round five's `isDerivedDefName` removed `Iso.prod` from a green
+> gate; round seven's `nm.getPrefix == \`Codec` removed 139 declarations; round eight's
+> attribution rule removed two claims by finding a helper name in the sentence. **When
+> you add or change a check, ask what it filters, and print the count of what it
+> looked at.**
+>
+> **No change in `basen` is started.** `basen-uppercase-prepass` exists because the
+> tree quoted RFC 4648 §8 as `MUST` when §8 says `MAY` — that misquote also reached
+> `codec`'s README and was fixed here. `basen-nat-iso` is blocked on where numbers
+> live (`basen` is "base-N byte encodings"; a numeral is not one).
 >
 > **The numbering is off by one from the audit change names, and that is not a typo.**
-> `round-six` is the sixth audit _change_; its findings came from the **seventh**
-> review round, so its ids are `R7-nn`. The next review's ids will be `R8-nn` in a
-> change called `round-seven`.
+> `round-six` is the sixth audit _change_; its findings came from the **seventh** review
+> round, so its ids are `R7-nn`. Round eight's change is `codec-audit-round-eight` and
+> its ids are `R8-nn`. The next review's ids will be `R9-nn` in a change called
+> `round-nine`.
 >
-> **This box names the change, never a task — and it has gone stale EIGHT times.**
-> It said "§1.5 next" long after §1.5–§1.10 landed; said "no open change" while
+> **This box names the change, never a task — and it has gone stale NINE times.** It
+> said "§1.5 next" long after §1.5–§1.10 landed; said "no open change" while
 > `round-four` was open; still named `round-four` after it archived; still named
 > `round-five` after it archived; said "no change is open" with `round-six` open;
 > named `round-six` at 6/32 while it ran; said "no change is open" with
-> `basen-nat-iso` open; and named `basen-nat-iso` alone after a second change was
-> authored. If what is named here is not what `openspec list` reports, **believe the
-> command**.
+> `basen-nat-iso` open; named `basen-nat-iso` alone after a second change was authored;
+> and said "no change in `codec` is open" for the hour before this one was authored.
+> If what is named here is not what `openspec list` reports, **believe the command**.
 >
 > **This box names the change, never a task — and round six is why that rule now
 > reads "believe the command".** The box has gone stale **six** times: it said
@@ -177,11 +179,18 @@ Guidance for AI coding agents working in this repository.
 | Archived history               | `openspec/changes/archive/<date>-<name>/tasks.md` (e.g. `2026-11-05-lean-basen`) |
 | Lessons (not direction)        | `openspec/lean-notes.md`                                                         |
 
-**No change in `codec` is open. The only open changes are the two PARKED `basen`
-ones** (`basen-uppercase-prepass` 0/20, `basen-nat-iso` 0/18 blocked) — the owner has
-deferred both until the library division is decided; round six and everything before
-it are archived history. Work in `codec`/`../fstar-codec` proceeds change-by-change,
-so author one before coding there too.
+**One change is open in `codec` (`codec-audit-round-eight`, 0/22), plus two PARKED
+`basen` ones** (`basen-uppercase-prepass` 0/20, `basen-nat-iso` 0/18 blocked) — the
+owner has deferred both `basen` changes until the library division is decided. Round
+six and everything before it are archived history.
+
+- `codec-audit-round-eight` — **in-progress**, 0/22, authored 2026-11-07 from the
+  eighth review round. **Read its `tasks.md` — not this file.** Carries the round's
+  remainder: the gate's universe is undefined for `opaque`/`axiom` constants;
+  `propProjections` claims a validity check it does not have; three allowlist reason
+  groups are not measurements; one README cell (`cold 49`) has no source; and the
+  footprint count has no denominator. Five of round eight's findings were fixed in the
+  landing session (`aaa5dbb`), and two were refuted — both recorded in its §0.
 
 - `basen-uppercase-prepass` — **in-progress**, 0/20, **do this one first.** Replaces
   `Base16`'s 24-theorem case-folding tier with an `upperBytes` pre-pass through
