@@ -214,7 +214,13 @@ theorem Bytes.ext {n : Nat} {s₁ s₂ : Bytes n} :
   exact h i
 
 /-- `s₁ = s₂` is equivalent to pointwise equality on `Fin n` — provable by
-`funext` (left) and `congrFun` (right), both `[propext, Quot.sound]`-only. -/
+`funext` (left) and `congrFun` (right). `[Quot.sound]`-only (measured: `#print axioms
+Codec.Bytes.ext_iff`).
+
+**Not both axioms**, which this docstring claimed until the eighth audit: the `funext`
+direction needs `Quot.sound` for `Fin`'s extensionality and never touches `propext`. The claim was invisible for two rounds because the attribution rule
+took the nearest resolving name in the sentence — `funext`/`congrFun` — and filed the
+claim as theirs rather than this theorem's. -/
 theorem Bytes.ext_iff {n : Nat} (s₁ s₂ : Bytes n) :
     s₁ = s₂ ↔ ∀ i : Fin n, s₁ i = s₂ i :=
   ⟨fun h i => congrFun h i, Bytes.ext⟩
