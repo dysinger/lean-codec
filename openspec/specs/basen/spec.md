@@ -284,6 +284,28 @@ deleted. A header table that is asserted while the paragraph beside it is rememb
 is not gated: the paragraph can be falsified by a regeneration that updates the table
 and leaves the prose stale, with every check green.
 
+**A count stated in prose SHALL be asserted at the same granularity as the claim it
+makes.** Where the gate's prose names two figures that stand in a stated relation — a
+number of pinned blocks against a number of pinned names — both figures SHALL be
+compared with the environment, not one against a constant that drifted with them. A
+sentence that says "N against M" is two claims, and asserting only that `N = M + k`
+leaves both free to move together while the sentence goes stale.
+
+**A bench lane's documentation SHALL describe the mechanism that exists.** Where the
+package's operating instructions, its derivation, or its module docs state that a
+lane must be _run_ for its checks to happen, that statement SHALL match the lane's
+entry point: a lane whose `main` performs no work and whose checks all fire at
+elaboration SHALL be documented as failing at build time, and a lane that does
+perform runtime work SHALL have its execution wired. A claim that marking the lane a
+package "without running it would verify nothing" is a claim about the code and
+SHALL be true of the code.
+
+Where a bench lane's checks live in a module the gate cannot import, a stated count
+of the sanctioned construct SHALL be compared against the source in a way that
+accounts for the legal spellings of that construct, so that the count cannot be
+evaded by formatting: a trailing comment, an inline `by` form, or two occurrences on
+one line SHALL all be counted.
+
 #### Scenario: The gate covers the new laws
 
 - **WHEN** `lake build` and `#print axioms` run on the conformance laws
@@ -319,6 +341,22 @@ and leaves the prose stale, with every check green.
 - **THEN** a build-time check compares those figures with the compiled environment,
   or the prose is removed, so a stale paragraph cannot survive a regeneration.
 
+#### Scenario: Both figures in a two-number sentence are asserted
+
+- **WHEN** the gate's prose states one count against another, such as a number of
+  pinned blocks against a number of pinned names
+- **THEN** both counts are compared with the environment, so the pair cannot drift
+  together while the sentence naming them goes stale.
+
+#### Scenario: A gate's consistency branch can actually fire
+
+- **WHEN** a gate check computes a condition intended to catch an inconsistent
+  count
+- **THEN** the condition is true for at least one input — an identity that is false
+  for every pair of counts, such as comparing a sum with itself after subtracting
+  and re-adding the same quantity, is not a check and is replaced by the identity
+  the table requires.
+
 #### Scenario: The gate's error messages are arithmetically true
 
 - **WHEN** a gate check reports counts in a message
@@ -341,6 +379,12 @@ this requirement. A sanctioned exception whose stated size is remembered rather 
 computed will drift as the exception grows, and the drift is invisible because the
 gate it escapes is, by construction, not looking.
 
+Where the package's history cites a revision by identifier, that identifier SHALL
+resolve in the repository it names, or the entry SHALL describe the change without
+the identifier. A historical citation that names no object cannot be checked by any
+reader and is the same class of defect as a remembered count: it is prose standing in
+for a measurement.
+
 #### Scenario: A silently stale pin is corrected or explained
 
 - **WHEN** the package pins a sibling repository and that pin is not the sibling's
@@ -356,6 +400,12 @@ gate it escapes is, by construction, not looking.
 - **THEN** a build-time check compares that figure with the source, or the prose is
   deleted, so the stated size cannot drift as the exception grows.
 
+#### Scenario: A historical revision citation resolves
+
+- **WHEN** the changelog or another historical entry cites a revision by identifier
+- **THEN** that identifier resolves in the repository it names, so the entry records
+  something a reader can check rather than a remembered string.
+
 ### Requirement: Base16 decoding accepts both cases (RFC 4648 §8)
 
 The Base16 decoder SHALL accept hex digits in **either** case, as RFC 4648 §8
@@ -364,6 +414,22 @@ The canonical alphabet SHALL remain uppercase and the encoder SHALL emit only it
 Case-insensitivity SHALL be supplied by a fold applied **outside** the strict
 `Iso` — never by weakening `Iso.law` — so the `Codec` value stays a strict
 uppercase bijection and the widening is confined to decoding.
+
+**The conforming decoder SHALL carry the roundtrip law that makes it a decoder of
+the package's format, not merely a case-folding function.** A requirement that a
+decoder accept both cases is met by a decoder that also _inverts the encoder_: it
+SHALL be proved that folding is the identity on the encoder's output and that the
+folded decoder accepts it, so that `decodeHexFold` is connected to `encodeHex` by a
+theorem. A wrapper whose case-folding behaviour is tested but which no theorem ties
+to the encoder SHALL NOT be described as satisfying §8 on behalf of the package,
+because a reader comparing the RFC against the library would find the conforming
+reading and no law about it.
+
+Where a package documents a profile as conforming to a specification and the
+package's roundtrip, canonicality, injectivity and converse laws are all stated over
+a _different_, stricter decoder, the documentation SHALL say which decoder owns
+which laws, so that no row of the conformance table claims a theorem the
+corresponding declaration does not own.
 
 #### Scenario: Both cases decode to the same value
 
@@ -397,6 +463,15 @@ uppercase bijection and the widening is confined to decoding.
 - **THEN** it maps `a`–`f` **up** to `A`–`F` (so the canonical uppercase encoding
   is a fixed point) and is idempotent (`foldByte_idem`, `foldList_idem`), which is
   the `Normalizer` law that makes the quotient type well-formed. It is
+
+#### Scenario: The conforming decoder inverts the encoder
+
+- **WHEN** a byte list is encoded by `encodeHex` and the result decoded by the
+  RFC-4648-conforming `decodeHexFold`
+- **THEN** the decoded value is that byte list — `encodeHex bs = some ⟨n, s⟩ →
+decodeHexFold s = some bs` — so the §8-conforming reading is a decoder of this
+  package's format and not only a case-folding function, and the roundtrip family
+  is not owned exclusively by the stricter decoder.
 
 ### Requirement: One package covers all seven bases
 
