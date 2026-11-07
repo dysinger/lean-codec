@@ -17,8 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `commitRemainder_spec` now derives from it rather than re-deriving the body.
   Every seam law now states its own axiom footprint, which is **not** uniform:
   `byteSlice_spec`/`blitBytes_spec`/`commitRemainder_spec` report no axioms,
-  `findByte_spec` reports `[propext]` (its `Array.findIdx?` goes through
-  `DecidableEq UInt8`).
+  `findByte_spec` reports `[propext]` (its **`findFrom`** scan reads `a[k]?`, so the
+  bound is propositional and no `DecidableEq UInt8` decision is consulted; the
+  _earlier_ `Array.findIdx?` body is what went through `DecidableEq UInt8` and reached
+  `Classical.choice` — a re-read of this entry before the rewrite attributed the clean
+  footprint to the body that had already been replaced, `codec-audit-round-eight`
+  S-3).
 - `Codec.Sound.unambiguous_byte` / `functional_byte` and
   `Codec.decodeArray_functional_byte` / `decodeArray_unambiguous_byte`:
   `Unambiguous`/`Functional` established for a concrete codec, at both the `Rel`

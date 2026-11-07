@@ -122,14 +122,21 @@ Guidance for AI coding agents working in this repository.
 > nix develop --command lake build 2>&1 | tail -10   # eight gate lines, see below
 > ```
 >
-> `lake build` prints **eight** gate lines in `codec`: footprint, partition,
-> definition coverage, def-side declination audit, classifier pattern audit, header
-> numbers, **stated footprints verified against the environment** (`round-six` §1),
-> and **`propProjections` covers every bare projection** (`round-seven` GC-02/GC-04).
-> `basen` prints **eight** of its own. `openspec validate --all` is **11/11** while a
-> change is open (10/10 with none). Read those numbers off the run, not off this
-> page: on 2026-11-07 the codec gate printed `425 = 347 + 78` theorems,
-> `140 = 115 + 25` defs, and **145** footprint claim sites.
+> `lake build` prints **ten** gate lines in `codec`: footprint, partition, definition
+> coverage, def-side declination audit, classifier pattern audit, header numbers,
+> **constant kinds** (`round-eight` §1 — `opaque`/`axiom` must be 0, and every kind is
+> printed), **stated footprints verified against the environment** (`round-six` §1),
+> **`propProjections` covers every bare projection** (`round-seven` GC-02/GC-04), and
+> **`propProjections` entries are all bare projections** (`round-eight` §2 — the
+> validity direction of the same list). `basen` prints **eight** of its own.
+> `openspec validate --all` is **11/11** while a change is open (10/10 with none). Read
+> those numbers off the run, not off this page: on 2026-11-07 the codec gate printed
+> `425 = 347 + 78` theorems, `140 = 115 + 25` defs, and **146** footprint claim sites of
+> **154** claim-shaped segments (144 docstrings mention a footprint; 8 sites are
+> attributed away or live in a `def` docstring and are out of scope). Those three
+> footprint counts are **asserted** (`expectedFootprintCounts`), not merely printed —
+> `round-eight` N-6 found `AGENTS.md` quoting them as evidence while nothing checked
+> them.
 >
 > **`[x]` means "in the tree AND evidence recorded in the ledger" — never tick on
 > intent, and never leave a finished task unticked.** A checkbox reports a fact; the
@@ -707,7 +714,10 @@ in `../lean-basen`. Never "fix" it by editing the importing Lean file.
     figure wearing a compute label (first-touching a 4 KiB array). Treat the
     remaining numbers as one lane each, and never as a sequence that "improved".
   - The "ideal floor" was quoted as **6 ns/step**, then **16**, then **2.4**, then
-    **3.0**, and is **~2.5–2.6 warm (latest burst median) / ~15–18 cold**. Each step of that sequence was a
+    **3.0**, and is **~2.5–2.7 warm (latest burst median; the range spans every committed
+    floor, 2.46–2.67 — `codec-audit-round-eight` S-2 found this file's `~2.5–2.6` and
+    the README's `~2.6–2.7` were two intervals neither of which contained the other's
+    end) / ~15–18 cold**. Each step of that sequence was a
     different mistake: the 6 came from a lane that `Array.push`-ed every element
     (floor plus n elements of growth); the 16 is a real number but _cold_; and the
     2.4 was the **minimum of 5 decaying rounds** at an `8n` working set — the most
@@ -755,13 +765,16 @@ in `../lean-basen`. Never "fix" it by editing the importing Lean file.
   So: **a number is sourced because the lane, run, prints it — not because a lane
   exists.** Three rows were labelled with a lane and still did not match it. When
   you quote a figure here, run the lane in the same session and paste its output.
-  This package has had **eight** performance figures wrong at some point (6 → 15 →
-  2.4 → 3.0 → 2.46 for the floor; 91 → 32 → 430 → 3 → 75 → 86 for `packedCands`,
-  the 3 withdrawn outright; 3 → 11–18 for the array read; and "~11×" derived from a
-  cherry-picked burst round). **Two were caught by the owner asking why two
-  committed figures could not both be true, not by a lane** — so an internal
-  inconsistency between two numbers is itself a legitimate check, and "it came from
-  a lane" is not sufficient.
+  This package has had **four distinct performance quantities** wrong at some point,
+  across fourteen recorded values: the ideal floor (6 → 15 → 2.4 → 3.0 → 2.46),
+  `packedCands` (91 → 32 → 430 → 3 → 75 → 86, the 3 withdrawn outright), the `Array`
+  read (3 → 11–18), and the "~11×" gap derived from a cherry-picked burst round. It
+  said **eight** until `codec-audit-round-eight` S-5 counted: no reading of the
+  parenthetical — 4 quantities, 14 values, 4 explicitly withdrawn — reaches eight, and
+  a remembered count is what this file forbids believing elsewhere. **Two were caught
+  by the owner asking why two committed figures could not both be true, not by a
+  lane** — so an internal inconsistency between two numbers is itself a legitimate
+  check, and "it came from a lane" is not sufficient.
 
   Withdrawn, because no lane ever produced them: the "~1,200–1,290 ns/byte",
   "~8.5× floor", and "20–40× ceiling" figures that used to sit here. **Do not quote a

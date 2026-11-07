@@ -222,9 +222,13 @@ constancy and is not by itself fatal: a partial iso whose `apply` merged two inp
 could still satisfy the field if `unapply` picked the one the law demands, so what
 breaks is the `↔` over all `a`, not the merging. So instead of relaxing the law to admit `ignore`, a run of
 allowed bytes is _captured_ as a value and re-emitted verbatim — realized by
-repetition over a **`Codec.satisfy p`** step (`Codec/Combinators.lean`), not a new
-primitive. (An earlier revision wrote "a `subset p byte` step"; no code composes
-`subset` with `byte` — the step is `satisfy p`.) There is therefore
+repetition over a **`Codec.satisfy p`** step, not a new primitive. The step is the
+`Codec` **constructor** (`Codec/Codec.lean`): `satisfy : (UInt8 → Bool) → Codec UInt8`.
+What `Codec/Combinators.lean` holds is its _use_, as the element of
+`relTakeWhile`/`decodeTakeWhile`/`encodeTakeWhile` (`codec-audit-round-eight` S-1 — an
+earlier revision's parenthetical sent a reader to `Codec/Combinators.lean` for a
+declaration that is not there). (An earlier revision wrote "a `subset p byte` step"; no
+code composes `subset` with `byte` — the step is `satisfy p`.) There is therefore
 **no `ignore` combinator in core**, and the strict inverse law holds
 unconditionally.
 
@@ -238,8 +242,14 @@ layer (the identity normalizer), not the explanation of why `ignore` fails. The
 quotient-as-object formulation is the explanation; capture-verbatim is the
 degenerate case that happens to need no `norm`.
 
-**Capture-verbatim is length-preserving, and that bounds what it can do.**
-`norm : Bytes n → Bytes n`, so the normalizer cannot shorten its input. Case folding
+**Capture-verbatim is length-preserving _for a `Bytes n` instance_, and that bounds what
+it can do there.** The layer itself is generic — `Normal (S : Type) (norm : S → S)`, so
+`norm : S → S` for any `S` — and it is the `Bytes n` specialisation (`norm : Bytes n →
+Bytes n`) that cannot shorten its input. A `List`-carrier instance is **not**
+length-preserving, and is in fact the carrier a length-changing normalizer would use
+(`codec-audit-round-eight` S-4: the earlier wording stated the general premise at
+`Bytes n`, which reads as the layer _forbidding_ a `List` normalizer when it
+instantiates one directly). For a `Bytes n` instance, then: Case folding
 (half the point of `[D4]` for a Base16 decoder) fits; **collapsing a whitespace run
 does not** — that is `Bytes m → Bytes n` with `m ≠ n` and needs a different carrier.
 So the one thing the paper's `ignore` existed _for_ — discarding an arbitrary-length
@@ -405,6 +415,13 @@ not an implementation detail.
 `unit`, `element`, `subset`, `nil`, `cons`, `optionSome`. `ofTotal` is the one that
 matters most for a porter: it turns two round-trip equations into the `law`, so a
 total bijection needs no hand-written inverse proof.
+
+**"Unconditional" describes the _law_, not the footprint, and the list is not
+footprint-uniform** (`codec-audit-round-eight` S-5): `Iso.inverse` measures
+**axiom-free**, while the other twelve are `[propext]`-only. That is the kind of
+difference the trust-contract section states is "recorded at each law, not treated as
+drift", so quoting one footprint for the whole list would be the drift. Per-name
+measurement, from `#print axioms` — grep `recorded at each law` for the sentence.
 
 `Iso.foldl` and `Iso.foldr` are **deliberately excluded** from that list, and the
 list is called "full" only of the _unconditional_ structural isos. **How the count
@@ -645,8 +662,11 @@ a **run value**, never a `Codec` constructor (`[S6]`).
 
 **[S4] `foldl`/`foldr` are distinct well-founded derivations, not `inverse ∘
 foldl ∘ inverse`.** "Fresh" was an earlier revision's word and it over-claimed:
-`Codec/Iso.lean` says the recursion is **factored once** — `foldr` _reuses_
-`unfoldBy`, the same well-founded driver `foldl` uses. What is distinct, and what a
+`Codec/Iso.lean` says the recursion is **factored once in the unfolding direction** —
+`foldr` _reuses_ `unfoldBy`, the same well-founded driver `foldl` uses — while the two
+`apply` directions are **separate** helpers (`foldApply`, `foldrApply`), so a porter
+expecting `foldr`'s `apply` to be `foldl`'s with a swap will not find it
+(`codec-audit-round-eight` S-2, which qualified the earlier unqualified wording). What is distinct, and what a
 porter has to write, is two things: the **step type** below, and the **measure
 witness** each fold supplies. "Type-incoherent" is checkable rather than rhetorical.
 The types are, in the code:
@@ -1255,7 +1275,10 @@ prints both figures.
 
 **First, a correction of yardstick.** `memcpy` is the wrong reference for a
 per-element codec, and quoting a "× off C" ratio against it is a category error:
-`memcpy` moves a byte for ~0.045 ns (a bulk copy, hardware-accelerated), while a
+`memcpy` moves a byte for ~0.03 ns — ~125 ns per 4 KiB (a bulk copy,
+hardware-accelerated), the figure the scale row below pins; an earlier revision wrote
+`~0.045` here, 48 % off the same section's own `~0.03` (`codec-audit-round-eight`
+S-3, two committed numbers that refuted each other) — while a
 parser does per-element _work_ — read, decide, advance, accumulate. The honest
 reference for a parser is a hand-written C parser over the same bytes. **This repo
 now ships one** (`Codec/CRef.c` + `benchCReference`; see "The hand-written C
@@ -1320,18 +1343,33 @@ and it is the same defect one layer down from the one the warm/cold split fixed.
 | -------------------------------------------------------- | ------------------------------ | ---------------------------- | --------------------------- | ------------------------------------------ |
 | `memcpy` (`ByteArray.copySlice`, `@[extern]`), for scale | `benchCalibration`             | ~0.03                        | —                           | ~125 ns / 4 KiB                            |
 | `Array` indexed read alone                               | `arrayRead`                    | see note                     | ~64–67 ns/call              | a single read, not a loop                  |
-| **ideal `Id.run` cursor loop** (`arr[k]` + `Nat`)        | `idealCursor` (+`(burst)`)     | 15                           | **~2.6–2.7**                | **the achievable pure-Lean compute floor** |
+| **ideal `Id.run` cursor loop** (`arr[k]` + `Nat`)        | `idealCursor` (+`(burst)`)     | 15                           | **~2.5–2.7**                | **the achievable pure-Lean compute floor** |
 | `decodeArray` single step (`List (α × Nat)` result)      | `decodeArray step`             | see note                     | —                           | the per-step `List`                        |
 | `packedCands` alone (now an `attach.map`)                | `packedCands (per step)`       | 430–650                      | —                           | cold-input dominated; see below            |
-| `decodeFullArrayRoot` (packed `Array` + `Nat` cursor)    | `decodeFullArray` (+`(burst)`) | 49                           | **~27.4–28.3**              | the whole decode, one candidate searched   |
+| `decodeFullArrayRoot` (packed `Array` + `Nat` cursor)    | `decodeFullArray` (+`(burst)`) | see note                     | **~27.4–28.3**              | the whole decode, one candidate searched   |
 | `decodeFullFastRoot` (`Bytes`/`Suffix` cursor)           | `decodeFullFast`               | 77                           | —                           | the `Suffix`/`bdrop` path                  |
 | `decodeFull` (the `Bytes n` specification itself)        | `benchDecodeFull`              | no per-step figure committed | —                           | super-linear: re-walks the suffix per step |
 
 All cold cells except the last are from the same two-run session and move with load;
 they are order-of-magnitude, not point measurements.
 
-**Two rows carry no `ns/step` figure, deliberately** (`codec-audit-round-seven` N-02,
-N-03). Both are one-level quantities the table used to divide by `n` anyway:
+**The `decodeFullArrayRoot` cold cell is now `see note`, not `49 ns/step`**
+(`codec-audit-round-eight` §4). There is no run behind the 49: every committed
+per-step value for this function in this document lies in **26.98–28.56** (the warm
+column, the per-step table above, and the two-run burst rows), the caption on this
+very table says all its cold cells come from one session, and 49 is **1.72×** the
+largest of them — a factor no other row in the table shows. A number that is
+underivable from the rest of its own table is indistinguishable from a number that
+was never measured, so it is dropped rather than qualified — the same treatment
+`arrayRead` and `decodeArray step` already had. **The fix is not a re-measurement**:
+the lane that prints the figure is `benchRatio "decodeFullArray"` (`Bench.lean`), and
+quote _its_ output with _its_ run vintage if you need a cold number. What it measures
+is the _interleaved_ lane, which is a throughput question, not a compute floor.
+
+**Three rows now carry no `ns/step` figure** — two deliberately
+(`codec-audit-round-seven` N-02, N-03), one because its figure was unsourced
+(`codec-audit-round-eight` §4, the `decodeFullArrayRoot` cold cell above). The first
+two are one-level quantities the table used to divide by `n` anyway:
 
 - **`arrayRead`** performs **one** `getD` per call, and `benchRatio` prints `ns/op`.
   Reporting "11–12 ns/step" means dividing one read by `n` = 4096, i.e. implying a
@@ -1345,8 +1383,11 @@ N-03). Both are one-level quantities the table used to divide by `n` anyway:
   neither is re-measured here, so neither is quoted.
 
 Both rows are still in the table because the lanes exist and the _warm_ figure for the
-first is sound; what was removed is only the per-step division that made them wrong. **The last row carries no
-per-step figure on purpose** (`codec-audit-round-six` R7-27): an earlier revision
+first is sound; what was removed is only the per-step division that made them wrong.
+(Third of the three: the `decodeFullArrayRoot` **cold** cell above, dropped for having
+no run behind it — the warm figure in the same row is the one the lanes print.)
+
+**The last row carries no per-step figure on purpose** (`codec-audit-round-six` R7-27): an earlier revision
 printed `~31,200 ns/step`, and no run table anywhere in this document produced it —
 `benchDecodeFull` prints one **batch** figure (`decodeFull byte [n]: <ns>/op`), and
 that is the only form the lane emits. A per-step figure with no committed run behind
@@ -1358,13 +1399,22 @@ be taken from, and only as a range.
 entry here claimed **3 ns/call on a hot, constant array**. **That claim is deleted,
 not qualified.** It came from a sink of `(…).length` — a constant `1` for a codec with
 one candidate — so the optimiser dropped nearly the whole call; a function that
-indexes an array cannot cost 3 ns in a tree where the bare index measures ~12. It
-was never a `packedCands` number.
+indexes an array cannot cost 3 ns in a tree where the bare index measures **~64–67 ns
+per call** (the `arrayRead` burst row below). An earlier revision made this argument
+against `~12`, which is the _withdrawn_ per-step division the `arrayRead` note three
+paragraphs down deletes as a 700× inversion (`codec-audit-round-eight` S-1: the
+conclusion survived, the premise was the number this very section repudiated). It was
+never a `packedCands` number.
 
 The replacement is the lane in `benchDecodeShapes`, which is a **burst** over 8
 buffers that differ _at the cursor_ (buffers differing only at byte 0 yield the same
 candidate and an invariant sink — the gate now rejects that), with the candidate
-values folded into the sink:
+values folded into the sink. **This row is the 8-buffer variant, unlike every other
+burst row here** (`codec-audit-round-eight` N-5): its closures ignore the buffer
+`benchBurst` hands them and index `bufs[j % 8]` themselves, so its working set is
+8 × 4 KiB rather than one buffer — the `(burst@8buf)` lane below is the same shape
+printed side by side, and the difference between the two rows is the price of that
+working set rather than of `packedCands`:
 
 | lane              | burst (min / median / max, ns per call) |
 | ----------------- | --------------------------------------- |
@@ -1382,12 +1432,15 @@ Two calibration notes, both of which cost a wrong figure this session:
   which is exactly the confusion this section exists to keep apart.
 
 **What the numbers say, stated at the strength the evidence supports.** In a warm
-loop the packed decoder is **~27–28 ns/step against a ~2.6–2.7 ns/step pure-Lean
+loop the packed decoder is **~27–28 ns/step against a ~2.5–2.7 ns/step pure-Lean
 floor** — about **10.5×** — and the whole of that gap is per-step work (a `List`
-cell, the search, the accumulator), not memory bandwidth. On cold input the same
-decoder is ~49 ns/step, because it is then paying to stream the buffer. Both are
-honest; they answer different questions, and a document that quoted one as the other
-is what this section used to do.
+cell, the search, the accumulator), not memory bandwidth. The decoder's per-step
+figure is quoted in **one** column only — the warm one. Its cold cell is `see note`
+in the table above (`codec-audit-round-eight` §4): the `49 ns/step` this paragraph
+used to restate has no run behind it, and repeating an unsourced number in prose is
+how a withdrawn figure survives its own deletion. For a cold figure, read what
+`benchRatio "decodeFullArray"` prints — that lane is the source, and it answers a
+_throughput_ question, which is not the compute floor the warm column measures.
 
 **One thing the table above does _not_ cover — now measured.** `Codec.byte` has
 **exactly one candidate per cursor position**, so `decodeFullArraySearch` never
@@ -1417,16 +1470,19 @@ than it is to a reader who divided by the caption instead of the row
 **The `packedCands` rows are deliberately _not_ in this table.** They are a
 _different_ run of a _different_ lane (`benchDecodeShapes`, 200 steps per burst),
 and an earlier revision of this document printed them here next to a set of figures
-from another session — which is how the same lane came to be quoted as both
-`85 / 86 / 87` and `74 / 75 / 77` for `k = 1`. One figure, one run, one table. The
-`packedCands` numbers are the ones two paragraphs above: **86 / 106 ns per call**
-(`k = 1` / `k = 2`), from `benchDecodeShapes`. The `74 / 75 / 77` and `92 / 95 / 96`
-figures that used to sit here were produced by a **bug in that lane** — its
-closure computed `j % (a.size + 1)` and the accompanying bound proof inside the
-measured region, so it priced a `Nat` modulus and a proof-term construction rather
-than `packedCands`. `Bench.lean` records the fix (the cursor is now hoisted out of
-the closure and the premise asserts it). **The 75 / 95 figures are withdrawn**, and
-so is any derivation from them.
+from another session — which is how the same lane came to be quoted as **two
+different triples** for `k = 1`. One figure, one run, one table. The `packedCands`
+numbers are the ones two paragraphs above: **86 / 106 ns per call** (`k = 1` /
+`k = 2`), from `benchDecodeShapes`. The earlier triples that used to sit here were
+produced by a **bug in that lane** — its closure computed `j % (a.size + 1)` and the
+accompanying bound proof inside the measured region, so it priced a `Nat` modulus and
+a proof-term construction rather than `packedCands`. `Bench.lean` records the fix (the
+cursor is now hoisted out of the closure and the premise asserts it). **Both earlier
+triples are withdrawn, and so is any derivation from them** — their _values_ are
+deliberately not reproduced here (`codec-audit-round-eight` N-4: quoting a withdrawn
+figure in the paragraph that forbids quoting withdrawn figures re-fires the claim, the
+same trap the footprint arm's `FP_BOTH`/`FP_PROPEXT` stripping exists to avoid). They
+are in the git history if you need to check them.
 
 **What that says — the search is linear in `k`, and its cost is not all in
 `packedCands`.**
@@ -1538,7 +1594,11 @@ as the bench reports.
 and the ratio with the five measurement rules the engineering ledger records
 (one fresh timed call per sample, a data-dependent sink so the optimiser cannot
 delete the work, median rather than mean, the `memcpy` reference interleaved in
-the same samples, and the load average noted next to the result). It is a
+the same samples, and, **recorded by hand beside each result**, the load average).
+The last one is a documentation practice, not a feature of the lane: no lane reads
+or prints load (`codec-audit-round-eight` S-4 — an earlier revision listed it among
+the things `benchDecodeShapes` "prints", which was a claim about tooling that the
+tooling does not make). It is a
 **reporting** lane, not a failing one: the owner has set no threshold, and a bar
 invented by the tooling would be the same defect as the figure it replaced.
 
