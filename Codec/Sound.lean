@@ -1080,7 +1080,8 @@ section's earlier sentence — "it is the **length index**, not `LengthDet`" —
 `uniqCounterexampleRel` happens to be `LengthDet`, so it is ruled out by the length
 index; but **`Rab` (below) is `LengthDet`, productive, and still admits two distinct
 full-consumption lists of one string at different list lengths**
-(`Rab_fails_huniq`, `[propext, Quot.sound]`-only). What excludes a `LengthDet`
+(`Rab_fails_huniq_full`, `[propext, Quot.sound]`-only — the `∃ R`-form carrying
+`LengthDet R` and productivity, not the bare two-lists-differ form). What excludes a `LengthDet`
 counterexample is the list-length side condition, and what excludes a
 non-`LengthDet` one is `LengthDet` — the two do different jobs. The
 `huniq_not_derivable` witness fails **both**: it is neither `LengthDet` nor
@@ -1613,6 +1614,26 @@ theorem Rab_fails_huniq :
   intro h
   have := h [false, false, false, false] [true, true] 4 (fun _ => 0) Rab_four Rab_two
   exact absurd this (by simp)
+
+/-- **The strong form the prose cites, and the form `huniq_not_derivable_full` has.**
+
+`Rab_fails_huniq` above proves only that two lists differ, so `#print axioms` on it
+says just that — the same weakness this file names as a defect for
+`huniq_not_derivable`. The evidence the section's prose actually wants is
+"**not even `LengthDet` plus productivity rescues `huniq`**", and that is an
+`∃ R`-statement carrying the hypotheses: `Rab` *is* `LengthDet`, *is* productive,
+and *still* admits two distinct full-consumption lists of one string.
+
+`Rab` is the **stronger** witness of the two in this file —
+`uniqCounterexampleRel`, which `huniq_not_derivable_full` uses, is `LengthDet` too,
+but the section contrasts them, so the strong form is stated at the witness the
+prose names. `[propext, Quot.sound]`-only. -/
+theorem Rab_fails_huniq_full :
+    ∃ (R : Bool → {m : Nat} → Bytes m → Prop),
+      LengthDet R ∧ (∀ a {m : Nat} (t : Bytes m), R a t → m ≠ 0) ∧
+      ¬ (∀ (xs ys : List Bool) (n : Nat) (s : Bytes n),
+          relRepeat R xs n s → relRepeat R ys n s → xs = ys) :=
+  ⟨Rab, Rab_lengthDet, Rab_productive, Rab_fails_huniq⟩
 
 /-- The **oriented core** of the uniqueness induction: two decompositions of one
 string, with the first step no longer than the second, and an induction hypothesis
