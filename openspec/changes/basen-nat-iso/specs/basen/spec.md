@@ -4,18 +4,19 @@
 
 The package SHALL provide a decimal codec whose value type is a **number**, not a
 byte list. A byte array is an acceptable intermediate representation inside the
-implementation, but it SHALL NOT be the type the caller receives: a caller asking
-for base-10 decoding is asking for a number, and a byte array obliges them to
+implementation, but it SHALL NOT be the type the caller receives: a caller asking for
+base-10 decoding is asking for a number, and a byte array obliges them to
 re-implement the arithmetic the package exists to provide.
 
 The encoder SHALL emit the **minimal** numeral and SHALL NOT zero-pad to a block
 width: `enc 0 = "0"`, `enc 1 = "1"`, `enc 10 = "10"`. Zero SHALL NOT encode to the
 empty byte string.
 
-The strict isomorphism's codomain SHALL carry canonicity rather than mere length,
-because a bare fixed-length byte string admits `"001"` — a well-formed three-byte
-string that names no distinct value — and an isomorphism including it has a false
-law at that element.
+The isomorphism's codomain SHALL be the **quotient of concrete syntax by
+information-free variation** — canonical numerals — rather than a bare fixed-length
+byte string. A bare `Bytes n` admits `"001"`, a well-formed three-byte string that
+names no distinct value, and an isomorphism including it has a false law at that
+element.
 
 #### Scenario: The encoder emits minimal digits
 
@@ -26,71 +27,111 @@ law at that element.
 
 #### Scenario: The codomain carries canonicity, not just length
 
-- **WHEN** the strict isomorphism's codomain is chosen
+- **WHEN** the isomorphism's codomain is chosen
 - **THEN** it is not a bare `Bytes n`, because `"001"` is a well-formed three-byte
-  string that names no distinct value; a codomain admitting it makes the inverse
-  law false at that element rather than merely unproved.
+  string that names no distinct value; a codomain admitting it makes the law false
+  at that element rather than merely unproved.
 
-### Requirement: A leading zero is rejected, not read
+### Requirement: Information-free variation is normalised, not rejected
 
-The strict decoder SHALL reject a numeral with a redundant leading zero (`"01"`,
-`"007"`) and SHALL reject the empty input, because the encoder never produces
-either. A leading zero carries no numeric information — `"01"` and `"1"` name the
-same value — so a decoder accepting both while the encoder emits one makes the
-inverse law a **false** proposition rather than an unproved one. Padding is not
-whitespace and does not get ignored: the strict reader accepts exactly the
-encoder's image.
+Some spellings of a numeral differ only in content that carries no numeric
+information: leading whitespace, a redundant leading zero, the all-blank run.
+`"1"`, `"01"` and `"   1"` all name the same value. These SHALL be treated as **one
+phenomenon** — lax names for the single canonical image — and SHALL NOT be treated as
+a second image, nor as an error.
 
-A single codec value that both accepts a non-canonical spelling and claims the
-canonical one is the only encoding SHALL be treated as a defect, not as an
-untested edge case, because the two claims contradict each other and no proof work
-reconciles them.
+The numeric decoder SHALL return the same value for every such spelling, so
+`decode "1" = decode "01" = decode "   1" = some 1`, while the encoder emits `"1"`.
+The number is isomorphic to its canonical numeral; the lax spellings are resolved
+_before_ the isomorphism is consulted, so it remains a total bijection with an
+unconditional law.
 
-#### Scenario: The strict decoder rejects a leading zero
+**The variation set is per base, and the bases SHALL be allowed to differ.** Which
+spellings are information-free depends on the alphabet, not on a global rule:
 
-- **WHEN** the strict decoder is given a numeral with a redundant leading zero
-  (`"01"`, `"007"`)
-- **THEN** it returns `none`, and a witness theorem records that rejection, so a
-  decoder that later accepts the input fails the build rather than silently
-  falsifying the inverse law.
+- a leading zero is inert wherever the digits are a bare numeral (decimal, and the
+  fixed-width bit groupings of bases 2/4/8/16/32/64), because it adds no digit;
+- a **base prefix** (`0x`, `0o`, `0b`) is a different question: it names the base
+  rather than padding within one, so whether it is absorbed, required, or rejected
+  is a decision per base and SHALL NOT be inherited from the decimal rule;
+- in the C-family `0`-prefix idiom a leading zero _changes the base_ of the literal
+  (`017` is octal), so the package SHALL NOT silently apply the decimal leading-zero
+  rule to a base where a caller could read it as a radix marker.
 
-#### Scenario: The strict decoder rejects the empty input
+Each base's normaliser SHALL state its own variation set, and the package SHALL NOT
+present one base's normalisation policy as another's.
 
-- **WHEN** the strict decoder is given an empty byte string
-- **THEN** it returns `none`, because the encoder never produces it — zero encodes
-  as `"0"`, not as nothing.
+Only input that names nothing SHALL be rejected: the empty string, and any byte that
+is neither a decimal digit nor an absorbed blank. Rejection SHALL NOT be used as the
+mechanism for resolving a non-canonical spelling, and leading zeros SHALL NOT be
+given a different treatment from leading whitespace.
 
-### Requirement: Tolerant input is a separate layer, outside the isomorphism
+#### Scenario: Every spelling of a numeral decodes to its value
 
-Where a caller must accept a non-canonical spelling, the package SHALL supply it as
-a **lenient** decoder that trims the spelling first and then defers to the strict
-one, proved to agree with it on canonical input, and composed **outside** the strict
-isomorphism. The package SHALL NOT satisfy a request for tolerant input by
-relaxing the strict inverse law instead.
+- **WHEN** the numeric decoder is given `"1"`, `"01"`, `"   1"`, or `"007"`
+- **THEN** it returns the same value in every case — `some 1` for the first three,
+  `some 7` for the last — and a theorem records that the spellings agree.
 
-The two decoders SHALL be distinguishable by name and SHALL NOT be conflated into
-one codec value carrying two laws, because whether a lax spelling is accepted is a
-property of the layer above the isomorphism, not of the isomorphism.
+#### Scenario: Only unreadable input is rejected
 
-Leniency SHALL be bounded honestly: a normaliser that trims leading zeros cannot
-express a lax spelling differing in _length_ from its canonical form, so the
-tolerant layer is a trimmer, not an equivalence-class quotient.
+- **WHEN** the numeric decoder is given the empty byte string, or a numeral
+  containing a byte that is neither a decimal digit nor an absorbed blank
+- **THEN** it returns `none`, because there is no value the input could name; this
+  is the only rejection, and a leading zero or a leading blank is never a reason for
+  one.
 
-#### Scenario: The lenient decoder agrees with the strict one on canonical input
+#### Scenario: The quotient, not the law, carries the equivalence
 
-- **WHEN** the lenient decoder is given a numeral the encoder produced
-- **THEN** it returns the same value as the strict decoder, and this agreement is a
-  theorem rather than a restatement — the lenient path normalises and then defers.
+- **WHEN** the acceptance of `"01"` or `"   1"` is justified
+- **THEN** the justification is that the codomain is the quotient of concrete syntax
+  by information-free variation, so those spellings are not elements of it and the
+  law is never consulted at them — never that the inverse law was relaxed.
 
-#### Scenario: Leniency does not weaken the inverse law
+### Requirement: The normaliser is one total idempotent function, proved
 
-- **WHEN** the lenient decoder accepts a spelling the encoder never produces
-- **THEN** the strict codec's inverse law is unchanged, because the normalisation
-  is composed outside the isomorphism.
+The layer that resolves non-canonical spellings SHALL be a single **total,
+idempotent** normaliser absorbing every information-free variation at once, not one
+normaliser per spelling class, not a second codec, and not a relaxed law. It SHALL be
+shown to reach every canonical form from every spelling, so no input is left without
+a reading, and SHALL be shown to be the identity on canonical forms, so the layer
+composition is well defined.
 
-#### Scenario: The normaliser's limit is stated
+Whether a lax spelling is accepted SHALL be a property of this layer, above the
+isomorphism. A codec value carrying two laws — one for canonical and one for lax
+input — SHALL NOT be constructed, because the second law contradicts the first.
 
-- **WHEN** the tolerant layer is documented
-- **THEN** it states which lax spellings it cannot express — those differing in
-  length from the canonical form — so a reader cannot take "lenient" to mean
-  "accepts anything".
+The normaliser's limit SHALL be stated: a spelling differing in _length_ from its
+canonical form is not expressible by a trimmer, so the layer absorbs variation in
+content, not "anything".
+
+#### Scenario: The normaliser agrees with the isomorphism on canonical input
+
+- **WHEN** the numeric decoder is given a numeral the encoder produced
+- **THEN** it returns the value the isomorphism gives, and this agreement is a
+  theorem rather than a restatement — the path normalises and then defers.
+
+#### Scenario: Octal and hexadecimal may normalise differently from decimal
+
+- **WHEN** the leading-zero policy for a non-decimal base is chosen
+- **THEN** it is decided per base and recorded, because a `0x`/`0o`/`0b` prefix names
+  a radix rather than padding a numeral, and in the C-family idiom a leading zero
+  changes the base of a literal; one base's policy SHALL NOT be applied to another
+  without that decision being made and stated.
+
+#### Scenario: One normaliser absorbs every variation
+
+- **WHEN** leading whitespace and leading zeros are both present (`"   01"`)
+- **THEN** a single normalisation pass reaches the canonical numeral, so the layers
+  do not have to be applied in a caller-visible order.
+
+#### Scenario: The normaliser reaches every canonical form
+
+- **WHEN** an arbitrary byte sequence is passed through the normaliser
+- **THEN** it produces a canonical numeral (a total surjection onto the canonical
+  forms), so no input is silently left undecodable for want of a normal form.
+
+#### Scenario: Normalisation does not weaken the inverse law
+
+- **WHEN** the normalising decoder accepts a spelling the encoder never produces
+- **THEN** the isomorphism's inverse law is unchanged, because the normalisation is
+  composed outside it.
