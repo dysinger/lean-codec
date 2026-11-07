@@ -1008,9 +1008,24 @@ theorem encode_injective_of_unambiguous {α : Type} (d : Codec α) (hd : Unambig
 
 /-! ## Relation-level completeness and functionality -/
 
+/-- **The same obligation as `Functional`, stated at the relation rather than at the
+codec.** `relFunctional R` says a value relates to at most one string (as a `Sigma`,
+so the length index count); `Functional d` is `relFunctional (Rel d)` — proved in both
+directions below as `functional_iff_relFunctional`. Both spellings are used for the
+same obligation on the same codec (`Functional` where a `Codec` value is in hand,
+`relFunctional` in the `relRepeat`-shaped `_of_decode` laws), so they cannot be left
+to drift silently. `[propext]`-only. -/
 def relFunctional {α : Type} (R : α → {n : Nat} → Bytes n → Prop) : Prop :=
   ∀ a {n₁ n₂ : Nat} (s₁ : Bytes n₁) (s₂ : Bytes n₂),
     R a s₁ → R a s₂ → (⟨n₁, s₁⟩ : Sigma fun n => Bytes n) = ⟨n₂, s₂⟩
+
+/-- **The two spellings of the functionality obligation are the same statement.**
+`Functional d ↔ relFunctional (Rel d)`, immediately from `Functional`'s definition —
+stated so a reader who has found one spelling can see it is the other, rather than
+having to guess whether the `_of_decode` obligations and the `Functional` suppliers
+are talking about the same thing. **No axioms at all** (measured). -/
+theorem functional_iff_relFunctional {α : Type} (d : Codec α) :
+    Functional d ↔ relFunctional (Rel d) := Iff.rfl
 
 def relUnambiguous {α : Type} (R : α → {n : Nat} → Bytes n → Prop) : Prop :=
   ∀ ⦃a b⦄ {n : Nat} (s : Bytes n), R a s → R b s → a = b
@@ -1041,7 +1056,8 @@ value sits on the empty string), yet at `n = 2` **both** `[a]` (one 2-byte step)
 `[b, b]` (two 1-byte steps) inhabit `relRepeat` — two distinct fully-consuming lists
 of the same string.
 
-So the honest statement needs **two** extra hypotheses beyond unambiguity, and this
+So the honest statement needs **two** extra hypotheses **in place of unambiguity** —
+one subsumes it, the other supplies per-step length agreement — and this
 section proves the law for that pair:
 
 * `LengthDet R` — each value relates only to strings of one length.
@@ -1049,11 +1065,23 @@ section proves the law for that pair:
   extended *across* lengths, so the induction can compare two first steps whose
   lengths differ.
 
-**Which hypothesis excludes the counterexample, stated correctly:** it is the
-**length index**, not `LengthDet`. `uniqCounterexampleRel` is *already* `LengthDet`
-(each value sits at exactly one length), so saying `LengthDet` "rules it out" would
-be false; what rules it out is that `[a]` and `[b, b]` differ in *list length*, and
-`relRepeat_unique_same_length` concludes only for equal-length lists.
+**Which hypothesis does what, stated correctly.** The **list-length index** handles
+*list* length: `relRepeat_unique_same_length` concludes only for equal-length lists.
+**`LengthDet`** handles *per-step* agreement **inside** the induction — it is what
+turns `hxy : a₀ = b₀` into `hmm : m = m'` in `relRepeat_cons_eq`, so the two
+remaining tails are compared at the same input length.
+
+Neither premise is decorative, and neither excludes the counterexample *alone*: the
+section's earlier sentence — "it is the **length index**, not `LengthDet`" —
+**generalised from one witness's shape, and is false as a general claim.**
+`uniqCounterexampleRel` happens to be `LengthDet`, so it is ruled out by the length
+index; but **`Rab` (below) is `LengthDet`, productive, and still admits two distinct
+full-consumption lists of one string at different list lengths**
+(`Rab_fails_huniq`, `[propext, Quot.sound]`-only). What excludes a `LengthDet`
+counterexample is the list-length side condition, and what excludes a
+non-`LengthDet` one is `LengthDet` — the two do different jobs. The
+`huniq_not_derivable` witness fails **both**: it is neither `LengthDet` nor
+list-length-unique.
 
 **Scope of the result, stated precisely.** `relRepeat_unique_same_length` is
 uniqueness **indexed by list length**:
@@ -1104,9 +1132,13 @@ theorem relRepeat_suffix_inj {n m : Nat} (hm : m ≤ n)
 
 /-- A step relation is **length-determinate** when each value relates only to strings
 of a single length. It is one of the two hypotheses
-`relRepeat_unique_same_length` needs beyond unambiguity, and it is *not* implied by
-it — proved, not asserted, as `lengthDet_not_implied_by_unamb` (the witness has one
-value at two lengths: unambiguous at each fixed length, plainly not `LengthDet`).
+`relRepeat_unique_same_length` takes **in place of unambiguity** — and it is not a
+*hypothesis added to* unambiguity, because the theorem takes none. The pair is
+`LengthDet` **plus** `RelAligned`, and `RelAligned` **contains** unambiguity (proved
+as `relUnambiguous_of_relAligned`, immediately below), so there is no set "beyond" it
+to add anything to. Nor is `LengthDet` implied by unambiguity — proved, not asserted,
+as `lengthDet_not_implied_by_unamb` (the witness has one value at two lengths:
+unambiguous at each fixed length, plainly not `LengthDet`).
 
 It holds for `byte`, proved as `lengthDet_byte` (which lives only at `Bytes 1`). The
 generalisation "for any codec whose leaves are fixed-width in their *value*" was
@@ -1516,6 +1548,64 @@ theorem relAligned_byte : RelAligned (Rel Codec.byte) := by
   rw [ht₂] at e
   exact e
 
+/-- **`LengthDet` does not exclude this counterexample — `codec-audit-round-five`
+R6-06.**
+
+`Rab` is length-determinate (each value sits at exactly one length) **and**
+productive (no value sits on the empty string), yet it admits two distinct
+full-consumption lists of the **same** string at **different list lengths**:
+`[false, false, false, false]` (four one-byte steps) and `[true, true]` (two two-byte
+steps) both inhabit `relRepeat Rab · 4`.
+
+That is the whole point of the witness. The section's sentence used to say the
+list-length index excludes the counterexample "and **not** `LengthDet`", generalising
+from `uniqCounterexampleRel`'s shape (which happens to be `LengthDet`) rather than
+from the theorem. `relRepeat_unique_same_length` concludes only for equal-length
+lists; that is what rules this relation out, and `LengthDet` says nothing about list
+length — it pins each *value's* own string length, not a list's. `[propext]`-only. -/
+def Rab : Bool → {m : Nat} → Bytes m → Prop
+  | true,  m, _ => m = 2
+  | false, m, _ => m = 1
+
+/-- `Rab` is `LengthDet`: `true` sits only at length `2`, `false` only at `1`.
+`[propext]`-only. -/
+theorem Rab_lengthDet : LengthDet Rab := by
+  intro a m₁ m₂ t₁ t₂ h₁ h₂
+  cases a <;> simp_all [Rab]
+
+/-- `Rab` is productive: neither value sits on the empty string. `[propext]`-only. -/
+theorem Rab_productive : ∀ a {m : Nat} (t : Bytes m), Rab a t → m ≠ 0 := by
+  intro a m t h
+  cases a <;> simp_all [Rab]
+
+/-- `[false, false, false, false]` consumes a 4-byte string in four one-byte steps. -/
+theorem Rab_four : relRepeat Rab [false, false, false, false] 4 (fun _ => 0) := by
+  refine ⟨1, by omega, (fun _ => 0), (fun _ => 0), by ext i; simp [splice, concat], rfl, ?_⟩
+  refine ⟨1, by omega, (fun _ => 0), (fun _ => 0), by ext i; simp [splice, concat], rfl, ?_⟩
+  refine ⟨1, by omega, (fun _ => 0), (fun _ => 0), by ext i; simp [splice, concat], rfl, ?_⟩
+  refine ⟨1, by omega, (fun _ => 0), (fun _ => 0), by ext i; simp [splice, concat], rfl, ?_⟩
+  exact (relRepeat_nil _ _).2 (by omega)
+
+/-- `[true, true]` consumes the **same** 4-byte string in two two-byte steps. -/
+theorem Rab_two : relRepeat Rab [true, true] 4 (fun _ => 0) := by
+  refine ⟨2, by omega, (fun _ => 0), (fun _ => 0), by ext i; simp [splice, concat], rfl, ?_⟩
+  refine ⟨2, by omega, (fun _ => 0), (fun _ => 0), by ext i; simp [splice, concat], rfl, ?_⟩
+  exact (relRepeat_nil _ _).2 (by omega)
+
+/-- **The refutation of "`LengthDet` is what excludes the counterexample".**
+
+`Rab` is `LengthDet` and productive, and here are two distinct full-consumption lists
+of one string — so `LengthDet` does **not** imply list-length uniqueness. What
+`relRepeat_unique_same_length` adds is the *equal list length* side condition, and
+that, not `LengthDet`, is the thing the section's sentence must name.
+`[propext, Quot.sound]`-only. -/
+theorem Rab_fails_huniq :
+    ¬ (∀ (xs ys : List Bool) (n : Nat) (s : Bytes n),
+        relRepeat Rab xs n s → relRepeat Rab ys n s → xs = ys) := by
+  intro h
+  have := h [false, false, false, false] [true, true] 4 (fun _ => 0) Rab_four Rab_two
+  exact absurd this (by simp)
+
 /-- The **oriented core** of the uniqueness induction: two decompositions of one
 string, with the first step no longer than the second, and an induction hypothesis
 supplied as a parameter (so this lemma is provable standalone and its footprint is
@@ -1594,6 +1684,15 @@ whose every value sits at a fixed length `LengthConst R c` does exactly that: a 
 of `xs.length` steps accounts for `xs.length * c` bytes, so `n` determines
 `xs.length`.
 
+**The side condition `c ≠ 0` is load-bearing, not cosmetic.** At `c = 0` a list of
+*any* number of steps consumes zero bytes: `relRepeat R [] 0 s` and
+`relRepeat R [a] 0 s` both hold, so `xs.length * 0 = n` reads `0 = 0` and pins
+nothing, while `relRepeat_length_of_const`'s conclusion stays true only by
+triviality. The two lemmas therefore take `hc0 : c ≠ 0` explicitly, and the
+discharge to a concrete codec must supply it (`lengthConst_byte` gives `c = 1`,
+where `by decide` closes `1 ≠ 0`). Any restatement of this mechanism without that
+condition is false (`codec-audit-round-five` R6-14). 
+
 With `LengthConst` the chain is: `lengths_eq_of_const` supplies the index that
 `relRepeat_unique_same_length` demands, which yields `huniq_byte`, which is exactly
 `decodeFull_spec`'s premise at `Codec.byte`. `decodeFull_spec_byte` is the result —
@@ -1609,7 +1708,11 @@ Quot.sound]`-only, zero `Classical.choice`. -/
 
 /-- A step relation is **length-constant** when every value relates only to strings
 of one fixed length `c`. This is the hypothesis that pins the _number of steps_ of a
-consuming list, and it is what `LengthDet` cannot do. -/
+consuming list, and it is what `LengthDet` cannot do.
+
+**`c` must be non-zero for the pinning to hold.** `relRepeat_length_of_const` and
+`lengths_eq_of_const` therefore take `hc0 : c ≠ 0`; at `c = 0` a list of any length
+consumes zero bytes and the count is not pinned at all. -/
 def LengthConst {α : Type} (R : α → {m : Nat} → Bytes m → Prop) (c : Nat) : Prop :=
   ∀ ⦃a : α⦄ {m : Nat} (t : Bytes m), R a t → m = c
 
@@ -1667,10 +1770,13 @@ theorem lengthDet_of_lengthConst {α : Type} (R : α → {m : Nat} → Bytes m �
 
 /-! ### `LengthDet` is not implied by `relUnambiguous`
 
-The docstring on `def LengthDet` claims it is "one of the two hypotheses
-`relRepeat_unique_same_length` needs beyond unambiguity, and it is *not* implied by
-it". The second half was prose; `codec-audit-round-three` §2.1.4 applies §2.1.2's
-rule ("state the measured relationship, not the assertion") and gives it a theorem.
+The docstring on `def LengthDet` calls it one of the two hypotheses
+`relRepeat_unique_same_length` takes **in place of unambiguity**, and says it is *not*
+implied by unambiguity. The second half was prose; `codec-audit-round-three` §2.1.4
+applies §2.1.2's rule ("state the measured relationship, not the assertion") and gives
+it a theorem. (The docstring's first half was itself corrected in
+`codec-audit-round-five` R6-13: the theorem takes **no** unambiguity hypothesis, so
+"beyond unambiguity" was the wrong phrase — `RelAligned` subsumes unambiguity.)
 
 The witness is simpler than `RelAligned`'s: a relation that has **one value at two
 lengths** is unambiguous (at each fixed length there is at most one value) while
