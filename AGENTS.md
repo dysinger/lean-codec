@@ -2,28 +2,36 @@
 
 Guidance for AI coding agents working in this repository.
 
-> ## START HERE: `openspec/changes/codec-audit-round-five/tasks.md`
+> ## START HERE: `openspec list --json` — no change is open
 >
-> **`codec-audit-round-five` is the open change** (authored 2026-11-07 from the sixth
-> adversarial review round; 38 numbered findings, `R6-01`…`R6-38`). Its `tasks.md` is
-> the ledger and the only direction — work top-down from §1.
+> **`codec-audit-round-five` closed 46/46 and archived 2026-11-07** as
+> `openspec/changes/archive/2026-11-07-codec-audit-round-five/` (38 findings,
+> `R6-01`…`R6-38`; three MODIFIED requirements, **all additive** — +2 `basen`,
+> +2 `codec/axiom-gate`, +4 `codec/review-remediation` scenarios, zero dropped —
+> plus two ADDED `codec/axiom-gate` requirements). Read its archived `tasks.md`
+> as history; do not reopen it.
 >
-> **Start at §1, not §5.** §1 adds the gate arm that _is_ the mechanism behind three
-> of the seven MUSTs; §2's classifications are the list §1's build failure prints.
-> Run `lake build` **once** at §1.1 because the failure output is the work list, then
-> stay on per-module checks until §7.2's single regeneration. The build is expected
-> RED from §1.1 until then — that is §1 doing its job, not a regression.
+> **Its one durable engine is the def-side audit arm**, and it is worth knowing
+> before touching any gate. `codec`'s `Axioms.lean` now runs **six** `run_cmd`
+> checks; the two new ones (`derivedDefDeclinationAudit`, `derivedDefPatternAudit`)
+> exist because `isDerivedDefName` removed a name from the gate's universe
+> _before_ any check could see it, and it was dropping `Iso.prod` — the paper's
+> own `×` — out of a green gate. Every dropped name now needs a reason, and a
+> pattern matching nothing is a build failure. `basen` gained a matching
+> `nativeDecideCount` arm. **When you add a check, ask what removes things from
+> its input, and whether that removal is recorded.**
 >
-> **The numbering is off by one from the change name, and that is not a typo.**
-> `round-five` is the fifth audit _change_; its findings come from the **sixth** review
-> round, so the ids are `R6-nn`. The next review's ids will be `R7-nn` in a change
-> called `round-six`.
+> **This box names the change, never a task.** That is deliberate: it has gone
+> stale **four** times (it said "§1.5 next" long after §1.5–§1.10 landed, then said
+> "no open change" while `round-four` was open, then still named `round-four` after
+> it archived, then still named `round-five` after it archived). If the change
+> named here is not what `openspec list` reports, **believe the command**. With no
+> change open **there is no queued work**; author a new change before coding.
 >
-> **This box names the change, never a task.** That is deliberate: it has gone stale
-> **three** times (it said "§1.5 next" long after §1.5–§1.10 landed, then said "no open
-> change" while `round-four` was open, then still named `round-four` after it
-> archived). If the change named here is not what `openspec list` reports, **believe
-> the command**.
+> **The numbering is off by one from the change names, and that is not a typo.**
+> `round-five` was the fifth audit _change_ and its findings came from the
+> **sixth** review round, so its ids are `R6-nn`. The next review's ids will be
+> `R7-nn` in a change called `round-six`.
 >
 > `codec-audit-round-four` closed 52/52 and archived 2026-11-07 as
 > `openspec/changes/archive/2026-11-07-codec-audit-round-four/` (37 findings,
@@ -61,13 +69,15 @@ Guidance for AI coding agents working in this repository.
 >
 > ```bash
 > nix develop --command openspec list --json | grep -E 'completedTasks|totalTasks'
-> nix develop --command lake build 2>&1 | tail -5    # four gate lines, see below
+> nix develop --command lake build 2>&1 | tail -8    # six gate lines, see below
 > ```
 >
-> `lake build` prints **four** gate lines — footprint, partition, definition
-> coverage, header numbers — and `openspec validate --all` is **10/10** live
-> capabilities with no change open (11/11 while a change is open: +its delta).
-> Read those numbers off the run, not off this page.
+> `lake build` prints **six** gate lines — footprint, partition, definition
+> coverage, **def-side declination audit**, **classifier pattern audit**, header
+> numbers (the last two added by `round-five` §1) — and `openspec validate --all`
+> is **10/10** live capabilities with no change open (11/11 while a change is open:
+> +its delta). Read those numbers off the run, not off this page: on 2026-11-07 the
+> codec gate printed `425 = 348 + 77` theorems and `140 = 115 + 25` defs.
 >
 > **`[x]` means "in the tree AND evidence recorded in the ledger" — never tick on
 > intent, and never leave a finished task unticked.** A checkbox reports a fact; the
@@ -111,22 +121,24 @@ Guidance for AI coding agents working in this repository.
 
 | Question                       | Authoritative file                                                               |
 | ------------------------------ | -------------------------------------------------------------------------------- |
-| **What is the task right now** | `openspec/changes/codec-audit-round-five/tasks.md` (§1 first)                    |
+| **What is the task right now** | `openspec/changes/<open>/tasks.md` — none open, so nothing                       |
 | Open changes + task counts     | `nix develop --command openspec list --json`                                     |
 | Are the spec deltas sound      | `nix develop --command openspec validate --all`                                  |
 | Archived history               | `openspec/changes/archive/<date>-<name>/tasks.md` (e.g. `2026-11-05-lean-basen`) |
 | Lessons (not direction)        | `openspec/lean-notes.md`                                                         |
 
-**One change is open (`codec-audit-round-five`); round four and earlier are archived
+**No change is open. `codec-audit-round-five` and everything before it are archived
 history.**
 
-- `codec-audit-round-five` — **in-progress**, authored 2026-11-07 from the sixth
+- `codec-audit-round-five` — **archived** 2026-11-07 as
+  `openspec/changes/archive/2026-11-07-codec-audit-round-five/` (46/46 tasks, all
+  three repos gated). Authored 2026-11-07 from the sixth
   adversarial review round (three read-only workers; reports `/tmp/r6/{A,B,C}.md`,
   merged ledger `/tmp/r6-SYNTHESIS.md`). 38 findings: 7 MUST / 15 SHOULD / 16 NITPICK,
   plus **26 refuted** — a third of what the reviewers set out to falsify turned out
-  sound, and those are recorded in its §9 so they are not re-derived. **Read its
-  `tasks.md` — not this file, not this bullet.** The one proof it needs is inlined in
-  its Appendix A and verified to compile, so no `/tmp` dependency remains.
+  sound, and those are recorded in its §9 so they are not re-derived. The proof it
+  needed was inlined in its Appendix A and verified to compile, so no `/tmp`
+  dependency remains. Do not reopen it; read its archived `tasks.md` as history.
 - `codec-audit-round-four` — **archived** 2026-11-07 as
   `openspec/changes/archive/2026-11-07-codec-audit-round-four/` (52/52 tasks). 37
   findings (`R5-nn`): §1 refuted `LengthDet → RelAligned` and proved the four-way
@@ -227,12 +239,16 @@ a template to resume.
   it already dropping `Iso.prod`, the paper's own `×`, out of a green gate. **When you
   add a check, ask what removes things from its input, and whether that removal is
   recorded.** The theorem side solved this with `partition` (every dropped name needs a
-  reasoned allowlist entry); the def side had nothing, and this is what `round-five` §1
-  adds.
+  reasoned allowlist entry); the def side had nothing until `round-five` §1 added
+  `derivedDefDeclinationAudit` + `derivedDefPatternAudit`. **The trap is the pattern, not
+  that one instance** — every future check needs the same question asked of it.
 
 - **A `Prop`-valued structure field is not a law.** `Iso.law`, `Normal.fixed`,
   `Normalizer.idem` are projections (`fun … => self.1`), and gating them measures the
-  structure's shape. The same file allowlists `MeasureDecreases.dec` and friends for
+  structure's shape. `round-five` §2.2 moved all three into the allowlist group whose
+  reason already covered them (`propProjections`), because the file had been gating
+  three of the six and allowlisting the other three. The same file allowlists
+  `MeasureDecreases.dec` and friends for
   exactly that reason, so the taxonomy has to be applied uniformly — if you find one
   field gated and its twin allowlisted, that is a defect, not a judgement call.
 
@@ -500,12 +516,15 @@ nix develop --command lake env lean /tmp/c.lean    # expect [propext, Quot.sound
 ```
 
 **Since §1.0 it also has a _mechanism_, not just blocks.** `lake build` now prints
-three lines and fails if any disagrees with the environment:
+**five** lines and fails if any disagrees with the environment (the fifth, the
+`native_decide` count, was added by `codec-audit-round-five` §4.3):
 
 ```
-info: basen axiom gate: 438 pinned + 46 allowlisted = 447 of 484 public theorems (0 explicit exclusion(s))
-info: basen axiom gate: 484 public theorems partitioned, 438 pinned and 46 allowlisted
-info: basen axiom gate: header numbers verified (484 = 438 + 46)
+info: basen axiom gate: 440 pinned + 46 allowlisted = 486 of 486 public theorems (0 explicit exclusion(s))
+info: basen axiom gate: 486 public theorems partitioned, 440 pinned and 46 allowlisted
+info: basen axiom gate: header numbers verified (486 = 440 + 46); prose paragraph says 443 pins = 440 BaseN + 3 Codec
+info: basen axiom gate: 137 public definitions covered, 122 mentioned and 15 allowlisted (mention proxy)
+info: basen axiom gate: native_decide stated count verified (12 uses in Bench.lean, all bench-lane, none in the gate)
 ```
 
 So a new `BaseN` law fails the build until it is pinned, and a stale pin fails too.
