@@ -165,6 +165,51 @@ def prod {α : Type u} {β : Type v} {γ : Type u} {δ : Type v}
       exact (bind_eq_some (i.apply a) (fun b => Option.bind (j.apply c) (fun d => some (b, d))) q).2
         ⟨q.1, hi, (bind_eq_some (j.apply c) (fun d => some (q.1, d)) q).2 ⟨q.2, hj, rfl⟩⟩
 
+/-- **The product bifunctor's characterisation**: `prod i j` applies componentwise.
+
+This is `Iso.prod`'s **law**, and it exists because the paper's `×` was the one
+`Iso`-valued definition the gate could not see. `Iso.prod` states its `law` field at
+the definition site, as every `Iso` literal does, but a structure-field proof is
+invisible to the definition-coverage gate's mention proxy — so before this theorem it
+sat outside the universe entirely (`codec-audit-round-five` §1, R6-01).
+
+`Iso.commute`/`Iso.associate` are allowlisted with the "correctness is the `law`
+field" reason; this one is *not* allowlisted, because it is named in `README [S1]`'s
+unconditional-iso list and a reader told that list is complete must be able to find a
+theorem about each entry. Either both halves succeed or the whole apply is `none`. -/
+theorem prod_apply_eq_some {α : Type u} {β : Type v} {γ : Type u} {δ : Type v}
+    (i : Iso α β) (j : Iso γ δ) (p : α × γ) (q : β × δ) :
+    (prod i j).apply p = some q ↔ i.apply p.1 = some q.1 ∧ j.apply p.2 = some q.2 := by
+  show (Option.bind (i.apply p.1) fun b => Option.bind (j.apply p.2) fun d => some (b, d)) =
+    some q ↔ _
+  rw [bind_eq_some]
+  constructor
+  · rintro ⟨b, hib, hb⟩
+    rw [bind_eq_some] at hb
+    obtain ⟨d, hjd, hbd⟩ := hb
+    have hq : (b, d) = q := by simpa using hbd
+    subst hq
+    exact ⟨hib, hjd⟩
+  · rintro ⟨hib, hjd⟩
+    exact ⟨q.1, hib, (bind_eq_some _ _ _).2 ⟨q.2, hjd, rfl⟩⟩
+
+/-- The backward direction of `Iso.prod`, mirroring `prod_apply_eq_some`. -/
+theorem prod_unapply_eq_some {α : Type u} {β : Type v} {γ : Type u} {δ : Type v}
+    (i : Iso α β) (j : Iso γ δ) (q : β × δ) (p : α × γ) :
+    (prod i j).unapply q = some p ↔ i.unapply q.1 = some p.1 ∧ j.unapply q.2 = some p.2 := by
+  show (Option.bind (i.unapply q.1) fun a => Option.bind (j.unapply q.2) fun c => some (a, c)) =
+    some p ↔ _
+  rw [bind_eq_some]
+  constructor
+  · rintro ⟨a, hia, ha⟩
+    rw [bind_eq_some] at ha
+    obtain ⟨c, hjc, hac⟩ := ha
+    have hp : (a, c) = p := by simpa using hac
+    subst hp
+    exact ⟨hia, hjc⟩
+  · rintro ⟨hia, hjc⟩
+    exact ⟨p.1, hia, (bind_eq_some _ _ _).2 ⟨p.2, hjc, rfl⟩⟩
+
 /-! ## Structural isomorphisms: products -/
 
 /-- Products associate: `α × (β × γ) ↔ (α × β) × γ`. -/
@@ -238,10 +283,18 @@ def unit {α : Type u} : Iso α (α × Unit) where
 
 **Public API, no in-tree caller.** Nothing in this repository builds one — the
 base leaves a downstream author writes are `Codec.byte`/`Codec.satisfy` — but it is
-kept rather than deleted because `README.md`'s `[D8]` cites exactly this function
-and `Iso.subset` as the two places where the paper's free-form `Eq`/`Bool` checks
-became `[DecidableEq α]`/`[DecidablePred p]`. Deleting it would leave that entry
-citing nothing. -/
+kept rather than deleted because two anchors cite it by name:
+
+* `README [D8]` names `Iso.element` and `Iso.subset` together as the two places
+  where the paper's `Eq`/`Bool` checks became `[DecidableEq α]`/`[DecidablePred p]`
+  — the decidable-witness departure;
+* `README [S1]` names it in the unconditional-iso list, and its parenthetical notes
+  that `[DecidableEq α]` is an instance argument rather than an isomorphism premise.
+
+(`codec-audit-round-five` R6-31 reported that `[D8]` names only the paper's
+constructors and never `Iso.element`; that was **refuted on inspection** — `[D8]`'s
+opening sentence names both `Iso.element` and `Iso.subset` verbatim. The retention
+reason stands, and the two anchors are the ones to re-check if either is renumbered.) -/
 def element {α : Type u} [DecidableEq α] (x : α) : Iso Unit α where
   apply _ := some x
   unapply b := if b = x then some () else none
@@ -285,6 +338,39 @@ def subset {α : Type u} {p : α → Prop} [DecidablePred p] : Iso α α where
       · rcases (ite_some_eq_some b a).1 h with ⟨hpb, hba⟩
         subst a
         contradiction
+
+/-- **`subset p`'s domain law**: it accepts exactly the elements satisfying `p`.
+
+`Iso.subset` is a **partial** iso, and for a partial iso the `law` field is vacuous as
+an obligation — `apply x = if p x then some x else none` satisfies it by construction
+whatever `p` is. What a caller needs is the **domain**, and it is stated here so the
+definition-coverage check's mention proxy can see it
+(`codec-audit-round-five` R6-07, design §D5). The file's allowlist reason "correctness
+is the `law` field" was read as covering this one, and for the partial isos it does
+not. -/
+theorem subset_apply_eq_some_iff {α : Type u} {p : α → Prop} [DecidablePred p]
+    (x : α) : (subset (p := p)).apply x = some x ↔ p x := by
+  show (if p x then some x else none) = some x ↔ p x
+  by_cases h : p x <;> simp [h]
+
+/-- **`subset p` accepts exactly one value per input**, and it is the input itself:
+`apply y = some x ↔ p y ∧ y = x`. The `y = x` half is what makes the domain law above
+about `x` alone rather than a coincidence of the identity map. -/
+theorem subset_apply_eq_some {α : Type u} {p : α → Prop} [DecidablePred p]
+    (x y : α) : (subset (p := p)).apply y = some x ↔ p y ∧ y = x := by
+  show (if p y then some y else none) = some x ↔ p y ∧ y = x
+  rw [ite_some_eq_some]
+
+/-- **`Iso.element x`'s domain law**: `unapply` accepts exactly `x`.
+
+`Iso.element x` is the partial iso between `Unit` and the singleton `{x}`, so the
+same argument as `subset_apply_eq_some_iff` applies: its `law` field holds by
+construction, and the obligation a caller needs is the domain
+(`codec-audit-round-five` R6-07, design §D5). -/
+theorem element_unapply_eq_some_iff {α : Type u} [DecidableEq α] (x b : α) :
+    (element x).unapply b = some () ↔ b = x := by
+  show (if b = x then some () else none) = some () ↔ b = x
+  by_cases h : b = x <;> simp [h]
 
 /-! ## Combinators -/
 
