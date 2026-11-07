@@ -4,7 +4,10 @@ Guidance for AI coding agents working in this repository.
 
 > ## START HERE: `openspec list --json`
 >
-> **Two changes are open, both in `basen`, and they are ordered.**
+> **Two changes are open, both in `basen`, and both PARKED by the owner**
+> (2026-11-07): the focus is **`codec` + `../fstar-codec`** first, then how to divvy
+> up the libraries. Do not start either `basen` change until that decision is made.
+> They are ordered, for when you do:
 >
 > 1. **`basen-uppercase-prepass` (0/20) — do this first.** It resolves a **false
 >    normative claim** and the 24-theorem tier built on it. `Base16.lean:14` and
@@ -174,8 +177,11 @@ Guidance for AI coding agents working in this repository.
 | Archived history               | `openspec/changes/archive/<date>-<name>/tasks.md` (e.g. `2026-11-05-lean-basen`) |
 | Lessons (not direction)        | `openspec/lean-notes.md`                                                         |
 
-**Two changes are open (`basen-uppercase-prepass` 0/20, then `basen-nat-iso` 0/18
-blocked); round six and everything before it are archived history.**
+**No change in `codec` is open. The only open changes are the two PARKED `basen`
+ones** (`basen-uppercase-prepass` 0/20, `basen-nat-iso` 0/18 blocked) — the owner has
+deferred both until the library division is decided; round six and everything before
+it are archived history. Work in `codec`/`../fstar-codec` proceeds change-by-change,
+so author one before coding there too.
 
 - `basen-uppercase-prepass` — **in-progress**, 0/20, **do this one first.** Replaces
   `Base16`'s 24-theorem case-folding tier with an `upperBytes` pre-pass through
