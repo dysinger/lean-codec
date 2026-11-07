@@ -1339,6 +1339,15 @@ theorem encodeTakeWhile_of_decode (p : UInt8 → Bool)
     (hd : relFunctional (relTakeWhile p)) (bs : List UInt8)
     {n : Nat} {s : Bytes n} (hdcd : (bs, Suffix.empty n) ∈ decodeTakeWhile p s) :
     encodeTakeWhile p bs = some ⟨n, s⟩ := by
+  -- **`hd` is a *derivable* obligation, and the signature keeps it as a parameter
+  -- deliberately** (`codec-audit-round-six` R7-24). The §D6 table below says
+  -- `takeWhile`'s obligation is "derivable, unconditionally", and that is true —
+  -- `relTakeWhile_functional p` supplies it for any `p`, with no hypothesis. Keeping
+  -- it explicit is what makes the `_of_decode` family uniform (`sepBy`'s twin needs
+  -- the hypothesis for real), and it lets a caller pass a *proved* instance rather
+  -- than re-deriving one. What was wrong was the README row saying "no hypothesis at
+  -- all" without saying that the hypothesis is nevertheless *taken* and is
+  -- dischargeable in one term; both halves are now stated.
   rcases (decodeTakeWhile_spec p bs n s (Suffix.empty n)).1 hdcd with ⟨s₀, hsplit, hrel⟩
   have hcast : s = cast (congrArg Bytes (Nat.sub_zero n)) s₀ := by
     rw [hsplit]
@@ -1365,11 +1374,21 @@ round-six reviewer argued was too strong and **explicitly flagged as inferred, n
 proved** after five failed attempts. The two theorems below settle it, and the answer
 is neither "every case" nor "none":
 
-| combinator         | `relFunctional` obligation                                       |
-| ------------------ | ---------------------------------------------------------------- |
-| `takeWhile`        | **derivable, unconditionally** (`relTakeWhile_functional`)         |
-| `sepBy`            | **derivable** from `relFunctional (Rel p)` (`relSepBy_functional`) |
-| `chainl1`/`chainr1`| a genuine caller obligation — not derived here                    |
+| combinator         | `relFunctional` obligation                                                     |
+| ------------------ | ------------------------------------------------------------------------------ |
+| `takeWhile`        | **derivable, unconditionally** (`relTakeWhile_functional`)                       |
+| `sepBy`            | **two** obligations: `relFunctional (Rel p)` **and** an `hstep` on `seqRight sep p` |
+| `chainl1`/`chainr1`| a genuine caller obligation — not derived here                                  |
+
+**`sepBy`'s row takes two hypotheses, not one** (`codec-audit-round-six` R7-22):
+`relSepBy_functional` is `(hp : relFunctional (Rel p)) (hstep : ∀ a {m₁ m₂} (t₁ t₂),
+Rel (seqRight sep p) a t₁ → Rel (seqRight sep p) a t₂ → ⟨m₁,t₁⟩ = ⟨m₂,t₂⟩)`. The row
+used to name only `hp`, which reads as a one-line derivation from the head's
+functionality and understates what a caller of `encodeSepBy_of_decode` must produce.
+The `hstep` term is the general lemma's hypothesis applied to the **tail** step
+`seqRight sep p`, and unlike `takeWhile`'s it is not available from the combinator's
+shape: `sep` is an arbitrary `Codec Unit`, so nothing determines the bytes of a tail
+step from its value.
 
 Why `takeWhile` is the strongest case: `relTakeWhile p` is `relRepeat` over
 `Rel (satisfy p)`, and **a `satisfy` step's bytes are determined by its value** —
@@ -1379,8 +1398,10 @@ functional *by the shape of the leaf*, with no hypothesis on `p` at all.
 Why `sepBy` is conditional and **not** unconditional: it is a `Rel p` head followed by
 a `relRepeat` of `seqRight sep p` steps. The tail is handled by the same general lemma
 (`takeWhile`'s shape), but the **head is an arbitrary `Codec α`**, so its functionality
-is a hypothesis on `p` rather than a consequence of `sepBy`'s own definition. The
-reviewer's inference therefore holds for the tail and not for the head.
+is a hypothesis on `p` rather than a consequence of `sepBy`'s own definition — and the
+tail's functionality is available *only* as the `hstep` premise, because `sep` is
+arbitrary. The reviewer's inference therefore holds for the tail's *shape* and not for
+either of the two things a caller actually has to supply.
 
 Why `chainl1`/`chainr1` are left as obligations: their denotation existentially
 quantifies the seed and the operand list and then requires the `Iso.foldl`/`foldr`
@@ -1438,12 +1459,14 @@ theorem satisfy_sigmaFunctional (p : UInt8 → Bool) (b : UInt8) {m₁ m₂ : Na
   simp only [] at s₁ s₂
   rw [s₁, s₂]
 
+
 /-- **`relTakeWhile` is `relFunctional`, unconditionally.** No hypothesis on `p`:
 `takeWhile`'s step is `satisfy p`, whose bytes are determined by the value. The first
 row of §D6's table, and the half of R6-15 that the reviewer's inference got right.
 `[propext, Quot.sound]`-only. -/
 theorem relTakeWhile_functional (p : UInt8 → Bool) : relFunctional (relTakeWhile p) :=
   relRepeat_functional_of_step _ (satisfy_sigmaFunctional p)
+
 
 /-- **`relSepBy` is `relFunctional` whenever its head codec and its tail step are.**
 The second row of §D6's table: `sepBy`'s *tail* is `takeWhile`-shaped and handled by
