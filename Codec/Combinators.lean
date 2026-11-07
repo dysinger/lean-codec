@@ -1377,14 +1377,19 @@ is neither "every case" nor "none":
 | combinator         | `relFunctional` obligation                                                     |
 | ------------------ | ------------------------------------------------------------------------------ |
 | `takeWhile`        | **derivable, unconditionally** (`relTakeWhile_functional`)                       |
-| `sepBy`            | **two** obligations: `relFunctional (Rel p)` **and** an `hstep` on `seqRight sep p` |
+| `sepBy`            | **two to derive, one to apply**: `relFunctional (Rel p)` + an `hstep` on `seqRight sep p` give `relSepBy_functional`; the law takes only the result |
 | `chainl1`/`chainr1`| a genuine caller obligation — not derived here                                  |
 
-**`sepBy`'s row takes two hypotheses, not one** (`codec-audit-round-six` R7-22):
-`relSepBy_functional` is `(hp : relFunctional (Rel p)) (hstep : ∀ a {m₁ m₂} (t₁ t₂),
+**`relSepBy_functional` takes two hypotheses, not one** (`codec-audit-round-six`
+R7-22): `(hp : relFunctional (Rel p)) (hstep : ∀ a {m₁ m₂} (t₁ t₂),
 Rel (seqRight sep p) a t₁ → Rel (seqRight sep p) a t₂ → ⟨m₁,t₁⟩ = ⟨m₂,t₂⟩)`. The row
 used to name only `hp`, which reads as a one-line derivation from the head's
-functionality and understates what a caller of `encodeSepBy_of_decode` must produce.
+functionality and understates what *this lemma* needs.
+
+**But `encodeSepBy_of_decode` takes one premise, `hd : relFunctional (relSepBy p
+sep)`**, and an earlier attempt to fix the row by writing "two" moved the error from
+under- to over-claiming (`codec-audit-round-seven` SHOULD-3). The row distinguishes
+them now: two obligations to *derive* the functionality, one to *apply* the law.
 The `hstep` term is the general lemma's hypothesis applied to the **tail** step
 `seqRight sep p`, and unlike `takeWhile`'s it is not available from the combinator's
 shape: `sep` is an arbitrary `Codec Unit`, so nothing determines the bytes of a tail
