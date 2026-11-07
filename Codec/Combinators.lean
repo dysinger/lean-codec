@@ -1356,4 +1356,129 @@ theorem encodeTakeWhile_of_decode (p : UInt8 → Bool)
       cases hs'
       rfl
 
+/-! ### Which `relFunctional` obligations are *derivable* (`codec-audit-round-five`
+§D6, R6-15)
+
+The `_of_decode` laws take a `relFunctional` hypothesis on the relation they transport.
+`README [S3]` said this obligation is "conditional in **every** case", which the
+round-six reviewer argued was too strong and **explicitly flagged as inferred, not
+proved** after five failed attempts. The two theorems below settle it, and the answer
+is neither "every case" nor "none":
+
+| combinator         | `relFunctional` obligation                                       |
+| ------------------ | ---------------------------------------------------------------- |
+| `takeWhile`        | **derivable, unconditionally** (`relTakeWhile_functional`)         |
+| `sepBy`            | **derivable** from `relFunctional (Rel p)` (`relSepBy_functional`) |
+| `chainl1`/`chainr1`| a genuine caller obligation — not derived here                    |
+
+Why `takeWhile` is the strongest case: `relTakeWhile p` is `relRepeat` over
+`Rel (satisfy p)`, and **a `satisfy` step's bytes are determined by its value** —
+`Rel (satisfy p) b t` forces `t = single b` at length `1`. So the step relation is
+functional *by the shape of the leaf*, with no hypothesis on `p` at all.
+
+Why `sepBy` is conditional and **not** unconditional: it is a `Rel p` head followed by
+a `relRepeat` of `seqRight sep p` steps. The tail is handled by the same general lemma
+(`takeWhile`'s shape), but the **head is an arbitrary `Codec α`**, so its functionality
+is a hypothesis on `p` rather than a consequence of `sepBy`'s own definition. The
+reviewer's inference therefore holds for the tail and not for the head.
+
+Why `chainl1`/`chainr1` are left as obligations: their denotation existentially
+quantifies the seed and the operand list and then requires the `Iso.foldl`/`foldr`
+`apply` to land on `a`. Two *different* `(a₀, ops)` pairs can fold to the same `a`, so
+functionality of the chain needs the fold to be injective on those pairs — which is
+not a property of the combinator's shape and is not available from `Iso.law`
+(that relates `apply`/`unapply`, not two `apply`s). Not attempted here; recorded as
+open rather than claimed either way. -/
+
+/-- **`relRepeat` over a `Sigma`-functional step is `relFunctional`.** The general
+lemma both derivations below use: if a single step relates a value to at most one
+byte string (with its length, as a `Sigma`), then a *list* of such steps does too —
+the first step fixes `m` and the prefix, and the induction hypothesis fixes the rest.
+`[propext, Quot.sound]`-only. -/
+theorem relRepeat_functional_of_step {α : Type} (R : α → {m : Nat} → Bytes m → Prop)
+    (hstep : ∀ a {m₁ m₂ : Nat} (t₁ : Bytes m₁) (t₂ : Bytes m₂),
+      R a t₁ → R a t₂ → (⟨m₁, t₁⟩ : Sigma fun m => Bytes m) = ⟨m₂, t₂⟩) :
+    relFunctional (relRepeat R) := by
+  intro xs
+  induction xs with
+  | nil =>
+    intro n₁ n₂ s₁ s₂ h₁ h₂
+    rw [relRepeat_nil] at h₁ h₂
+    subst h₁; subst h₂
+    congr 1
+    funext i
+    exact Fin.elim0 i
+  | cons x rest ih =>
+    intro n₁ n₂ s₁ s₂ h₁ h₂
+    rw [relRepeat_cons] at h₁ h₂
+    obtain ⟨m₁, hm₁, a₁, b₁, hs₁, hR₁, hr₁⟩ := h₁
+    obtain ⟨m₂, hm₂, a₂, b₂, hs₂, hR₂, hr₂⟩ := h₂
+    cases hstep x a₁ a₂ hR₁ hR₂
+    have hb := ih b₁ b₂ hr₁ hr₂
+    obtain ⟨eb, hbe⟩ := Sigma.mk.inj hb
+    have hn : n₁ = n₂ := by omega
+    subst hn
+    have hb1 : b₁ = b₂ := eq_of_heq hbe
+    subst hb1
+    rw [hs₁, hs₂]
+
+/-- **A `satisfy` step is `Sigma`-functional**: `Rel (satisfy p) b t` forces
+`t = single b` at length `1`, so two such steps for one value are the same `Sigma`.
+This is why `takeWhile`'s functionality needs no hypothesis. `[propext]`-only. -/
+theorem satisfy_sigmaFunctional (p : UInt8 → Bool) (b : UInt8) {m₁ m₂ : Nat}
+    (t₁ : Bytes m₁) (t₂ : Bytes m₂) :
+    Rel (Codec.satisfy p) b t₁ → Rel (Codec.satisfy p) b t₂ →
+    (⟨m₁, t₁⟩ : Sigma fun m => Bytes m) = ⟨m₂, t₂⟩ := by
+  intro h₁ h₂
+  rw [Rel_satisfy] at h₁ h₂
+  obtain ⟨-, e₁, s₁⟩ := h₁
+  obtain ⟨-, e₂, s₂⟩ := h₂
+  subst e₁
+  subst e₂
+  simp only [] at s₁ s₂
+  rw [s₁, s₂]
+
+/-- **`relTakeWhile` is `relFunctional`, unconditionally.** No hypothesis on `p`:
+`takeWhile`'s step is `satisfy p`, whose bytes are determined by the value. The first
+row of §D6's table, and the half of R6-15 that the reviewer's inference got right.
+`[propext, Quot.sound]`-only. -/
+theorem relTakeWhile_functional (p : UInt8 → Bool) : relFunctional (relTakeWhile p) :=
+  relRepeat_functional_of_step _ (satisfy_sigmaFunctional p)
+
+/-- **`relSepBy` is `relFunctional` whenever its head codec and its tail step are.**
+The second row of §D6's table: `sepBy`'s *tail* is `takeWhile`-shaped and handled by
+`relRepeat_functional_of_step`, but the head is an arbitrary `Codec α`, so its
+functionality is a hypothesis rather than a consequence — which is why the reviewer's
+"derivable for `sepBy`" holds only up to `relFunctional (Rel p)`.
+`[propext, Quot.sound]`-only. -/
+theorem relSepBy_functional {α : Type} (p : Codec α) (sep : Codec Unit)
+    (hp : relFunctional (Rel p))
+    (hstep : ∀ a {m₁ m₂ : Nat} (t₁ : Bytes m₁) (t₂ : Bytes m₂),
+      Rel (seqRight sep p) a t₁ → Rel (seqRight sep p) a t₂ →
+      (⟨m₁, t₁⟩ : Sigma fun m => Bytes m) = ⟨m₂, t₂⟩) :
+    relFunctional (relSepBy p sep) := by
+  intro xs
+  induction xs with
+  | nil => intro n₁ n₂ s₁ s₂ h₁ h₂; exact absurd h₁ (by simp [relSepBy])
+  | cons x₀ rest ih =>
+    intro n₁ n₂ s₁ s₂ h₁ h₂
+    obtain ⟨m₁, hm₁, a₁, b₁, hs₁, hr₁, ht₁⟩ := h₁
+    obtain ⟨m₂, hm₂, a₂, b₂, hs₂, hr₂, ht₂⟩ := h₂
+    have hr₁' : Rel p x₀ a₁ := hr₁
+    have hr₂' : Rel p x₀ a₂ := hr₂
+    have hh := hp x₀ (n₁ := m₁) (n₂ := m₂) a₁ a₂ hr₁' hr₂'
+    obtain ⟨em, ha⟩ := Sigma.mk.inj hh
+    subst em
+    have ha1 : a₁ = a₂ := eq_of_heq ha
+    subst ha1
+    have hts : relFunctional (relRepeat (Rel (seqRight sep p))) :=
+      relRepeat_functional_of_step _ hstep
+    have ht := hts rest b₁ b₂ ht₁ ht₂
+    obtain ⟨eb, hbe⟩ := Sigma.mk.inj ht
+    have hn : n₁ = n₂ := by omega
+    subst hn
+    have hb1 : b₁ = b₂ := eq_of_heq hbe
+    subst hb1
+    rw [hs₁, hs₂]
+
 end Codec
