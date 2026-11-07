@@ -1276,7 +1276,32 @@ theorem encodeChainr1_injective_of_unambiguous {α β : Type} (f : Iso ((α × �
 `takeWhile p` is `many (satisfy p)` — a maximal run of bytes each satisfying `p` —
 realized over the existing repetition layer, **not** a new `Codec` constructor.
 It is the variable-length-token primitive: an alphabet run (`takeWhile isHexDigit`),
-a varint (`takeWhile highBitSet` + a fold `iso`), a UTF-8 code-unit run. Like
+a varint (`takeWhile highBitSet` + a fold `iso`), a UTF-8 code-unit run.
+
+**A numeral built this way is NOT automatically an `Iso` — normalise the spelling
+first, or reject it.** "`takeWhile` + a fold `iso`" gets you a *byte run*, and the
+run is not canonical: `"01"` and `"1"` are two spellings of one number, and so are
+the LEB128 forms `[0x80; 0x00]` and `[0x00]`. If the fold's `apply` sends both to
+the same value while `unapply` produces one of them, the `Iso.law` field
+`apply a = some b ↔ unapply b = some a` is **false** — not unproved, false — and the
+constructor will not accept the proof. This is the defect `../fstar-codec` records
+as `[D12]`/`[D13]` (`digits_to_int` and `varint` both ⛔ over their library's
+decoder) and classifies as *padding*: a leading zero carries no numeric
+information, so it is lax spelling, and lax spelling is what the case-folding
+`Normal` layer (and `[D4]`'s absent `ignore`) exists to consume **outside** the
+`Iso`, never inside it. Two consequences for anything built here:
+
+* **strict**: reject the non-canonical spelling in the decoder, so `dec` accepts
+  exactly `enc`'s image and the law is *true* rather than conditioned on the input;
+* **lenient**: keep the tolerance in a separate, separately-proved layer composed
+  outside the `Iso` (`decodeNormal`'s shape), so the `Codec` value stays a strict
+  bijection.
+
+Neither is a weakening. What is **not** available is a single `Iso` that both
+accepts `"01"` and claims `enc 1` is the only encoding of `1` — that pair is
+contradictory, and no amount of proof search changes it.
+
+Like
 `sepBy`/`chainl1`, it is a *relation, a decoder, an encoder* triple (there is no
 finite `many` node to embed), and its laws are inherited (`decodeRepeat_spec` /
 `encodeRepeat_rel` / `encodeRepeat_ne_none`) with **no new induction**: each is the
