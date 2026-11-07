@@ -387,9 +387,16 @@ validity ✅); `nix build .#native .#cli` exit 0.
 - [x] 8.2 `basen`: `lake build`, `lake build bench`, `nix build '.#bench'` (its
       `installPhase` **runs** the executable).
 - [x] 8.3 `template`: `nix flake check`, `nix build .#native .#cli`.
-- [ ] 8.4 Commit per task family, individual files only, printing
+- [x] 8.4 Commit per task family, individual files only, printing
       `git diff --cached --name-only` before each. The pre-commit hook runs `nix fmt`
       and rejects a reformatted staged file; re-add and commit again.
+      **Done.** Eight `codec` commits (`Codec/Iso.lean`, `Codec/Sound.lean`,
+      `Codec/Combinators.lean`, `Codec/Decode.lean`, `Axioms.lean`,
+      `scripts/gen-axioms.lean`, `README.md`, `tasks.md`), two `basen` commits
+      (`Bench.lean`+`Axioms.lean`, then `README.md`+`Base10.lean`+`default.nix`+
+      `AGENTS.md`) and two `template` commits (`lakefile.lean`, `AGENTS.md`). Each
+      printed `git diff --cached --name-only` first; the basen and template hooks
+      reformatted and rejected once each, and the re-stage committed normally.
 - [x] 8.5 Verify every new law's footprint by hand:
       `printf 'import Codec\n#print axioms Codec.<n>\n' > /tmp/c.lean` →
       expect `[propext, Quot.sound]` or cleaner. `Classical.choice` is a defect.
