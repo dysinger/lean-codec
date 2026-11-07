@@ -29,8 +29,16 @@ explicitly, "it is not safe because **it is not checked that the two directions 
 really inverse to each other**", with §7.5 leaving the follow-up open: "It would be
 interesting to see **how the invariants of `Iso` values could be encoded in a
 dependently typed language**" — `codec` makes it a **field of the type**: you cannot construct an isomorphism
-without its proof, and the roundtrip — `encode d x = some s → (x, []) ∈ decode d s` — is a **closed theorem**, holding **unconditionally** for every
+without its proof, and the roundtrip — `encode d x = some ⟨n, s⟩ → (x, Suffix.empty n) ∈ decode d s` — is a **closed theorem**, holding **unconditionally** for every
 description. Invertibility is enforced by the type system, not by a comment.
+
+**That second line used to read `(x, []) ∈ decode d s`** (`codec-audit-round-six`
+R7-31). `[]` is not the library's empty remainder — the type is `List (α × Suffix n)`
+and the empty remainder is `Suffix.empty n` — so the shorthand was rendered in
+backticks as if it were the library's own statement. `bidir` (line for line,
+`Rel d x s ↔ (x, Suffix.empty n) ∈ decode d s`) is the exact form, and this section
+now uses it in the same spelling as `[D2]`'s two other citations rather than a fourth
+one that existed nowhere.
 
 `codec` also re-bases the idea from text (`String`/`Char`) onto **bytes**
 (`UInt8`), so it covers fixed-width integers, endianness, and image files — with
@@ -70,7 +78,7 @@ the second writes `Rel` as if it were a constructor rather than a `data` type).
 unit is `UInt8`, the base string is a byte sequence, and `byte : Codec UInt8` is
 the `token` analogue. Text/Unicode is rebuilt downstream (`lean-text`) on top of
 bytes, not in core. **One byte-string type, one job** (see
-[Representations](#representations-one-length-indexed-byte-string)): the _spec_
+[Representations](#representations--one-length-indexed-byte-string-the-spec-substrate)): the _spec_
 substrate is the single length-indexed `Bytes n := Fin n → UInt8`, which is
 structurally reducible for proofs **and** expected (as an IR matter, not a theorem) to
 lower to a scalar indexed load — there
@@ -78,7 +86,7 @@ is no separate `List` spec and no `ByteArray` run-model slab _for the specificat
 carrier_ (`decode`/`encode`/`Rel` and the laws). The packed (`Array UInt8`) and
 byte-slice (`ByteArray`) carriers in `Codec/Packed.lean`/`Codec/ByteSlice.lean` are
 proved-equal or trust-seam _implementations on top of_ that single spec — see
-[Performance](#performance-two-proof-layers-and-where-the-speed-goes).
+[Performance](#performance--two-proof-layers-and-where-the-speed-goes).
 
 **[D2] The nondeterministic list decoder — filed under Departures, where it belongs.**
 The anchor id `[D2]` is kept for continuity (downstream files cite it), but the
@@ -176,8 +184,9 @@ The paper (§6.3) defines
 `ignore :: α → Iso α ()` and, in its own words, notes it is "again **not a strict
 partial isomorphism**": it maps _any_ run of blanks down to a single unit value
 and, on printing, emits a **fixed, single** representation back — so an
-arbitrary-length whitespace run is not preserved, and the inverse invariant
-holds only "modulo equivalence classes" (§3.1) rather than literally.
+arbitrary-length whitespace run is not preserved. §3.1 lets this pass by reading the
+invariant "modulo equivalence classes" — quoted, and marked as the paper's own
+concession rather than a law this project could state and check.
 
 **Read the quotation precisely: that sentence is about `ignore` alone.** The paper
 turns it into a _family_ by instantiating it three ways — `skipSpace`, `optSpace`,
@@ -288,8 +297,12 @@ promise.
 deliberately omitted.** Its forward- and backward-iteration fixpoints need not
 coincide: "unapply until it stops" and "apply until it stops" can land on different
 states, because `apply`-succeeds-iff-`unapply`-succeeds does not give
-`apply`-fails-iff-`unapply`-fails. So no inverse law exists for `iterate` without a
-precondition, and `codec` omits it rather than ship a subtly-unsound one. What is
+`apply`-fails-iff-`unapply`-fails. So `iterate` cannot satisfy `Iso.law`
+**unconditionally** — it does not follow from the step iso's law, and no proof of it
+exists here — and `codec` omits it rather than ship a subtly-unsound one. (An earlier
+revision said "no inverse law exists", which is stronger than what is proved: what is
+proved and recorded is that the two fixpoints need not agree, so the law is not
+available _without_ a precondition. `codec-audit-round-six` R7-20.) What is
 supplied instead is `Iso.foldl`/`Iso.foldr` directly, and the honest obligation they
 carry is a **`measure : α → Nat` plus a proof that each step strictly decreases it**
 — a termination witness. **Stated at the right type, because an earlier revision
@@ -388,10 +401,21 @@ wrong** (`codec-audit-round-five` R6-04): it said "grepping `^def` in
 `Codec/Iso.lean` finds exactly two other `Iso`-valued definitions", which is wrong
 twice over — `grep '^def'` misses a multi-line signature, and the tree has **four**
 more, not two. A walk of the compiled environment (the same method `Axioms.lean`'s
-definition-coverage check uses) finds **19** public `Iso`-valued definitions: the 13
-above, plus `foldl`, `foldr`, `counterIso` and `counterIsoR`.
+definition-coverage check uses) finds **19** public `Iso`-valued definitions:
+`id`, `ofTotal`, `trans`, `inverse`, `prod`, `associate`, `commute`, `unit`,
+`element`, `subset`, `nil`, `cons`, `optionSome` (the 13 structural unconditional
+isos above), plus `foldl`, `foldr`, `counterIso`, `counterIsoR`, plus the two
+counterexample witnesses `uniqSeqIso` and `uniqSeqUnitIso` — **13 + 4 + 2 = 19**.
 
-Those four are not all in the same position, which is why "exactly two others" was
+**The total was right and the decomposition was wrong** (`codec-audit-round-six`
+R7-03). This sentence used to give `13 + 4`, which sums to 17, because it named the
+fold pair and the two counter isos but not the two witness isos in `Codec/Sound.lean`.
+A total that is correct while its parts do not add up is the shape that survives a
+correction: the number looks right and only the sum is wrong. The 19 is re-derived
+for this fix by an environment walk, and that walk returns the two witnesses **by
+name** — so this is the list the method produces, not a repaired sum.
+
+Those six are not all in the same position, which is why "exactly two others" was
 misleading rather than merely off by two:
 
 - `Iso.foldl`/`Iso.foldr` hold their law only on the **terminal-seed domain** —
@@ -402,25 +426,31 @@ misleading rather than merely off by two:
   definition site like every entry in the list above. The earlier revision lumped
   these in with the folds by saying both "hold their law only on the terminal-seed
   domain", which is **false for `counterIso`/`counterIsoR`**.
+- `Codec.uniqSeqIso`/`Codec.uniqSeqUnitIso` are the two leaves of the `Unambiguous`
+  counterexample — unconditional structure literals like the rest, and not
+  combinators a porting reader is looking for at all.
 
 So the honest scope of the 13-value list is: it is the list of **structural**
 unconditional isos a porter reproduces, and it is complete _of that category_ — it is
-not an enumeration of every `Iso`-valued definition in the tree. The four omitted
-values are a fold pair with a domain restriction and two counterexample witnesses;
-none is a combinator a porting reader is missing.
+not an enumeration of every `Iso`-valued definition in the tree. The six omitted
+values are a fold pair with a domain restriction, two counterexample witnesses and
+two witness leaves; none is a combinator a porting reader is missing.
 
-**Five of the thirteen have no in-tree caller at all, and that is expected rather
+**Three of the thirteen have no in-tree caller at all, and that is expected rather
 than a defect** (`codec-audit-round-five` R6-30). Measured by an environment walk over
 referencing constants (ignoring the compiler's `.eq_1` unfoldings): `Iso.id`,
 `Iso.ofTotal` and `Iso.associate` are referenced by **nothing** — they are the
 category's identity and its two structural isos, shipped for a downstream author and
-required by `[S3]` only as _combinators a porter must reproduce_. (`Iso.element` and
+required by `[S3]` only as _combinators a porter must reproduce_. `Iso.element` and
 `Iso.subset` used to be in the same position; they are not any more, because
 `codec-audit-round-five` §2.3 gave them the **domain laws**
 `Iso.element_unapply_eq_some_iff` / `Iso.subset_apply_eq_some_iff` — the answer to
-`R6-07`. That is what "five" counted before those laws existed; do not re-derive it
-as five.) So the count is **3** of the 13 with no referencing constant, plus
-`element`/`subset` now referenced by their own domain laws.
+`R6-07`.
+
+**The heading used to say "Five" while this paragraph concluded three**
+(`codec-audit-round-six` R7-19): "five" was the count _before_ the `element`/`subset`
+domain laws existed, and only the heading was left behind when the body was corrected.
+The number is **3**, it is the list above, and it is measured — not remembered.
 
 **Two strengths, stated separately, because they are not the same strength.**
 (i) For the **structural** isos in that list the law holds **unconditionally** — no
@@ -444,15 +474,18 @@ three are not cosmetic and should not be ported as if they were:
 - `token → byte` changes the _carrier_ (`Char` → `UInt8`, `[D1]`);
 - `parse → decode` changes the _result shape_ (whole-string matches → every
   `(value, remainder)` pair, `[D2]`);
-- `print → encode` changes the **argument**: the paper's `print` is
+- `print → encode` changes **what the argument is**: the paper's `print` is
   `print :: Printer α → α → Maybe String` — it takes an explicit _pretty-printer
   implementation_ value — while `encode` takes a `Codec` description —
   `encode : (d : Codec α) → α → Option (Σ n, Bytes n)`. An earlier revision called it
   "a method selected by the value's `Printer α` instance"; that is not the paper's
-  form, and it is `[S2]`'s one real over-claim. The **conclusion survives** — this is
-  the change with the largest porting cost — but the **reason changes**: what differs
-  is _what the argument is_ (`[D6]`'s typeclass-to-value move), not _whether_ one is
-  passed. It is the one place `[S2]` and `[D6]` overlap.
+  form, and it is `[S2]`'s one real over-claim. The lead said only "changes the
+  **argument**", which a reader takes as _whether_ an argument is passed — and both
+  forms take one, so the lead contradicted the paragraph under it
+  (`codec-audit-round-six` R7-18). The **conclusion survives** — this is the change
+  with the largest porting cost — but the **reason** is that _what_ the argument is
+  changed (`[D6]`'s typeclass-to-value move), not that one appeared. It is the one
+  place `[S2]` and `[D6]` overlap.
 
 **[S3] Zero domain-specific leaf codecs.** Core ships every primitive leaf —
 `byte`, `satisfy` — plus the non-leaf `pure` (a value-equality check, not a
@@ -471,14 +504,24 @@ decoders on functional descriptions. **How strong that obligation is, measured r
 than asserted** (`codec-audit-round-five` §D6 / R6-15; an earlier revision said it was
 "conditional in **every** case" and that was too strong):
 
-| combinator          | the `relFunctional` obligation                                     |
-| ------------------- | ------------------------------------------------------------------ |
-| `takeWhile`         | **derivable — no hypothesis at all** (`relTakeWhile_functional`)   |
-| `sepBy`             | **derivable from `relFunctional (Rel p)`** (`relSepBy_functional`) |
-| `chainl1`/`chainr1` | a genuine caller obligation                                        |
+| combinator          | the `relFunctional` obligation                                          |
+| ------------------- | ----------------------------------------------------------------------- |
+| `takeWhile`         | **derivable for any `p`** (`relTakeWhile_functional`); still _taken_    |
+| `sepBy`             | **two**: `relFunctional (Rel p)` **and** an `hstep` on `seqRight sep p` |
+| `chainl1`/`chainr1` | a genuine caller obligation                                             |
 
 `takeWhile`'s step is `satisfy p`, whose bytes are determined by its _value_
-(`t = single b` at length 1), so the obligation follows from the leaf's shape. `sepBy`
+(`t = single b` at length 1), so the obligation follows from the leaf's shape.
+
+**"Derivable" is not "absent", and the row now says both** (`codec-audit-round-six`
+R7-24). `encodeTakeWhile_of_decode` still takes `hd : relFunctional (relTakeWhile p)`
+as a parameter; what `relTakeWhile_functional` proves is that a caller can always
+supply it in one term, since that theorem quantifies over `p` and needs nothing else.
+An earlier revision's "no hypothesis at all" described the lemma and read as a
+description of the law, so a reader opening `encodeTakeWhile_of_decode` found a
+hypothesis the table had said did not exist. Keeping the parameter explicit is
+deliberate: it makes the `_of_decode` family uniform, because `sepBy`'s twin needs
+the hypothesis for real. `sepBy`
 is a `Rel p` head plus a `takeWhile`-shaped tail: the tail is derivable, the **head is
 an arbitrary `Codec α`**, so its functionality is a hypothesis on `p`. `chainl1`/
 `chainr1` existentially quantify a seed and operand list and then require the fold's
@@ -661,7 +704,7 @@ indexed load in the emitted IR. There is no second `List UInt8`/`Array`/`ByteArr
 `Buffer` carrier _for the spec_: every law is stated over `Bytes n`. (The packed
 `Array UInt8` and byte-slice `ByteArray` carriers exist only as proved-equal or
 trust-seam implementations on top of this spec — see
-[Performance](#performance-two-proof-layers-and-where-the-speed-goes).)
+[Performance](#performance--two-proof-layers-and-where-the-speed-goes).)
 
 |                    | **`Bytes n`** (`= Fin n → UInt8`)                                                                                                            |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -684,7 +727,7 @@ at the seam. One length-indexed byte string removes that split and its leaks for
 _proof_ substrate. **The carrier split was never the strategy; it was the defect.**
 (The performance change re-introduces a `ByteArray` accumulator _only_ as a proved-equal
 implementation, in two layers with **distinct proof status** — see
-[Performance](#performance-two-proof-layers) — keeping `Bytes n` as the specification
+[Performance](#performance--two-proof-layers-and-where-the-speed-goes) — keeping `Bytes n` as the specification
 every law is stated over.)
 
 ---
@@ -740,7 +783,7 @@ compiler _can_ unbox it), the cursor is _not_ (and by measurement is not unboxed
 neither is a proved property of this library. (The packed `Array`/`ByteArray` carriers
 sit _above_ the substrate as proved-equal or trust-seam implementations; the laws never
 leave `Bytes n`.) — see
-[Representations](#representations-one-length-indexed-byte-string-the-spec-substrate).
+[Representations](#representations--one-length-indexed-byte-string-the-spec-substrate).
 
 ### `[D2]` + `[D3]` the decoder returns a _list_, and `|` means "try both, keep
 
@@ -776,7 +819,7 @@ passage introduced as the paper's own cost. The paper attributes the leak to no 
 thing (it names only "unlimited backtracking"), and nothing in this repository has
 measured it — no bench lane reports result-list allocation, and the memory figures
 that _do_ exist are about `packedCands` and the array read (see
-[Performance](#performance-and-what-it-costs)), not about `decode`'s
+[Performance](#performance--two-proof-layers-and-where-the-speed-goes)), not about `decode`'s
 `List (α × Suffix n)`. It is therefore recorded here as the project's **unmeasured
 inference**, not as a measurement and not as the paper's claim. Stated as an
 inference it is at least a plausible one — `decode` genuinely materializes a list —
@@ -787,8 +830,16 @@ but a plausible inference is what this section exists to stop presenting as fact
 The paper's `ignore` maps _any_ run of whitespace down to a single value and, on
 printing, always emits _one_ (fixed) run back — `skipSpace` re-emits none,
 `optSpace`/`sepSpace` re-emit a single blank, but none of them preserves the
-original length. That is one-way loss: three spaces in, a fixed run out. The paper
-accepts this and says the inverse law holds only "modulo equivalence classes".
+original length. That is one-way loss: three spaces in, a fixed run out.
+
+**What the paper actually says, quoted exactly, because a paraphrase used to sit
+inside the quotation marks** (`codec-audit-round-six` R7-21). §3.1 says the authors
+"will generally not be very strict with the invariant stated above", and "in
+particular we will sometimes interpret this condition **modulo equivalence
+classes**" — the paper is describing how _it_ reads the invariant, not stating that
+the inverse law _holds modulo_ equivalence classes as a verified fact. The project's
+reading is the second thing, and it is the project's: the loss is the equivalence
+class, not a law that has been weakened in a checkable way.
 
 `codec` cannot do that — not as a preference, but as a **consequence of the
 isomorphism itself**. Every `codec` building block is a strict partial
@@ -972,7 +1023,7 @@ supplier establishes **satisfiability**, **not congruence**; and it is **not the
 supplier of every family** — `Unambiguous` has two composed suppliers,
 `uniqSeqBo_unambiguous` and `uniqSeqD2_unambiguous`, besides `unambiguous_byte`
 (`codec-audit-round-five` R6-18; an earlier revision said "only at `Codec.byte`" and
-that was false for `Unambiguous`). What is true, and is the point, is: `Codec.Sound.uniqSeq_not_congruent` proves that
+that was false for `Unambiguous`). What is true, and is the point, is: `Codec.uniqSeq_not_congruent` proves that
 `Unambiguous d₁ → Unambiguous d₂ → Unambiguous (seq d₁ d₂)` is **false**, with a
 counterexample where both halves are unambiguous and `seq` relates two distinct
 values to one one-byte input. `uniqSeq_not_relAligned` refutes the same for
@@ -1217,19 +1268,25 @@ The measured burst **median** at an L1-resident working set is **~2.6–3.0 ns/s
 and the gap is **~10–11×**. The correction is small; the reason for it is the point,
 and it is the same defect one layer down from the one the warm/cold split fixed.
 
-| shape                                                 | lane                           | cold ns/step | warm ns/step (burst median) | note                                       |
-| ----------------------------------------------------- | ------------------------------ | ------------ | --------------------------- | ------------------------------------------ |
-| `memcpy` (`copySlice`), for scale                     | `benchCalibration`             | ~0.03        | —                           | ~125 ns / 4 KiB                            |
-| `Array` indexed read alone                            | `arrayRead`                    | 11–12        | ~65 ns/call                 | a single read, not a loop                  |
-| **ideal `Id.run` cursor loop** (`arr[k]` + `Nat`)     | `idealCursor` (+`(burst)`)     | 15           | **~2.6–2.7**                | **the achievable pure-Lean compute floor** |
-| `decodeArray` single step (`List (α × Nat)` result)   | `decodeArray step`             | 12           | —                           | the per-step `List`                        |
-| `packedCands` alone (now an `attach.map`)             | `packedCands (per step)`       | 430–650      | —                           | cold-input dominated; see below            |
-| `decodeFullArrayRoot` (packed `Array` + `Nat` cursor) | `decodeFullArray` (+`(burst)`) | 49           | **~27.4–28.3**              | the whole decode, one candidate searched   |
-| `decodeFullFastRoot` (`Bytes`/`Suffix` cursor)        | `decodeFullFast`               | 77           | —                           | the `Suffix`/`bdrop` path                  |
-| `decodeFull` (the `Bytes n` specification itself)     | `decodeFull spec`              | ~31,200      | —                           | super-linear: re-walks the suffix per step |
+| shape                                                 | lane                           | cold ns/step                 | warm ns/step (burst median) | note                                       |
+| ----------------------------------------------------- | ------------------------------ | ---------------------------- | --------------------------- | ------------------------------------------ |
+| `memcpy` (`copySlice`), for scale                     | `benchCalibration`             | ~0.03                        | —                           | ~125 ns / 4 KiB                            |
+| `Array` indexed read alone                            | `arrayRead`                    | 11–12                        | ~65 ns/call                 | a single read, not a loop                  |
+| **ideal `Id.run` cursor loop** (`arr[k]` + `Nat`)     | `idealCursor` (+`(burst)`)     | 15                           | **~2.6–2.7**                | **the achievable pure-Lean compute floor** |
+| `decodeArray` single step (`List (α × Nat)` result)   | `decodeArray step`             | 12                           | —                           | the per-step `List`                        |
+| `packedCands` alone (now an `attach.map`)             | `packedCands (per step)`       | 430–650                      | —                           | cold-input dominated; see below            |
+| `decodeFullArrayRoot` (packed `Array` + `Nat` cursor) | `decodeFullArray` (+`(burst)`) | 49                           | **~27.4–28.3**              | the whole decode, one candidate searched   |
+| `decodeFullFastRoot` (`Bytes`/`Suffix` cursor)        | `decodeFullFast`               | 77                           | —                           | the `Suffix`/`bdrop` path                  |
+| `decodeFull` (the `Bytes n` specification itself)     | `benchDecodeFull`              | no per-step figure committed | —                           | super-linear: re-walks the suffix per step |
 
-All cold cells are from the same two-run session and move with load; they are
-order-of-magnitude, not point measurements. The two burst rows are the ones a gap may
+All cold cells except the last are from the same two-run session and move with load;
+they are order-of-magnitude, not point measurements. **The last row carries no
+per-step figure on purpose** (`codec-audit-round-six` R7-27): an earlier revision
+printed `~31,200 ns/step`, and no run table anywhere in this document produced it —
+`benchDecodeFull` prints one **batch** figure (`decodeFull byte [n]: <ns>/op`), and
+that is the only form the lane emits. A per-step figure with no committed run behind
+it is the same defect as the withdrawn `52.4 − 27.4`. The row is kept, the number is
+not: quote `benchDecodeFull`'s own output if you need this lane. The two burst rows are the ones a gap may
 be taken from, and only as a range.
 
 **The `packedCands` row, and a figure that has now been withdrawn twice.** The old
@@ -1255,7 +1312,7 @@ Two calibration notes, both of which cost a wrong figure this session:
   this exact call reads ~850–1050 ns/call. Quoting that against the compiled 86 is a
   10× error in the other direction. Only rows printed by the `lake build bench`
   executable may be quoted.
-- The interleaved-lane figure (**430–541 ns/call**, two runs, above) is _cold_: it
+- The interleaved-lane figure (**430–650 ns/call**, two runs, above) is _cold_: it
   re-touches a 4 KiB array per call. It is a memory figure wearing a compute label,
   which is exactly the confusion this section exists to keep apart.
 
@@ -1334,8 +1391,11 @@ so is any derivation from them.
   it was a folded-away sink, not a measurement (see the note above).
 
 **Nothing was optimised as a result.** The task was to price the term _before_
-rewriting it, and the numbers say the rewrite is worth ~4–7 ns/step of a ~55 ns/step
-decode — real, but neither the dominant term nor a change to make on a guess.
+rewriting it, and the numbers say the rewrite is worth **~4–6 ns/step** of a
+~55 ns/step decode — real, but neither the dominant term nor a change to make on a
+guess. The range is `24–26 − 20 = 4–6`, and its upper end is `26.4 − 20 = 6.4`; an
+earlier revision wrote "~4–7", which no term in the derivation produces
+(`codec-audit-round-six` R7-25).
 
 ### The hand-written C reference — the yardstick that was missing
 
@@ -1369,15 +1429,22 @@ Three properties keep it honest rather than a straw man:
   one L1-resident buffer, a different `n/8`-byte window decoded per call so neither
   closure can be folded away.
 
-Measured in one session, two consecutive runs, load ~1.4 on 10 cores, burst medians,
-**512 steps per burst** (`n/8`, the window every row here decodes):
+Measured in one session, two consecutive runs, load ~1.4 on 10 cores, burst medians.
+**The burst span is given per row**, because the three lanes do not share one:
 
-| lane                           | run 1 (min / median / max, ns) | run 2 (min / median / max, ns) | ns/step         |
-| ------------------------------ | ------------------------------ | ------------------------------ | --------------- |
-| `idealCursor` (Lean loop)      | 10380 / 10532 / 10669          | 9982 / 10059 / 10643           | 2.57 / 2.46     |
-| **C reference** (hand-written) | 3501 / 3598 / 3783             | 3482 / 3507 / 3575             | **7.03 / 6.85** |
-| `decodeWhole` (Lean)           | 14487 / 14623 / 15477          | 13755 / 13811 / 14197          | **28.6 / 27.0** |
-| **Lean ÷ C**                   | **4.1×**                       | **3.9×**                       | **~4×**         |
+| lane                           | steps/burst | run 1 (min / median / max, ns) | run 2 (min / median / max, ns) | ns/step         |
+| ------------------------------ | ----------- | ------------------------------ | ------------------------------ | --------------- |
+| `idealCursor` (Lean loop)      | **4096**    | 10380 / 10532 / 10669          | 9982 / 10059 / 10643           | 2.57 / 2.46     |
+| **C reference** (hand-written) | 512         | 3501 / 3598 / 3783             | 3482 / 3507 / 3575             | **7.03 / 6.85** |
+| `decodeWhole` (Lean)           | 512         | 14487 / 14623 / 15477          | 13755 / 13811 / 14197          | **28.6 / 27.0** |
+| **Lean ÷ C**                   | —           | **4.1×**                       | **3.9×**                       | **~4×**         |
+
+**The span column is not decoration — an earlier caption said "512 steps per burst
+(the window every row here decodes)", and it was wrong for the first row**
+(`codec-audit-round-six` R7-11). `10532 / 512 = 20.57`, not the `2.57` the row states;
+`10532 / 4096 = 2.57`. The figure was always correct for its own span and only the
+caption was wrong, so the fix is the caption, **not a re-run**. This is the same
+defect (`R6-26`) that was fixed in the table above while this one was being written.
 
 **What that settles, including one thing it upsets.**
 
