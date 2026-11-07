@@ -2,177 +2,85 @@
 
 Guidance for AI coding agents working in this repository.
 
-> ## START HERE: `openspec/changes/codec-audit-round-eight/tasks.md`
+> ## START HERE: `openspec list --json`, then that change's `tasks.md`
 >
-> **`codec-audit-round-eight` is the open change in this repo, 0/22 tasks.** The
-> other two open changes (`basen-uppercase-prepass`, `basen-nat-iso`) are **parked**
-> by the owner pending a library-division decision — do not start them.
+> **There is no open change in `codec`.** `codec-audit-round-eight` closed **22/22** and
+> archived 2026-11-07 as
+> `openspec/changes/archive/2026-11-07-codec-audit-round-eight/`. The only open changes
+> are `basen-uppercase-prepass` (0/20) and `basen-nat-iso` (0/18, blocked), and **both
+> are PARKED by the owner** pending a library-division decision — do not start them.
 >
-> **What it carries.** The eighth review round (three read-only workers, `codec`
-> only, reports `/tmp/r8-{paper,gates,numbers}.md`) returned 9 MUST / 15 SHOULD /
-> 18 NITPICK. **Five were fixed in the landing session and are NOT in scope:** the
-> footprint attribution rule (claim sites **145 → 146**, and the newly visible site was
-> a live false claim in `Codec.Bytes.ext_iff`); `Bench.lean`'s `~4.3 µs` note which
-> contradicted its own row's `430–650 ns` by 10×; `README`'s RFC `MUST`; three
-> run-vintage stamps. **Read its `tasks.md` — not this file.**
+> **So: if `openspec list` shows nothing open in `codec`, there is no queued `codec`
+> work.** Do not invent some from this file, and do not reopen an archived change.
+> The next `codec` change is either a ninth review round the owner commissions, or
+> nothing. That is a decision, not a backlog item.
 >
-> **Two findings were REFUTED and are recorded there so they are not re-derived:**
+> **This box has gone stale eleven times.** It said "§1.5 next" long after §1.5–§1.10
+> landed; said "no open change" while `round-four` was open; still named `round-four`
+> after it archived; still named `round-five` after it archived; said "no change is
+> open" with `round-six` open; named `round-six` at 6/32 while it ran; said "no change
+> is open" with `basen-nat-iso` open; named `basen-nat-iso` alone after a second change
+> was authored; said "no change in `codec` is open" for the hour before `round-eight`
+> was authored; and said "0/22" for the whole session in which `round-eight` was being
+> finished. **Believe the command, never this box.** It names the _change_, never a
+> task, and right now it deliberately names **none**.
 >
-> - **R8-01, "`filter` evaluates `!(a) || !(b)` as `&&`"** — the reviewer's own
->   reproducer refutes it. Every element of `[1,2,3]` genuinely satisfies
->   `!(n==2) || !(n==1)`, so `filter` returning `[1,2,3]` is **correct**. No toolchain
->   bug. (`String.splitOn` _is_ a trap, but a different one — it splits on a
->   **sequence**, not a char set.)
-> - **M-2, "`86 → 106` does not reproduce"** — the committed figures are internally
->   consistent; the reviewer re-timed at 118 on another box, an 11 % cross-session
->   difference of the kind `AGENTS.md`'s Speed section forbids comparing.
+> ### What round eight closed, and the one thing to carry forward
 >
-> **The three live gaps it does carry**, because they are all one shape — _a check
-> that reports nothing_: the gate's universe matches only `thmInfo`/`defnInfo` of
-> seven `ConstantInfo` constructors, so an `opaque` would be invisible to all eight
-> arms (`opaque = 0` today, measured); `propProjections`' docstring claims an invalid
-> entry "would fail" and no arm checks that (all four current entries _are_ genuine
-> projections, so it is latent); and the footprint arm prints how many claims it read
-> but not how many exist, so a narrowed vocabulary would be as invisible as the round
-> seven predicate bug was.
+> Round eight's findings were **all one shape: a check that reports nothing.** Four of
+> them, and each is now a printed, asserted count:
 >
-> **The lesson this repo keeps re-learning, now four times:** a check is only as good
-> as what _enters_ it. Round five's `isDerivedDefName` removed `Iso.prod` from a green
-> gate; round seven's `nm.getPrefix == \`Codec` removed 139 declarations; round eight's
-> attribution rule removed two claims by finding a helper name in the sentence. **When
-> you add or change a check, ask what it filters, and print the count of what it
-> looked at.**
+> | was invisible                                                                                         | now                                                                                                                                                                       |
+> | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+> | `opaqueInfo`/`axiomInfo` — matched by **no arm** of eight, and `exclusions` _refuses_ an `opaque`     | a `constantKindCensus` arm prints all seven `ConstantInfo` kinds and **fails** the build on a non-zero `opaque`/`axiom`                                                   |
+> | `propProjections`' validity — the docstring said a non-projection entry "would fail"; nothing checked | a second arm reads the **same** `isBareProj`; mutation-tested                                                                                                             |
+> | the footprint arm's denominator — it printed how many claims it **read**, never how many existed      | `769 scanned / 144 mentioning / 154 found / 146 checked / 8 left`, all three asserted                                                                                     |
+> | `gen-axioms.lean`'s **mirror** of `propProjections`                                                   | drift found and fixed; it had un-pinned `Codec.Suffix.hle` while `headerNumbers` read the mirror's own count, so the numbers agreed with each other and not with the tree |
 >
-> **No change in `basen` is started.** `basen-uppercase-prepass` exists because the
-> tree quoted RFC 4648 §8 as `MUST` when §8 says `MAY` — that misquote also reached
-> `codec`'s README and was fixed here. `basen-nat-iso` is blocked on where numbers
-> live (`basen` is "base-N byte encodings"; a numeral is not one).
+> **The lesson, now five times over, and the fifth one is the sharpest:** a check is only
+> as good as what _enters_ it — and a **mirror list is a name list.** Round five's
+> `isDerivedDefName` removed `Iso.prod` from a green gate; round seven's
+> `nm.getPrefix == \`Codec` removed 139 declarations; round eight's attribution rule
+> skipped two live claims; and round eight's regeneration found a _second copy_ of a
+> name list, three entries to the real one's four, that had been silently un-pinning a
+> law. Two lists that must agree, and no arm comparing them, is the same defect as one
+> list with no completeness arm. **When you add a check, ask what removes things from
+> its input, whether that removal is recorded — and whether anything else holds a copy
+> of the same list.**
 >
-> **The numbering is off by one from the audit change names, and that is not a typo.**
-> `round-six` is the sixth audit _change_; its findings came from the **seventh** review
-> round, so its ids are `R7-nn`. Round eight's change is `codec-audit-round-eight` and
-> its ids are `R8-nn`. The next review's ids will be `R9-nn` in a change called
-> `round-nine`.
+> ### `nix fmt` does not format markdown here — use the flake formatter
 >
-> **This box names the change, never a task — and it has gone stale NINE times.** It
-> said "§1.5 next" long after §1.5–§1.10 landed; said "no open change" while
-> `round-four` was open; still named `round-four` after it archived; still named
-> `round-five` after it archived; said "no change is open" with `round-six` open;
-> named `round-six` at 6/32 while it ran; said "no change is open" with
-> `basen-nat-iso` open; named `basen-nat-iso` alone after a second change was authored;
-> and said "no change in `codec` is open" for the hour before this one was authored.
-> If what is named here is not what `openspec list` reports, **believe the command**.
+> Cost a build cycle in round eight, so it is here, not buried. **`nix fmt` in this
+> dev shell has no `prettier`**: it formats `*.nix` only and prints "0 changed" for
+> markdown it never touched. Every "`nix fmt` clean" claim in this file's history and
+> in the archives covered Lean and Nix and **not markdown**. The real markdown gate is
+> `checks.aarch64-darwin.formatting` (treefmt + sandboxed prettier), reachable as
+> `nix build .#formatter.aarch64-darwin`; it **caches per tree**, so after an
+> out-of-band edit run it with `--clear-cache`, and remember the check reads the
+> **git tree**, so an uncommitted fix cannot turn it green. Round eight found a
+> pre-existing red this way (`185eebd`, an archived ledger).
 >
-> **This box names the change, never a task — and round six is why that rule now
-> reads "believe the command".** The box has gone stale **six** times: it said
-> "§1.5 next" long after §1.5–§1.10 landed; said "no open change" while
-> `round-four` was open; still named `round-four` after it archived; still named
-> `round-five` after it archived; said "no change is open" with `round-six` open;
-> and named `round-six` at **6/32** while it ran. If the change named here is not
-> what `openspec list` reports, **believe the command**.
+> ### The archive hazard, which has now fired three times
 >
-> **`codec-audit-round-five` closed 46/46 and archived 2026-11-07** as
-> `openspec/changes/archive/2026-11-07-codec-audit-round-five/` (38 findings,
-> `R6-01`…`R6-38`; three MODIFIED requirements, **all additive** — +2 `basen`,
-> +2 `codec/axiom-gate`, +4 `codec/review-remediation` scenarios, zero dropped —
-> plus two ADDED `codec/axiom-gate` requirements). Its durable engine was the
-> **def-side audit arm** (`derivedDefDeclinationAudit`, `derivedDefPatternAudit`):
-> `isDerivedDefName` removed a name from the gate's universe _before_ any check
-> could see it, and it was dropping `Iso.prod` — the paper's own `×` — out of a
-> green gate. Round six has now added the third arm of the same family, for
-> **stated footprints**. **When you add a check, ask what removes things from its
-> input, and whether that removal is recorded.**
+> A MODIFIED block **replaces** the live requirement wholesale, so any live scenario the
+> delta does not restate is dropped at sync time. Two changes modifying the same
+> requirement must archive dependency-first, with the order recorded in the later
+> change's `tasks.md`. Fired in `lean-basen` / "The `basen` bases are `Codec` values",
+> and twice in `codec/axiom-gate` (`round-two`→`round-three`, then `round-three`
+> rewriting `round-two`'s text). **Check the live spec's scenario count against the
+> delta's before syncing** — `openspec validate` will not always catch a narrowed set.
+> Round eight's archive was checked: `+96 / ~0 / -0`, 32 scenarios, nothing dropped.
+> Do the same for any future change that touches a requirement another already rewrote.
 >
-> > `codec-audit-round-four` closed 52/52 and archived 2026-11-07 as
-> > `openspec/changes/archive/2026-11-07-codec-audit-round-four/` (37 findings,
-> > `R5-01`…`R5-37`; four MODIFIED requirements, **all additive** — +3 `basen`, +1
-> > `codec/axiom-gate`, +2 `codec/law-coverage`, +2 `codec/review-remediation` scenarios,
-> > zero dropped).
+> ### History, so it is not re-invented
 >
-> `codec-audit-round-three` closed 56/56 and archived 2026-11-06 as
-> `openspec/changes/archive/2026-11-06-codec-audit-round-three/` (7 requirements
-> added, 6 modified, 0 removed; `codec/law-coverage` is new with its `## Purpose`
-> carried across, and round two's three partition scenarios survived — verified
-> scenario-by-scenario at archive time, not assumed).
->
-> **First action of the session, always:**
->
-> ```bash
-> nix develop --command openspec list --json          # is anything open?
-> nix develop --command openspec validate --all       # are the deltas sound?
-> ```
->
-> If a change is open, its `tasks.md` is the ledger and the only direction — open it
-> and work top-down. If none is open **there is no queued work**.
->
-> Do not work from this file; it holds the **stable** part — how to work here, what
-> the gates are, and the traps that have cost sessions. Status is computed from
-> `openspec/`, never recorded here.
->
-> **Nothing in this file names a task or a next task — that is deliberate.** Sessions
-> have repeatedly let a prose "next task" go stale while the ledger moved on (a
-> START-HERE box said "§1.5 next" long after §1.5–§1.10 had all landed). Do not
-> reintroduce a task pointer here, and do not trust one if you find one.
->
-> **Re-derive the state; do not believe a number in prose.** Two commands, plus the
-> gates below:
->
-> ```bash
-> nix develop --command openspec list --json | grep -E 'completedTasks|totalTasks'
-> nix develop --command lake build 2>&1 | tail -10   # eight gate lines, see below
-> ```
->
-> `lake build` prints **ten** gate lines in `codec`: footprint, partition, definition
-> coverage, def-side declination audit, classifier pattern audit, header numbers,
-> **constant kinds** (`round-eight` §1 — `opaque`/`axiom` must be 0, and every kind is
-> printed), **stated footprints verified against the environment** (`round-six` §1),
-> **`propProjections` covers every bare projection** (`round-seven` GC-02/GC-04), and
-> **`propProjections` entries are all bare projections** (`round-eight` §2 — the
-> validity direction of the same list). `basen` prints **eight** of its own.
-> `openspec validate --all` is **11/11** while a change is open (10/10 with none). Read
-> those numbers off the run, not off this page: on 2026-11-07 the codec gate printed
-> `425 = 347 + 78` theorems, `140 = 115 + 25` defs, and **146** footprint claim sites of
-> **154** claim-shaped segments (144 docstrings mention a footprint; 8 sites are
-> attributed away or live in a `def` docstring and are out of scope). Those three
-> footprint counts are **asserted** (`expectedFootprintCounts`), not merely printed —
-> `round-eight` N-6 found `AGENTS.md` quoting them as evidence while nothing checked
-> them.
->
-> **`[x]` means "in the tree AND evidence recorded in the ledger" — never tick on
-> intent, and never leave a finished task unticked.** A checkbox reports a fact; the
-> schedule is a separate sentence.
->
-> **Do not look in the open ledger for "already implemented" work.** An earlier
-> version of this paragraph told the reader to check a "`evidence / what remains`" cell
-> and to expect §2 items already done (`warningAsError`, `master`, the arity renames,
-> the `enrichHex` prose), citing `16/56` while `28` were complete. **All of that
-> describes `codec-audit-round-three`, which is archived** — round three's own ledger
-> records that it deleted exactly this prose as the `16/56` defect. It is recorded here
-> in the past tense only so the text is not re-invented: if a future ledger has a task
-> whose work predates it, tick it and say so _in that task's own evidence cell_, never
-> as a blanket instruction here.
->
-> **Two items are open in code, not as task numbers** — do not "discover" them as
-> bugs: basen's three `native_decide` bench uses (annotated with the route out, which
-> needs a `b32TailApply_b32MZTA_chars`-shaped lemma that does not exist), and the
-> general arity rejection for the fixed-width bases (needs a `decodeFull`-length
-> lemma). Both are recorded in `round-four`'s tasks §8 as prose, deliberately without
-> checkboxes.
->
-> **`LengthDet → RelAligned` is no longer open**: it is refuted, and `round-four` §1
-> lands the refutation. Do not re-record it as open.
->
-> **Never cite a line number in this file or the ledger.** Both carried stale
-> `:693`/`:646` figures for the same laws within a single session; cite the grep.
->
-> **Rounds two and three are both archived, and the hazard they shared is the one to
-> carry forward.** `2026-11-05-codec-audit-round-two` (42/42) and
-> `2026-11-06-codec-audit-round-three` (56/56) are history. Round three's delta was
-> authored against the _pre_-sync text, so it replaced `codec/axiom-gate`'s
-> requirement a second time; it was archived **after** a live-vs-delta scenario diff
-> and `openspec validate --all` was re-run **after** the archive — both green, and
-> round two's three partition scenarios survived. Do the same for any future change
-> that touches a requirement another change already rewrote.
+> `codec-audit-round-five` closed 46/46 and archived 2026-11-07
+> (`R6-01`…`R6-38`; the def-side audit arms). `codec-audit-round-four` closed 52/52
+> (`R5-01`…`R5-37`). `codec-audit-round-three` closed 56/56 on 2026-11-06 (7
+> requirements added, 6 modified, 0 removed). `codec-audit-round-two` closed 42/42 on
+> 2026-11-05. All four are additive-only deltas, verified scenario-by-scenario at their
+> archive time rather than assumed. Read an archived `tasks.md` as **history**; do not
+> reopen it.
 
 ## Current state
 
@@ -180,37 +88,42 @@ Guidance for AI coding agents working in this repository.
 
 | Question                       | Authoritative file                                                               |
 | ------------------------------ | -------------------------------------------------------------------------------- |
-| **What is the task right now** | `openspec/changes/codec-audit-round-six/tasks.md` (§2 next)                      |
+| **What is the task right now** | whatever `openspec list --json` reports; **nothing in `codec` today**            |
 | Open changes + task counts     | `nix develop --command openspec list --json`                                     |
 | Are the spec deltas sound      | `nix develop --command openspec validate --all`                                  |
 | Archived history               | `openspec/changes/archive/<date>-<name>/tasks.md` (e.g. `2026-11-05-lean-basen`) |
 | Lessons (not direction)        | `openspec/lean-notes.md`                                                         |
 
-**One change is open in `codec` (`codec-audit-round-eight`, 0/22), plus two PARKED
-`basen` ones** (`basen-uppercase-prepass` 0/20, `basen-nat-iso` 0/18 blocked) — the
-owner has deferred both `basen` changes until the library division is decided. Round
-six and everything before it are archived history.
+**`codec` has no open change.** `codec-audit-round-eight` closed 22/22 on 2026-11-07
+(22 tasks; 4 ADDED `codec/axiom-gate` requirements, archived additively — `+96 / ~0 /
+-0`, no scenario dropped). The only open changes are the two **PARKED** `basen` ones;
+the owner has deferred both until the library division is decided. Everything else in
+this list is archived history.
 
-- `codec-audit-round-eight` — **in-progress**, 0/22, authored 2026-11-07 from the
-  eighth review round. **Read its `tasks.md` — not this file.** Carries the round's
-  remainder: the gate's universe is undefined for `opaque`/`axiom` constants;
-  `propProjections` claims a validity check it does not have; three allowlist reason
-  groups are not measurements; one README cell (`cold 49`) has no source; and the
-  footprint count has no denominator. Five of round eight's findings were fixed in the
-  landing session (`aaa5dbb`), and two were refuted — both recorded in its §0.
+- `codec-audit-round-eight` — **archived** 2026-11-07 as
+  `openspec/changes/archive/2026-11-07-codec-audit-round-eight/` (22/22). The eighth
+  review round produced 9 MUST / 15 SHOULD / 18 NITPICK; five were fixed in the landing
+  session and **two refuted** (R8-01's `filter ||` and M-2's `86→106`). What the change
+  landed is four counts that were previously silent — the `constantKindCensus` arm, the
+  `propProjections` **validity** arm, the footprint **denominator** (`769 scanned /
+144 mentioning / 154 found / 146 checked / 8 left`), and the fix for a **mirror list**
+  in `scripts/gen-axioms.lean` that had been un-pinning `Codec.Suffix.hle` while
+  `headerNumbers` read the mirror's own count. Read its archived `tasks.md` as history.
+  Its §6 records the paper/numbers SHOULDs it fixed and the ones it **refuted** (S-6's
+  suffix-vs-component, N-7's "15 jobs" — `lake build` really does print that).
 
-- `basen-uppercase-prepass` — **in-progress**, 0/20, **do this one first.** Replaces
-  `Base16`'s 24-theorem case-folding tier with an `upperBytes` pre-pass through
+- `basen-uppercase-prepass` — **in-progress, PARKED**, 0/20. Replaces `Base16`'s
+  24-theorem case-folding tier with an `upperBytes` pre-pass through
   `Codec/Normal.lean`, corrects the RFC `MAY`-vs-`MUST` misquote that justified the
   tier, and **excludes base64** because its lowercase letters are data. Three ADDED
   `basen` requirements; disjoint from `basen-nat-iso`'s, so neither can drop the
   other's scenarios.
 
-- `basen-nat-iso` — **in-progress but BLOCKED**, 0/18. Its premise is under review:
-  `basen` is "base-N byte encodings" and a numeral is not one, so it may belong in a
-  new repo. Read its §0 before anything else. The analysis inside is sound (a number
-  is isomorphic to its canonical numeral, lax spellings are names not images) and will
-  be reused wherever it lands; what is unsettled is the home.
+- `basen-nat-iso` — **in-progress, PARKED and BLOCKED**, 0/18. Its premise is under
+  review: `basen` is "base-N byte encodings" and a numeral is not one, so it may
+  belong in a new repo. Read its §0 before anything else. The analysis inside is sound
+  (a number is isomorphic to its canonical numeral, lax spellings are names not
+  images) and will be reused wherever it lands; what is unsettled is the home.
 
 - `codec-audit-round-six` — **archived** 2026-11-07 as
   `openspec/changes/archive/2026-11-07-codec-audit-round-six/` (32/32 tasks, both
@@ -569,10 +482,20 @@ different `checks` sets — never run one tree's recipe in the other.
 ### In `lean-codec` (this repo)
 
 ```bash
-nix develop --command lake build            # 15 jobs, zero warnings; FAILS on `sorry`
+nix develop --command lake build            # 10 gate lines; FAILS on `sorry`
 nix develop --command lake build bench      # the bench lane (links Codec/ByteSlice.c)
 nix develop --command openspec validate --all   # after ANY spec or task edit
+nix build .#checks.aarch64-darwin.formatting   # THE markdown/nix format gate
 ```
+
+**`nix fmt` is not the format gate here — `checks.…formatting` is.** `nix fmt` in this
+dev shell has no `prettier`, so it formats `*.nix` only and prints "0 changed" for
+markdown it never touched; every "`nix fmt` clean" in this file's history and in the
+archives covered Lean and Nix and **not markdown**. Use the flake formatter, which is
+treefmt with the sandboxed prettier: it **caches per tree** (pass `--clear-cache`
+after an out-of-band edit) and it reads the **git tree**, so an uncommitted fix cannot
+turn it green. `codec-audit-round-eight` lost a build cycle to this and found a
+pre-existing red with it (`185eebd`).
 
 `openspec` above needs **this** repo's `openspec/` root; `nix flake check` is
 likewise a **per-repo** command (this flake's `checks` are
