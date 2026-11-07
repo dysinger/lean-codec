@@ -2,26 +2,34 @@
 
 Guidance for AI coding agents working in this repository.
 
-> ## START HERE: `openspec list --json`
+> ## START HERE: `openspec/changes/codec-audit-round-five/tasks.md`
 >
-> **There is no open change.** `codec-audit-round-four` closed 52/52 and archived
-> 2026-11-07 as `openspec/changes/archive/2026-11-07-codec-audit-round-four/`
-> (37 findings, `R5-01`…`R5-37`; four MODIFIED requirements, **all additive** —
-> +3 `basen`, +1 `codec/axiom-gate`, +2 `codec/law-coverage`, +2
-> `codec/review-remediation` scenarios, zero dropped, verified by matching scenario
-> _names_ against HEAD before and after the sync). `openspec validate --all` is
-> **10/10** live capabilities; the gate is at 410 theorems / 337 gated / 73
-> allowlisted and 141 defs / 112 mentioned / 29 allowlisted.
+> **`codec-audit-round-five` is the open change** (authored 2026-11-07 from the sixth
+> adversarial review round; 38 numbered findings, `R6-01`…`R6-38`). Its `tasks.md` is
+> the ledger and the only direction — work top-down from §1.
 >
-> **So the next piece of work is an _owner decision_: author a new change** under
-> `openspec/changes/` (the archived ledgers are models for _shape_, never a template
-> to resume). Do not invent one from this file.
+> **Start at §1, not §5.** §1 adds the gate arm that _is_ the mechanism behind three
+> of the seven MUSTs; §2's classifications are the list §1's build failure prints.
+> Run `lake build` **once** at §1.1 because the failure output is the work list, then
+> stay on per-module checks until §7.2's single regeneration. The build is expected
+> RED from §1.1 until then — that is §1 doing its job, not a regression.
+>
+> **The numbering is off by one from the change name, and that is not a typo.**
+> `round-five` is the fifth audit _change_; its findings come from the **sixth** review
+> round, so the ids are `R6-nn`. The next review's ids will be `R7-nn` in a change
+> called `round-six`.
 >
 > **This box names the change, never a task.** That is deliberate: it has gone stale
-> **three** times now (it said "§1.5 next" long after §1.5–§1.10 landed, then said "no
-> open change" while `round-four` was open, and then still named `round-four` after
-> it archived). If the change named here is not what `openspec list` reports,
-> **believe the command**.
+> **three** times (it said "§1.5 next" long after §1.5–§1.10 landed, then said "no open
+> change" while `round-four` was open, then still named `round-four` after it
+> archived). If the change named here is not what `openspec list` reports, **believe
+> the command**.
+>
+> `codec-audit-round-four` closed 52/52 and archived 2026-11-07 as
+> `openspec/changes/archive/2026-11-07-codec-audit-round-four/` (37 findings,
+> `R5-01`…`R5-37`; four MODIFIED requirements, **all additive** — +3 `basen`, +1
+> `codec/axiom-gate`, +2 `codec/law-coverage`, +2 `codec/review-remediation` scenarios,
+> zero dropped).
 >
 > `codec-audit-round-three` closed 56/56 and archived 2026-11-06 as
 > `openspec/changes/archive/2026-11-06-codec-audit-round-three/` (7 requirements
@@ -103,20 +111,28 @@ Guidance for AI coding agents working in this repository.
 
 | Question                       | Authoritative file                                                               |
 | ------------------------------ | -------------------------------------------------------------------------------- |
-| **What is the task right now** | `openspec/changes/codec-audit-round-four/tasks.md` (§1 first)                    |
+| **What is the task right now** | `openspec/changes/codec-audit-round-five/tasks.md` (§1 first)                    |
 | Open changes + task counts     | `nix develop --command openspec list --json`                                     |
 | Are the spec deltas sound      | `nix develop --command openspec validate --all`                                  |
 | Archived history               | `openspec/changes/archive/<date>-<name>/tasks.md` (e.g. `2026-11-05-lean-basen`) |
 | Lessons (not direction)        | `openspec/lean-notes.md`                                                         |
 
-**One change is open (`codec-audit-round-four`); rounds two and three are archived
+**One change is open (`codec-audit-round-five`); round four and earlier are archived
 history.**
 
-- `codec-audit-round-four` — **in-progress**, authored 2026-11-06 from a third
-  adversarial review round (three read-only workers; reports `/tmp/r5-*.md`, merged
-  ledger `/tmp/r5-SYNTHESIS.md`). 37 findings: 6 MUST / 14 SHOULD / 17 NITPICK.
-  **Read its `tasks.md` — not this file, not this bullet.** Every proof it needs is
-  inlined in its Appendix A and verified to compile, so no `/tmp` dependency remains.
+- `codec-audit-round-five` — **in-progress**, authored 2026-11-07 from the sixth
+  adversarial review round (three read-only workers; reports `/tmp/r6/{A,B,C}.md`,
+  merged ledger `/tmp/r6-SYNTHESIS.md`). 38 findings: 7 MUST / 15 SHOULD / 16 NITPICK,
+  plus **26 refuted** — a third of what the reviewers set out to falsify turned out
+  sound, and those are recorded in its §9 so they are not re-derived. **Read its
+  `tasks.md` — not this file, not this bullet.** The one proof it needs is inlined in
+  its Appendix A and verified to compile, so no `/tmp` dependency remains.
+- `codec-audit-round-four` — **archived** 2026-11-07 as
+  `openspec/changes/archive/2026-11-07-codec-audit-round-four/` (52/52 tasks). 37
+  findings (`R5-nn`): §1 refuted `LengthDet → RelAligned` and proved the four-way
+  independence diagram, §2–§3 landed three advertised-but-absent laws, §5–§6 corrected
+  the necessity/uniqueness docstrings and ported the def-coverage gate to `basen`.
+  Do not reopen it; read its archived `tasks.md` as history.
 - `codec-audit-round-three` — **archived** 2026-11-06 as
   `openspec/changes/archive/2026-11-06-codec-audit-round-three/` (56/56 tasks). It
   came from the third audit (three read-only reviewers; reports in `/tmp/r3-*.md`):
@@ -184,11 +200,18 @@ closed in one session.
 
 ### Where the work is going (a pointer, not a ledger)
 
-The roadmap **lives in `openspec/`**. Three audit rounds have landed and each one
-found a different layer: round one the gate's _existence_, round two the gate's
-_mechanism_, round three the gate's _universe_ (it covers theorems, not
-definitions, so a public `def` with no law is outside every check). Round three's
-`tasks.md` §1 closes that, and §2 is the prose.
+The roadmap **lives in `openspec/`**. Five audit rounds have landed and each one found
+a different layer, which is worth holding in mind because each next round confirms the
+pattern: round one the gate's _existence_, round two the gate's _mechanism_, round three
+the gate's _universe_ (theorems, not definitions), round four the universe's
+_completeness_ (definitions, and one refuted predicate claim), round five the
+universe's **filter** — the classifier that decides what enters it had no audit, so it
+was silently removing `Iso.prod` from the check.
+
+The lesson that generalises: **a gate is only as strong as its narrowest unaudited
+step.** Every round so far has closed the step the previous round's fix introduced. When
+you add a check, ask what removes things from _its_ input, and whether that removal is
+recorded.
 
 The next **format port** (another `lean-*` repo) is still an owner decision; this
 file does not guess it. When one is chosen, author it as a new change under
@@ -196,6 +219,40 @@ file does not guess it. When one is chosen, author it as a new change under
 a template to resume.
 
 ### Traps that have actually cost sessions here
+
+- **A name-based classifier is the gate's weakest step, and it fails _silently by
+  construction_.** `isDerivedDefName` drops a `def` by its last name component; the name
+  then leaves the universe, so the coverage check cannot report it — a dropped `def` and
+  a `def` that was never written are indistinguishable to the check. Round six measured
+  it already dropping `Iso.prod`, the paper's own `×`, out of a green gate. **When you
+  add a check, ask what removes things from its input, and whether that removal is
+  recorded.** The theorem side solved this with `partition` (every dropped name needs a
+  reasoned allowlist entry); the def side had nothing, and this is what `round-five` §1
+  adds.
+
+- **A `Prop`-valued structure field is not a law.** `Iso.law`, `Normal.fixed`,
+  `Normalizer.idem` are projections (`fun … => self.1`), and gating them measures the
+  structure's shape. The same file allowlists `MeasureDecreases.dec` and friends for
+  exactly that reason, so the taxonomy has to be applied uniformly — if you find one
+  field gated and its twin allowlisted, that is a defect, not a judgement call.
+
+- **`#print axioms` reporting _no axioms_ does not mean "restatement".** It is neither
+  necessary nor sufficient: `decodeWholeOneBytes_eq` _is_ an identity and reports
+  `[propext, Quot.sound]`, while the three Layer-2 `*_spec`s report no axioms and are
+  load-bearing referents for the C contract. To test for a restatement, `#print` the
+  body. (Round six deleted the diagnostic that claimed otherwise.)
+
+- **A completeness claim must come from an environment walk, never `grep '^def'`.**
+  `grep` misses multi-line signatures (`Iso.prod`, `Iso.ofTotal`) and cannot see through
+  an alias, and the sentence built on it then reads as an enumeration it is not. Two of
+  round six's MUSTs are exactly this (`[S1]`'s "exactly two others", `[S3]`'s "every
+  `Codec` value is one of these fifteen").
+
+- **Never subtract two committed performance figures from different sessions.** This
+  project has recorded **three** successive defects of that shape. `README` derived
+  "~25 ns/step" from `52.4 − 27.4` where `52.4` appeared nowhere else in the document
+  and the adjacent table gave 26.4/23.6 — three bullets below a sentence forbidding
+  precisely that subtraction. Quote the table, name the run.
 
 - **`Suffix`/`splice` bookkeeping is _not_ where §6.2 died — check the input
   length before reaching for it.** The old version of this bullet asserted six
@@ -274,13 +331,15 @@ hk.symm s)` — and `subst hk; subst ha`.
   their sum. **When you regenerate, the header check fires — update the table and the
   `expected*` constants together.** Do not weaken it to a `logInfo`.
 
-  **Three triples of "basen's numbers" float around the ecosystem and only one is
-  current — do not grep for them, read the gate output.** The history above is
-  `446 / 437 / 9`; `../lean-basen/Axioms.lean`'s prose paragraph still says
-  `440 / 437 / 483` (it is stale, and `round-four` §6.4 fixes it); the truth is what
-  `lake build` prints, which at 2026-11-06 is `441 / 438 / 484` = 438 `BaseN` pins +
-  3 `Codec` pins, against 438 gated + 46 allowlisted. **Quote the gate, never a number
-  written in a file.**
+  **Several sets of "basen's numbers" have floated around the ecosystem; only the
+  gate is current — do not grep for them, read the gate output.** The history above is
+  `446 / 437 / 9`; round four found the prose paragraph still saying `440 / 437 / 483`
+  and **fixed it by computing it** — `headerNumbers` now derives the `BaseN` pin count,
+  asserts the three `Codec.*` pin names exist, and asserts the total, so the paragraph
+  cannot rot behind a green table again. At 2026-11-07 the gate prints
+  `486 = 440 + 46` theorems with `443 = 440 BaseN + 3 Codec` pins, and
+  `137 = 122 + 15` defs. **Quote the gate, never a number written in a file** — and
+  note `round-five` §7 is where these move again.
 
 - **The gate catches your own new laws, by design — regenerate, do not investigate.**
   Every law added in §1 fails `lake build` with `not pinned by this gate` until
