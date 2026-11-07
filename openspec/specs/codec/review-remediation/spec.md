@@ -149,6 +149,58 @@ measured SHALL be marked unmeasured rather than stated as established.
 - **THEN** that sentence is marked as the project's own and, if unmeasured, as
   unmeasured — the introduction's attribution does not carry over to it.
 
+A **completeness** claim behaves like a quotation claim and SHALL meet the same bar.
+Where documentation says a list is "the full" list or "complete", the enumeration
+SHALL match an environment walk rather than a textual search of definition headers,
+because a search for a leading `def` misses multi-line signatures and cannot see
+through an alias — the method, not only the number, is part of the claim.
+
+A **figure stated to two derivations** SHALL be derived from figures measured in one
+run. Where a quantity is obtained by subtracting two committed figures, both terms
+SHALL come from the same table and the same session, and the text SHALL say which
+table. This project has recorded three successive performance-figure defects of
+exactly this shape — a subtraction across sessions that produces a number readable as
+an improvement — and a section that forbids the practice in one bullet SHALL NOT
+commit it in another.
+
+A **signature quoted as the library's own** SHALL match a declaration that exists at
+that type. A shorthand such as `decode (encode bs)` that resembles a total inverse
+but corresponds to no declaration SHALL NOT be rendered inside backticks as if it
+were one, and where a document forbids such a shorthand in one place it SHALL NOT use
+it in another.
+
+A claim about **why a declaration is kept** SHALL name a reason that holds. "It is
+cited by anchor X" SHALL be checked against anchor X's text; where the anchor does not
+in fact cite it, the justification is corrected or the declaration is deleted rather
+than kept on a false footing.
+
+#### Scenario: A completeness claim states how it was obtained
+
+- **WHEN** documentation asserts that a list of declarations is complete
+- **THEN** the enumeration matches a walk of the compiled environment, and the text
+  states that it was obtained that way rather than by searching for a leading `def`.
+
+#### Scenario: A derived figure uses one table and one run
+
+- **WHEN** documentation derives a quantity by subtracting two committed figures
+- **THEN** both figures appear in the same table, from the same session, and the text
+  names that table, so a reader can reproduce the subtraction without crossing runs.
+
+#### Scenario: A quoted signature matches a real declaration
+
+- **WHEN** documentation presents an equation in backticks as the library's own
+  statement of a law
+- **THEN** the identifiers in it exist at those types; a shorthand that corresponds to
+  no declaration is not rendered as if it did, and a document that forbids such a
+  shorthand elsewhere does not use it.
+
+#### Scenario: A retention reason names something that holds
+
+- **WHEN** documentation justifies keeping a declaration by saying another document
+  cites it
+- **THEN** that other document does cite it, and the justification is corrected if it
+  does not.
+
 ### Requirement: Agent operating instructions SHALL name the correct repository for each command
 
 An instruction file that covers more than one repository SHALL group its commands
