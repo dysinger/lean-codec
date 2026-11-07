@@ -173,101 +173,289 @@ separate prose fixes.
 
 ## 2. `basen`'s gate (R7-05, R7-06, R7-07, R7-17)
 
-- [ ] 2.1 Replace the dead branch. **R7-05.** ✔Verified `a - b + b ≠ a` is false for
+- [x] 2.1 Replace the dead branch. **R7-05.** ✔Verified `a - b + b ≠ a` is false for
       all `a, b` by exhaustive enumeration. Replace with
       `mentionedCount + definitionSurfaceAllowlist.size != defs.size`.
+      **Done.** Replaced with exactly that identity, and **mutated to prove it
+      fires**: with all three `expected*` constants correct, injecting `(mentionedCount + 1)`
+      into the sum makes the build fail with `definition table does not add up: 122 + 15 != 137`.
+      Reverting the expression to the old `a - b + b` form leaves that branch silent, so the
+      old code was dead and the new code is live.
 
-- [ ] 2.2 Assert both numbers in the "443 / 440" sentence. **R7-06.** ✔Measured
+- [x] 2.2 Assert both numbers in the "443 / 440" sentence. **R7-06.** ✔Measured
       `grep -c '^#print axioms'` → **443**, `gatedNames` → **440**; the prose says
       `440 / 437`. Fix the prose **and** fold both into the `run_cmd` so the pair
       cannot drift together again.
+      **Done.** Prose corrected to `443` against `440`. Both figures are now asserted:
+      `statedPrintBlockCount := 443` against a column-0 line count of `Axioms.lean`
+      (matching `grep -c '^#print axioms'`; a naive substring count reads 454 because
+      these very comments mention the phrase), and `statedGatedNamesCount := 440`
+      against `gatedNames.length`. **Both mutated:** `442` fails on the block count,
+      `437` fails on `gatedNames`.
 
-- [ ] 2.3 Close the `nativeDecideCount` escapes. **R7-07.** ✔Reproduced: a trailing
+- [x] 2.3 Close the `nativeDecideCount` escapes. **R7-07.** ✔Reproduced: a trailing
       comment moves the count `12 → 11`; `:= by native_decide` and two-on-a-line are
       invisible; `uses` is computed and never compared. Fix: truncate each line at
       `--`, strip both ends, and assert `uses ≥ tacticLines` as well as
       `tacticLines == stated`.
+      **Done, and the reported fix was not sufficient.** Truncating at `--` leaves
+      **block** comments uncounted, and `Bench.lean` has a `/- … -/` block that
+      names the identifier — a naive total read **18** against the true **12**. Landed: a
+      comment stripper handling both `--` and nested `/- … -/`, then a substring count
+      over the code. Unit-checked against eight spellings (trailing comment, inline `by`,
+      two-on-a-line, CRLF, block comment, nested block comment, plain, comment-only)
+      **before** installation, because a counter that silently miscounts is the defect.
+      **Then mutated end to end, with the `.olean` deleted each round** (an earlier
+      round of this test read stale artifact and passed four times spuriously — that
+      trap is real): adding a trailing-comment use, an inline-`by` use, a two-on-one-line
+      use, or a CRLF use each makes the gate report **13** and fail; adding a
+      **comment-only** mention correctly still reports **12**.
 
-- [ ] 2.4 Give `exclusions` the stale arm its sibling has. **R7-17.** Two failures:
+- [x] 2.4 Give `exclusions` the stale arm its sibling has. **R7-17.** Two failures:
       a name that is not a public theorem, and a name whose measured footprint is
       already inside the discipline. Both are build failures.
+      **Done.** Both arms land in the coverage `run_cmd` (which already honours
+      `exclusions` by skipping them, so a bad entry was previously invisible).
+      **Mutated:** adding `` `BaseN.DoesNotExist `` fails with "names a declaration that
+      does not exist"; adding `` `BaseN.Base10.Rel_digElem_canonical `` fails with "whose
+      measured footprint [[propext, Quot.sound]] is already inside the discipline".
 
 ## 3. The `Rab` family (R7-09, R7-10)
 
-- [ ] 3.1 Record that `Rab` is deliberately the same relation as
+- [x] 3.1 Record that `Rab` is deliberately the same relation as
       `uniqCounterexampleRel`. **R7-09.** ✔Verified: identical bodies. Keep both
       names; the defect was the prose contrasting them as if they differed.
+      **Done.** Verified identical again (`| true, m, _ => m = 2` / `| false, m, _ => m = 1`
+      in both). `Rab`'s docstring now says the body is identical to
+      `uniqCounterexampleRel`'s **and why both names are kept** (two arguments cite
+      them; deleting `Rab` was rejected because three passages name it).
+      `uniqCounterexampleRel`'s docstring carries the reciprocal pointer, so neither
+      reads as an accident. No statement changed.
 
-- [ ] 3.2 De-orphan or delete `decodeRepeat_mem_iff_general`. **R7-10.** Its
+- [x] 3.2 De-orphan or delete `decodeRepeat_mem_iff_general`. **R7-10.** Its
       docstring says the specialisation "was never necessary", yet the specialisation
       is the only one used. Either rewrite `huniq_byte` to consume the general form
       and delete the specialisation, or record it as a kept alias with no caller.
       **Prefer the first**: it makes the docstring true.
+      **Done — the first option.** `huniq_byte` now calls
+      `decodeRepeat_mem_iff_general Codec.byte byteConsumesByte`; `decodeRepeat_mem_iff`
+      (the `Codec.byte` specialisation) is **deleted**. The gate caught the deletion by
+      design (`pinned names with no matching theorem`, plus `#print axioms` for a name
+      that no longer exists), and `scripts/gen-axioms.lean` was run: it rewrote 348 gates
+      and the header moved `426 = 349 + 77` → **`425 = 348 + 77`** with
+      `expectedPub`/`expectedGated` in lockstep. Green on all seven lines.
 
 ## 4. base16 (R7-15)
 
-- [ ] 4.1 Prove `decodeHexFold (encodeHex bs) = some bs`. **R7-15**, design §D6.
+- [x] 4.1 Prove `decodeHexFold (encodeHex bs) = some bs`. **R7-15**, design §D6.
       ✔Verified the pieces exist: `foldList_hexBlockUnapply` supplies the fixed-point
       hypothesis, `decodeHexFold_of_fixed` consumes it. If awkward, fallback is a
       scoped README row (design §D6) — either outcome ends in a tick.
+      **Done — the proof, not the fallback.** Four new laws in `BaseN/Base16.lean`
+      (the task said three pieces would suffice; it took four because the range bridge
+      is its own lemma): - `hexToNibble_range` — `hexToNibble N ≤ 15 → (48 ≤ N ∧ N ≤ 57) ∨ (65 ≤ N ∧ N ≤ 70)`; - `foldByte_of_hexDigit` — a `hexDigit` byte is a `foldByte` fixed point; - `foldByteBytes_of_encodeHex` — hence `foldByteBytes s = s` on the encoder's output; - `decodeHexFold_roundtrip` — `encodeHex bs = some ⟨n, s⟩ → decodeHexFold s = some bs`,
+      by `decodeHexFold_of_fixed` + `roundtrip`.
 
-- [ ] 4.2 Say which decoder owns which laws, in `README:29`'s table.
+      The four pieces came out as four lemmas, not the three the task sketched. **All
+      four measured `[propext, Quot.sound]`-only** and are now pinned. Non-vacuity verified by mutating
+      the conclusion to `some (bs ++ [0])`, which fails to typecheck at the `roundtrip`
+      step.
+
+      **The `Classical.choice` leak hit here and the cause is worth recording.** The
+      first proof closed the range case-split with `omega` on a **disjunction** goal and
+      reported `[propext, Classical.choice, Quot.sound]` — the documented trap, arriving
+      in the form of "let `omega` produce the disjunct". The fix was to build the disjunct
+      explicitly (`Or.inl ⟨h2, h1⟩` / `Or.inr ⟨h4, h3⟩`) and let `omega` close only the
+      negation branches that `simp`/`omega` can prove contradictory. A second `split`-based
+      shape was tried first and **also** leaked, because `split` on a `Nat ≤` condition
+      takes the classical decidable instance. `by_cases` was fine; the leak was in what
+      closed the goal.
+
+- [x] 4.2 Say which decoder owns which laws, in `README:29`'s table.
+      **Done.** A four-point note under the status table names, for base16, the five laws
+      the **strict** decoder owns (`roundtrip`, `decodeFull_canonical`,
+      `decodeFull_B16_char`, `decode_encode_inverse`, `encode_injective`) and the four the
+      **case-insensitive** one owns (the three two-case laws plus the new
+      `decodeHexFold_roundtrip`). All nine names were grepped against `Base16.lean` after
+      writing, so the note cites declarations that exist.
 
 ## 5. `README` (R7-03, R7-04, R7-11, R7-12, R7-18 … R7-27, R7-31)
 
-- [ ] 5.1 Repair `[S1]`'s arithmetic. **R7-03.** ✔My environment walk returns **19**
+- [x] 5.1 Repair `[S1]`'s arithmetic. **R7-03.** ✔My environment walk returns **19**
       and includes `Codec.uniqSeqIso` / `Codec.uniqSeqUnitIso`. Keep 19; fix the sum
       to `13 + 4 + 2` and "two counterexample witnesses" → **four**.
       **Do not change 19 to 21** — see §9, that reviewer figure is refuted.
+      **Done.** Re-ran the environment walk in this session (a `MetaM` pass over
+      `Codec`/`Iso` `defnInfo`s whose type's head is `Iso`): it returns **19** and the
+      list contains `Codec.uniqSeqIso` and `Codec.uniqSeqUnitIso` by name, so the
+      decomposition is `13 + 4 + 2`. The sentence now enumerates all 19 explicitly
+      rather than asserting a sum, and says the count came from a walk. The 19 was
+      **not** touched, per §9.
 
-- [ ] 5.2 Fix the phantom name. **R7-04.** ✔`#check` → unknown identifier;
+- [x] 5.2 Fix the phantom name. **R7-04.** ✔`#check` → unknown identifier;
       the real constant is `Codec.uniqSeq_not_congruent` (`Codec/Sound.lean`).
+      **Done.** `#check @Codec.Sound.uniqSeq_not_congruent` → `unknownIdentifier`;
+      `#check @Codec.uniqSeq_not_congruent` → `¬ Codec.uniqSeqWhole.Unambiguous`.
+      Corrected at the one site that had the prefix.
 
-- [ ] 5.3 Fix table 4's caption. **R7-11.** ✔`10532 / 512 = 20.57`, but the row says
+- [x] 5.3 Fix table 4's caption. **R7-11.** ✔`10532 / 512 = 20.57`, but the row says
       `2.57` — it is a 4096-step figure. Give the span per row. **Do not re-run the
       lane.**
+      **Done, no re-run.** A `steps/burst` column was added
+      (`idealCursor` **4096**, C reference and `decodeWhole` 512), and the arithmetic
+      is stated in the text: `10532 / 512 = 20.57` but `10532 / 4096 = 2.57`. The
+      caption no longer claims one span for all rows.
 
-- [ ] 5.4 Repair the four dead anchors. **R7-12.** ✔Verified none of the four
+- [x] 5.4 Repair the four dead anchors. **R7-12.** ✔Verified none of the four
       targets exists as a heading. Recompute the GitHub anchor from the real heading.
+      **Done, and there were six, not four.** The two headings are
+      `## Representations — one length-indexed byte string (the spec substrate)` and
+      `## Performance — two proof layers, and where the speed goes`; the em-dash
+      produces a **double** hyphen in a GitHub anchor, so the correct ids are
+      `#representations--one-length-indexed-byte-string-the-spec-substrate` and
+      `#performance--two-proof-layers-and-where-the-speed-goes`. Recomputing by
+      lowering + stripping non-word characters gave those two; **six** links pointed
+      at three stale ids (`…-byte-string`, `#performance-two-proof-layers`,
+      `#performance-and-what-it-costs`, plus three single-hyphen variants). All six now
+      point at one of the two real anchors, and a final `grep -o '](#[^)]*)' | sort -u`
+      returns exactly those two.
 
-- [ ] 5.5 Fix the per-step and figure inconsistencies. **R7-25/26/27.** "~4–7"
+- [x] 5.5 Fix the per-step and figure inconsistencies. **R7-25/26/27.** "~4–7"
       → "~4–6" (derivation max 6.4); "430–541" → the table's "430–650"; either
       table the `decodeFull spec` figure or drop it.
+      **Done.** `~4–7` → **`~4–6`**, with the derivation printed (`24–26 − 20 = 4–6`,
+      upper end `26.4 − 20 = 6.4`). `430–541` → **`430–650`**, which is what the table
+      row says. The `decodeFull spec ~31,200 ns/step` figure is **dropped, not
+      tabulated**: `benchDecodeFull` prints one _batch_ figure and no committed run
+      produced a per-step one, so the cell now says "no per-step figure committed" and
+      the note under the table explains why. Re-running the lane is out of scope per
+      the design's non-goals.
 
-- [ ] 5.6 Fix the four anchoring/wording items. **R7-18/19/20/21.** `print → encode`
+- [x] 5.6 Fix the four anchoring/wording items. **R7-18/19/20/21.** `print → encode`
       lead; `[S1]`'s "Five" heading; `[D7]`'s "no inverse law exists"; `[D4]`'s
       paraphrase-in-quotes.
+      **Done, all four.** - R7-18: `print → encode`'s lead is now "changes **what the argument is**", and
+      says why the old lead ("changes the **argument**") contradicted its own
+      paragraph — both forms take an argument. - R7-19: the heading's "Five" → **"Three"**, matching the paragraph, with a note
+      that "five" was the pre-`element`/`subset`-domain-laws count. - R7-20: "no inverse law exists" → the weaker, true form: `iterate` cannot
+      satisfy `Iso.law` unconditionally and no proof exists here. - R7-21: two sites quoted "modulo equivalence classes" as if it were a verified
+      weakening. Quoted `PAPER.md`'s actual sentence ("we will **sometimes interpret
+      this condition** modulo equivalence classes") and marked the project's reading
+      as the project's.
 
-- [ ] 5.7 Fix `[S3]`'s "no hypothesis at all" and `[D2]`'s inverted `bidir`
+- [x] 5.7 Fix `[S3]`'s "no hypothesis at all" and `[D2]`'s inverted `bidir`
       citation. **R7-24/31.**
+      **Done, and R7-24 was a _design_ fact rather than a prose error.** `takeWhile`'s
+      obligation is derivable (`relTakeWhile_functional` needs only `p`) but
+      `encodeTakeWhile_of_decode` still **takes** it. Discharging it was tried and
+      reverted: it needs two helper lemmas moved above the theorem, and keeping the
+      parameter is deliberate anyway — it makes the `_of_decode` family uniform, since
+      `sepBy`'s twin needs the hypothesis for real. So the README row now says "derivable
+      for any `p`; still _taken_", with a paragraph on why both halves matter, and the
+      theorem's body carries the same note. **No statement was changed and no law moved.**
+      R7-31: the offending citation was `(x, []) ∈ decode d s` in the opening section —
+      `[]` is not the library's empty remainder (`List (α × Suffix n)`, empty =
+      `Suffix.empty n`). Now spelled exactly as `bidir` states it, in the same form as
+      the other two citations.
 
 ## 6. Cross-repo and template (R7-13, R7-14, R7-16, R7-28 … R7-33)
 
-- [ ] 6.1 Decide the pin. **R7-13.** ✔Verified: pinned `5acf487`, HEAD `fc132de`,
+- [x] 6.1 Decide the pin. **R7-13.** ✔Verified: pinned `5acf487`, HEAD `fc132de`,
       **14 commits**, and the pinned rev **is** an ancestor. Bump
       (`nix flake update codec` — targeted; then `lake update codec`) and re-run all
       three gates, **or** record the lag with its reason in `AGENTS.md`. Either way
       the repo's own quoted rule is satisfied.
+      **Done — bumped, not recorded.** `nix flake update codec` moved
+      `5acf487` → `56ff74f`, `lake update codec` checked it out, and `lake build` is green
+      with all five gate lines. The lag measured **22** commits at bump time, not the 14
+      the reviewer saw — `codec` moved during this session. **The pin must be bumped
+      again after §8.4's `codec` commits land**, because `56ff74f` predates §2–§5.
 
-- [ ] 6.2 Resolve or drop the two unresolved CHANGELOG SHAs. **R7-14.**
+- [x] 6.2 Resolve or drop the two unresolved CHANGELOG SHAs. **R7-14.**
       ✔`git cat-file -t` fails for both in both repos.
+      **REFUTED — no edit made.** Re-ran `git cat-file -t` in **`../lean-basen`**, the
+      repository `CHANGELOG.md` lives in: `9d5074e` and `3dfc249` both resolve to commits,
+      both are ancestors of `HEAD`, and their subject lines ("Base64/Base32: name the
+      §3.5 zero-pad-bit fact (§C4, first half)" and "Base32: name the §3.5 zero-pad-bit
+      fact") are exactly what the two changelog entries describe. They do **not** resolve
+      in `lean-codec`, which is irrelevant — the citation names `basen`'s own history.
+      Recorded in §9 as the third refuted finding of the round.
 
-- [ ] 6.3 Make the bench-lane documents match the code. **R7-16**, design §D4.
+- [x] 6.3 Make the bench-lane documents match the code. **R7-16**, design §D4.
       `Bench.lean:707` is `main : IO Unit := pure ()`. Rewrite `default.nix:16-21`,
       the `installPhase` comment, and the `AGENTS.md` bullet to say the checks fail
       at **build** time, and restate what `nix build '.#bench'` then proves.
 
-- [ ] 6.4 `basen` README/doc prose sweep. **R7-28/29/32/33.** Rename
+      **Done, per design §D4(b).** `default.nix`'s header no longer says the lane must
+      be *run*; it says every `Bench.lean` check is an `example` closed by `rfl` or
+      `native_decide`, both of which fire while Lake elaborates the module, that `main`
+      is `pure ()`, and that `nix build '.#bench'` therefore proves the lane **builds in
+      the sandbox**. The `installPhase` comment now calls its execution a smoke test.
+      `AGENTS.md`'s bullet is rewritten the same way with the retraction stated.
+      Verified: `nix build '.#bench'` exits 0.
+
+- [x] 6.4 `basen` README/doc prose sweep. **R7-28/29/32/33.** Rename
       `rejects_single_char` (or document it), complete the overflow enumeration,
       `3 + 9 = 12`, name the canonical `MY======`.
 
-- [ ] 6.5 Template. **R7-30.** Drop the `bench` paragraph the template does not
+      **Done, all four.**
+      - R7-28: every `rejects_single_char` summary now names the concrete byte it proves
+        (`0x30`, or `0x36` for base16) and says in the text that the name reads general
+        while the statement is a single-point witness. Names kept — five public renames
+        is churn for a defect the summary can fix.
+      - R7-29: the overflow enumeration is completed. Only `Base8.rejects_overflow` and
+        `Base10.rejects_overflow` exist; the text now says so **and** why
+        base2/4/16/32/64 have no such input.
+      - R7-32: `Bench.lean` says **3 of the twelve, the other 9 further down**
+        (`3 + 9 = 12`, confirmed by locating the tactic lines).
+      - R7-33: `Base32.lean`'s §3.5 head pairs `MZ======` with its canonical twin
+        `MY======`; `CHANGELOG.md`'s entry opens by naming both.
+
+- [x] 6.5 Template. **R7-30.** Drop the `bench` paragraph the template does not
       ship; scope the git-tracked claim to the flake path; add `moreLeanArgs` to
       `lean_exe cli`.
 
-- [ ] 6.6 Port the footprint arm to `basen`'s `Axioms.lean`. **R7-02**, `basen`
+      **Done, all three.** The `bench` paragraph is replaced by a statement that the
+      template ships no bench lane (nothing in `default.nix`/`flake.nix` has one), with
+      `basen`'s derivation named only as guidance for a project that adds one. The
+      git-tracked claim is scoped: `default.nix`'s `src = ./.` is the git-tree snapshot
+      *through the flake* and the whole directory *through a bare `nix-build`*. And
+      `lean_exe cli` carries `moreLeanArgs := #["-DwarningAsError=true"]` now.
+      **Verified load-bearing by mutation:** with `import Example.Count.CLI` removed
+      from `Example.lean` and a `sorry` added in `CLI.lean`, `lake build` still fails
+      naming it — only the executable root's flag can catch that, so the gate no longer
+      depends on the library importing the CLI module. `nix build .#native .#cli` green.
+
+- [x] 6.6 Port the footprint arm to `basen`'s `Axioms.lean`. **R7-02**, `basen`
       spec delta. `basen` has docstrings stating footprints too and no arm to check
       them.
+      **Done, and the port found two real defects.** A sixth `run_cmd` in `basen`'s
+      `Axioms.lean` now compares every stated footprint with `collectAxioms` over
+      `BaseN`, with `namesAnotherDecl` + `namesSelf` helpers in `BaseNAxioms`.
+
+      **The port reproduced §1's trap, in a new form, and that is the finding.** The
+      arm was green on its first run with **6** claim sites — while 52 docstrings
+      stated one. `codec`'s attribution rule ("name another declaration ⇒ not your
+      claim") dropped **46 of 52**, because `basen`'s docstrings routinely cite their
+      own ingredients (`BaseN.Base8.roundtrip`'s says "gated by the
+      `octDecodeFull_unambiguous` uniqueness fact. `[propext, Quot.sound]`-only.").
+      The rule was refined to: a claim is **self-attributed** when its segment is
+      *only* the claim (no declaration name — the shape almost every law uses), or
+      when its segment/paragraph names self; it is attributed away only when it names
+      another declaration and neither. Sites went **6 → 46**.
+
+      Verified in both directions, which is the whole point:
+      - **Mutation:** inserting "Axiom-free." into `Base8.roundtrip`'s docstring fails
+        the build with `says axiom-free, measured [propext, Quot.sound]`.
+      - **False-positive control:** a false "axiom-free" claim about a *different*
+        declaration (`BaseN.Base8.encodeOct_canonical`) inside `roundtrip`'s docstring
+        does **not** fire.
+      - **Real defects found:** `BaseN.Base64.b64BytesOf_tail1_eq` and
+        `BaseN.Base32.b32BytesOf_tail1_eq` each claimed
+        `[propext, Quot.sound]`-only; `#print axioms` reports **no axioms** (both
+        proofs are `rfl`). Both docstrings corrected to "Axiom-free", verified by hand.
+      (An earlier run of the mutation read a stale `.olean` and passed spuriously —
+      the trap `AGENTS.md` names — so every mutation above deleted the `.olean` first.)
 
 ## 7. Regenerate (gate counts)
 
@@ -278,6 +466,21 @@ separate prose fixes.
       `426 = 349 + 77`, `expectedPub`/`expectedGated` in lockstep, and the build is
       green with **seven** gate lines. `basen`'s counts are untouched by this
       regeneration and need their own run if §2/§6.6 move them.
+
+      **`basen` re-run (§3.2 deleted a law).** `scripts/gen-axioms.lean` does not exist
+      in `basen` — its header table is asserted by hand — so the counts were moved in
+      lockstep by measurement instead: the deletion of `decodeRepeat_mem_iff` made
+      `486 = 440 + 46` → **`490 = 444 + 46`**, because §4.1 **added four** theorems
+      (`hexToNibble_range`, `foldByte_of_hexDigit`, `foldByteBytes_of_encodeHex`,
+      `decodeHexFold_roundtrip`) to the one it removed. `expectedPub`/`expectedGated`/
+      `statedPrintBlockCount`/`statedGatedNamesCount` and the prose paragraph were all
+      moved together, and the distribution sentence (`381 + 48 + 15 = 444`) is now
+      **asserted** rather than remembered — it had already rotted to `377 / 48 / 15 =
+      440` behind a green table, which is the defect §2.2 exists for. Both new arms are
+      mutation-verified (a `380` in the distribution fails naming the measured `381`).
+
+      **§6.6 added a sixth gate line** to `basen`: stated footprints verified, over 46
+      claim sites.
 
 ## 8. Gates (run all three repos; they are different flakes)
 
