@@ -59,8 +59,24 @@ def localIsGeneratedAux (n : Name) : Bool := Id.run do
   if authored.contains n then return false
   -- `Prop`-valued structure-field projections, recognised by name (no shared suffix:
   -- each is `fun … => self.n`). Mirror of `CodecAxioms.propProjections`.
+  --
+  -- **This list drifted, and the drift un-pinned a law for a whole round**
+  -- (`codec-audit-round-eight` §7.2). It listed `Iso.law`, `Codec.Normal.fixed`,
+  -- `Codec.Normalizer.idem` — three names — while the real `propProjections` had four,
+  -- `Codec.Suffix.hle` having been added to the gate by `codec-audit-round-seven`
+  -- GC-02. So the generator emitted `Codec.Suffix.hle` into `gatedNames` and never
+  -- emitted its `#guard_msgs` block: `gatedNames` claimed 347 gated theorems and the
+  -- file pinned 346, and `headerNumbers` was reading the *mirror's* count, so the
+  -- numbers agreed with each other while disagreeing with the tree. Regenerating found
+  -- it in one line. **A mirror is a name list with no completeness arm of its own** —
+  -- which is the lesson this file has now paid for four times — so the entry is
+  -- commented with the reason it is here, exactly as `propProjections` entries are.
   let propProjections : Array Name := #[
-    `Iso.law, `Codec.Normal.fixed, `Codec.Normalizer.idem]
+    `Iso.law, `Codec.Normal.fixed, `Codec.Normalizer.idem,
+    -- Found by the completeness arm in `Axioms.lean` (GC-02); missing here until
+    -- round eight regenerated. `Suffix.hle : remaining ≤ n` is `Prop`-valued, so its
+    -- `@[projection]` theorem is `fun … => self.2`.
+    `Codec.Suffix.hle]
   if propProjections.contains n then return true
   let s := n.components.getLast!.toString
   return s == "eq_def" || s == "inj" || s == "injEq" || s == "sizeOf_spec" ||

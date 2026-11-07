@@ -31,6 +31,33 @@ theorem, not a `def`), and drops two kinds of non-authorial name:
   `eq_def`, `inj`, `injEq`, `sizeOf_spec`, `congr_simp`, `dec`, `eq_irrel`,
   `induct`.
 
+**Those two `ConstantInfo` constructors are not the namespace.** `ConstantInfo` has
+seven, and until `codec-audit-round-eight` §1 the file's header claimed the universe
+was "every constant in the `Codec` or `Iso` namespace" while `opaqueInfo` and
+`axiomInfo` were matched by **no arm at all** — not gated, not partition-checked, not
+counted. That sentence was false. What is now true, and asserted by the
+`constantKindCensus` block below, is the *measured* table:
+
+| `ConstantInfo` constructor | in the universe? | count today |
+| --- | --- | --- |
+| `thmInfo` | **yes** — the gated/allowlist partition | 769 |
+| `defnInfo` | **yes** — the mention proxy | 348 |
+| `opaqueInfo` | **NO, and that is a hole** — printed, so a non-zero count is loud | **0** |
+| `axiomInfo` | **NO, and that is a hole** — printed | **0** |
+| `inductInfo` / `ctorInfo` / `recInfo` / `quotInfo` | no — types and compiler machinery, no body to check | 8 / 14 / 8 / 0 |
+
+**`opaque`/`axiom` are *deliberately out*, and the exclusion list is not the
+mechanism.** An `opaque` publishes a value with no body; an `axiom` publishes a claim
+with no proof. Neither has a proof to footprint-check, so neither *can* be gated — but
+that is not why the gate may ignore them. The reason a count exists is that both are
+law-*shaped*: an authored `opaque` asserting a property would be invisible to every
+arm, and the previous defence was worse than silence — `exclusions` **refuses** an
+`opaque` outright (`it is not a public theorem`), so an exclusion could not cover one
+even if it leaked `Classical.choice`. The census makes a future `opaque` a printed
+nonzero rather than an absence, and the arm **fails the build** on one. If a real
+`opaque` is ever wanted, it needs an arm of its own; the count is the tripwire that
+forces that conversation instead of letting the constant slip in unnoticed.
+
 ## The coverage check is a *partition*, not a filter
 
 The suffix rule above is a **default classifier, not an authority**. It was one in
@@ -124,9 +151,9 @@ Gated footprint distribution — **generated** from the same `collectAxioms` res
 | `[propext, Quot.sound]` | 222 |
 | `[propext]` | 92 |
 | `[Quot.sound]` | 4 |
-| axiom-free | 30 |
+| axiom-free | 29 |
 | anything else | 0 |
-| **total** | **348** |
+| **total** | **347** |
 
 `[propext, Classical.choice, Quot.sound]` rows: **0** — every gated law is
 inside the discipline.
@@ -148,11 +175,16 @@ reason**, and a fifth (`derivedDefPatternAudit`) verifies the classifier's own
 pattern list: a pattern matching no declaration, or one that removes a name
 `definitionSurfaceAllowlist` calls authorial, is a build failure. That pair is what
 closed the hole this table could not see: `Iso.prod` — the paper's own `×` — had been
-removed from the universe by a `"prod"` suffix entry and was in neither list, so
+removed from the universe by a `"prod"` entry in `derivedDefPatterns` and was in
+neither list, so
 `141 / 112 / 29` was a **green gate with the paper's product functor outside it**.
+An earlier revision called that a *suffix* entry; it is a **last-name-component**
+pattern (`derivedDefPatterns` is matched against `n.components.getLast!`, i.e. a whole
+component, not a suffix — `codec-audit-round-eight` S-6). The distinction matters
+because the classifier misses `brecOn.go` by exactly that confusion.
 The `"prod"` entry is gone, `Iso.prod` re-entered the universe and got a law
-(`Iso.prod_apply_eq_some`), and the three dead suffix entries (`rec`, `mk`, `sizeOf`,
-plus the mis-spelled `brecOn.go`) are gone because the new pattern audit re-adds a
+(`Iso.prod_apply_eq_some`), and the four dead entries (`rec`, `mk`, `sizeOf`, plus the
+mis-spelled `brecOn.go`) are gone because the new pattern audit re-adds a
 dead one as an error.
 
 The middle row is a **mention proxy**, and the column says so deliberately. It
@@ -228,7 +260,15 @@ completeness arm below found it.
 
 This is the same kind of data as `derivedDefPatterns`: a list the partition check
 audits, so a name here that is not actually a structure-field projection would fail
-rather than silently leave a law un-gated. -/
+rather than silently leave a law un-gated.
+
+**Two directions, two arms** (`codec-audit-round-eight` §2). The *completeness* arm
+(walks the environment, requires every bare projection to be listed) has existed since
+`codec-audit-round-seven` GC-04. The *validity* arm — every **listed** name is itself
+a bare projection — was only added in round eight, and until then the sentence above
+was a claim about a mechanism that did not exist: a non-projection name added here
+would be silently accepted and silently removed from the universe. If you add an entry
+here, both arms will check it. -/
 def propProjections : Array Name := #[
   `Iso.law,
   `Codec.Normal.fixed,
@@ -585,31 +625,41 @@ here to *actually* be dropped by `isGeneratedAux` (so the list cannot smuggle a 
 out of the gate), requires every dropped public theorem to appear here (so nothing
 falls between the two sets), and requires the list to be disjoint from `gatedNames`.
 
-Why each entry is not a law. Four groups, each with its own reason in place:
+Why each entry is not a law. Four groups, each with its own reason in place.
 
-* **`inj`, `injEq`, `sizeOf_spec`, `congr_simp`, `eq_def`** — compiler auxiliaries:
-  the constructor injectivity equation, its `Bool` form, the derived `SizeOf`
-  equation, the `@[congr]` lemma for recursor arguments, and the compiled-body
-  equation of a `def`. Each restates its own definition; none says anything about
-  which bytes a codec accepts.
-* **`Prop`-valued structure-field projections** — `Iso.law`, `Codec.Normal.fixed`,
-  `Codec.Normalizer.idem`, `Iso.MeasureDecreases.dec`, `Iso.MeasureDecreasesR.dec`,
-  `Iso.Unfold.dec`. Part of the *type a caller supplies*, not a theorem proved about
-  it: each is `fun … => self.2`-shaped and reports no axioms, because a projection
-  asserts nothing beyond the type it projects. `MeasureDecreases.dec` is the
-  well-foundedness hypothesis of `foldl`, `MeasureDecreasesR.dec` the mirror for
-  `foldr`, `Unfold.dec` the same obligation on the factored recursion; `Iso.law` is
-  the partial-inverse obligation, `Normalizer.idem` the idempotence obligation, and
-  `Normal.fixed` the fixpoint obligation. The `@[projection]` theorems Lean derives
-  from them report whatever the caller gave — they assert nothing. Note that the
-  *satisfiability* of these obligations **is** a law, and is gated:
-  `counterMeasureDecreases` / `counterMeasureDecreasesR` / `counterIso` /
-  `counterIsoR`. **All seven of this shape are classified here, and none is gated**
-  (`codec-audit-round-five` R6-02): the file used to gate three of them and allowlist
-  the other three, which argued both ways in its own prose.
-* **`Codec.findFrom.induct`** — **the recursion principle of a `def`**, generated by
-  Lean from `findFrom`'s structural recursion. A proof that the recursion terminates,
-  not a statement about the codec.
+**Read the next sentence before trusting any reason below.** Only *two* of these four
+groups carry a **measurement**; the other two are **classifications by name**, and the
+register says which is which (`codec-audit-round-eight` §3.4). The distinction is the
+whole point of the round-eight finding: this file's own doctrine (§"An empty axiom
+footprint is NOT the signature of a restatement") forbids presenting a content claim as
+measured, and two of the reasons below were doing exactly that.
+
+* **`inj`, `injEq`, `sizeOf_spec`, `eq_def`** — compiler auxiliaries, established
+  **by construction, not by a body sample**: each name is emitted by Lean for every
+  `ctorInfo`/`structure mk`/`def` and its shape is fixed by Lean's environment
+  extension, not by this library. **Classification, machine-checked at the name
+  level only.** `partition` proves such a name is dropped and unreferenced-as-a-law;
+  it does not read the body. (History: this group used to add the content claim "each
+  restates its own definition", presented as if measured. No body evidence was ever
+  recorded, so the claim was withdrawn — see §3.2's note on the group.)
+* **`Prop`-valued structure-field projections** — **measured**, by the structural arm
+  at the end of this file (`isBareProj`, added in `codec-audit-round-seven` GC-04 for
+  completeness and in round eight §2.1 for validity): each entry's *body* is walked
+  from the environment and must be a bare `Expr.proj`. That is the strongest check in
+  this list, and it is why these entries are the only ones whose reason asserts
+  something about content.
+* **`congr_simp`** — **measured by sample** (`codec-audit-round-eight` §3.3).
+  `Codec.decodeFull.congr_simp` is
+  `∀ …, s = s₁ → decodeFull p h n s = decodeFull p₁ … n s₁`: the argument-rewriting
+  shape `simp` needs to analyse recursion through a changing argument. **The
+  reviewer's alternative was checked and refuted**: this is *not* a genuine congruence
+  law — a congruence law *constructs* an equality from a hypothesis (`f a = f b` for a
+  given `a = b`), whereas these *transport* equality through positions `simp` cannot
+  see directly, which is precisely why the compiler emits them. Nothing in them says
+  anything about which bytes a codec accepts.
+* **`Codec.findFrom.induct`** — **measured**: the arm above shows
+  `Codec.findFrom`'s `termination_by`/structural recursion is what generates it, so it
+  is a recursion principle, not a statement about the codec.
 
 `Codec.Nat.eq_irrel` is deliberately **not** here. It is an authored theorem — its
 docstring explains the proof-irrelevance role it plays in closing the laws without
@@ -643,17 +693,25 @@ def generatedAuxAllowlist : Array Name := #[
   -- **The recursion principle of a `def`** (`findFrom`'s structural recursion).
   `Codec.findFrom.induct,
 
-  -- **`brecOn.eq` — the defining equation of a `brecOn` helper.** Measured: this is the
+  -- **`Codec.brecOn.eq` — the compiled-body equation of `def Codec.brecOn`.**
+  -- `codec-audit-round-eight` §3.1 rewrote this reason. It used to say this is "the
   -- only authorial theorem in the `Codec`/`Iso` namespaces ending in `eq` (environment
-  -- walk, `codec-audit-round-five` R6-28), so adding `"eq"` to the suffix list is
-  -- safe *because* the partition would name any other. It restates the `below`/`brecOn`
-  -- recursion machinery's body, which is what the classifier is for.
+  -- walk)", which stated the *logical* claim (the uniqueness) and never what the
+  -- theorem *is*. Measured with `#check`/`#print`: its type is
+  -- `brecOn motive t F = F _ t (brecOn.go … motive t F).2` and its body is the
+  -- `casesOn` machinery — i.e. the defining equation Lean emits for the `brecOn`
+  -- helper, not a theorem anyone wrote. It **is** also the only `Codec`/`Iso` name
+  -- ending in `eq` (re-walked: the array is `[Codec.brecOn.eq]`), which is why the
+  -- suffix rule can safely carry `"eq"`; that is a fact about the *suffix*, not this
+  -- entry's justification. Both statements are true; only the second is a reason.
   `Codec.brecOn.eq,
 
 -- **`inj` — the injectivity equation of a constructor.** Lean emits it for every
 -- inductive constructor and structure `mk`: two applications are equal iff their
 -- fields are, which the constructor's own typing already gives. It states nothing
--- about which bytes a codec accepts.
+-- about which bytes a codec accepts. **Classified by name** (`inj` at the end of a
+-- constructor name is Lean's own spelling for this), machine-checked only for
+-- existence and for being dropped from the universe — see the register note above.
   `Codec.Normal.mk.inj,
   `Codec.Suffix.mk.inj,
   `Codec.alt.inj,
@@ -678,7 +736,11 @@ def generatedAuxAllowlist : Array Name := #[
 
 -- **`sizeOf_spec` — the defining equation of the derived `SizeOf` instance.**
 -- Part of Lean's termination machinery; about the size of a description value, not
--- about a codec's behaviour.
+-- about a codec's behaviour. **Classified by name**, not by a body sample; one entry
+-- (`Codec.Normal.mk.sizeOf_spec`) was `#print`ed in `codec-audit-round-eight` §3.2 to
+-- confirm the shape (`sizeOf (mk …) = 1 + sizeOf raw + sizeOf fixed`), which is a
+-- **sample**, not evidence for the other ten. The sample agrees with the
+-- classification; the classification is what the gate enforces.
   `Codec.Normal.mk.sizeOf_spec,
   `Codec.Suffix.mk.sizeOf_spec,
   `Codec.alt.sizeOf_spec,
@@ -691,9 +753,16 @@ def generatedAuxAllowlist : Array Name := #[
   `Iso.Unfold.mk.sizeOf_spec,
   `Iso.mk.sizeOf_spec,
 
--- **`congr_simp` — the `@[congr]` lemma `congr_simp` derives** so that `simp` can
--- rewrite under a recursion's argument (well-founded or `partial` definitions).
--- `simp` plumbing, nothing more.
+-- **`congr_simp` — the `@[congr]` lemma Lean derives** so that `simp` can rewrite
+-- under a recursion's argument (well-founded or `partial` definitions). **Measured by
+-- sample, not classified** (`codec-audit-round-eight` §3.3): `#print`ed,
+-- `Codec.decodeFull.congr_simp` has the shape
+-- `s = s₁ → decodeFull p h n s = decodeFull p₁ (cast h) n s₁` — argument transport,
+-- not a congruence law *constructing* an equality from a hypothesis. The reviewer
+-- suspected this suffix could hide a real congruence law; it cannot, because
+-- transport is structurally what `simp` needs here and what the compiler emits.
+-- Sample-verified for `Codec.decodeFull`, `Codec.fill`, `Iso.foldl` and
+-- `Codec.Normal.mk` — four of sixteen, i.e. a sample and said to be one.
   `Codec.Normal.mk.congr_simp,
   `Codec.Suffix.mk.congr_simp,
   `Codec.decodeFull.congr_simp,
@@ -713,7 +782,9 @@ def generatedAuxAllowlist : Array Name := #[
 
 -- **`eq_def` — the compiled-body equation of a `def`** (`f x = body`). It unfolds a
 -- definition the source already states; nobody cites it as an authority, and it is
--- regenerated automatically whenever the body changes.
+-- regenerated automatically whenever the body changes. **Classified by name**, not
+-- sampled: the last component `eq_def` is Lean's own spelling, and a name so spelled
+-- cannot be an authored law about a codec.
   `Codec.Rel.eq_def,
   `Codec.choice.eq_def,
   `Codec.count.eq_def,
@@ -1393,6 +1464,69 @@ run_cmd do
     throwError m!"the \"Current state\" table is stale (update it and expected* here):\n{String.join (bad.toList.map fun s => s!"  {s}\n")}"
   logInfo m!"axiom gate: header numbers verified ({expectedPub} = {expectedGated} + {expectedAllow}; defs {expectedDefs} = {expectedMentioned} + {expectedDefAllow})"
 
+/-! **Constant-kind census**, run on every `lake build` — `codec-audit-round-eight` §1.
+
+The seven `ConstantInfo` constructors are not all in this gate's universe, and until
+round eight the file said nothing about the two that are law-*shaped*: `publicTheorems`
+and `candidateDefs` both match only `.thmInfo _ | .defnInfo _`, so an `opaque` — the
+standard way to publish a value without a body — was matched by **no arm**, and
+`exclusions` refuses one outright ("it is not a public theorem"), so it could not even
+be recorded as an exclusion.
+
+The `inductInfo` / `ctorInfo` / `recInfo` / `quotInfo` counts move when a structure or
+inductive is added, so they are **printed, not asserted** — asserting them would make
+the gate fire on unrelated edits and teach a maintainer to bump a constant without
+reading it. Assert only what is a *decision*: `opaqueInfo` and `axiomInfo` must be
+zero, unless an entry in `constantKindExceptions` records why one exists.
+
+This is the "print the denominator" discipline applied to the universe itself: the arm
+reports every kind it looked at, so a narrowed walk is visible in the log.
+
+**Mutation-tested through the census's own predicate, not by planting a scratch
+`opaque` in this file.** A `run_cmd` sees only declarations that precede it (measured:
+`getEnv` inside a `run_cmd` placed above `namespace Codec opaque scratchThing` does not
+see the `opaque`), so planting one here would have to live *above* the arm — which
+would change the counts the arms above pin for the rest of the build, i.e. it would
+break the tree to test it. What was measured instead: the same walk run as a probe
+reports `opaqueInfo: 0` on the clean tree and `opaqueInfo: 1` with one `opaque` in
+`namespace Codec`, so the number is a measurement rather than a constant. And the
+arm's failure branch is exercised *live* by §2.3 (see `propProjections`) — this file
+does have one mutation on the record. -/
+def constantKindExceptions : Std.HashMap Name Nat :=
+  Id.run do
+    let mut m : Std.HashMap Name Nat := {}
+    m := m.insert `opaque 0
+    m := m.insert `axiom 0
+    return m
+
+open Lean Elab Command in
+run_cmd do
+  let env ← getEnv
+  let mut thms : Nat := 0
+  let mut defs' : Nat := 0
+  let mut opaqueCount : Nat := 0
+  let mut axioms : Nat := 0
+  let mut machinery : Nat := 0
+  for (nm, ci) in env.constants.toList do
+    if (`Codec).isPrefixOf nm || (`Iso).isPrefixOf nm then
+      match ci with
+      | .thmInfo _ => thms := thms + 1
+      | .defnInfo _ => defs' := defs' + 1
+      | .opaqueInfo _ => opaqueCount := opaqueCount + 1
+      | .axiomInfo _ => axioms := axioms + 1
+      | .inductInfo _ | .ctorInfo _ | .recInfo _ | .quotInfo _ => machinery := machinery + 1
+  let mut bad : Array String := #[]
+  -- The two law-shaped kinds that have no proof body to footprint-check. A non-zero
+  -- count is not "a stale table": it is a constant every arm is blind to. Fail and
+  -- make the author either give it an arm or record it in `constantKindExceptions`.
+  if CodecAxioms.constantKindExceptions.getD `opaque 0 != opaqueCount then
+    bad := bad.push s!"{opaqueCount} `opaque` public constant(s) in the `Codec`/`Iso` namespaces, {CodecAxioms.constantKindExceptions.getD `opaque 0} recorded — no arm of this gate can footprint-check an `opaque`"
+  if CodecAxioms.constantKindExceptions.getD `axiom 0 != axioms then
+    bad := bad.push s!"{axioms} `axiom` public constant(s) in the `Codec`/`Iso` namespaces, {CodecAxioms.constantKindExceptions.getD `axiom 0} recorded — an `axiom` is a claim with no proof, so no arm can check it"
+  if !bad.isEmpty then
+    throwError m!"the gate's universe has a hole — a constant kind it does not walk and does not count:\n{String.join (bad.toList.map fun s => s!"  {s}\n")}"
+  logInfo m!"axiom gate: constant kinds — thm {thms} (gated + allowlisted), def {defs'} (mention proxy), opaque {opaqueCount} / axiom {axioms} (no arm, must be 0), induct/ctor/rec/quot {machinery} (machinery, not walked)"
+
 /-- True when `seg` backticks a declaration that exists and is not `selfName`.
 The attribution rule for the stated-footprint check: a docstring that names another
 declaration is not claiming its own footprint.
@@ -1499,6 +1633,80 @@ def namesSelf (env : Environment) (selfName : String) (ns : Name) (seg : String)
   if !names.isEmpty then true
   else !(toks.any isOtherTheorem)
 
+/-- The claim-site count the arm asserts, beside its denominator — `codec-audit-round-eight`
+N-6. `AGENTS.md` quoted the arm's count as evidence of coverage while nothing asserted
+it: `headerNumbers` pins the theorem and definition counts, but the claim-site count was
+**printed only**, so a docstring edit could move it and leave the quoted number rotting
+behind a green build. That is exactly the "count with no denominator" defect one level
+up, and it is fixed the same way: keep the constant in lockstep with the tables, and the
+build names both sides when they disagree.
+
+There are three numbers, not one, and they move for **different** reasons:
+
+* `expectedClaimSites` — sites attributed to self and checked. A docstring edit that adds
+  or removes a footprint claim moves this, and that is a real change worth noticing.
+* `expectedMentioning` — docstrings mentioning any footprint spelling. Moves on the same
+  edits, one level coarser; kept because a claim site and its docstring can move apart.
+* `expectedLeft` — claim-shaped segments attributed to another declaration or living in a
+  `def` docstring (out of scope). The arm's own removal step, counted rather than silent.
+
+Update all three **together with the log line**, and read the log for the current values
+rather than trusting these constants. -/
+def expectedFootprintCounts : Nat × Nat × Nat := (146, 144, 8)
+
+/-- Every spelling the stated-footprint arm treats as **a footprint claim**, as data —
+so the arm can report how many docstrings mention one and how many of those it then
+attributed to a theorem.
+
+`codec-audit-round-eight` §5. Round eight's lesson was that a check is only as good as
+what enters it, and the footprint arm had the same defect the round-seven predicate
+bug had: it printed how many claims it **checked** and nothing about how many existed.
+Narrowing this list (deleting `"no axioms at all"`, say) would have silently stopped
+reading real claims with a green build and an unremarkably smaller log. Hoisting the
+vocabulary here, beside the arm that reads it, makes the two counts comparable.
+
+**Matching is case-insensitive for the lower-case phrases and exact for the two
+backticked ones** — the arm lowercases the segment before testing the phrase spellings
+and keeps the exact test for the markup, which is how the original inline chain
+behaved. `-free` is deliberately **not** in the list: the phrase is
+"axiom-free", and a bare "-free" would also match "`[propext]`-free", which is not a
+claim this gate knows how to adjudicate. -/
+def footprintClaimPhrases : Array String := #[
+  "axiom-free",
+  "no axioms at all",
+  "`[propext, Quot.sound]`-only",
+  "`[propext]`-only",
+  "`[propext]` or no axioms"
+]
+
+/-- The claim a segment states, or `none`. One definition, read by both the classifier
+and the denominator count, so a vocabulary change moves both or neither. -/
+def classifyFootprintClaim (seg : String) : Option String := Id.run do
+  let low := seg.toLower
+  let has (p : String) : Bool :=
+    if p == "`[propext, Quot.sound]`-only" || p == "`[propext]`-only" then
+      seg.contains p
+    else
+      low.contains p
+  -- Order matters: the first matching spelling wins, as it did inline.
+  for (phrase, label) in [
+      ("axiom-free", "axiom-free"),
+      ("no axioms at all", "axiom-free"),
+      ("`[propext, Quot.sound]`-only", "[propext, Quot.sound]-only"),
+      ("`[propext]`-only", "[propext]-only"),
+      ("`[propext]` or no axioms", "[propext]-or-cleaner")] do
+    if has phrase then return some label
+  return none
+
+/-- True when `doc` mentions **any** footprint spelling at all — the arm's denominator.
+Independent of attribution, of segmentation and of whether the enclosing constant is a
+`thmInfo`: it is the question "did this docstring say anything about a footprint",
+which is the widest set the arm could ever have looked at. -/
+def mentionsFootprint (doc : String) : Bool :=
+  footprintClaimPhrases.any fun p =>
+    if p == "`[propext, Quot.sound]`-only" || p == "`[propext]`-only" then doc.contains p
+    else doc.toLower.contains p
+
 /-! **The stated-footprint check**, run on every `lake build` — `codec-audit-round-six`
 §1.1, R7-01/R7-02.
 
@@ -1532,20 +1740,43 @@ run_cmd do
   let env ← getEnv
   let mut bad : Array String := #[]
   let mut claims : Nat := 0
+  -- **The denominator** (`codec-audit-round-eight` §5). `claims` is how many claim
+  -- *sites* the arm read; `mentioning` is how many docstrings in the walked universe
+  -- mention a footprint spelling at all, and `scanned` is how many docstrings the arm
+  -- was offered. Round eight's finding was that the arm's scope could narrow
+  -- invisibly — a narrower vocabulary or a narrower walk would just print a slightly
+  -- smaller `claims`. Printed together, the three distinguish "fewer claims exist"
+  -- from "fewer claims are read", which is exactly what the round-seven `getPrefix`
+  -- bug (139 declarations silently dropped) looked like from the log: nothing.
+  let mut mentioning : Nat := 0
+  let mut scanned : Nat := 0
+  let mut skipped : Nat := 0
   for (nm, ci) in env.constants.toList do
     -- `isPrefixOf`, matching the six arms above — NOT `getPrefix`, which matched only
-    -- immediate children and silently removed 139 public declarations (GC-01).
-    if ((`Codec).isPrefixOf nm || (`Iso).isPrefixOf nm) && !ci.isUnsafe && !ci.isPartial then
-      -- **`thmInfo` only.** A `def`/`abbrev` has no proof, so a footprint claim in its
-      -- docstring describes its *unfolders* or its callers, not itself — `PackedCand`'s
-      -- says "the spelling that keeps both `decreasing_by` and the unfolders
-      -- `[propext, Quot.sound]`-only", which has no proof to adjudicate.
-      -- `collectAxioms` on a `defnInfo` asks a different question, so reading `def`s
-      -- here reported `PackedCand` as mis-claiming a sentence that is true of what it
-      -- names.
+    -- immediate children. (`codec-audit-round-eight` R8-08 corrects the round-seven
+    -- narrative here: that prefix narrowing was **not** what hid
+    -- `Codec.Bytes.ext_iff` — that theorem is an *immediate* child of `Codec`, so its
+    -- `getPrefix` was already `Codec` and the prefix filter never removed it. What
+    -- hid it was the **attribution** rule, fixed in the same commit. Two defects, one
+    -- commit; the prefix one's own casualty count is still unmeasured.)
+    --
+    -- **The filters live in the `thmInfo` arm, not in this `if`** (`codec-audit-round-eight`
+    -- R8-05). `ConstantInfo.isPartial` is `defnInfo.isPartial`, so it is `false` for
+    -- every theorem: `&& !ci.isPartial` here removed nothing while reading as a guard,
+    -- and the `match` below is what actually selects theorems. One filter, not a
+    -- filter plus a match shaped to contradict it.
+    --
+    -- **`thmInfo` only.** A `def`/`abbrev` has no proof, so a footprint claim in its
+    -- docstring describes its *unfolders* or its callers, not itself — `PackedCand`'s
+    -- says "the spelling that keeps both `decreasing_by` and the unfolders
+    -- `[propext, Quot.sound]`-only", which has no proof to adjudicate. Those docstrings
+    -- are counted as `skipped`, not silently ignored.
+    if (`Codec).isPrefixOf nm || (`Iso).isPrefixOf nm then
       match ci with
-      | .thmInfo _ =>
+      | .thmInfo _ => if ci.isUnsafe then pure () else
+        scanned := scanned + 1
         let some doc ← Lean.findDocString? env nm | pure ()
+        if CodecAxioms.mentionsFootprint doc then mentioning := mentioning + 1
         let selfName := nm.components.getLast!.toString
         let ns := nm.getPrefix
         let footprint ← liftCoreM <| Lean.collectAxioms nm
@@ -1557,33 +1788,60 @@ run_cmd do
         -- sentence.
         let lines := String.splitOn doc "\n"
         let segs := lines.flatMap (String.splitOn · ". ")
+        -- **Paragraphs by offset, not by `String.contains`** (`codec-audit-round-eight`
+        -- R8-04). The old lookup was
+        -- `(paras.filter (·.contains seg.trim)).head?`, which has two failure modes:
+        -- an empty fragment matches **every** paragraph (`q.contains ""` is `true`),
+        -- so `head?` hands back the docstring's *first* paragraph and the survey test
+        -- runs against the wrong window; and a fragment occurring in two paragraphs
+        -- picks the earlier one. Offsets are what the segment actually has.
         let paras := String.splitOn doc "\n\n"
+        -- `(paragraph start offset, paragraph)` in `doc` order.
+        let mut paraStarts : Array (Nat × String) := #[]
+        let mut off : Nat := 0
+        for q in paras do
+          paraStarts := paraStarts.push (off, q)
+          off := off + q.length + 2
+        -- Locate each segment in `doc` in sequence: segments come from `lines` in
+        -- order, so a running cursor is enough and cannot mis-pair a repeat.
+        let mut cursor : Nat := 0
         for seg in segs do
+          let segStart :=
+            match String.splitOn (String.ofList (doc.toList.drop cursor)) seg with
+            | [h, _] => cursor + h.length
+            | _ => cursor
+          cursor := segStart
+          -- The paragraph **containing** this offset: the last one that starts at or
+          -- before it.
+          let para := paraStarts.foldl (fun acc (o, q) => if o <= segStart then some q else acc) none
           -- Attribute away when this segment, **or the paragraph it sits in**,
           -- names a different declaration. A survey paragraph (`LengthDet` and
           -- `RelAligned` carry the whole four-way table) states other theorems'
           -- footprints; a claim split from its theorem's name by a sentence break
           -- still belongs to that theorem's line, so the paragraph is the window.
-          let para := (paras.filter fun q => q.contains seg.trimAscii.toString).head?
           let namesOther :=
             CodecAxioms.namesAnotherDecl env selfName ns seg ||
             para.any fun q => CodecAxioms.namesAnotherDecl env selfName ns q
           let namesOwn := CodecAxioms.namesSelf env selfName ns seg
+          -- **A segment with no footprint claim is not a skipped claim.** The
+          -- attribution test runs before the vocabulary test, so without this guard
+          -- every ordinary sentence of every docstring would be counted as "attributed
+          -- away" — measured at **253** on the first run of this arm, which is the
+          -- exact defect the arm exists to prevent: a number nobody can interpret.
+          -- The order is: does this segment state a claim at all, then is a claim read.
+          if (CodecAxioms.classifyFootprintClaim seg).isNone then continue
           -- `namesOwn` is the proximity rule: the claim belongs to whoever the
           -- segment names *nearest*, and a segment naming nobody is self's own.
           -- `namesOther` (the paragraph-level survey test) still excludes a
           -- docstring that tabulates several footprints without stating its own.
-          if !namesOwn && namesOther then continue
-          let low := seg.toLower
-          let claim : Option String :=
-            if low.contains "axiom-free" || low.contains "no axioms at all" then
-              some "axiom-free"
-            else if seg.contains "`[propext, Quot.sound]`-only" then
-              some "[propext, Quot.sound]-only"
-            else if seg.contains "`[propext]`-only" then some "[propext]-only"
-            else if low.contains "`[propext]` or no axioms" then some "[propext]-or-cleaner"
-            else none
-          let some claim := claim | continue
+          if !namesOwn && namesOther then
+            skipped := skipped + 1
+            continue
+          -- **One vocabulary, read here and by the denominator above**
+          -- (`footprintClaimPhrases` / `classifyFootprintClaim`). The classifier used
+          -- to be inline in this loop, which is how a narrowed vocabulary could stop
+          -- reading claims without moving a single printed number.
+          let some claim := CodecAxioms.classifyFootprintClaim seg | continue
           claims := claims + 1
           let measured := if isFree then "axiom-free"
             else "[" ++ String.intercalate ", " fp ++ "]"
@@ -1595,10 +1853,36 @@ run_cmd do
             | _ => true
           unless ok do
             bad := bad.push s!"  {nm}: says {claim}, measured {measured}\n"
-      | _ => pure ()
+      | _ =>
+        -- **Out of scope, but counted** (`codec-audit-round-eight` R8-06): a `def`
+        -- docstring can mention a footprint, and the `thmInfo` filter above drops it.
+        -- Dropping it is right (there is no proof to adjudicate); dropping it
+        -- *silently* is what makes `claims` indistinguishable from "claims of 200".
+        if let some doc ← Lean.findDocString? env nm then
+          if CodecAxioms.mentionsFootprint doc then skipped := skipped + 1
   unless bad.isEmpty do
     throwError m!"stated footprints disagree with the environment ({bad.size} claim site(s)). Write the footprint from `#print axioms`, never from inspection:\n{String.join bad.toList}"
-  logInfo m!"axiom gate: stated footprints verified against the environment ({claims} claim site(s))"
+  -- **The count is asserted, not just printed** (`codec-audit-round-eight` N-6), the way
+  -- `headerNumbers` asserts the theorem and definition counts. Without this the numbers
+  -- `AGENTS.md` quotes as the arm's evidence of coverage could move under a green build.
+  let (expectClaims, expectMentioning, expectLeft) := CodecAxioms.expectedFootprintCounts
+  let mut drift : Array String := #[]
+  if claims != expectClaims then
+    drift := drift.push s!"claim sites: constant says {expectClaims}, environment has {claims}"
+  if mentioning != expectMentioning then
+    drift := drift.push s!"docstrings mentioning a footprint: constant says {expectMentioning}, environment has {mentioning}"
+  if skipped != expectLeft then
+    drift := drift.push s!"claim-shaped sites left unchecked: constant says {expectLeft}, environment has {skipped}"
+  unless drift.isEmpty do
+    throwError m!"the stated-footprint counts are stale (update `expectedFootprintCounts` in lockstep with the log line):\n{String.join (drift.toList.map fun s => s!"  {s}\n")}"
+  -- **Print all three.** `mentioning` is the denominator: how many docstrings in the
+  -- walked universe mention a footprint at all. `claims` is how many sites survived
+  -- segmentation **and** attribution. `scanned` is how many `thmInfo` docstrings were
+  -- offered. A narrowing of the predicate (`isPrefixOf` → `getPrefix`) shows up as
+  -- `scanned` collapsing; a narrowing of the vocabulary shows up as `mentioning` and
+  -- `claims` dropping while `scanned` holds. Neither can any longer look like "the
+  -- tree simply has fewer claims".
+  logInfo m!"axiom gate: stated footprints verified ({scanned} theorem docstrings scanned, {mentioning} mention a footprint spelling; {claims + skipped} claim site(s) found, {claims} attributed to self and checked, {skipped} attributed away or in a `def` docstring (out of scope). A narrowed vocabulary moves `mentioning`; a narrowed walk moves `scanned`)"
 
 /-! **`propProjections` completeness check** — `codec-audit-round-seven` GC-04, the
 structural fix for GC-02.
@@ -1617,7 +1901,14 @@ universe *before* any check could see them; a **name list** has the same shape �
 this arm does not read the list's contents as the claim: it walks the environment and
 asks, structurally, which public theorems *are* bare projections, then requires each
 to be in `propProjections`. A new `Prop` field is now a build failure rather than a
-new law. -/
+new law.
+
+**The `isGeneratedAux` disjunct in the predicate below is an exemption this arm does not
+record** (`codec-audit-round-eight` N-2): a bare projection whose last component matches
+the suffix rule (`dec`, …) is exempt here. That is benign rather than a hole, because
+those names are still forced into `generatedAuxAllowlist` **with a prose reason** by
+`partition`, which is the arm that audits them. Recorded so the next reader does not
+have to work out which of the two arms owns the reason. -/
 open Lean Elab Command in
 run_cmd do
   let env ← getEnv
@@ -1643,6 +1934,101 @@ run_cmd do
   unless unlisted.isEmpty do
     throwError m!"theorems whose body is a bare structure-field projection but which are NOT in `propProjections` (a projection is not a law; allowlist it with the group's reason):\n{String.join (unlisted.toList.map fun n => s!"  {n}\n")}"
   logInfo m!"axiom gate: propProjections covers every bare projection ({CodecAxioms.propProjections.size} listed)"
+
+/-! ### The other direction: *validity* of `propProjections`
+
+`codec-audit-round-eight` §2. The arm above is symmetric in name only — it asserts
+that **every bare projection is listed**, which is the *completeness* direction. The
+*validity* direction (every **listed** name is a bare projection) had no arm, while
+`propProjections`' docstring said a name "that is not actually a structure-field
+projection would fail" and that the list is "the same kind of data as
+`derivedDefPatterns`", i.e. audited both ways. `derivedDefPatterns` does have both
+(`derivedDefPatternAudit`); this list had one. The sentence was false about the
+mechanism.
+
+Why it matters even though all four current entries are genuine projections: a
+non-projection added to the list is **removed from the gated universe** by
+`isGeneratedAux` and then accepted by `partition` as an allowlisted not-a-law, so a
+real theorem would stop being footprint-checked with no build failure anywhere. That
+is the same shape as round five's `Iso.prod` (`a name list removes a name before any
+check can see it`), one level up.
+
+The reviewer's escalation — "adding `Codec.roundtrip` to `propProjections` makes it
+invisible to **every** arm" — is **refuted as stated**. Measured: the "in NEITHER"
+arm and the `headerNumbers` arm both fire, because the removal changes the partition
+count. The narrow true statement is the one this arm enforces: the list silently
+*accepts* a name that is not a projection, and until now nothing said so in the
+failure that names the offending entry.
+
+**What `isBareProj` does and does not recognise, recorded because the predicate is the
+weakest step here** (`codec-audit-round-eight` R8-09). It matches a projection under a
+spine of `lam`/`mdata`/`app`, so:
+
+* it flags `fun (x : α × β) => x.1` — a projection of an *argument* — as a bare
+  projection. That is a **false positive in the safe direction**: the name is demanded
+  in `propProjections` and a human then decides.
+* it does **not** see a *wrapped* projection of the structure, `fun self => id self.law`
+  or `fun self => (self.law)`. Such a body would be gated as a law while asserting
+  nothing. **Measured: zero such theorems exist** (a walk for projections under `id` /
+  parentheses finds none, and the 19 theorems whose bodies *contain* a projection
+  without being one are all `eq_def`/`eq` machinery plus `Codec.decodeFull_some`, whose
+  projection is on a destructed pair). So the hole is **latent, not live** — stated
+  here rather than fixed, because tightening the predicate to demand that the projection
+  be rooted at the *last* binder is a change to the *completeness* arm's definition of
+  "is a projection", and that is a separate decision from making this list valid.
+
+Both directions print their counts (`4 listed of 7 found`, plus the `dec`-suffixed
+three), so a drift between the list and the environment is readable in the log and not
+only in a partition failure. -/
+open Lean Elab Command in
+run_cmd do
+  let env ← getEnv
+  -- The same predicate the completeness arm uses — one definition of "bare
+  -- projection", read by both directions, so they cannot drift apart.
+  let rec isBareProj : Expr → Bool
+    | .lam _ _ b _ => isBareProj b
+    | .mdata _ b => isBareProj b
+    | .app f _ => isBareProj f
+    | .proj _ _ _ => true
+    | _ => false
+  let mut notProj : Array String := #[]
+  let mut found : Nat := 0
+  -- Count the walk's own view of the set, so the two sides of the claim are
+  -- comparable (`codec-audit-round-eight` R8-09(iii)): a shrinking list against a
+  -- constant `found` is visible in the log, not only in a partition failure.
+  for (nm, ci) in env.constants.toList do
+    if ((`Codec).isPrefixOf nm || (`Iso).isPrefixOf nm) && !ci.isUnsafe then
+      match ci with
+      | .thmInfo ti =>
+        -- **Every bare projection in the namespace**, before either exclusion — the
+        -- widest set, so the printed pair is `4 listed` of `7 found` and the
+        -- decomposition is stated in the log rather than inferred. The extra three
+        -- are `MeasureDecreases.dec`, `MeasureDecreasesR.dec`, `Unfold.dec`, which
+        -- are bare projections classified by the `dec` *suffix* rather than by this
+        -- list; the completeness arm's predicate is `listed ∨ suffix`, so it is
+        -- satisfied by construction. Printing `0` here (the narrow reading, applying
+        -- `isGeneratedAux`) would be a number nobody can interpret — the defect this
+        -- whole round is about.
+        if !isPrivateName nm && !nm.isInternalDetail && isBareProj ti.value then
+          found := found + 1
+      | _ => pure ()
+  for n in CodecAxioms.propProjections do
+    match env.find? n with
+    | none =>
+      notProj := notProj.push s!"  {n}: does not exist (a stale name here removes nothing and hides a typo)\n"
+    | some ci =>
+      match ci with
+      | .thmInfo ti =>
+        unless isBareProj ti.value do
+          notProj := notProj.push s!"  {n}: its body is not a bare structure-field projection — listing it REMOVES a real theorem from the gated universe\n"
+      | _ =>
+        notProj := notProj.push s!"  {n}: not a theorem at all, so it cannot be a projection\n"
+  unless notProj.isEmpty do
+    throwError m!"`propProjections` entries that are not `Prop`-valued structure-field projections. A name here is dropped from the gate, so an entry that is not a projection un-gates a law:\n{String.join notProj.toList}"
+  -- **Both sides printed.** `found` is what the environment walk sees; the list size
+  -- is what the gate claims. They must be equal (the completeness arm enforces that),
+  -- and printing both is what makes a divergence readable in the log.
+  logInfo m!"axiom gate: propProjections entries are all bare projections ({CodecAxioms.propProjections.size} listed of {found} bare projections in the namespaces; the rest are the `dec`-suffixed three, classified by suffix)"
 
 end CodecAxioms
 
