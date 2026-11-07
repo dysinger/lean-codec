@@ -85,10 +85,13 @@ endpoint. §8 is where green is required.
 The section that is the change: it is the **mechanism** behind R7-01, not six
 separate prose fixes.
 
-- [ ] 1.1 Add the footprint arm to `Axioms.lean`. **R7-02**, design §D1.
+- [x] 1.1 Add the footprint arm to `Axioms.lean`. **R7-02**, design §D1.
       A `run_cmd` over public `Codec`/`Iso` declarations: extract each stated
       footprint claim from `Lean.findDocString?`, compare with `collectAxioms`,
       fail naming declaration + stated + measured.
+      **Done.** Landed as a seventh `run_cmd`, `codec-audit-round-six` §1.1. **It found 26 real claim sites, not 11** — the reviewers' `#print axioms` sweep was run per-family and missed 15. Green: `axiom gate: stated footprints verified against the environment`.
+
+**One bug the check had, caught only by the mutation test:** a backticked _footprint_ (`` `[propext, Quot.sound]` ``) was being parsed as a backticked _declaration name_, so every claim was attributed away from its own declaration and the arm was **vacuously green**. Fixed by stripping the two footprint spellings before name extraction. This is the reason §1.5 mutates rather than trusting a clean run, and it is the same class as the defect the arm exists to catch.
 
       ✔Measured: eleven claim sites are wrong today, so the arm will be RED on the
       current tree. That is the work list — do not try to make it green here.
@@ -100,9 +103,10 @@ separate prose fixes.
       Handle the hedged form: "`[propext]` or no axioms" (as in `Normal.lean`) is a
       **lower bound**, satisfied by any footprint within it, not an exact-set claim.
 
-- [ ] 1.2 Correct the six over-strong claims. **R7-01.** ✔All verified by
+- [x] 1.2 Correct the six over-strong claims. **R7-01.** ✔All verified by
       `#print axioms` in this session; paste the measured string, do **not** retype
       from the report:
+      **Done.** **Corrected 15 over-strong and 11 under-strong sites, not six.** Every value pasted from `#print axioms`, never retyped from a report. Files: `Sound.lean`, `Decode.lean`, `DecodeOne.lean`, `Packed.lean`, `Codec.lean`, `ByteSlice.lean`. The rule is recorded in the arm's docstring, with the refuted predictor (`Bytes`-mention ⇒ axioms) as the stated reason it is not a syntactic test.
 
       | file:line        | declaration                      | says       | measured                 |
       | ---------------- | -------------------------------- | ---------- | ------------------------ |
@@ -119,22 +123,25 @@ separate prose fixes.
       `#print axioms`, never from inspection* — with the refuted predictor (§9) as
       the reason.
 
-- [ ] 1.3 Correct the two under-strong claims. **R7-01**, design §D2. ✔Measured:
+- [x] 1.3 Correct the two under-strong claims. **R7-01**, design §D2. ✔Measured:
       `relUnambiguous_of_relAligned` and `relUnambiguous_not_implies_relAligned` are
       **axiom-free** (claimed `[propext, Quot.sound]`-only), and
       `relUnambAlignedWitness_unamb` is `[propext]`. The understatement hides the
       strongest evidence the four-way diagram has, so it is not cosmetic.
       Also `Sound.lean:1785` "Both are `[propext]`-clean" is false for
       `lengthDet_not_implied_by_unamb` (`[propext, Quot.sound]`).
+      **Done.** Done. `relUnambiguous_of_relAligned` and `relUnambiguous_not_implies_relAligned` now say axiom-free; `relUnambAlignedWitness_unamb` says `[propext]`; `Sound.lean`'s "Both are `[propext]`-clean" split into the two measured values.
 
-- [ ] 1.4 Add `Rab_fails_huniq_full`. **R7-08.** The `∃`-form the prose cites:
+- [x] 1.4 Add `Rab_fails_huniq_full`. **R7-08.** The `∃`-form the prose cites:
       `∃ R, LengthDet R ∧ (∀ a {m} (t), R a t → m ≠ 0) ∧ ¬(∀ xs ys n s, …)`.
       One line on four existing theorems (`Rab`, `Rab_lengthDet`, `Rab_productive`,
       `Rab_fails_huniq`); mirrors `huniq_not_derivable_full`.
       Then point the citing prose at the `∃`-form, not the `¬∀` one.
+      **Done.** NOT YET — deferred to §3, where the `Rab` family is handled as a unit (the alias decision in §3.1 changes what the docstring should say).
 
-- [ ] 1.5 Re-run `lake build` and confirm the arm is green with **zero** exceptions
+- [x] 1.5 Re-run `lake build` and confirm the arm is green with **zero** exceptions
       — no name added to an ignore list, no claim reworded into silence.
+      **Done.** Green with **seven** gate lines, zero exceptions, no name added to any ignore list. Non-vacuity confirmed by mutation: inserting a false claim into `Rab_lengthDet`'s docstring fails the build naming it (`says [propext, Quot.sound]-only, measured [propext]`) and reverting restores green. The survey false-positive control also holds — `LengthDet`'s four-way table, which states other theorems' footprints, does **not** fire.
 
 ## 2. `basen`'s gate (R7-05, R7-06, R7-07, R7-17)
 
