@@ -802,7 +802,8 @@ theorem drop_trans_eq {α : Type} (p : Codec α) {n : Nat} (s : Bytes n) (m : Na
 /-- `decodeFullStep` over an **empty** attached list is `none` — the companion of
 `decodeFullStep_cons`, stated with the list as a **parameter** for the same reason:
 rewriting under `.attach` fails on the dependent motive. The caller supplies
-`l = []` (typically via `rw [hx]; exact List.attach_nil`). Axiom-free. -/
+`l = []` (typically via `rw [hx]; exact List.attach_nil`). `[propext, Quot.sound]`-only
+(measured: `#print axioms Codec.decodeFullStep_nil`). -/
 theorem decodeFullStep_nil {α : Type} (p : Codec α) (h : ConsumesByte p)
     {n : Nat} (s : Bytes n)
     (ih : (m : Nat) → (s' : Bytes m) → m < n → Option (List α))
@@ -822,7 +823,7 @@ of `decodeFullFast_eq_aux`, where the fast side has already returned `none` and
 the specification side must be shown to do the same for the remaining
 candidates.
 
-Axiom-free in effect (`[propext, Quot.sound]`), by induction on the list. -/
+`[propext, Quot.sound]`-only (measured), by induction on the list. -/
 theorem decodeFullStep_none_of_forall_none {α : Type} (p : Codec α) (h : ConsumesByte p)
     {n : Nat} (s : Bytes n)
     (ih : (m : Nat) → (s' : Bytes m) → m < n → Option (List α)) :
@@ -845,7 +846,7 @@ the same as appending it after reversing — the arithmetic the `some` branch of
 `decodeFullFast_eq_aux` needs, because the fast side accumulates `x :: acc` while
 the specification side builds `x :: xs`.
 
-`[propext, Quot.sound]`-only. -/
+`[propext]`-only (measured: `#print axioms Codec.rel_byte_cast`). -/
 theorem reverse_cons_append {α : Type} (acc : List α) (x : α) (xs : List α) :
     (x :: acc).reverse ++ xs = acc.reverse ++ (x :: xs) := by
   rw [List.reverse_cons, List.append_assoc]
@@ -1003,7 +1004,8 @@ theorem remaining_at_cursor {n m r : Nat} (hr : r ≤ n - m) :
 
 /-- The same fact at the **re-rooted** cursor (`0 + ((n - m) - r)` over
 `bdrop m s`). Its `remaining` is `r` as well, which is what lets the two cursors'
-`decode` calls be compared. `[propext, Quot.sound]`-only. -/
+`decode` calls be compared. `[propext]`-only (measured: `#print axioms
+Codec.remaining_at_reroot`). -/
 theorem remaining_at_reroot {n m r : Nat} (hr : r ≤ n - m) :
     n - m - (0 + (n - m - r)) = r := by
   rw [Nat.zero_add, Nat.sub_sub_self hr]
@@ -1039,7 +1041,7 @@ theorem bdrop_seg {n : Nat} (s : Bytes n) {a b : Nat} (hab : a ≤ b) :
   omega
 
 /-- `decode` is invariant under `bdrop_seg`'s rewrite — the form the re-rooting
-lemma consumes at its step. Axiom-free. -/
+lemma consumes at its step. `[propext, Quot.sound]`-only (measured). -/
 theorem decode_congr_bdrop {α : Type} (d : Codec α) {n : Nat} (s : Bytes n)
     {a b : Nat} (hab : a ≤ b) :
     decode d (bdrop (b - a) (bdrop a s)) =

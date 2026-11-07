@@ -386,7 +386,8 @@ theorem decode_cast {α : Type} (d : Codec α) {n m : Nat} (e : n = m) (s : Byte
   simp
 
 /-- A length-cast `Suffix` has the same `remaining` field (the cast only moves
-the `hle` bound, which is proof-irrelevant). `[propext, Quot.sound]`-only. -/
+the `hle` bound, which is proof-irrelevant). **No axioms at all** (measured:
+`#print axioms Codec.PackedCand`). -/
 theorem Suffix_cast_remaining {n m : Nat} (e : n = m) (t : Suffix n) :
     (cast (congrArg Suffix e) t).remaining = t.remaining := by
   cases e

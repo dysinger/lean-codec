@@ -952,7 +952,8 @@ RelAligned` (or `huniq`) for its own description — the leaves do not donate it
 /-- `Unambiguous` is **satisfiable**, not decorative: `byte` relates every value to
 exactly one byte string (`Rel_byte`). This is a base instance the definition needs
 (a typo in it — quantifying over the wrong `s`, say — would otherwise go unnoticed,
-because nothing in-tree established it for any `d`). Axiom-free. -/
+because nothing in-tree established it for any `d`). `[propext, Quot.sound]`-only
+(measured: `#print axioms Codec.unambiguous_byte`). -/
 theorem unambiguous_byte : Unambiguous Codec.byte := by
   intro x y n s hx hy
   rw [Rel_byte] at hx hy
@@ -967,7 +968,7 @@ theorem unambiguous_byte : Unambiguous Codec.byte := by
 
 /-- `Functional` is satisfiable for the same reason: one byte value determines one
 byte string, hence one `(length, bytes)` sigma. The companion of
-`unambiguous_byte`. Axiom-free. -/
+`unambiguous_byte`. `[propext, Quot.sound]`-only (measured). -/
 theorem functional_byte : Functional Codec.byte := by
   intro x n₁ n₂ s₁ s₂ h₁ h₂
   rw [Rel_byte] at h₁ h₂
@@ -1014,7 +1015,8 @@ so the length index count); `Functional d` is `relFunctional (Rel d)` — proved
 directions below as `functional_iff_relFunctional`. Both spellings are used for the
 same obligation on the same codec (`Functional` where a `Codec` value is in hand,
 `relFunctional` in the `relRepeat`-shaped `_of_decode` laws), so they cannot be left
-to drift silently. `[propext]`-only. -/
+to drift silently. **No axioms at all** (measured: `#print axioms
+Codec.relFunctional`). -/
 def relFunctional {α : Type} (R : α → {n : Nat} → Bytes n → Prop) : Prop :=
   ∀ a {n₁ n₂ : Nat} (s₁ : Bytes n₁) (s₂ : Bytes n₂),
     R a s₁ → R a s₂ → (⟨n₁, s₁⟩ : Sigma fun n => Bytes n) = ⟨n₂, s₂⟩
@@ -1023,7 +1025,8 @@ def relFunctional {α : Type} (R : α → {n : Nat} → Bytes n → Prop) : Prop
 `Functional d ↔ relFunctional (Rel d)`, immediately from `Functional`'s definition —
 stated so a reader who has found one spelling can see it is the other, rather than
 having to guess whether the `_of_decode` obligations and the `Functional` suppliers
-are talking about the same thing. **No axioms at all** (measured). -/
+are talking about the same thing. `[propext]`-only (measured: `#print axioms
+Codec.functional_iff_relFunctional`). -/
 theorem functional_iff_relFunctional {α : Type} (d : Codec α) :
     Functional d ↔ relFunctional (Rel d) := Iff.rfl
 
@@ -1159,11 +1162,13 @@ as `lengthDet_of_lengthConst`.
 assumed.** An earlier revision recorded `LengthDet → RelAligned` as **open** — "it may
 or may not hold, and no theorem settles it either way" — and a revision before that
 attributed the difficulty to needing a `DecidableEq α` / classical axiom. **Both were
-wrong**, and the witness was already in this file: `relUnambAlignedWitness` is
-`LengthDet` (`lengthDet_relUnambAlignedWitness`, `[propext]`-only) and not
-`RelAligned` (`lengthDet_not_implies_relAligned`, `[propext]`-only), *even with
-productivity added* (`lengthDet_not_implies_relAligned_productive`). The converse
-fails too (`relAligned_not_implies_lengthDet`, `[propext, Quot.sound]`-only). A claim
+wrong**, and the witness was already in this file. Measured footprints of the four theorems this paragraph
+rests on:
+
+`lengthDet_relUnambAlignedWitness` is `[propext]`-only,
+`lengthDet_not_implies_relAligned` is `[propext]`-only,
+`lengthDet_not_implies_relAligned_productive` is `[propext]`-only, and
+`relAligned_not_implies_lengthDet` is `[propext, Quot.sound]`-only. A claim
 of the form "no theorem settles it either way" is itself falsifiable, and its falsity
 tells a reader not to go looking for a witness that is already present — which is why
 it survived three archive rounds: every gate checks theorems, and this was a claim
@@ -1210,9 +1215,9 @@ one with a shared prefix, so unambiguity at a fixed length says nothing across
 lengths. The witness is `relUnambiguous_not_implies_relAligned`, below: let
 `S a t := (a = true ∧ m = 1) ∨ (a = false ∧ m = 2)`. Then `true` relates only at
 length 1 and `false` only at length 2, so the length pins the value and
-`relUnambiguous S` holds (`[propext, Quot.sound]`-only), while `RelAligned S` demands
-a length-1 and a length-2 string with a shared prefix relate equal values, which is
-false (`[propext]`-only). Neither predicate implies the other.
+`relUnambiguous S` holds (`[propext]`-only: `relUnambAlignedWitness_unamb`), while
+`RelAligned S` demands a length-1 and a length-2 string with a shared prefix relate
+equal values, which is false (axiom-free: `relUnambiguous_not_implies_relAligned`). Neither predicate implies the other.
 
 **Why this matters rather than being pedantic.** The withdrawn sentence carried
 advice: "prove `relUnambiguous`, it is enough". It is not —
@@ -1251,8 +1256,8 @@ needs a counterexample on the record: "unambiguous implies aligned" was asserted
 several revisions, and advice built on it ("prove `relUnambiguous`, it is enough")
 is unsound for `decodeArray_unique`, which needs `RelAligned` **and** `Functional`.
 
-Measured: `relUnambiguous S` is `[propext, Quot.sound]`-only; `¬ RelAligned S` is
-axiom-free. -/
+Measured: `relUnambiguous S` is `[propext]`-only (`relUnambAlignedWitness_unamb`);
+`¬ RelAligned S` is axiom-free (`relUnambiguous_not_implies_relAligned`). -/
 
 /-- Design D4's witness relation: `true` at length 1, `false` at length 2, nothing
 else. `Sw` mirrors the design doc's `S`, renamed to avoid colliding with any local
@@ -1521,7 +1526,8 @@ theorem huniq_not_derivable_full :
 
 /-- `LengthDet` holds for `byte`: `Rel byte a s` forces `s` to be the one-byte string
 `[a]`, so both `m₁` and `m₂` are `1`. The first in-tree discharge of the extra
-hypothesis, and the reason it is not vacuous. `[propext, Quot.sound]`-only. -/
+hypothesis, and the reason it is not vacuous. `[propext]`-only (measured:
+`#print axioms Codec.lengthDet_byte`). -/
 theorem lengthDet_byte : LengthDet (Rel Codec.byte) := by
   intro a m₁ m₂ t₁ t₂ h₁ h₂
   rw [Rel_byte] at h₁ h₂
@@ -1562,7 +1568,8 @@ list-length index excludes the counterexample "and **not** `LengthDet`", general
 from `uniqCounterexampleRel`'s shape (which happens to be `LengthDet`) rather than
 from the theorem. `relRepeat_unique_same_length` concludes only for equal-length
 lists; that is what rules this relation out, and `LengthDet` says nothing about list
-length — it pins each *value's* own string length, not a list's. `[propext]`-only. -/
+length — it pins each *value's* own string length, not a list's. **No axioms at
+all** (measured: `#print axioms Codec.Rab`). -/
 def Rab : Bool → {m : Nat} → Bytes m → Prop
   | true,  m, _ => m = 2
   | false, m, _ => m = 1
@@ -1573,7 +1580,8 @@ theorem Rab_lengthDet : LengthDet Rab := by
   intro a m₁ m₂ t₁ t₂ h₁ h₂
   cases a <;> simp_all [Rab]
 
-/-- `Rab` is productive: neither value sits on the empty string. `[propext]`-only. -/
+/-- `Rab` is productive: neither value sits on the empty string. `[propext]`-only
+(measured: `#print axioms Codec.Rab_productive`). -/
 theorem Rab_productive : ∀ a {m : Nat} (t : Bytes m), Rab a t → m ≠ 0 := by
   intro a m t h
   cases a <;> simp_all [Rab]
@@ -1782,7 +1790,9 @@ The witness is simpler than `RelAligned`'s: a relation that has **one value at t
 lengths** is unambiguous (at each fixed length there is at most one value) while
 plainly failing `LengthDet`. Note the contrast with
 `relUnambiguous_not_implies_relAligned`: that one needs two *values*, this one needs
-one value at two lengths. Both are `[propext]`-clean. -/
+one value at two lengths. The unambiguity half is `[propext]`-only
+(`lengthDetWitness_unamb`); the refutation is `[propext, Quot.sound]`-only
+(`lengthDet_not_implied_by_unamb`). -/
 
 /-- The witness for `LengthDet`'s independence: `tt` at length 1 **and** at length 2,
 `ff` nowhere. At each length at most one value relates (so `relUnambiguous`), but `tt`

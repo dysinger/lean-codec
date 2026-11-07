@@ -58,7 +58,8 @@ fresh `ByteArray` of the bytes of `a` at-or-after index `i` (empty when `i` is a
 -or past the end).
 
 The Lean body below is the *specification* — `a.data.extract i.toNat a.data.size`
-re-packed — and reduces in proofs (`[propext, Quot.sound]`-only, no added axiom).
+re-packed — and reduces in proofs. **No axioms at all** (measured:
+`#print axioms Codec.byteSlice`).
 The `@[extern "codec_byteSlice"]` attribute makes the *running* C call the matching
 `codec_byteSlice` symbol in `ByteSlice.c`; that C is trusted, not proven, and is
 therefore excluded from the `#print axioms` gate (Layer 2, never conflated with

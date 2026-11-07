@@ -295,7 +295,8 @@ theorem Rel_satisfy (p : UInt8 → Bool) (b : UInt8) {n : Nat} (s : Bytes n) :
 /-- `Rel` is insensitive to a length-cast of its byte string (`cast (congrArg Bytes e)`,
 for `e : n = m`, is the same string transported across the Fin re-indexing). Needed to
 re-state `encode_rel`'s `seq` case, where the `splice` decomposition gives the suffix a
-`Bytes (n₁ + n₂ - n₁)` type instead of the encoder's `Bytes n₂`. `[propext, Quot.sound]`-only. -/
+`Bytes (n₁ + n₂ - n₁)` type instead of the encoder's `Bytes n₂`. `[propext]`-only
+(measured: `#print axioms Codec.reverse_cons_append`). -/
 theorem Rel_cast {α : Type} (d : Codec α) (x : α) {n m : Nat} (e : n = m) (s : Bytes n) :
     Rel d x (cast (congrArg Bytes e) s) ↔ Rel d x s := by
   subst m
@@ -1048,7 +1049,7 @@ theorem prepend_single_bdrop {k : Nat} (s : Bytes (k + 1)) :
 /-- `byte` relates a single byte `x` to any length-`1` byte string obtained by
 length-transporting `single x`. This is the `Rel_byte` witness of `decode_spec`'s
 `byte` forward case (the decoder's `(s ⟨0, ·⟩, Suffix.drop 1 s)` result, whose
-remainder length `n - (n-1)` is `1`). `[propext, Quot.sound]`-only. -/
+remainder length `n - (n-1)` is `1`). `[propext]`-only (measured). -/
 theorem rel_byte_cast {n : Nat} (h : n = 1) (x : UInt8) :
     Rel Codec.byte x (cast (congrArg Bytes h.symm) (single x)) := by
   rw [Rel_byte]
@@ -1058,7 +1059,8 @@ theorem rel_byte_cast {n : Nat} (h : n = 1) (x : UInt8) :
 
 /-- Reversing `byte`'s `Rel` transport: if a length-`n` byte string transports (along
 `h : n = 1`) to `single x`, then the string itself is the length-transported `single x`.
-This is the `decode_spec` `byte` backward case's `s₀ = single x` extraction. `[propext, Quot.sound]`-only. -/
+This is the `decode_spec` `byte` backward case's `s₀ = single x` extraction.
+**No axioms at all** (measured: `#print axioms Codec.cast_bytes_eq_single`). -/
 theorem cast_bytes_eq_single {n : Nat} (h : n = 1) (s : Bytes n) (x : UInt8)
     (hs : h ▸ s = single x) : s = cast (congrArg Bytes h.symm) (single x) := by
   subst h

@@ -215,7 +215,8 @@ hypothesis anywhere. The actual `Functional Codec.byte` instance is
 decoder gates on.
 
 Proof shape: mirror `decodeOne_mem`'s `byte` case, so the `if`-guard reaches the
-`decodeArray` membership. Axiom-free. -/
+`decodeArray` membership. `[propext]`-only (measured: `#print axioms
+Codec.decodeArray_functional_byte`). -/
 theorem decodeArray_functional_byte (a : Array UInt8) (i : Nat) :
     ∀ {x₁ x₂ : UInt8} {c₁ c₂ : Nat},
       (x₁, c₁) ∈ decodeArray Codec.byte a i →
@@ -232,7 +233,8 @@ theorem decodeArray_functional_byte (a : Array UInt8) (i : Nat) :
 unambiguity half: two `decodeArray byte a i` results that agree on the **count**
 agree on the value. Like its companion this is the **mirror shape**, not
 `Unambiguous Codec.byte` — that instance is `Codec.Sound.unambiguous_byte`, which
-compares two `Rel` steps at one length. Axiom-free. -/
+compares two `Rel` steps at one length. `[propext]`-only (measured:
+`#print axioms Codec.decodeArray_unambiguous_byte`). -/
 theorem decodeArray_unambiguous_byte (a : Array UInt8) (i : Nat) :
     ∀ {x₁ x₂ : UInt8} {c : Nat},
       (x₁, c) ∈ decodeArray Codec.byte a i →
