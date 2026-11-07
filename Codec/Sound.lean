@@ -1463,7 +1463,19 @@ theorem splice_prefix_agree {n m₁ m₂ : Nat} (h₁ : m₁ ≤ n) (h₂ : m₂
 
 /-- A length-determinate-free step relation: `true` on any 2-byte string, `false` on
 any 1-byte string. Unambiguous at fixed length and productive, yet it admits two
-distinct fully-consuming lists at `n = 2`. -/
+distinct fully-consuming lists at `n = 2`.
+
+**`Rab`, below, is deliberately the same relation.** The two definitions have
+byte-identical bodies, and that is intentional rather than duplicated work: they are
+two witnesses read under two different hypotheses, and the round-five retraction
+(that `LengthDet` does not exclude the counterexample) is easier to follow when the
+relation named in that argument is not the one already used for the `huniq`
+argument. The defect `codec-audit-round-six` R7-09 found was in the **prose**, which
+contrasted them as if they differed in content; the definitions are the same and the
+docstrings now say so. Deleting either name was considered and rejected — three
+passages cite `Rab` by name (`Rab_fails_huniq`, `Rab_fails_huniq_full`, and the
+section prose), and a second name for a witness is cheap where re-reading a
+retraction is not. -/
 def uniqCounterexampleRel : Bool → {m : Nat} → Bytes m → Prop
   | true, m, _ => m = 2
   | false, m, _ => m = 1
@@ -1570,7 +1582,12 @@ from `uniqCounterexampleRel`'s shape (which happens to be `LengthDet`) rather th
 from the theorem. `relRepeat_unique_same_length` concludes only for equal-length
 lists; that is what rules this relation out, and `LengthDet` says nothing about list
 length — it pins each *value's* own string length, not a list's. **No axioms at
-all** (measured: `#print axioms Codec.Rab`). -/
+all** (measured: `#print axioms Codec.Rab`).
+
+**This relation's body is identical to `uniqCounterexampleRel`'s**, deliberately —
+see that definition's docstring. The two names exist because two different
+arguments cite them (the `huniq` argument and the `LengthDet` retraction); neither
+docstring claims the relations differ. -/
 def Rab : Bool → {m : Nat} → Bytes m → Prop
   | true,  m, _ => m = 2
   | false, m, _ => m = 1
@@ -1841,31 +1858,13 @@ theorem lengthDet_not_implied_by_unamb : ¬ LengthDet lengthDetWitness := by
   have := h (a := true) (fun _ : Fin 1 => (0x41 : UInt8)) (fun _ : Fin 2 => (0x41 : UInt8)) h1 h2
   omega
 
-/-- `decodeRepeat` membership at full consumption, spelled as `relRepeat`, **at
-`Codec.byte`**. This is a **convenience specialisation**, not a forced one: an earlier
-revision said the general form was impossible because `Codec.byte` is "the only step
-relation whose `∃ s₀` collapses for free", and that is **false** —
-`prepend_empty_self`'s statement mentions no step relation at all, so the collapse is
-uniform. The general form is `decodeRepeat_mem_iff_general`, immediately below. This
-instance is kept because it is the one `huniq_byte` consumes.
-`[propext, Quot.sound]`-only. -/
-theorem decodeRepeat_mem_iff {n : Nat} (s : Bytes n) (xs : List UInt8) :
-    (xs, Suffix.empty n) ∈ decodeRepeat Codec.byte byteConsumesByte n s ↔
-      relRepeat (Rel Codec.byte) xs n s := by
-  rw [decodeRepeat_spec Codec.byte byteConsumesByte]
-  constructor
-  · rintro ⟨s₀, hs, hrel⟩
-    have hpre : (Suffix.empty n).prepend s₀ = s := hs.symm
-    rw [prepend_empty_self] at hpre
-    subst hpre
-    exact hrel
-  · intro hrel
-    exact ⟨s, (prepend_empty_self n s).symm, hrel⟩
-
-/-- **`decodeRepeat` membership at full consumption, in general.** The same statement
-at an arbitrary `Codec α` and an arbitrary value list: the `∃ s₀` collapses by
-`prepend_empty_self`, which says nothing about the step relation, so the
-specialisation above was never necessary. `[propext, Quot.sound]`-only. -/
+/-- **`decodeRepeat` membership at full consumption, in general, and the only form
+this file uses.** At an arbitrary `Codec α` and an arbitrary value list: the `∃ s₀`
+collapses by `prepend_empty_self`, which says nothing about the step relation, so the
+`Codec.byte` specialisation that used to sit above this was never necessary — and was
+in fact the only one `huniq_byte` consumed, so it was an orphan in the other
+direction too (`codec-audit-round-six` R7-10). It is now **deleted**; `huniq_byte`
+calls this. `[propext, Quot.sound]`-only. -/
 theorem decodeRepeat_mem_iff_general {α : Type} (p : Codec α) (h : ConsumesByte p)
     {n : Nat} (s : Bytes n) (xs : List α) :
     (xs, Suffix.empty n) ∈ decodeRepeat p h n s ↔ relRepeat (Rel p) xs n s := by
@@ -1886,8 +1885,8 @@ theorem huniq_byte : ∀ {x y : List UInt8} {n : Nat} (s : Bytes n),
     (x, Suffix.empty n) ∈ decodeRepeat Codec.byte byteConsumesByte n s →
     (y, Suffix.empty n) ∈ decodeRepeat Codec.byte byteConsumesByte n s → x = y := by
   intro x y n s hx hy
-  have hrx := (decodeRepeat_mem_iff s x).1 hx
-  have hry := (decodeRepeat_mem_iff s y).1 hy
+  have hrx := (decodeRepeat_mem_iff_general Codec.byte byteConsumesByte s x).1 hx
+  have hry := (decodeRepeat_mem_iff_general Codec.byte byteConsumesByte s y).1 hy
   exact relRepeat_unique_same_length (Rel Codec.byte)
     (lengthDet_of_lengthConst _ 1 lengthConst_byte) relAligned_byte
     ((productive_iff_consumesByte Codec.byte).2 byteConsumesByte) n s x y hrx hry
