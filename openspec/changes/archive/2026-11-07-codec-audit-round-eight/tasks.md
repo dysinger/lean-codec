@@ -243,7 +243,15 @@ performance figures` recounted: **four distinct quantities across fourteen
 
 - [x] 7.1 `nix fmt`, `lake build` (every gate line, counts in lockstep), `lake build
 bench`, `openspec validate --all`, `nix flake check` (detached with `nohup`).
-      **DONE, all five, same session.** `nix fmt`: clean (second run 0 changed).
+      **DONE, all five, same session — but with one correction that changes what "`nix
+    fmt` clean" means in this repo.** `nix fmt` in this dev shell has **no prettier**:
+      it formats `*.nix` only and prints "0 changed" for markdown it never touched. So
+      every "`nix fmt` clean" in this file's history (and in the archives) covered Lean
+      and Nix and **not markdown**. The real markdown gate is the flake formatter
+      (`nix build .#formatter.…` → treefmt with the sandboxed prettier, cached per
+      tree — `--clear-cache` after an out-of-band edit). That is what caught the
+      archived round-six ledger (`185eebd`), a **pre-existing** red this change did not
+      cause and could not see while the tree was dirty.
       `lake build`: **10** gate lines — `425 = 347 + 78` theorems, `140 = 115 + 25` defs,
       `12` def-name patterns, `54` definitions dropped, constant kinds
       `769 / 348 / 0 / 0 / 30`, footprints
@@ -252,10 +260,9 @@ bench`, `openspec validate --all`, `nix flake check` (detached with `nohup`).
       that asserts it — no `expected*` was stale. `lake build bench`: 28 jobs, links
       `CRef.o`. `openspec validate --all`: **13 passed, 0 failed**. `nix flake check`
       (detached): `treefmt-check` initially failed **on this very file** (the ticked text
-      was not `nix fmt`-clean — a real catch, fixed by re-running `nix fmt`);
-      `checks.lean` was _cancelled_, not failed, because the run was killed at the end of
-      the session — the sandboxed build is the long one, and `lake build` above is the same
-      build, green.
+      was not fmt-clean — a real catch); `checks.lean` was _cancelled_ on the first run
+      because it was killed at the end of that session, and **a cancelled check is not a
+      pass**. It was then re-run to completion: see the closing note below.
       **Mutations run this session, and what each proved:** `constantKindExceptions`'
       `opaque` entry → `3` fails naming the mismatch (census branch live);
       `Codec.bytesToArray_size` added to `propProjections` fails naming it (validity arm
@@ -311,6 +318,28 @@ bench`, `openspec validate --all`, `nix flake check` (detached with `nohup`).
       **`nix flake check` was re-run to completion after the final edits** — the
       earlier run was cancelled, and a cancelled check is not a pass. Result and any
       caveat are in this change's closing note below, not in a commit message.
+
+## Closing note — state at the end of the session
+
+**22/22. All gates green, both repos pushed, nothing half-done.**
+
+```
+lake build         10 gate lines, 425 = 347 + 78, 140 = 115 + 25,
+                   154 claim sites found / 146 checked / 8 left
+lake build bench   28 jobs
+openspec validate  13 passed, 0 failed
+nix flake check    checks.aarch64-darwin.{formatting,openspec,lean} all ✅
+```
+
+Commits, `codec`: `217b7e5` (gate code), `0c014bf` (docs), `14b54fa` (ledger),
+`c00ca7f` (7.3), `185eebd` (the archived-ledger format fix). Pushed to `master`.
+`lean-basen`: `4806fb8`, pin bumped to `14b54fa`, its 8 gate lines + 45-job bench
+re-run on the bumped pin, pushed.
+
+**The one thing a next session must not re-derive the wrong way:** `nix fmt` in this
+dev shell has no prettier, so "`nix fmt` clean" says nothing about markdown. The
+markdown gate is the flake formatter, and it caches per tree. This change spent a
+build cycle learning that, and `AGENTS.md` now carries the correction.
 
 ## 8. Recorded, deliberately not in this change
 
