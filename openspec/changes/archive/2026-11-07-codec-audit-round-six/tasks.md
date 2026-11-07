@@ -504,7 +504,7 @@ separate prose fixes.
       `nix flake check` (**detached with `nohup`, never foregrounded**).
       **Done, all green.** `nix fmt` (197 files, 2 changed); `lake build` — 15 jobs,
       zero warnings, **seven** gate lines `425 = 348 + 77`, `140 = 115 + 25`; `lake
-    build bench` — 28 jobs; `openspec validate --all` — **11 passed, 0 failed**
+  build bench` — 28 jobs; `openspec validate --all` — **11 passed, 0 failed**
       (3 pre-existing >500-char warnings, no errors); `nix flake check` detached via
       `nohup` — `checks.aarch64-darwin.{formatting,lean,openspec}` all ✅.
 - [x] 8.2 `basen`: `lake build`, `lake build bench`, `nix build '.#bench'`.
@@ -529,16 +529,16 @@ separate prose fixes.
       expect `[propext, Quot.sound]` or cleaner. `Classical.choice` is a defect.
       **Done. `codec`:**
       `     'Codec.Rab_fails_huniq_full' depends on axioms: [propext, Quot.sound]
-    'Codec.uniqSeq_not_congruent' depends on axioms: [propext, Quot.sound]
-    `
+  'Codec.uniqSeq_not_congruent' depends on axioms: [propext, Quot.sound]
+  `
       **`basen`:**
       `     'BaseN.Base16.decodeHexFold_roundtrip' depends on axioms: [propext, Quot.sound]
-    'BaseN.Base16.foldByte_of_hexDigit' depends on axioms: [propext, Quot.sound]
-    'BaseN.Base16.foldByteBytes_of_encodeHex' depends on axioms: [propext, Quot.sound]
-    'BaseN.Base16.hexToNibble_range' depends on axioms: [propext, Quot.sound]
-    'BaseN.Base64.b64BytesOf_tail1_eq' does not depend on any axioms
-    'BaseN.Base32.b32BytesOf_tail1_eq' does not depend on any axioms
-    `
+  'BaseN.Base16.foldByte_of_hexDigit' depends on axioms: [propext, Quot.sound]
+  'BaseN.Base16.foldByteBytes_of_encodeHex' depends on axioms: [propext, Quot.sound]
+  'BaseN.Base16.hexToNibble_range' depends on axioms: [propext, Quot.sound]
+  'BaseN.Base64.b64BytesOf_tail1_eq' does not depend on any axioms
+  'BaseN.Base32.b32BytesOf_tail1_eq' does not depend on any axioms
+  `
       No `Classical.choice` in any. The two axiom-free rows are the ones §6.6's new
       arm found mis-claimed as `[propext, Quot.sound]`-only.
 
