@@ -72,6 +72,24 @@ the partition*. That is why `btake`, `maybe`, `manyUpTo`, `seqRight`, `seqLeft` 
 The third check closes that: every public `def` must be mentioned by the **type** of
 some gated theorem, or be in `definitionSurfaceAllowlist` with its reason in place.
 
+**But a mention proxy is only as strong as the filter feeding it, and until
+`codec-audit-round-five` that filter had no audit arm.** `isDerivedDefName` removes a
+`def` from the universe *before* the mention check is computed, so a dropped `def`
+and a `def` that was never written were indistinguishable to every check above — and
+the name it was dropping was **`Iso.prod`, the paper's own `×`**. Two more checks
+(§1.1 / R6-01) close that:
+
+* `derivedDefDeclinationAudit` — every public `def` the classifier drops must appear
+  in `derivedDefAllowlist` **with a reason**, mirroring `partition`'s rule for
+  theorems;
+* `derivedDefPatternAudit` — the classifier's own pattern list is verified: a pattern
+  that matches **no** declaration, or one that removes a name
+  `definitionSurfaceAllowlist` describes as authorial, is a build failure naming it.
+
+This is the same lesson every round of this audit has produced, stated as a rule:
+**a gate is only as strong as its narrowest unaudited step — when you add a check, ask
+what removes things from its input, and whether that removal is recorded.**
+
 **Read that as a MENTION PROXY, never as a strength guarantee.** "Does this `def`
 have a law?" is not decidable; "does any gated theorem's type mention this constant"
 is. The property the check actually has is the narrow one:
@@ -88,12 +106,12 @@ failure mode. **It is not soundness.**
 
 ## Current state
 
-**410** public theorems are covered, by a partition with no third route:
+**425** public theorems are covered, by a partition with no third route:
 
 | side | count | what it is |
 | --- | --- | --- |
-| gated (`gatedNames`) | **337** | footprint pinned by `#print axioms` |
-| allowlisted (`generatedAuxAllowlist`) | **73** | not a law; reason recorded in place |
+| gated (`gatedNames`) | **348** | footprint pinned by `#print axioms` |
+| allowlisted (`generatedAuxAllowlist`) | **77** | not a law; reason recorded in place |
 | un-gated and unlisted | **0** | a build failure, by construction |
 
 Gated footprint distribution — **generated** from the same `collectAxioms` results the
@@ -103,12 +121,12 @@ Gated footprint distribution — **generated** from the same `collectAxioms` res
 
 | footprint | count |
 | --- | --- |
-| `[propext, Quot.sound]` | 216 |
-| `[propext]` | 83 |
+| `[propext, Quot.sound]` | 222 |
+| `[propext]` | 92 |
 | `[Quot.sound]` | 4 |
-| axiom-free | 34 |
+| axiom-free | 30 |
 | anything else | 0 |
-| **total** | **337** |
+| **total** | **348** |
 
 `[propext, Classical.choice, Quot.sound]` rows: **0** — every gated law is
 inside the discipline.
@@ -118,20 +136,50 @@ Definitions, by the third check:
 
 | side | count | what it is |
 | --- | --- | --- |
-| public `def`s (after dropping compiler machinery) | **141** | the universe |
-| named by a gated theorem's type | **112** | *mentioned* — the proxy's whole measurement (a mention, not a strength claim) |
-| `definitionSurfaceAllowlist` | **29** | no law; reason recorded in place |
+| public `def`s (after dropping compiler machinery) | **140** | the universe |
+| named by a gated theorem's type | **115** | *mentioned* — the proxy's whole measurement (a mention, not a strength claim) |
+| `definitionSurfaceAllowlist` | **25** | no law; reason recorded in place |
 | silent | **0** | a build failure, by construction |
+
+**And every name the classifier removes is now on the record too.** A fourth check
+(`derivedDefDeclinationAudit`, `codec-audit-round-five` §1.1 / R6-01) requires each
+`def` that `isDerivedDefName` drops to appear in `derivedDefAllowlist` **with a
+reason**, and a fifth (`derivedDefPatternAudit`) verifies the classifier's own
+pattern list: a pattern matching no declaration, or one that removes a name
+`definitionSurfaceAllowlist` calls authorial, is a build failure. That pair is what
+closed the hole this table could not see: `Iso.prod` — the paper's own `×` — had been
+removed from the universe by a `"prod"` suffix entry and was in neither list, so
+`141 / 112 / 29` was a **green gate with the paper's product functor outside it**.
+The `"prod"` entry is gone, `Iso.prod` re-entered the universe and got a law
+(`Iso.prod_apply_eq_some`), and the three dead suffix entries (`rec`, `mk`, `sizeOf`,
+plus the mis-spelled `brecOn.go`) are gone because the new pattern audit re-adds a
+dead one as an error.
 
 The middle row is a **mention proxy**, and the column says so deliberately. It
 measures one thing: that no public definition can be covered by *silence*. It is
 **not** a count of definitions with characterised behaviour, and it can be satisfied
 vacuously — by a theorem that mentions the constant trivially. Two entries here are
 exactly that: `decodeArrayFast_eq` and `decodeWholeOneBytes_eq` are `rfl` unfolds of
-their own bodies, whose docstrings already admit it (`#print axioms` reports *no
-axioms*, the signature of a restatement rather than a law). An earlier revision of
-this table said "has a stated law, by the proxy", which over-read the count by those
-two. The count is unchanged at 111; what changed is what the column claims.
+their own bodies, which their docstrings admit. An earlier revision of this table
+said "has a stated law, by the proxy", which over-read the count by those two; what
+changed is what the column claims.
+
+**An empty axiom footprint is NOT the signature of a restatement — the diagnostic
+that said so has been deleted** (`codec-audit-round-five` R6-03, design §D4). This
+paragraph used to read "`#print axioms` reports *no axioms*, the signature of a
+restatement rather than a law", and that is **false for one of its own two named
+examples**: `Codec.decodeWholeOneBytes_eq` reports `[propext, Quot.sound]`, not *no
+axioms*, so the diagnostic fails on the example it was built from. It also
+over-flags the three Layer-2 `*_spec`s (`commitRemainder_spec`, `byteSlice_spec`,
+`blitBytes_spec`), which are honest identities *of a definition* and load-bearing
+referents for the C trust contract — they are not vacuous, and two of them report no
+axioms.
+
+Axiom-freeness is **neither necessary nor sufficient** for a restatement, so no
+repair keeps the sentence true. Name an identity by **`#print`ing its body**: a
+`rfl`-unfolded `def` shows as `fun … => <its own definition>`, which is checkable,
+while an empty footprint is not. `Codec.Nat.eq_irrel` is the standing counterexample
+on the law side — it is axiom-free and is an authored law.
 
 **The theorem/definition counts are asserted, and the footprint table is
 generated** — two mechanisms, because they have different failure modes.
@@ -139,8 +187,9 @@ generated** — two mechanisms, because they have different failure modes.
 * The *counts* are asserted by `headerNumbers` at the end of this file: a stale table
   is a build failure. That is not decoration — this table said `364 / 292` and
   `197 / 61 / 4 / 30` after the gated set had already reached `382 / 310` and
-  `201 / 74 / 4 / 31`, because `partition`/`gateCoverage` compare set *membership* and
-  never read the prose.
+  `201 / 74 / 4 / 31` (correction landed in `9db99b8`, the regeneration that swapped
+  the distribution table to generated), because `partition`/`gateCoverage` compare set
+  *membership* and never read the prose.
 * The *footprint distribution* is now **generated** by `scripts/gen-axioms.lean`
   (`codec-audit-round-three` §1.9), counting the `collectAxioms` name lists rather than
   parsing renderered prose. It keys on names, so the audit's own failure mode — a
@@ -149,7 +198,7 @@ generated** — two mechanisms, because they have different failure modes.
   hand-written one** (`209 / 78 / 4 / 34 = 325`), which is D1's "the table is correct
   today" re-confirmed by the compiler rather than by re-reading it.
 
-`Codec.Nat.eq_irrel` is one of the axiom-free 34, and it is in the gated set only
+`Codec.Nat.eq_irrel` is one of the axiom-free group above, and it is in the gated set only
 since `codec-audit-round-two`: the suffix classifier had been dropping it as an
 `eq_irrel`-shaped auxiliary, which is what motivated the partition.
 
@@ -164,6 +213,26 @@ the leak and the exclusion with it. **The excluded set is empty.**
 namespace CodecAxioms
 
 open Lean Elab Command
+
+/-- `Prop`-valued structure-field projections, recognised **by name** rather than by
+suffix, because a projection's last component is the field's own name (`law`,
+`fixed`, `idem`) and there is no shared shape to match on.
+
+These are not laws: each is `fun … => self.2`-shaped, reports **no axioms**, and
+asserts nothing beyond the type the caller supplied (`codec-audit-round-five` R6-02,
+design §D3). The `dec`-suffixed trio (`MeasureDecreases.dec`, `MeasureDecreasesR.dec`,
+`Unfold.dec`) is caught by the suffix rule instead; **all six are classified the same
+way**, which is the point — the file used to gate three of them and allowlist the
+other three.
+
+This is the same kind of data as `derivedDefPatterns`: a list the partition check
+audits, so a name here that is not actually a structure-field projection would fail
+rather than silently leave a law un-gated. -/
+def propProjections : Array Name := #[
+  `Iso.law,
+  `Codec.Normal.fixed,
+  `Codec.Normalizer.idem,
+]
 
 /-- Default classifier for non-authorial theorem names: the ones the compiler emits
 for every structure or `def`.
@@ -185,9 +254,12 @@ def isGeneratedAux (n : Name) : Bool := Id.run do
   -- check below means this list cannot hide anything, only name it.
   let authored : Array Name := #[`Codec.Nat.eq_irrel]
   if authored.contains n then return false
+  -- `Prop`-valued structure-field projections have no shared suffix: their last
+  -- component is the field's own name. Recognised by name instead.
+  if propProjections.contains n then return true
   let s := n.components.getLast!.toString
   return s == "eq_def" || s == "inj" || s == "injEq" || s == "sizeOf_spec" ||
-    s == "congr_simp" || s == "dec" || s == "induct"
+    s == "congr_simp" || s == "dec" || s == "induct" || s == "eq"
 
 /-- Every public theorem candidate in the `Codec`/`Iso` namespaces, **before** any
 name-based declination. This is the universe `gatedNames` and
@@ -255,37 +327,131 @@ surface: an inductive's derived companions (`recOn`, `casesOn`, `noConfusion`,
 definitions anyone wrote. Everything else is either mentioned by a gated theorem or
 listed in `definitionSurfaceAllowlist` **with its reason in place**. -/
 
+/-- The compiler-machinery patterns `isDerivedDefName` matches, as data, so that the
+build-time check below can audit the list rather than trust it. An entry here removes
+every `def` whose **last** name component it equals from the gate's universe.
+
+`rec`, `mk` and `sizeOf` used to be listed and matched **no** `def` in `Codec`/`Iso`
+(`codec-audit-round-five` R6-37): the derived companions Lean actually emits are
+`recOn`/`casesOn`/`elim`/…, and a structure's `mk` is a *constructor*, a
+`ctorInfo`, so it never reaches this filter at all. They were deleted. The audit arm
+below re-adds such an entry as a build **failure** rather than a silent default.
+
+**`prod` is deliberately absent.** It used to be here, and it silently removed
+`Iso.prod` — the paper's `×` — from the universe, which is the defect
+`codec-audit-round-five` §1 exists to close (R6-01). -/
+def derivedDefPatterns : Array String := #[
+  "casesOn", "recOn", "elim",
+  "noConfusion", "noConfusionType",
+  "ctorIdx", "ctorElim", "ctorElimType",
+  "below", "brecOn",
+  -- `go` — the worker a `brecOn`-compiled mutual recursion is emitted as. It was
+  -- previously listed as `"brecOn.go"`, which matched **nothing** (a name's last
+  -- component is `go`, not `brecOn.go`), so the pattern was dead and R6-37 deleted it;
+  -- deleting it exposed `Codec.brecOn.go` as a public `def` in the universe. Listed
+  -- correctly here. Measured: it is the **only** public `Codec`/`Iso` name whose last
+  -- component is `go`, so this pattern removes exactly the recursion worker.
+  "go",
+  -- Notation aliases: a token bound to an existing declaration, so the *declaration*
+  -- is what has (or lacks) a law, not the token. `Iso.«term_≫_»` is `Infixr "≫" =>
+  -- Iso.trans`, whose law is `Iso.trans`'s own `law` field.
+  "«term_≫_»"
+]
+
 /-- Default classifier for `def` names that are **not** authorial surface: the
 companions Lean emits for every inductive and structure. Same status as
 `isGeneratedAux` — a heuristic, audited by the check below, never an authority. -/
 def isDerivedDefName (n : Name) : Bool := Id.run do
   let last := n.components.getLast!.toString
-  return last == "casesOn" || last == "recOn" || last == "rec" || last == "elim" ||
-    last == "noConfusion" || last == "noConfusionType" || last == "ctorIdx" ||
-    last == "ctorElim" || last == "ctorElimType" || last == "below" ||
-    last == "brecOn" || last == "brecOn.go" || last == "mk" || last == "prod" ||
-    last == "sizeOf" || last == "sizeOf_spec" ||
-    -- Notation aliases: a token bound to an existing declaration, so the *declaration*
-    -- is what has (or lacks) a law, not the token. `Iso.«term_≫_»` is `Infixr "≫" =>
-    -- Iso.trans`, whose law is `Iso.trans`'s own `law` field.
-    last == "«term_≫_»"
+  return derivedDefPatterns.contains last
 
-/-- Every public `def` in the `Codec`/`Iso` namespaces, **after** dropping compiler
-machinery and non-public names. This is the universe `definitionSurfaceAllowlist`
-and "mentioned by a gated theorem" must partition. -/
-def publicDefs (env : Environment) : Array Name := Id.run do
+/-- Every public `def` in the `Codec`/`Iso` namespaces **before** any name-based
+declination — the universe `publicDefs` and `derivedDefAllowlist` must partition.
+
+Same public-surface filter as `publicTheorems`: unsafe, private and internal-detail
+names are not public surface at all, so they are outside the universe rather than
+dropped from it. -/
+def candidateDefs (env : Environment) : Array Name := Id.run do
   let mut ds : Array Name := #[]
   for (name, ci) in env.constants.toList do
     if (`Codec).isPrefixOf name || (`Iso).isPrefixOf name then
       match ci with
       | .defnInfo _ =>
-        if ci.isUnsafe || isPrivateName name || name.isInternalDetail ||
-            isDerivedDefName name then
+        if ci.isUnsafe || isPrivateName name || name.isInternalDetail then
           pure ()
         else
           ds := ds.push name
       | _ => pure ()
   return ds.qsort (fun a b => Name.toString a < Name.toString b)
+
+/-- Every public `def` in the `Codec`/`Iso` namespaces, **after** dropping compiler
+machinery and non-public names. This is the universe `definitionSurfaceAllowlist`
+and "mentioned by a gated theorem" must partition. -/
+def publicDefs (env : Environment) : Array Name :=
+  (candidateDefs env).filter fun n => !isDerivedDefName n
+
+/-- The def-side twin of `generatedAuxAllowlist`: every public `def` the name
+classifier drops, listed **by name with the reason it is not authorial surface**.
+
+This is `codec-audit-round-five` §1's arm (R6-01), and it exists because the theorem
+side already had it and the def side did not: `isDerivedDefName` removed a name from
+the gate's universe *before* `publicDefs` was computed, so a dropped `def` and a `def`
+that was never written were indistinguishable to every check. That is how `Iso.prod`
+— the paper's own `×` — sat outside a green gate.
+
+That is exactly why three of the theorem-side reason groups have no counterpart
+here: a structure's `mk` is a *constructor* (`ctorInfo`), and `eq_def`/`inj`/
+`injEq`/`sizeOf_spec`/`congr_simp` are **theorems**, so none of them is a `defnInfo`
+and the classifier never sees them. Only the genuinely `defnInfo`-shaped companions
+belong in this list, and each is recorded below.
+
+Keep the reason next to the entry. A bare name here is the dumping ground this list
+exists to avoid, and the `derivedDefPatternAudit` check below will not let one in
+without a reason. -/
+def derivedDefAllowlist : Array Name := #[
+  -- **Derived recursors and case eliminators.** Lean emits one per inductive and per
+  -- structure; they are the machinery a `def`-by-recursion is compiled *through*, not
+  -- definitions a human wrote about a codec.
+  `Codec.casesOn, `Codec.recOn, `Iso.casesOn, `Iso.recOn,
+  `Codec.Normal.casesOn, `Codec.Normal.recOn,
+  `Codec.Suffix.casesOn, `Codec.Suffix.recOn,
+  `Iso.Unfold.casesOn, `Iso.Unfold.recOn,
+  `Iso.MeasureDecreases.casesOn, `Iso.MeasureDecreases.recOn,
+  `Codec.Normalizer.casesOn, `Codec.Normalizer.recOn,
+  `Iso.MeasureDecreasesR.casesOn, `Iso.MeasureDecreasesR.recOn,
+
+  -- **Per-constructor case eliminators** (`casesOn` specialised to one constructor).
+  `Codec.byte.elim, `Codec.empty.elim, `Codec.iso.elim, `Codec.alt.elim,
+  `Codec.satisfy.elim, `Codec.pure.elim, `Codec.seq.elim,
+
+  -- **`noConfusion` / `noConfusionType`** — the constructor-disjointness lemma and
+  -- the type it goes through. Says two different constructors cannot be equal, which
+  -- the inductive's own typing already gives.
+  `Codec.noConfusion, `Codec.noConfusionType, `Iso.noConfusion,
+  `Iso.noConfusionType,
+  `Codec.Normal.noConfusion, `Codec.Normal.noConfusionType,
+  `Codec.Normal.mk.noConfusion,
+  `Codec.Suffix.noConfusion, `Codec.Suffix.noConfusionType,
+  `Codec.Suffix.mk.noConfusion,
+  `Codec.alt.noConfusion, `Codec.iso.noConfusion, `Codec.pure.noConfusion,
+  `Codec.satisfy.noConfusion, `Codec.seq.noConfusion, `Codec.empty.noConfusion,
+  `Iso.Unfold.noConfusion, `Iso.Unfold.mk.noConfusion, `Iso.mk.noConfusion,
+  `Iso.Unfold.noConfusionType,
+
+  -- **`ctorIdx` / `ctorElim` / `ctorElimType` / `below` / `brecOn`** — the constructor
+  -- index, the constructor eliminator and its type, and the `below`/`brecOn` pair
+  -- Lean derives for a *mutually* or *structurally* recursive inductive. Recursion
+  -- machinery.
+  `Codec.ctorIdx, `Iso.ctorIdx,
+  `Codec.Normal.ctorIdx, `Codec.Suffix.ctorIdx, `Iso.Unfold.ctorIdx,
+  `Codec.ctorElim, `Codec.ctorElimType,
+  `Codec.below, `Codec.brecOn, `Codec.brecOn.go,
+
+  -- **A notation alias.** `Iso.«term_≫_»` is `Infixr "≫" => Iso.trans`; the token is
+  -- bound to an existing declaration, and *that* declaration is what has (or lacks) a
+  -- law. `Iso.trans` is in `definitionSurfaceAllowlist` with its own reason.
+  `Iso.«term_≫_»,
+]
 
 /-- The names mentioned by at least one gated theorem's **type**. The other half of
 the definition-coverage partition; the mention proxy's whole measurement. -/
@@ -302,13 +468,16 @@ def mentionedByGated (env : Environment) : Std.HashSet Name := Id.run do
 /-- Public `def`s with **no** law naming them, listed by name with the reason the
 absence is deliberate.
 
-Each entry is one of three shapes, and the reason is in place at the entry:
+Each entry is one of four shapes, and the reason is in place at the entry:
 
 * an `Iso` combinator whose correctness is the `law` **structure field**, proved at its
 own definition site (so the kernel checks it at construction) and therefore stated by
-no separate theorem — the mention proxy cannot see a field proof;
-* a `Type`-level alias (`candsAt`/`candsRoot`/`retypeCands`) whose whole content is a
-list-cast that is definitionally the identity;
+no separate theorem — the mention proxy cannot see a field proof. (`Iso.prod` left this
+group in `codec-audit-round-five` §D2 because a gated law *does* name it;
+`Iso.subset`/`Iso.element` left it because their **domain** laws do, since for a
+*partial* iso the `law` field is vacuous and the domain is what a caller needs.);
+* a **type spelling** (`candsAt`) that exists only so one proof can name a list type
+at a spelling the elaborator can match;
 * an internal witness or instance (`uniqSeqBt`, `instDecidableEqBytes`, …) that exists
 to make another proof go through, not to be a codec a caller uses.
 
@@ -318,14 +487,28 @@ def definitionSurfaceAllowlist : Array Name := #[
   -- **`Iso` combinators: correctness is the `law` structure field**, proved at the
   -- definition site (`law := by …`), so the kernel checks it at construction and no
   -- separate theorem names it. The mention proxy cannot see a field proof.
+  --
+  -- **`Iso.prod` is deliberately NOT here** (`codec-audit-round-five` §D2). It is the
+  -- paper's `×`, and `README [S1]` tells the reader its unconditional-iso list is
+  -- complete, so a law naming it is the honest resolution: `Iso.prod_apply_eq_some` /
+  -- `Iso.prod_unapply_eq_some` are gated. An allowlist reason for the one member of a
+  -- list the reader is told is complete would be the dumping ground this docstring
+  -- forbids.
+  --
+  -- **`Iso.subset`/`Iso.element` are NOT here** (`codec-audit-round-five` R6-07/R6-38,
+  -- design §D5). They are the two *partial* isos, for which the "correctness is the
+  -- `law` field" reason above is **vacuous**: `subset p` is
+  -- `if p x then some x else none`, so the `↔` holds by construction whatever `p` is.
+  -- What a caller needs is the domain, and it is now stated by a gated theorem that
+  -- mentions the constant (`Iso.subset_apply_eq_some_iff`,
+  -- `Iso.element_unapply_eq_some_iff`), so the mention proxy reports them as
+  -- *mentioned* and an entry here would fail the "already has a gated law" check.
   `Iso.associate,
   `Iso.commute,
-  `Iso.element,
   `Iso.id,
   `Iso.inverse,
   `Iso.ofTotal,
   `Iso.optionSome,
-  `Iso.subset,
   `Iso.trans,
   `Iso.unit,
   -- `Iso.foldl`/`Iso.foldr`/`Iso.nil` are `Iso` structures too: their `law` field is
@@ -346,13 +529,14 @@ def definitionSurfaceAllowlist : Array Name := #[
   `Iso.MeasureDecreases.toUnfold,
   `Iso.MeasureDecreasesR.toUnfold,
 
-  -- **`Type`-level aliases**: the whole content is a `List.cast` that is
-  -- definitionally the identity. There is no law to state (see `retypeCands`'s
-  -- docstring: "`List.cast` is definitionally the identity here; it exists only to
-  -- name the type").
+  -- **A type spelling, not a codec.** `candsAt` names the candidate-list type so that
+  -- `search_nil_left` can bind its `[]` candidate at a spelling the elaborator
+  -- matches; its whole content is a `List` of subtype, so there is no law to state.
+  -- (Its two siblings `candsRoot`/`retypeCands` were **deleted** in
+  -- `codec-audit-round-five` R6-11: no theorem and no definition referenced either,
+  -- so they were a closed dead island — the "dumping ground" this docstring warns
+  -- about, and deletion was the honest fix rather than a longer reason.)
   `Codec.candsAt,
-  `Codec.candsRoot,
-  `Codec.retypeCands,
 
   -- **Internal witnesses** built to make one specific proof go through, not codecs.
   -- `uniqSeq*` are the `Unambiguous`-counterexample description values (their
@@ -399,14 +583,21 @@ Why each entry is not a law. Four groups, each with its own reason in place:
   equation, the `@[congr]` lemma for recursor arguments, and the compiled-body
   equation of a `def`. Each restates its own definition; none says anything about
   which bytes a codec accepts.
-* **`Iso.MeasureDecreases.dec`, `Iso.MeasureDecreasesR.dec`, `Iso.Unfold.dec`** — a
-  **`Prop`-valued structure field**: part of the *type a caller supplies*, not a
-  theorem proved about it. `MeasureDecreases.dec` is the well-foundedness hypothesis
-  of `foldl`, `MeasureDecreasesR.dec` the mirror for `foldr`, and `Unfold.dec` the
-  same obligation on the factored recursion. The `@[projection]` theorems Lean derives
+* **`Prop`-valued structure-field projections** — `Iso.law`, `Codec.Normal.fixed`,
+  `Codec.Normalizer.idem`, `Iso.MeasureDecreases.dec`, `Iso.MeasureDecreasesR.dec`,
+  `Iso.Unfold.dec`. Part of the *type a caller supplies*, not a theorem proved about
+  it: each is `fun … => self.2`-shaped and reports no axioms, because a projection
+  asserts nothing beyond the type it projects. `MeasureDecreases.dec` is the
+  well-foundedness hypothesis of `foldl`, `MeasureDecreasesR.dec` the mirror for
+  `foldr`, `Unfold.dec` the same obligation on the factored recursion; `Iso.law` is
+  the partial-inverse obligation, `Normalizer.idem` the idempotence obligation, and
+  `Normal.fixed` the fixpoint obligation. The `@[projection]` theorems Lean derives
   from them report whatever the caller gave — they assert nothing. Note that the
   *satisfiability* of these obligations **is** a law, and is gated:
-  `counterMeasureDecreases` / `counterMeasureDecreasesR`.
+  `counterMeasureDecreases` / `counterMeasureDecreasesR` / `counterIso` /
+  `counterIsoR`. **All six of this shape are classified here, and none is gated**
+  (`codec-audit-round-five` R6-02): the file used to gate three of them and allowlist
+  the other three, which argued both ways in its own prose.
 * **`Codec.findFrom.induct`** — **the recursion principle of a `def`**, generated by
   Lean from `findFrom`'s structural recursion. A proof that the recursion terminates,
   not a statement about the codec.
@@ -419,15 +610,35 @@ it as an authored exception), which is why it is absent from the group above. Th
 the shape of every future correction: a law the heuristic misclassifies moves into
 the gated set, and the allowlist keeps only what is genuinely not a law. -/
 def generatedAuxAllowlist : Array Name := #[
-  -- **`Prop`-valued structure fields**: part of the type a caller supplies, not a
-  -- theorem proved about it. Their satisfiability *is* a law, and is gated
-  -- (`counterMeasureDecreases`, `counterMeasureDecreasesR`).
+  -- **`Prop`-valued structure-field projections**: part of the type a caller
+  -- supplies, not a theorem proved about it.
+  --
+  -- `Iso.law`, `Codec.Normal.fixed` and `Codec.Normalizer.idem` are `fun … => self.3` /
+  -- `self.2` / `self.1` — the same shape as the three `MeasureDecreases*.dec` /
+  -- `Unfold.dec` entries below, which this file's prose already described as "not a
+  -- theorem proved about it" while gating these three as laws
+  -- (`codec-audit-round-five` R6-02, design §D3). Measured: all six report **no
+  -- axioms**, because a projection asserts nothing beyond the type it projects. The
+  -- file cannot argue both ways in its own prose, so the two groups are one group.
+  -- Note that the *satisfiability* of the `dec` obligations is a law and is gated
+  -- (`counterMeasureDecreases` / `counterMeasureDecreasesR`); `Iso.law`'s
+  -- satisfiability is `counterIso` / `counterIsoR`, gated for the same reason.
+  `Iso.law,
+  `Codec.Normal.fixed,
+  `Codec.Normalizer.idem,
   `Iso.MeasureDecreases.dec,
   `Iso.MeasureDecreasesR.dec,
   `Iso.Unfold.dec,
 
   -- **The recursion principle of a `def`** (`findFrom`'s structural recursion).
   `Codec.findFrom.induct,
+
+  -- **`brecOn.eq` — the defining equation of a `brecOn` helper.** Measured: this is the
+  -- only authorial theorem in the `Codec`/`Iso` namespaces ending in `eq` (environment
+  -- walk, `codec-audit-round-five` R6-28), so adding `"eq"` to the suffix list is
+  -- safe *because* the partition would name any other. It restates the `below`/`brecOn`
+  -- recursion machinery's body, which is what the classifier is for.
+  `Codec.brecOn.eq,
 
 -- **`inj` — the injectivity equation of a constructor.** Lean emits it for every
 -- inductive constructor and structure `mk`: two applications are equal iff their
@@ -533,8 +744,11 @@ def gatedNames : List Lean.Name := [
   ,`Codec.Nat.eq_irrel
   ,`Codec.Normal.ext
   ,`Codec.Normal.ext_iff
-  ,`Codec.Normal.fixed
-  ,`Codec.Normalizer.idem
+  ,`Codec.Rab_fails_huniq
+  ,`Codec.Rab_four
+  ,`Codec.Rab_lengthDet
+  ,`Codec.Rab_productive
+  ,`Codec.Rab_two
   ,`Codec.Rel_alt
   ,`Codec.Rel_between
   ,`Codec.Rel_byte
@@ -588,7 +802,6 @@ def gatedNames : List Lean.Name := [
   ,`Codec.bidir
   ,`Codec.blitBytes_spec
   ,`Codec.bpush_data
-  ,`Codec.brecOn.eq
   ,`Codec.btake_agree
   ,`Codec.btake_apply
   ,`Codec.btake_btake
@@ -735,6 +948,7 @@ def gatedNames : List Lean.Name := [
   ,`Codec.foldl_push_append
   ,`Codec.foldl_push_data
   ,`Codec.functional_byte
+  ,`Codec.functional_iff_relFunctional
   ,`Codec.huniq_byte
   ,`Codec.huniq_not_derivable
   ,`Codec.huniq_not_derivable_full
@@ -793,6 +1007,7 @@ def gatedNames : List Lean.Name := [
   ,`Codec.relRepeat_cast
   ,`Codec.relRepeat_cons
   ,`Codec.relRepeat_cons_eq
+  ,`Codec.relRepeat_functional_of_step
   ,`Codec.relRepeat_induction
   ,`Codec.relRepeat_length_of_const
   ,`Codec.relRepeat_nil
@@ -801,7 +1016,9 @@ def gatedNames : List Lean.Name := [
   ,`Codec.relRepeat_unbounded_of_empty
   ,`Codec.relRepeat_unique_same_length
   ,`Codec.relSepBy_cast
+  ,`Codec.relSepBy_functional
   ,`Codec.relTakeWhile_cast
+  ,`Codec.relTakeWhile_functional
   ,`Codec.relUnambAlignedWitness_unamb
   ,`Codec.relUnambiguous_not_implies_relAligned
   ,`Codec.relUnambiguous_of_relAligned
@@ -812,6 +1029,7 @@ def gatedNames : List Lean.Name := [
   ,`Codec.reverse_cons_append
   ,`Codec.roundtrip
   ,`Codec.satisfyConsumesByte
+  ,`Codec.satisfy_sigmaFunctional
   ,`Codec.search_nil_left
   ,`Codec.search_nil_right
   ,`Codec.seqConsumesByte
@@ -851,12 +1069,16 @@ def gatedNames : List Lean.Name := [
   ,`Iso.counterMeasureDecreases
   ,`Iso.counterMeasureDecreasesR
   ,`Iso.dropLast_append_last
+  ,`Iso.element_unapply_eq_some_iff
   ,`Iso.foldRec_append
   ,`Iso.ite_some_eq_some
-  ,`Iso.law
   ,`Iso.map_fst_reverse_eq_some
   ,`Iso.map_swap_eq_none
   ,`Iso.map_swap_eq_some
+  ,`Iso.prod_apply_eq_some
+  ,`Iso.prod_unapply_eq_some
+  ,`Iso.subset_apply_eq_some
+  ,`Iso.subset_apply_eq_some_iff
   ,`Iso.unapply_eq_some_of_apply
   ,`Iso.unfoldBy_eq
   ,`Iso.unfoldBy_of_fold
@@ -979,12 +1201,111 @@ run_cmd do
     throwError msg
   logInfo m!"axiom gate: {defs.size} public definitions covered, {defs.size - CodecAxioms.definitionSurfaceAllowlist.size} mentioned and {CodecAxioms.definitionSurfaceAllowlist.size} allowlisted (mention proxy)"
 
+/-! **Def-side declination audit**, run on every `lake build` — `codec-audit-round-five`
+§1.1, R6-01.
+
+The theorem side has had this since `codec-audit-round-two` (`partition`); the def side
+never did. `isDerivedDefName` removes a name from the universe **before** `publicDefs`
+is computed, so a dropped `def` and a `def` that was never written are the same thing
+to every check above. That is how `Iso.prod` — the paper's own `×`, listed in
+`README [S1]`'s unconditional-iso list — sat outside a green gate.
+
+Two failures, each naming what is wrong:
+
+* a public `def` the classifier **drops** and that is in **neither**
+  `derivedDefAllowlist` nor (redundantly) the universe — removal from the gate's
+  universe must be a recorded decision, exactly as it is for theorems;
+* an allowlist entry the classifier does **not** drop — a stale name, or a typo, or an
+  attempt to hide a `def` that is actually in the universe.
+
+The classifier's *pattern list* is audited separately by `derivedDefPatternAudit`. -/
+open Lean Elab Command in
+run_cmd do
+  let env ← getEnv
+  let candidates := CodecAxioms.candidateDefs env
+  let droppedAllow := Std.HashSet.ofList CodecAxioms.derivedDefAllowlist.toList
+  let dropped := candidates.filter CodecAxioms.isDerivedDefName
+  let unexplained := dropped.filter fun n => !droppedAllow.contains n
+  let notDropped := CodecAxioms.derivedDefAllowlist.filter fun n =>
+    !candidates.contains n || !CodecAxioms.isDerivedDefName n
+  if !unexplained.isEmpty || !notDropped.isEmpty then
+    let mut msg : MessageData := ""
+    if !unexplained.isEmpty then
+      msg := msg ++ m!"public definitions dropped from the gate's universe by `isDerivedDefName` with no reason in `derivedDefAllowlist` (removal must be a recorded decision):\n" ++
+        m!"{String.join (unexplained.toList.map fun n => s!"  {Name.toString n}\n")}"
+    if !notDropped.isEmpty then
+      msg := msg ++ m!"`derivedDefAllowlist` entries the classifier does not drop (stale name, or a definition that IS in the universe):\n" ++
+        m!"{String.join (notDropped.toList.map fun n => s!"  {Name.toString n}\n")}"
+    throwError msg
+  logInfo m!"axiom gate: {dropped.size} definitions dropped by the name classifier, all reason-recorded"
+
+/-! **Classifier audit**, run on every `lake build` — `codec-audit-round-five` §1.1's
+second arm.
+
+The allowlist above records every *name* the classifier drops. This check audits the
+classifier itself, so the pattern list cannot rot into a set of defaults that quietly
+removes API:
+
+* a pattern that matches **no** declaration in the environment is a build failure
+  naming the pattern — a dead pattern is either a rename or a word nobody should be
+  matching on, and either way it is not a default worth keeping silently;
+* a pattern whose matched set contains a name that is **not** in
+  `derivedDefAllowlist` is a build failure — authorial API removed from the gate with
+  no recorded reason;
+* a pattern whose matched set contains public surface that a
+  `definitionSurfaceAllowlist` reason describes as authored (`Iso` combinator, `Type`
+  alias, witness, instance) is a build failure — the classifier and the allowlist must
+  not both be describing the same declaration as authorial.
+
+This is the arm that makes `derivedDefPatterns` safe to *shrink*: deleting `rec`,
+`mk`, `sizeOf` (R6-37) is only sound because a re-added dead entry now fails here.
+
+**Failure-branch status: none of the four arms in this file (here, `partition`,
+`definitionSurfaceCoverage`, `headerNumbers`) is exercised by this tree** — every one is
+on its passing path, which is the point of a gate. A maintainer can verify each one is
+live by making a deliberate one-line edit (add `"sizeOf"` to `derivedDefPatterns` for
+the dead-pattern arm; delete an entry from `derivedDefAllowlist` for the unexplained
+arm; change `expectedPub` for the header arm) and confirming `lake build` fails naming
+it, then reverting. Recorded as absence of evidence, not as proof the checks are dead. -/
+open Lean Elab Command in
+run_cmd do
+  let env ← getEnv
+  let candidates := CodecAxioms.candidateDefs env
+  let droppedAllow := Std.HashSet.ofList CodecAxioms.derivedDefAllowlist.toList
+  let surface := Std.HashSet.ofList CodecAxioms.definitionSurfaceAllowlist.toList
+  let mut dead : Array String := #[]
+  let mut unexplained : Array Name := #[]
+  let mut removesAuthored : Array Name := #[]
+  for p in CodecAxioms.derivedDefPatterns do
+    let hits := candidates.filter fun n => n.components.getLast!.toString == p
+    if hits.isEmpty then
+      dead := dead.push p
+    else
+      for n in hits do
+        if !droppedAllow.contains n then unexplained := unexplained.push n
+        if surface.contains n then removesAuthored := removesAuthored.push n
+  if !dead.isEmpty || !unexplained.isEmpty || !removesAuthored.isEmpty then
+    let mut msg : MessageData := ""
+    if !dead.isEmpty then
+      msg := msg ++ m!"`derivedDefPatterns` entries that match no definition in the `Codec`/`Iso` namespaces (a dead pattern is not a default — delete it, or record why it stays):\n" ++
+        m!"{String.join (dead.toList.map fun p => s!"  {p}\n")}"
+    if !unexplained.isEmpty then
+      msg := msg ++ m!"names a `derivedDefPatterns` entry removes that are in no `derivedDefAllowlist` entry:\n" ++
+        m!"{String.join (unexplained.toList.map fun n => s!"  {Name.toString n}\n")}"
+    if !removesAuthored.isEmpty then
+      msg := msg ++ m!"names the classifier drops that `definitionSurfaceAllowlist` describes as authorial API (the two lists contradict each other):\n" ++
+        m!"{String.join (removesAuthored.toList.map fun n => s!"  {Name.toString n}\n")}"
+    throwError msg
+  logInfo m!"axiom gate: {CodecAxioms.derivedDefPatterns.size} def-name patterns, each matching a recorded non-surface declaration"
+
 /-! **Header check**, run on every `lake build`. The "Current state" tables at the top
 of this file are prose, and `partition`/`gateCoverage` compare set *membership* — so a
 regeneration leaves them stale silently. It happened: the tables read
 `364 / 292` and `197 / 61 / 4 / 30` while the tree was already at
-`382 / 310` and `201 / 74 / 4 / 31`. This check makes the numbers **asserted**:
-a mismatch fails the build naming both sides.
+`382 / 310` and `201 / 74 / 4 / 31` (corrected in `9db99b8`). This check makes the
+numbers **asserted**: a mismatch fails the build naming both sides. Remember the
+figures and the commit are quoted as history; the *current* numbers are the ones this
+check prints, never a number written in a file.
 
 Keep these constants in lockstep with the tables above. **This is the settled design,
 not a stopgap**: `codec-audit-round-three` §1.9 generated the *footprint distribution*
@@ -999,12 +1320,12 @@ run_cmd do
   let gated := gatedNames.length
   let allow := CodecAxioms.generatedAuxAllowlist.size
   -- Lockstep with "Current state" above.
-  let expectedPub := 410
-  let expectedGated := 337
-  let expectedAllow := 73
-  let expectedDefs := 141
-  let expectedMentioned := 112
-  let expectedDefAllow := 29
+  let expectedPub := 425
+  let expectedGated := 348
+  let expectedAllow := 77
+  let expectedDefs := 140
+  let expectedMentioned := 115
+  let expectedDefAllow := 25
   let mut bad : Array String := #[]
   if pub.size != expectedPub then
     bad := bad.push s!"public theorems: table says {expectedPub}, environment has {pub.size}"
@@ -1089,12 +1410,21 @@ why it was fixed instead of documented.
 /-- info: 'Codec.Normal.ext_iff' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Codec.Normal.ext_iff
-/-- info: 'Codec.Normal.fixed' does not depend on any axioms -/
+/-- info: 'Codec.Rab_fails_huniq' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
-#print axioms Codec.Normal.fixed
-/-- info: 'Codec.Normalizer.idem' does not depend on any axioms -/
+#print axioms Codec.Rab_fails_huniq
+/-- info: 'Codec.Rab_four' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
-#print axioms Codec.Normalizer.idem
+#print axioms Codec.Rab_four
+/-- info: 'Codec.Rab_lengthDet' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Codec.Rab_lengthDet
+/-- info: 'Codec.Rab_productive' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Codec.Rab_productive
+/-- info: 'Codec.Rab_two' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.Rab_two
 /-- info: 'Codec.Rel_alt' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Codec.Rel_alt
@@ -1254,9 +1584,6 @@ why it was fixed instead of documented.
 /-- info: 'Codec.bpush_data' does not depend on any axioms -/
 #guard_msgs in
 #print axioms Codec.bpush_data
-/-- info: 'Codec.brecOn.eq' does not depend on any axioms -/
-#guard_msgs in
-#print axioms Codec.brecOn.eq
 /-- info: 'Codec.btake_agree' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.btake_agree
@@ -1695,6 +2022,9 @@ why it was fixed instead of documented.
 /-- info: 'Codec.functional_byte' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.functional_byte
+/-- info: 'Codec.functional_iff_relFunctional' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Codec.functional_iff_relFunctional
 /-- info: 'Codec.huniq_byte' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.huniq_byte
@@ -1869,6 +2199,9 @@ why it was fixed instead of documented.
 /-- info: 'Codec.relRepeat_cons_eq' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.relRepeat_cons_eq
+/-- info: 'Codec.relRepeat_functional_of_step' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.relRepeat_functional_of_step
 /-- info: 'Codec.relRepeat_induction' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.relRepeat_induction
@@ -1893,9 +2226,15 @@ why it was fixed instead of documented.
 /-- info: 'Codec.relSepBy_cast' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Codec.relSepBy_cast
+/-- info: 'Codec.relSepBy_functional' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.relSepBy_functional
 /-- info: 'Codec.relTakeWhile_cast' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Codec.relTakeWhile_cast
+/-- info: 'Codec.relTakeWhile_functional' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.relTakeWhile_functional
 /-- info: 'Codec.relUnambAlignedWitness_unamb' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Codec.relUnambAlignedWitness_unamb
@@ -1926,6 +2265,9 @@ why it was fixed instead of documented.
 /-- info: 'Codec.satisfyConsumesByte' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.satisfyConsumesByte
+/-- info: 'Codec.satisfy_sigmaFunctional' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Codec.satisfy_sigmaFunctional
 /-- info: 'Codec.search_nil_left' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.search_nil_left
@@ -2043,15 +2385,15 @@ why it was fixed instead of documented.
 /-- info: 'Iso.dropLast_append_last' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Iso.dropLast_append_last
+/-- info: 'Iso.element_unapply_eq_some_iff' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Iso.element_unapply_eq_some_iff
 /-- info: 'Iso.foldRec_append' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Iso.foldRec_append
 /-- info: 'Iso.ite_some_eq_some' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Iso.ite_some_eq_some
-/-- info: 'Iso.law' does not depend on any axioms -/
-#guard_msgs in
-#print axioms Iso.law
 /-- info: 'Iso.map_fst_reverse_eq_some' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Iso.map_fst_reverse_eq_some
@@ -2061,6 +2403,18 @@ why it was fixed instead of documented.
 /-- info: 'Iso.map_swap_eq_some' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Iso.map_swap_eq_some
+/-- info: 'Iso.prod_apply_eq_some' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Iso.prod_apply_eq_some
+/-- info: 'Iso.prod_unapply_eq_some' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Iso.prod_unapply_eq_some
+/-- info: 'Iso.subset_apply_eq_some' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Iso.subset_apply_eq_some
+/-- info: 'Iso.subset_apply_eq_some_iff' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Iso.subset_apply_eq_some_iff
 /-- info: 'Iso.unapply_eq_some_of_apply' does not depend on any axioms -/
 #guard_msgs in
 #print axioms Iso.unapply_eq_some_of_apply
