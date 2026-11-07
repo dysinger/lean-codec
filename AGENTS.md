@@ -4,26 +4,59 @@ Guidance for AI coding agents working in this repository.
 
 > ## START HERE: `openspec list --json`
 >
-> **No change is open.** `codec-audit-round-six` closed **32/32** and archived
-> 2026-11-07 as
-> `openspec/changes/archive/2026-11-07-codec-audit-round-six/` (33 findings,
-> `R7-01`…`R7-33`; two ADDED `codec/axiom-gate` requirements and four MODIFIED,
-> every one a strict superset of the live block — zero scenarios dropped). With no
-> change open **there is no queued work**; author a new change before coding.
+> **Two changes are open, both in `basen`, and they are ordered.**
 >
-> **What round six landed, in one line each:** a seventh `codec` gate arm that
-> compares a docstring's **stated** footprint with `collectAxioms` (it found 26 real
-> claim sites, not the 11 reviewers reported, and 2 in `basen`); `basen`'s dead
-> `a - b + b ≠ a` branch replaced and its two figures asserted; `nativeDecideCount`
-> made comment-aware after five formatting escapes; `exclusions` given the staleness
-> arms its allowlist sibling had; `decodeHexFold_roundtrip` proved so RFC 4648 §8 is
-> met by a decoder that inverts the encoder; and six `basen`/`template`/`README`
-> prose classes repaired.
+> 1. **`basen-uppercase-prepass` (0/20) — do this first.** It resolves a **false
+>    normative claim** and the 24-theorem tier built on it. `Base16.lean:14` and
+>    `:641` say _"RFC 4648 §8 requires a Base16 decoder to accept both cases"_. §8
+>    actually says **`MAY`**, not `MUST`: "Base 16 encoding does not require case
+>    insensitivity; however, Base 16 decoders MAY accept lowercase letters." Nothing
+>    in the repo sources the RFC, so this was never checked. The fix is the owner's:
+>    **uppercase the input, then decode** — a normaliser pre-pass, with the `Iso` from
+>    _normalised text_ to the value. `Codec/Normal.lean` already supplies the
+>    mechanism (`decodeNormal_encode`, stated for **any** `S`); `Base16` re-derived it
+>    locally and its `hexBlockIsoF` has no caller.
+> 2. **`basen-nat-iso` (0/18) — BLOCKED, do not start.** Its premise is under review:
+>    `basen` is "base-N byte encodings" and a **numeral** is not one. Read its §0.
 >
-> **The numbering is off by one from the change names, and that is not a typo.**
+> **The one distinction that must not be lost, because getting it wrong corrupts
+> data:** uppercasing is sound **only** where the alphabet has no lowercase symbols.
+> Measured: base32's `b32ToVal` has no `97–122` branch, so it rejects lowercase and
+> uppercasing is safe; **base64's `b64ToVal` maps `97–122` → 26–51, so its lowercase
+> letters are DATA** — `TWFu` is `Man` and `twfu` is something else. **Base64 is
+> excluded from the pre-pass**, and the exclusion is a task with a test, not a comment.
+>
+> **The unifying statement, which is the durable part.** Uppercasing hex, stripping
+> leading zeros and dropping optional whitespace are **one operation**: a total
+> idempotent pre-pass `S → S` that removes _information-free variation_, after which
+> the strict decoder is a genuine `Iso`. `Codec/Normal.lean`'s header says exactly
+> this and its `decodeNormal_encode` is the theorem that generalises it. **When a value
+> has more than one permitted spelling, the answer is a quotient codomain — never a
+> relaxed law, and never a rejected spelling.** Weakening is a dead end: a law loose
+> enough to admit the input proves for _any_ decoder, one tight enough to mean
+> anything is false. `../fstar-codec` records the same class as `[D12]`/`[D13]`.
+>
+> **Why `basen` needs this at all is worth stating.** Compared with `../fstar-basen`
+> (2,033 lines, 4 RFC bases, base16 alone 216 lines with one roundtrip lemma),
+> `lean-basen` is 11,866 lines and 7 bases because **all seven are `Codec` values with
+> five law families** — that part is a genuine strengthening. But 24 of base16's 67
+> theorems are a **parallel implementation of a core mechanism**, not base-N
+> arithmetic, which is the honest reading of "half byte-stream, half hex/integer
+> codec".
+>
+> **The numbering is off by one from the audit change names, and that is not a typo.**
 > `round-six` is the sixth audit _change_; its findings came from the **seventh**
 > review round, so its ids are `R7-nn`. The next review's ids will be `R8-nn` in a
 > change called `round-seven`.
+>
+> **This box names the change, never a task — and it has gone stale EIGHT times.**
+> It said "§1.5 next" long after §1.5–§1.10 landed; said "no open change" while
+> `round-four` was open; still named `round-four` after it archived; still named
+> `round-five` after it archived; said "no change is open" with `round-six` open;
+> named `round-six` at 6/32 while it ran; said "no change is open" with
+> `basen-nat-iso` open; and named `basen-nat-iso` alone after a second change was
+> authored. If what is named here is not what `openspec list` reports, **believe the
+> command**.
 >
 > **This box names the change, never a task — and round six is why that rule now
 > reads "believe the command".** The box has gone stale **six** times: it said
@@ -81,16 +114,17 @@ Guidance for AI coding agents working in this repository.
 >
 > ```bash
 > nix develop --command openspec list --json | grep -E 'completedTasks|totalTasks'
-> nix develop --command lake build 2>&1 | tail -9    # seven gate lines, see below
+> nix develop --command lake build 2>&1 | tail -10   # eight gate lines, see below
 > ```
 >
-> `lake build` prints **seven** gate lines — footprint, partition, definition
-> coverage, def-side declination audit, classifier pattern audit, header numbers,
-> and (new in `round-six` §1) **stated footprints verified against the
-> environment**. `openspec validate --all` is **11/11** while a change is open
-> (10/10 with none: the change is the eleventh item). Read those numbers off the
-> run, not off this page: on 2026-11-07, after `round-six` §1, the codec gate
-> printed `425 = 348 + 77` theorems and `140 = 115 + 25` defs.
+> `lake build` prints **eight** gate lines in `codec`: footprint, partition,
+> definition coverage, def-side declination audit, classifier pattern audit, header
+> numbers, **stated footprints verified against the environment** (`round-six` §1),
+> and **`propProjections` covers every bare projection** (`round-seven` GC-02/GC-04).
+> `basen` prints **eight** of its own. `openspec validate --all` is **11/11** while a
+> change is open (10/10 with none). Read those numbers off the run, not off this
+> page: on 2026-11-07 the codec gate printed `425 = 347 + 78` theorems,
+> `140 = 115 + 25` defs, and **145** footprint claim sites.
 >
 > **`[x]` means "in the tree AND evidence recorded in the ledger" — never tick on
 > intent, and never leave a finished task unticked.** A checkbox reports a fact; the
@@ -140,7 +174,21 @@ Guidance for AI coding agents working in this repository.
 | Archived history               | `openspec/changes/archive/<date>-<name>/tasks.md` (e.g. `2026-11-05-lean-basen`) |
 | Lessons (not direction)        | `openspec/lean-notes.md`                                                         |
 
-**No change is open; round six and everything before it are archived history.**
+**Two changes are open (`basen-uppercase-prepass` 0/20, then `basen-nat-iso` 0/18
+blocked); round six and everything before it are archived history.**
+
+- `basen-uppercase-prepass` — **in-progress**, 0/20, **do this one first.** Replaces
+  `Base16`'s 24-theorem case-folding tier with an `upperBytes` pre-pass through
+  `Codec/Normal.lean`, corrects the RFC `MAY`-vs-`MUST` misquote that justified the
+  tier, and **excludes base64** because its lowercase letters are data. Three ADDED
+  `basen` requirements; disjoint from `basen-nat-iso`'s, so neither can drop the
+  other's scenarios.
+
+- `basen-nat-iso` — **in-progress but BLOCKED**, 0/18. Its premise is under review:
+  `basen` is "base-N byte encodings" and a numeral is not one, so it may belong in a
+  new repo. Read its §0 before anything else. The analysis inside is sound (a number
+  is isomorphic to its canonical numeral, lax spellings are names not images) and will
+  be reused wherever it lands; what is unsettled is the home.
 
 - `codec-audit-round-six` — **archived** 2026-11-07 as
   `openspec/changes/archive/2026-11-07-codec-audit-round-six/` (32/32 tasks, both
@@ -728,6 +776,61 @@ in `../lean-basen`. Never "fix" it by editing the importing Lean file.
   §D0/D7 under `openspec/changes/archive/`.
 
 ## Lean proof ergonomics (learned the hard way)
+
+- **A `omega` that closes a _disjunction_ goal leaks `Classical.choice`** — this is
+  trap shape 2 below arriving in a new dress, and it cost a `basen` proof in round
+  six. Proving `hexToNibble N ≤ 15 → (48 ≤ N ∧ N ≤ 57) ∨ (65 ≤ N ∧ N ≤ 70)` by ending
+  each branch with `omega` reported `[propext, Classical.choice, Quot.sound]`;
+  building the disjunct explicitly (`Or.inl ⟨h2, h1⟩` / `Or.inr ⟨h4, h3⟩`) and letting
+  `omega` close only the _contradiction_ branches gave `[propext, Quot.sound]`. A
+  `split`-based rewrite **also** leaked, because `split` on a `Nat ≤` condition takes
+  the classical decidable instance. `by_cases` itself was fine — the leak is in what
+  closes the goal. Always `#print axioms` a new disjunction-shaped law.
+
+- **A `run_cmd` arm's own `if` is a removal step with no allowlist** — the seventh
+  review's central finding. `codec`'s stated-footprint arm filtered with
+  `nm.getPrefix == \`Codec` (immediate children only) while the six arms beside it
+used `` (`Codec).isPrefixOf name ``; that silently removed **139 public
+  declarations before the docstring was read**, and hid a live false claim
+  (`Codec.Bytes.ext_iff` said `[propext, Quot.sound]`-only, measures `[Quot.sound]`).
+  Round five's lesson was "ask what removes things from a check's input"; the clause
+  it was missing is **"and check the `run_cmd`'s own filter, not only the library's
+  classifier — the arm's `if` is a removal step too."** The arm now prints its
+  claim-site count, because **an arm that reports no count cannot be told from an arm
+  that reads nothing**.
+
+- **A one-sided attribution rule discards real claims.** The same arm had only
+  "a docstring naming a different declaration is not claiming its own", so a law whose
+  docstring cites its own ingredients had its claim thrown away. The fix is
+  **proximity**: split the segment at the claim marker, take the last backticked
+  resolvable name in the _prefix_, and attribute to it; no name means it is self's
+  own. Sites went **9 → 145** and six mis-claims fell out. `basen` had the fix (round
+  six §6.6) and `codec` did not — **when you fix one arm, port it to its twin.**
+
+- **A `_prop` projection is not a law, and a name list cannot enforce that.** Seven
+  public theorems have bodies that are a bare `Expr.proj` (`fun … => self.k`). Six
+  were allowlisted; `Codec.Suffix.hle` was **gated as a law** while the prose said
+  "all six are classified the same way". `propProjections` is a name list, so the
+  only durable fix is a **structural** arm that walks the environment and flags any
+  `thmInfo` whose value is a projection — which is what now exists.
+
+- **A pattern list that audits itself is the only one that can fire.** `basen`'s
+  `isDerivedDefName` carried six dead entries (`rec`, `brecOn.go`, `mk`, `prod`,
+  `sizeOf`, `sizeOf_spec`), including `prod` — the entry `codec` deleted for silently
+  dropping `Iso.prod`. The first draft of the audit arm hardcoded its own copy of the
+  pattern list, so re-adding `"prod"` left the build green. Make the classifier and
+  its audit read **one** list, then mutate: re-add a dead pattern and confirm the
+  build fails naming it.
+
+- **`String.trim` does not exist** in this toolchain (`trimAscii` returns a `Slice`),
+  `String.join` takes only a `List String` (no separator — use `String.intercalate`),
+  `String.Pos.byteIdx` is not projectable, and `ID.run` is `Id.run`. Each of these
+  cost a compile cycle in rounds six and seven.
+
+- **A docstring that states a claim in _history_ re-fires the claim.** Writing
+  "this used to say `[propext, Quot.sound]`-only" makes the footprint arm read the
+  historical phrase as a live claim. Describe the history without reproducing the
+  claim spelling ("used to state two different footprints two sentences apart").
 
 - **`Classical.choice` trap — three verified shapes.** All three are silent (`#print
 axioms` on the enclosing theorem is the only check) and all three happened here:
