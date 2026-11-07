@@ -96,7 +96,7 @@ separate prose fixes.
 
 - [ ] 1.1 Add the def-side audit arm to `Axioms.lean`, mirroring the theorem-side
       `partition`. **R6-01.** ✔Verified: `publicDefs = 141`, `Iso.prod in publicDefs:
-    false`, `Iso.prod in allowlist: false`, `Iso.commute in publicDefs: true`.
+  false`, `Iso.prod in allowlist: false`, `Iso.commute in publicDefs: true`.
 
       Two arms, both as `run_cmd`s in the same style as the existing coverage check:
 
@@ -131,7 +131,7 @@ separate prose fixes.
       reason already covers them, and move the counts. **R6-02**, design §D3.
       ✔Measured: all three are `fun … => self.1`/`self.2` and report no axioms.
 - [ ] 2.3 Add the **domain laws** for the two partial isos: `(subset p).apply x = some x
-    ↔ p x` and `(element x).unapply b = some () ↔ b = x`. **R6-07**, design §D5.
+  ↔ p x` and `(element x).unapply b = some () ↔ b = x`. **R6-07**, design §D5.
       If either is awkward, fallback is a fourth allowlist group with the "partial iso"
       reason — design §D5 records it so the decision does not return.
 - [ ] 2.4 Resolve the three zero-reference allowlist entries. **R6-11.** `candsRoot` and
@@ -170,11 +170,28 @@ separate prose fixes.
 
 ## 4. `basen` (R6-09, R6-10, R6-20, R6-21, R6-32, R6-33, R6-34)
 
-- [ ] 4.1 Decide the pin. **R6-09.** ✔Verified: pinned `a12ac65`, sibling tree
+- [x] 4.1 Decide the pin. **R6-09.** ✔Verified: pinned `a12ac65`, sibling tree
       `d86132b`, 10 commits, 7 library files, +370/−70. Round six **proved the gap
       benign** by rebuilding against HEAD in `/tmp` (25 jobs green). **Take the bump**
       (`nix flake update codec` — targeted, never all inputs; then `lake update codec`)
       and re-run `lake build`, `lake build bench`. Record the actual output.
+
+      **DONE ahead of this change, in the session that authored it** (`2751537`), because
+      the pin was the one item that could be closed without touching a spec delta and it
+      blocked nothing. Pinned `a12ac65` → **`93acd59`**, which is `codec`'s
+      `origin/master` exactly — so the validated revision and the sibling tree now agree
+      and R6-09 is closed rather than merely decided. **Every gate was run on the new
+      pin, not predicted:**
+      `lake build` → `486 = 440 + 46` theorems, `137 = 122 + 15` defs, four gate lines;
+      `lake build bench` → 45 jobs; `nix build '.#bench'` → builds, `installPhase` runs
+      the executable, exit 0. The update was **targeted** (`nix flake update codec`):
+      `nixpkgs` (`1d06008`), `flake-utils`, `treefmt-nix` and `systems` were already
+      identical across all three `lean-*` repos, so nothing else moved.
+      **What remains for this task: nothing.** The prose arm the spec delta adds
+      (`basen` must record the validated revision or the lag) is still 4.2–4.3's
+      neighbour work and is not satisfied by the bump alone — a future drift would again
+      be invisible, which is what the delta is for.
+
 - [ ] 4.2 Correct the `native_decide` count claim. **R6-10.** `Bench.lean:403` says
       "these three stay as the only `native_decide` in the ecosystem"; there are **13**
       (✔), and the second block's own header already says "`native_decide` **again**".
@@ -234,7 +251,7 @@ separate prose fixes.
 Each is one clause. Do them as one pass.
 
 - [ ] 6.1 `[D1]`: quote both paper declarations correctly — `newtype Parser α = Parser
-    (String → [(α, String)])` and `data Rel α = Rel [(α, String)]`. **R6-22.** `[D2]`
+  (String → [(α, String)])` and `data Rel α = Rel [(α, String)]`. **R6-22.** `[D2]`
       quotes them right 20 lines later; make them agree.
 - [ ] 6.2 `[D2]`: add "**as a graph** (not as a multiset — see the Multiplicity note
       under `[D3]`)". **R6-23.**
