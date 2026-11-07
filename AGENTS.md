@@ -2,42 +2,36 @@
 
 Guidance for AI coding agents working in this repository.
 
-> ## START HERE: `openspec/changes/codec-audit-round-six/tasks.md`
+> ## START HERE: `openspec list --json`
 >
-> **`codec-audit-round-six` is the open change, 6/32 tasks** (authored 2026-11-07
-> from the seventh review round; 33 numbered findings, `R7-01`…`R7-33`). Its
-> `tasks.md` is the ledger and the only direction — work top-down from §2.
+> **No change is open.** `codec-audit-round-six` closed **32/32** and archived
+> 2026-11-07 as
+> `openspec/changes/archive/2026-11-07-codec-audit-round-six/` (33 findings,
+> `R7-01`…`R7-33`; two ADDED `codec/axiom-gate` requirements and four MODIFIED,
+> every one a strict superset of the live block — zero scenarios dropped). With no
+> change open **there is no queued work**; author a new change before coding.
 >
-> **§1 is closed; §2 is next.** §1 landed the seventh gate arm (a stated axiom
-> footprint is now compared with `collectAxioms` on every build) and corrected
-> **26** docstring footprint claims, not the 11 the reviewers reported. §2 is
-> `basen`'s gate. Do **not** re-litigate §1; read its four ticks for what was
-> measured.
->
-> **Two traps §1 cost a session, both worth knowing before §2:**
->
-> 1. **A new check that passes is not evidence it runs.** The footprint arm was
->    green and would have stayed green forever: a backticked _footprint_
->    (`` `[propext, Quot.sound]` ``) was parsed as a backticked _declaration name_,
->    so every claim was attributed away from its own declaration. Only inserting a
->    deliberately false claim and watching it **fail** found this. **Mutate every
->    new check before believing it.**
-> 2. **`String.trim` does not exist** in this toolchain (`trimAscii` returns a
->    `Slice`), and `String.join` takes only a `List String` — no separator
->    argument. Both cost compile cycles in §1.
->
-> **This box names the change, never a task.** That is deliberate: it has gone
-> stale **five** times (it said "§1.5 next" long after §1.5–§1.10 landed, then said
-> "no open change" while `round-four` was open, then still named `round-four` after
-> it archived, then still named `round-five` after it archived, then still said
-> "no change is open" with `round-six` open). If the change named here is not what
-> `openspec list` reports, **believe the command**. With no change open **there is
-> no queued work**; author a new change before coding.
+> **What round six landed, in one line each:** a seventh `codec` gate arm that
+> compares a docstring's **stated** footprint with `collectAxioms` (it found 26 real
+> claim sites, not the 11 reviewers reported, and 2 in `basen`); `basen`'s dead
+> `a - b + b ≠ a` branch replaced and its two figures asserted; `nativeDecideCount`
+> made comment-aware after five formatting escapes; `exclusions` given the staleness
+> arms its allowlist sibling had; `decodeHexFold_roundtrip` proved so RFC 4648 §8 is
+> met by a decoder that inverts the encoder; and six `basen`/`template`/`README`
+> prose classes repaired.
 >
 > **The numbering is off by one from the change names, and that is not a typo.**
-> `round-six` is the sixth audit _change_ and its findings come from the
-> **seventh** review round, so its ids are `R7-nn`. The next review's ids will be
-> `R8-nn` in a change called `round-seven`.
+> `round-six` is the sixth audit _change_; its findings came from the **seventh**
+> review round, so its ids are `R7-nn`. The next review's ids will be `R8-nn` in a
+> change called `round-seven`.
+>
+> **This box names the change, never a task — and round six is why that rule now
+> reads "believe the command".** The box has gone stale **six** times: it said
+> "§1.5 next" long after §1.5–§1.10 landed; said "no open change" while
+> `round-four` was open; still named `round-four` after it archived; still named
+> `round-five` after it archived; said "no change is open" with `round-six` open;
+> and named `round-six` at **6/32** while it ran. If the change named here is not
+> what `openspec list` reports, **believe the command**.
 >
 > **`codec-audit-round-five` closed 46/46 and archived 2026-11-07** as
 > `openspec/changes/archive/2026-11-07-codec-audit-round-five/` (38 findings,
@@ -96,7 +90,7 @@ Guidance for AI coding agents working in this repository.
 > environment**. `openspec validate --all` is **11/11** while a change is open
 > (10/10 with none: the change is the eleventh item). Read those numbers off the
 > run, not off this page: on 2026-11-07, after `round-six` §1, the codec gate
-> printed `426 = 349 + 77` theorems and `140 = 115 + 25` defs.
+> printed `425 = 348 + 77` theorems and `140 = 115 + 25` defs.
 >
 > **`[x]` means "in the tree AND evidence recorded in the ledger" — never tick on
 > intent, and never leave a finished task unticked.** A checkbox reports a fact; the
@@ -146,20 +140,28 @@ Guidance for AI coding agents working in this repository.
 | Archived history               | `openspec/changes/archive/<date>-<name>/tasks.md` (e.g. `2026-11-05-lean-basen`) |
 | Lessons (not direction)        | `openspec/lean-notes.md`                                                         |
 
-**One change is open (`codec-audit-round-six`, 6/32); round five and everything
-before it are archived history.**
+**No change is open; round six and everything before it are archived history.**
 
-- `codec-audit-round-six` — **in-progress**, 6/32, authored 2026-11-07 from the
-  seventh review round (three read-only workers; reports `/tmp/r7/{A,B,C}.md`,
-  merged ledger `/tmp/r7-SYNTHESIS.md`). 33 findings (`R7-nn`): 5 MUST / 12 SHOULD /
-  16 NITPICK, plus **10 refuted**. **Read its `tasks.md` — not this file.** Three
-  things about it are worth holding in mind before §2:
+- `codec-audit-round-six` — **archived** 2026-11-07 as
+  `openspec/changes/archive/2026-11-07-codec-audit-round-six/` (32/32 tasks, both
+  gates green). Authored 2026-11-07 from the seventh review round (three read-only
+  workers; reports `/tmp/r7/{A,B,C}.md`, merged ledger `/tmp/r7-SYNTHESIS.md`).
+  33 findings (`R7-nn`): 5 MUST / 12 SHOULD / 16 NITPICK, plus **10 refuted**, and
+  **two more refuted while fixing them** (its §9 now records both). Read its archived
+  `tasks.md` as history; do not reopen it. Four things worth carrying forward:
   - **Zero soundness defects.** 502-constant sweep: no `Classical.choice`, no
-    `sorry`. Every MUST is a false claim _about_ the mathematics.
+    `sorry`. Every MUST was a false claim _about_ the mathematics.
   - **§1 found 26 footprint claims, not the 11 reported** — an environment walk
     catches what a per-family `#print` sweep misses.
-  - **One reviewer figure is refuted** (`[S1]`'s count "should be 21"): the walk
-    returns 19, and only the decomposition was wrong. Recorded in its §9.
+  - **§6.6's port reproduced §1's trap.** `basen`'s new footprint arm was green on
+    **6 of 52** claim sites until the attribution rule was fixed (a claim that names
+    a _different_ declaration right beside it was being dropped). It then found two
+    real under-strong claims. **Mutating a new check is not optional.**
+  - **Two reviewer figures refuted** (`[S1]`'s "should be 21": the walk returns 19,
+    only the decomposition was wrong; R7-14's "both CHANGELOG SHAs resolve nowhere":
+    both resolve in `basen` and are ancestors of HEAD) — and a third refuted during
+    §2.3 (the suggested `nativeDecideCount` fix left block comments uncounted; a
+    naive total read 18 against a true 12).
 - `codec-audit-round-five` — **archived** 2026-11-07 as
   `openspec/changes/archive/2026-11-07-codec-audit-round-five/` (46/46 tasks, all
   three repos gated). Authored 2026-11-07 from the sixth
@@ -382,10 +384,11 @@ hk.symm s)` — and `subst hk; subst ha`.
   `446 / 437 / 9`; round four found the prose paragraph still saying `440 / 437 / 483`
   and **fixed it by computing it** — `headerNumbers` now derives the `BaseN` pin count,
   asserts the three `Codec.*` pin names exist, and asserts the total, so the paragraph
-  cannot rot behind a green table again. At 2026-11-07 the gate prints
-  `486 = 440 + 46` theorems with `443 = 440 BaseN + 3 Codec` pins, and
-  `137 = 122 + 15` defs. **Quote the gate, never a number written in a file** — and
-  note `round-five` §7 is where these move again.
+  cannot rot behind a green table again. As of `round-six`'s archive the gate prints
+  `490 = 444 + 46` theorems with `447 = 444 BaseN + 3 Codec` pins, `137 = 122 + 15`
+  defs, and a footprint distribution of `381 + 48 + 15 = 444` that is itself
+  asserted (it had rotted to `377 / 48 / 15 = 440` behind a green table).
+  **Quote the gate, never a number written in a file.**
 
 - **The gate catches your own new laws, by design — regenerate, do not investigate.**
   Every law added in §1 fails `lake build` with `not pinned by this gate` until
@@ -546,15 +549,17 @@ nix develop --command lake env lean /tmp/c.lean    # expect [propext, Quot.sound
 ```
 
 **Since §1.0 it also has a _mechanism_, not just blocks.** `lake build` now prints
-**five** lines and fails if any disagrees with the environment (the fifth, the
-`native_decide` count, was added by `codec-audit-round-five` §4.3):
+**six** lines and fails if any disagrees with the environment (the fifth, the
+`native_decide` count, was added by `codec-audit-round-five` §4.3; the sixth, stated
+footprints, by `codec-audit-round-six` §6.6):
 
 ```
-info: basen axiom gate: 440 pinned + 46 allowlisted = 486 of 486 public theorems (0 explicit exclusion(s))
-info: basen axiom gate: 486 public theorems partitioned, 440 pinned and 46 allowlisted
-info: basen axiom gate: header numbers verified (486 = 440 + 46); prose paragraph says 443 pins = 440 BaseN + 3 Codec
+info: basen axiom gate: 444 pinned + 46 allowlisted = 490 of 490 public theorems (0 explicit exclusion(s))
+info: basen axiom gate: 490 public theorems partitioned, 444 pinned and 46 allowlisted
+info: basen axiom gate: header numbers verified (490 = 444 + 46); prose paragraph says 447 pins = 444 BaseN + 3 Codec
 info: basen axiom gate: 137 public definitions covered, 122 mentioned and 15 allowlisted (mention proxy)
 info: basen axiom gate: native_decide stated count verified (12 uses in Bench.lean, all bench-lane, none in the gate)
+info: basen axiom gate: stated footprints verified against the environment (46 claim site(s))
 ```
 
 So a new `BaseN` law fails the build until it is pinned, and a stale pin fails too.
