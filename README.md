@@ -134,8 +134,9 @@ parse (Parser p) s = [x | (x, "") ← p s]
 ```
 
 — so the paper's `parse` is not even the full relation; its `Rel` is. `codec`'s
-`decode` returns the unfiltered pair list, i.e. a **superset** of what `parse`
-yields and exactly the paper's `Rel` **as a graph** — that is, as a set of
+`decode` returns the unfiltered pair list — a **superset, as a set of pairs**, of
+what `parse` yields, and it is the paper's `Rel` **denotation** (`bidir` is the `↔`,
+not an equality) — that is, as a set of
 `(value, string)` pairs, not as a multiset of derivations, so two parses reaching the
 same pair are one element of the relation (see the Multiplicity note under `[D3]`).
 The **relation** is unchanged; the
@@ -484,8 +485,16 @@ three are not cosmetic and should not be ported as if they were:
   forms take one, so the lead contradicted the paragraph under it
   (`codec-audit-round-six` R7-18). The **conclusion survives** — this is the change
   with the largest porting cost — but the **reason** is that _what_ the argument is
-  changed (`[D6]`'s typeclass-to-value move), not that one appeared. It is the one
-  place `[S2]` and `[D6]` overlap.
+  changed: the paper passes a `Printer α` **value**, `encode` passes a `Codec α`
+  **description**.
+
+  **Not "`[D6]`'s typeclass-to-value move", which an earlier revision cited here**
+  (`codec-audit-round-seven` SHOULD-2). The paper's `print` is a plain top-level
+  function over a `newtype` (§4.2), not an instance method — the only class in §3.4
+  has `pure` and `token`. `[D6]` changed how the _description_ is represented; it did
+  not move `print` out of a class, because `print` was never in one. The earlier
+  sentence also called this "the one place `[S2]` and `[D6]` overlap", which that
+  fact contradicts.
 
 **[S3] Zero domain-specific leaf codecs.** Core ships every primitive leaf —
 `byte`, `satisfy` — plus the non-leaf `pure` (a value-equality check, not a
@@ -504,11 +513,11 @@ decoders on functional descriptions. **How strong that obligation is, measured r
 than asserted** (`codec-audit-round-five` §D6 / R6-15; an earlier revision said it was
 "conditional in **every** case" and that was too strong):
 
-| combinator          | the `relFunctional` obligation                                          |
-| ------------------- | ----------------------------------------------------------------------- |
-| `takeWhile`         | **derivable for any `p`** (`relTakeWhile_functional`); still _taken_    |
-| `sepBy`             | **two**: `relFunctional (Rel p)` **and** an `hstep` on `seqRight sep p` |
-| `chainl1`/`chainr1` | a genuine caller obligation                                             |
+| combinator          | the `relFunctional` obligation                                                                                                                                                                     |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `takeWhile`         | **derivable for any `p`** (`relTakeWhile_functional`); still _taken_                                                                                                                               |
+| `sepBy`             | **two to derive, one to apply**: `relFunctional (Rel p)` and an `hstep` on `seqRight sep p` feed `relSepBy_functional`; `encodeSepBy_of_decode` itself takes only `relFunctional (relSepBy p sep)` |
+| `chainl1`/`chainr1` | a genuine caller obligation                                                                                                                                                                        |
 
 `takeWhile`'s step is `satisfy p`, whose bytes are determined by its _value_
 (`t = single b` at length 1), so the obligation follows from the leaf's shape.
@@ -521,7 +530,14 @@ An earlier revision's "no hypothesis at all" described the lemma and read as a
 description of the law, so a reader opening `encodeTakeWhile_of_decode` found a
 hypothesis the table had said did not exist. Keeping the parameter explicit is
 deliberate: it makes the `_of_decode` family uniform, because `sepBy`'s twin needs
-the hypothesis for real. `sepBy`
+the hypothesis for real.
+
+**`sepBy`'s row is the mirror-image error, and it was introduced while fixing
+`takeWhile`'s** (`codec-audit-round-seven` SHOULD-3). The row said the obligation is
+"`relFunctional (Rel p)` **and** an `hstep`" — true of `relSepBy_functional`, the
+_lemma that derives_ `relFunctional (relSepBy p sep)`, but not of
+`encodeSepBy_of_decode`, which takes **one** premise: `hd : relFunctional (relSepBy p
+sep)`. The row now says which is which. `sepBy`
 is a `Rel p` head plus a `takeWhile`-shaped tail: the tail is derivable, the **head is
 an arbitrary `Codec α`**, so its functionality is a hypothesis on `p`. `chainl1`/
 `chainr1` existentially quantify a seed and operand list and then require the fold's
@@ -625,11 +641,17 @@ witness** each fold supplies. "Type-incoherent" is checkable rather than rhetori
 The types are, in the code:
 
 ```
-foldl : Iso (α × β) α → Iso (α × List β) α      -- step consumes β, accumulates α
-foldr : Iso (β × α) α → Iso (α × List β) α      -- step has β on the LEFT
+foldl (i : Iso (α × β) α) (measure : α → Nat) (h : MeasureDecreases measure i)
+    : Iso (α × List β) α                    -- step consumes β, accumulates α
+foldr (i : Iso (β × α) α) (measure : α → Nat) (h : MeasureDecreasesR measure i)
+    : Iso (α × List β) α                    -- step has β on the LEFT
 ```
 
-(the `measure : α → Nat` and witness arguments are omitted for clarity). The paper's
+**Written as the real `#check`, not an erasure of it.** An earlier revision showed
+`foldr : Iso (β × α) α → Iso (α × List β) α` with a note that the measure and
+witness were "omitted for clarity" — but `Iso.foldr i` is a `Π` over `measure` and
+the witness, not an `Iso`, so the arrow was a false statement about the library
+rather than a shorthand for one (`codec-audit-round-seven` SHOULD-1). The paper's
 `foldl` is the first. The dual needs a step whose **argument order is swapped** —
 `Iso (β × α) α` — and `inverse : Iso (α × β) α → Iso α (α × β)` produces neither
 that argument order nor the right nesting, so no composition of `inverse`/`foldl`
@@ -828,9 +850,10 @@ but a plausible inference is what this section exists to stop presenting as fact
 ### `[D4]` lossless capture — why we cannot follow the paper's destructive constructor
 
 The paper's `ignore` maps _any_ run of whitespace down to a single value and, on
-printing, always emits _one_ (fixed) run back — `skipSpace` re-emits none,
-`optSpace`/`sepSpace` re-emit a single blank, but none of them preserves the
-original length. That is one-way loss: three spaces in, a fixed run out.
+printing, emits back whatever `x` it was instantiated with — `skipSpace` (= `ignore
+[]`) re-emits nothing, `optSpace`/`sepSpace` re-emit a single blank — but none of them
+preserves the original length. (`ignore`'s own `g ()` is `Just x`, so "one fixed run"
+is an _instantiation_, not `ignore` itself; `codec-audit-round-seven` NITPICK-1.) That is one-way loss: three spaces in, a fixed run out.
 
 **What the paper actually says, quoted exactly, because a paraphrase used to sit
 inside the quotation marks** (`codec-audit-round-six` R7-21). §3.1 says the authors
@@ -964,20 +987,31 @@ list, so it needs no condition). `[S5]` proves "least fixpoint" rather than
 asserting it; `[S6]` records the structural consequence of strictness — there is
 no `many`/`many1` **value**, only the relation/decoder/encoder triple, and the
 `sepBy` triple has "one or more" (non-empty) semantics. **Bounded** repetition is
-different and _is_ available as a `Codec` value — `count`, `manyUpTo`, `optional`,
-`maybe` (`[S3]`'s inventory) — because a bound is part of the description; only the
-unbounded case has no node. A porter should look for these three readings, not for a
+different and _is_ available as a `Codec` value — `count` and `manyUpTo` carry their
+bound (`Nat → Codec α → …`), while `optional` and `maybe` are finite because 0-or-1
+is, not because they take a bound (`#check @Codec.optional` has no `Nat`) — because a
+bound is part of the description; only the unbounded case has no node. A porter should look for these three readings, not for a
 `many` object.
 
 ---
 
 **Bottom line for a porter.** The paper gives the idea; `codec` makes it _honest_
 by (1) enforcing the inverse law as a type, (2) resting on bytes, (3) keeping the
-full backtracking semantics so the laws are unconditional, (4) being strictly
-isomorphic — which _rules out_ the paper's destructive (`ignore`-shaped)
-constructors rather than needing to drop them by hand, and (5) making the
-description an ordinary value you can induct over. Reproduce those first; the
-rest is bookkeeping you can re-derive.
+full backtracking semantics, which makes the **soundness/roundtrip** laws
+unconditional (`roundtrip`, `bidir`, `decode_spec`), (4) being strictly isomorphic
+— which _rules out_ the paper's destructive (`ignore`-shaped) constructors rather
+than needing to drop them by hand, and (5) making the description an ordinary value
+you can induct over. Reproduce those first; the rest is bookkeeping you can
+re-derive.
+
+**One qualification on (3), because this is the paragraph a porter reads first.**
+"Unconditional" holds for the _soundness_ family and **not** for the _uniqueness_
+family: `encode_of_decode`, `encode_injective_of_unambiguous`, `decodeArray_unique`
+and `decodeFull_spec` each take a per-description hypothesis (`Functional`,
+`Unambiguous`, `RelAligned`, `huniq`) that **no composition inherits** — see the
+paragraph on suppliers in "The abstraction, in brief". An earlier revision said the
+laws are unconditional without that scope, which read as a promise the uniqueness
+laws do not keep (`codec-audit-round-seven` SHOULD-5).
 
 ## The abstraction, in brief
 
@@ -1193,8 +1227,11 @@ Each is tied to the specification (`encodeWhole_eq`, `encodeWholeRepeat_eq`,
 `encodeWholeBytes_toList`), and the bench checks the law **and** the round trip —
 encode with `encodeWhole`, decode with `decodeWhole`, get the input back. Measured at
 `n` = 4 KiB: **32 MiB/s, against 17 for `encodeRepeat` and 20 for the old
-"fast" `fastEncodeRepeat`** — a 1.9× improvement over the encoder that was already
-supposed to be the fast one.
+"fast" `fastEncodeRepeat`** — **1.6× over the encoder that was already supposed to be
+the fast one** (`32 / 20`), or **1.9× over `encodeRepeat`** (`32 / 17`). An earlier
+revision said "a 1.9× improvement over the encoder that was already supposed to be the
+fast one", which pairs the slow route's ratio with the fast route's name
+(`codec-audit-round-seven` N-04).
 
 ### Where the speed actually goes (measured, with its causes named)
 
@@ -1268,19 +1305,36 @@ The measured burst **median** at an L1-resident working set is **~2.6–3.0 ns/s
 and the gap is **~10–11×**. The correction is small; the reason for it is the point,
 and it is the same defect one layer down from the one the warm/cold split fixed.
 
-| shape                                                 | lane                           | cold ns/step                 | warm ns/step (burst median) | note                                       |
-| ----------------------------------------------------- | ------------------------------ | ---------------------------- | --------------------------- | ------------------------------------------ |
-| `memcpy` (`copySlice`), for scale                     | `benchCalibration`             | ~0.03                        | —                           | ~125 ns / 4 KiB                            |
-| `Array` indexed read alone                            | `arrayRead`                    | 11–12                        | ~65 ns/call                 | a single read, not a loop                  |
-| **ideal `Id.run` cursor loop** (`arr[k]` + `Nat`)     | `idealCursor` (+`(burst)`)     | 15                           | **~2.6–2.7**                | **the achievable pure-Lean compute floor** |
-| `decodeArray` single step (`List (α × Nat)` result)   | `decodeArray step`             | 12                           | —                           | the per-step `List`                        |
-| `packedCands` alone (now an `attach.map`)             | `packedCands (per step)`       | 430–650                      | —                           | cold-input dominated; see below            |
-| `decodeFullArrayRoot` (packed `Array` + `Nat` cursor) | `decodeFullArray` (+`(burst)`) | 49                           | **~27.4–28.3**              | the whole decode, one candidate searched   |
-| `decodeFullFastRoot` (`Bytes`/`Suffix` cursor)        | `decodeFullFast`               | 77                           | —                           | the `Suffix`/`bdrop` path                  |
-| `decodeFull` (the `Bytes n` specification itself)     | `benchDecodeFull`              | no per-step figure committed | —                           | super-linear: re-walks the suffix per step |
+| shape                                                    | lane                           | cold ns/step                 | warm ns/step (burst median) | note                                       |
+| -------------------------------------------------------- | ------------------------------ | ---------------------------- | --------------------------- | ------------------------------------------ |
+| `memcpy` (`ByteArray.copySlice`, `@[extern]`), for scale | `benchCalibration`             | ~0.03                        | —                           | ~125 ns / 4 KiB                            |
+| `Array` indexed read alone                               | `arrayRead`                    | see note                     | ~64–67 ns/call              | a single read, not a loop                  |
+| **ideal `Id.run` cursor loop** (`arr[k]` + `Nat`)        | `idealCursor` (+`(burst)`)     | 15                           | **~2.6–2.7**                | **the achievable pure-Lean compute floor** |
+| `decodeArray` single step (`List (α × Nat)` result)      | `decodeArray step`             | see note                     | —                           | the per-step `List`                        |
+| `packedCands` alone (now an `attach.map`)                | `packedCands (per step)`       | 430–650                      | —                           | cold-input dominated; see below            |
+| `decodeFullArrayRoot` (packed `Array` + `Nat` cursor)    | `decodeFullArray` (+`(burst)`) | 49                           | **~27.4–28.3**              | the whole decode, one candidate searched   |
+| `decodeFullFastRoot` (`Bytes`/`Suffix` cursor)           | `decodeFullFast`               | 77                           | —                           | the `Suffix`/`bdrop` path                  |
+| `decodeFull` (the `Bytes n` specification itself)        | `benchDecodeFull`              | no per-step figure committed | —                           | super-linear: re-walks the suffix per step |
 
 All cold cells except the last are from the same two-run session and move with load;
-they are order-of-magnitude, not point measurements. **The last row carries no
+they are order-of-magnitude, not point measurements.
+
+**Two rows carry no `ns/step` figure, deliberately** (`codec-audit-round-seven` N-02,
+N-03). Both are one-level quantities the table used to divide by `n` anyway:
+
+- **`arrayRead`** performs **one** `getD` per call, and `benchRatio` prints `ns/op`.
+  Reporting "11–12 ns/step" means dividing one read by `n` = 4096, i.e. implying a
+  single array read costs ~45,000–49,000 ns against the **~64–67 ns** the burst lane
+  measures for the identical one-read call — a 700× inversion. The honest figure is the
+  burst one, and it is in the next column.
+- **`decodeArray step`** was quoted at cold **12** while `idealCursor` — the bare,
+  allocation-free cursor loop that a `decodeArray` step must _contain_ — is **15**.
+  A component priced below the loop it contains is the arithmetic impossibility
+  `Bench.lean` names for `packedCands`; the two figures cannot both be right, and
+  neither is re-measured here, so neither is quoted.
+
+Both rows are still in the table because the lanes exist and the _warm_ figure for the
+first is sound; what was removed is only the per-step division that made them wrong. **The last row carries no
 per-step figure on purpose** (`codec-audit-round-six` R7-27): an earlier revision
 printed `~31,200 ns/step`, and no run table anywhere in this document produced it —
 `benchDecodeFull` prints one **batch** figure (`decodeFull byte [n]: <ns>/op`), and
@@ -1376,8 +1430,9 @@ so is any derivation from them.
   interleaved lane, run 1) — so the subtraction crossed both tables **and** runs,
   which is exactly what the "same lane in the same run" rule three bullets below
   forbids. The orphan is deleted (`codec-audit-round-five` R6-08). The ~10–11×
-  headline is therefore a **lower bound** for a real backtracking codec; at `k = 2`
-  the gap to the floor is **~20×** (run 1: `54.9 / 2.50`; run 2: `51.1 / 2.61`).
+  headline is therefore a **lower bound** for a real backtracking codec; the gap to the floor is **~20–22×** (run 1: `54.9 / 2.50 = 22.0`; run 2:
+  `51.1 / 2.61 = 19.6`). The range is the two run-points, not their midpoint: an earlier
+  revision said "~20×", which is true of run 2 only.
 - `packedCands` moves **86 → 106 ns/call** for the extra candidate: **~20 ns** of the
   ~24–26 ns per-candidate cost. So **~4–6 ns/step is _not_ `packedCands`** — it is the
   `decodeArray` re-list plus the singleton `PackedCand` allocation in

@@ -152,7 +152,12 @@ Guidance for AI coding agents working in this repository.
   - **Zero soundness defects.** 502-constant sweep: no `Classical.choice`, no
     `sorry`. Every MUST was a false claim _about_ the mathematics.
   - **§1 found 26 footprint claims, not the 11 reported** — an environment walk
-    catches what a per-family `#print` sweep misses.
+    catches what a per-family `#print` sweep misses. The gate now **prints** the
+    count, which is how the next finding below was possible: round seven widened the
+    arm's enumeration predicate (`getPrefix` → `isPrefixOf`) and its attribution rule,
+    after which the printed count went **9 → 145** and seven further mis-claims fell
+    out (`codec-audit-round-seven` GC-01). The lesson: an arm that reports no count
+    cannot be told from an arm that reads nothing.
   - **§6.6's port reproduced §1's trap.** `basen`'s new footprint arm was green on
     **6 of 52** claim sites until the attribution rule was fixed (a claim that names
     a _different_ declaration right beside it was being dropped). It then found two
@@ -212,7 +217,7 @@ not this file), and **§6.5** removed
 every `set_option linter.… false` rather than deferring it. **§6.10** closed:
 the ecosystem is on Lean 4.35.0. The `lean-toolchain` pins
 now match what builds (`v4.35.0`), the lockfiles are nixpkgs `1d06008`
-(2026-11-03), and `basen` tracks `codec` `3277d48`. The bump cost **one line**
+(2026-11-03), and `basen`'s `codec` pin was bumped in the same change — **read `basen`'s `flake.lock`, never a SHA here**. The bump cost **one line**
 in `Codec/Packed.lean` — `basen` needed no source changes — because the
 toolchain itself was a cache substitution. Two traps from that bump:
 
@@ -535,8 +540,14 @@ nix build '.#bench'                      # same lane, sandboxed — BUILDS AND R
 
 `packages.bench` exists and is a **package, not a `checks` entry**: the lane
 value-checks known vectors, which is evidence, not proof, so it must not be able
-to fail the proof gate. Its `installPhase` _runs_ the executable, so
-`nix build '.#bench'` verifies the vectors rather than merely producing a binary.
+to fail the proof gate. **The checks fire at BUILD time** — every `Bench.lean` check
+is an `example` closed by `rfl` or `native_decide`, and `main` is `pure ()` — so
+`nix build '.#bench'` proves the lane **builds and links in the sandbox**, not that a
+runtime check passed. Its `installPhase` runs the binary only as a smoke test that it
+starts and exits 0. An earlier revision said the `installPhase` "verifies the vectors";
+that is the sentence `basen`'s `default.nix` records as false of the code
+(`codec-audit-round-six` R7-16), and `codec` had not been corrected
+(`codec-audit-round-seven` N-06).
 Do not add it to `checks`, and do not treat a green `lake build bench` as having
 verified anything — that only compiles.
 
@@ -639,8 +650,12 @@ in `../lean-basen`. Never "fix" it by editing the importing Lean file.
     2.4 was the **minimum of 5 decaying rounds** at an `8n` working set — the most
     favourable endpoint of the wrong variant. `benchBurst` now reports
     min/median/max over one L1-resident buffer, and 3.0 is its median.
-  - The `Array` read was quoted as **3** and is **~14–18** (cold, per `n`) / **~78
-    ns per call** (burst, one read per call).
+  - The `Array` read was quoted as **3**; the README's stamped tables are the
+    authority, and they give **~64–67 ns per call** (burst, one read per call) with
+    **no** per-step figure — one read per call must not be divided by `n`. An earlier
+    revision of this file said "~14–18 (cold, per `n`) / ~78 ns per call", which
+    contradicted the README on both numbers and quoted the divided form the README now
+    explains is wrong (`codec-audit-round-seven` N-05).
 
   **A three-reviewer audit (against `PAPER.md`/`README.md`) is on the record.**
   It found the core pure and proved, and "ready to use" **false** for three
@@ -822,11 +837,14 @@ the required order in the later change's `tasks.md`.
   staged file; re-`git add` and commit again. That is normal, not a failure.
 - `lake-manifest.json` is gitignored (the library shouldn't pin deps);
   `flake.lock` **is** tracked, for reproducibility.
-- New files matter to Nix: `src = ./.` snapshots only **git-tracked** files, so an
-  untracked `Codec/*.c` breaks the sandboxed bench build from a clean clone.
+- New files matter to Nix: `src = ./.` snapshots only **git-tracked** files _through
+  the flake_, so an untracked `Codec/*.c` breaks the sandboxed bench build from a clean
+  clone. A bare `nix-build` / `import ./default.nix` takes the whole directory,
+  untracked files included — the unqualified sentence was false for that path
+  (`codec-audit-round-seven` H-04, the same defect R7-30 fixed in the template).
   (The dev-loop command is `lake build bench`, which links the `.c` from the
   working tree and does not care about `git`. `nix build '.#bench'` exists —
-  `flake.nix:58`, `packages.bench` — as the sandboxed/CI equivalent, and it is a
+  `flake.nix`'s `packages.bench` — as the sandboxed/CI equivalent, and it is a
   **long** build: `nohup`, never foreground.)
 
 ## Skills
