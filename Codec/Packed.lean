@@ -782,7 +782,7 @@ candidates while the fast decoder walks *packed* ones. -/
 "`packedCands`' two `dif`s always take the `some` branch under `ConsumesByte`".
 Stated for a general list and a general `g` because the proof is pure list induction
 and has nothing to do with `Codec` — the caller supplies the pointwise `some` fact.
-`[propext, Quot.sound]`-only. -/
+**Axiom-free** (measured: `#print axioms` reports no axioms). -/
 theorem filterMap_eq_map_of_forall {β γ : Type} (l : List β) (f : β → Option γ)
     (g : β → γ) (h : ∀ b ∈ l, f b = some (g b)) :
     l.filterMap f = l.map g := by

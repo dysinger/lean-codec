@@ -138,9 +138,9 @@ def blitBytes (dst : ByteArray) (dstOff : USize) (src : ByteArray) (srcOff : USi
 
 /-- A constructive byte scan over an `Array UInt8`: the first index `≥ k` at which
 the array holds `b`, or `none`. Total, non-dependent, and recursion by a `Nat`
-measure — it reads `a[k]?`, so no `DecidableEq` decision is consulted and the whole
-family below (`findFrom_sound`, `_least`, `_min`, `_complete`, `_finds`) is
-`[propext, Quot.sound]`-only.
+measure — it reads `a[k]?`, so no `DecidableEq` decision is consulted. **This `def` itself is `[propext]`-only**;
+the family below (`findFrom_sound`, `_least`, `_min`, `_complete`, `_finds`) is
+`[propext, Quot.sound]`-only, measured.
 
 This is `findByte`'s body. The earlier body was `Array.findIdx?`, whose `DecidableEq
 UInt8` decision is propositional rather than definitional and so reached
@@ -202,11 +202,16 @@ This law is what makes the trust seam's contract *nameable*: the C's contract is
 "the C matches the Lean body", and without a theorem fixing that body the
 contract points at a definition rather than at a checkable statement. It is the
 sibling of `blitBytes_spec`/`findByte_spec` below, so every Layer-2 seam now has
-its own `*_spec`. `rfl`-clean, `[propext, Quot.sound]`-only (no `Classical.choice`,
-zero `sorry`), and no `byteSlice`-related axiom — the running C is invisible to
-Lean, as the module header records. **Axiom footprint: none** (`#print axioms
+its own `*_spec`. `rfl`-clean and **axiom-free** (no `Classical.choice`, zero
+`sorry`, no `byteSlice`-related axiom — the running C is invisible to Lean, as the
+module header records). **Axiom footprint: none** (`#print axioms
 Codec.byteSlice_spec` reports no axioms at all), the same as `blitBytes_spec` and
-unlike `findByte_spec`'s `[propext]`; see that law for why the set is not uniform. -/
+unlike `findByte_spec`'s `[propext]`; see that law for why the set is not uniform.
+
+**This docstring used to state two different footprints two sentences apart** — a
+self-contradiction `#print axioms` settles in one line (it reports no axioms). Found
+by the seventh audit's widened footprint arm, which is the arm's own lesson applied
+to itself: a claim the arm cannot attribute is a claim nobody read. -/
 theorem byteSlice_spec (a : ByteArray) (i : USize) :
     byteSlice a i = ByteArray.mk (a.data.extract i.toNat a.data.size) := by
   rfl

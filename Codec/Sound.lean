@@ -1441,7 +1441,9 @@ identified by its own bytes, so two values related to the same `s` are equal —
 `t₁ = t₂` case of alignment, where the shared-prefix premise is `rfl` at every
 index. This is the lemma `RelAligned`'s docstring cites as proved; it used to cite
 it while it did not exist (`codec-audit-remediation` 3.1, design D4).
-`[propext, Quot.sound]`-only. -/
+**Axiom-free** (measured: `#print axioms Codec.relUnambiguous_of_relAligned` reports
+no axioms) — this is the strongest evidence in the four-way diagram, and it was
+under-claimed until the seventh audit's attribution fix let the gate read it. -/
 theorem relUnambiguous_of_relAligned {α : Type} {R : α → {m : Nat} → Bytes m → Prop}
     (hal : RelAligned R) : relUnambiguous R := by
   intro a b n s hra hrb

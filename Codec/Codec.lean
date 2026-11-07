@@ -189,7 +189,9 @@ theorem Suffix.eq_empty_of_remaining_zero {n : Nat} (t : Suffix n) (h : t.remain
 lengths agree (up to the transport `hrem`) and their `bytes` fields agree under
 that same transport. The `hle` field is proof-irrelevant. Used by `decode_spec`'s
 `seq` backward third goal to close `r = Suffix.trans t₁ t₂` from the
-`bdrop_drop_eq_bytes` field equality. `[propext, Quot.sound]`-only. -/
+`bdrop_drop_eq_bytes` field equality. **Axiom-free** (measured: `#print axioms
+Codec.Suffix.ext` reports no axioms) — the proof is `funext`-free, since both
+remaining fields are compared at the same index. -/
 theorem Suffix.ext {n : Nat} {t₁ t₂ : Suffix n}
     (hrem : t₁.remaining = t₂.remaining)
     (hbytes : cast (congrArg Bytes hrem) t₁.bytes = t₂.bytes) : t₁ = t₂ := by
