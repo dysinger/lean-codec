@@ -325,6 +325,37 @@ and leaves the prose stale, with every check green.
 - **THEN** any equation it prints holds of the sets it names, rather than combining
   figures from two different sets into one line.
 
+The gate SHALL also be **reproducible against the tree it is run beside**. Where the
+package depends on a sibling repository by pinned revision, the pinned revision SHALL
+be the sibling's current default-branch commit at the time the gate is last known
+green, or the lag SHALL be recorded in the package's operating instructions together
+with its reason. A pin that has drifted silently is a stale dependency: the gate is
+honest about this package, but a reader comparing it against the sibling tree will
+believe a different revision was validated than the one that was, and no build can
+report the difference.
+
+Where a package's documentation states a count of a construct it sanctions but does
+not gate — a tactic, a trusted operation, an escape from the axiom discipline — the
+count SHALL be asserted by a build-time check on the same principle as the counts in
+this requirement. A sanctioned exception whose stated size is remembered rather than
+computed will drift as the exception grows, and the drift is invisible because the
+gate it escapes is, by construction, not looking.
+
+#### Scenario: A silently stale pin is corrected or explained
+
+- **WHEN** the package pins a sibling repository and that pin is not the sibling's
+  current default-branch commit
+- **THEN** either the pin is bumped and the gate re-run, or the package's operating
+  instructions record the revision and the reason for the lag, so a reader cannot
+  mistake the validated revision for the sibling tree's current one.
+
+#### Scenario: A sanctioned construct's stated count is asserted
+
+- **WHEN** package documentation states how many uses of a banned-or-sanctioned
+  construct exist outside the gate
+- **THEN** a build-time check compares that figure with the source, or the prose is
+  deleted, so the stated size cannot drift as the exception grows.
+
 ### Requirement: Base16 decoding accepts both cases (RFC 4648 §8)
 
 The Base16 decoder SHALL accept hex digits in **either** case, as RFC 4648 §8
