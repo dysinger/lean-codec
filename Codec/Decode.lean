@@ -907,24 +907,23 @@ theorem decodeFullFastSearch_eq {α : Type} (p : Codec α) (h : ConsumesByte p) 
           exact congrArg some (reverse_cons_append acc x xs)
 
 /-- The candidate list at cursor `m`, re-rooted at `Suffix.drop m s`'s bytes.
-`List.cast` is definitionally the identity here; it exists only to name the type. -/
+`List.cast` is definitionally the identity here; it exists only to name the type.
+
+The **only** reason this alias is kept is that `search_nil_left` below binds its `[]`
+candidate at exactly this spelling: naming the type lets the goal see the `[]`
+constructor instead of a `Suffix.drop 0 (…)`-shaped instance head it cannot match.
+It is therefore a *type spelling*, not a codec, and has no law to state — recorded in
+`definitionSurfaceAllowlist` with that reason (`codec-audit-round-five` R6-11: the
+entry's old reason called it a "`Type`-level alias" and did not say what it is for).
+
+Two siblings, `candsRoot` and `retypeCands`, were deleted here: nothing in the tree
+referenced either (`candsRoot` only in prose, `retypeCands` only in prose and in the
+other's own signature), so they were a closed dead island rather than aliases some
+proof spelled. That is the same defect shape as a bare allowlist entry, and the
+honest fix was deletion, not a longer reason. -/
 abbrev candsAt {α : Type} (p : Codec α) {n : Nat} (s : Bytes n) (m : Nat) : Type :=
   List { pr : α × Suffix (Suffix.drop m s).remaining //
       pr ∈ decode p (Suffix.drop m s).bytes }
-
-/-- The re-rooted candidate list at the same cursor, seen from the root
-`(Suffix.drop m s).bytes` with no cursor at all. Same length, same head. -/
-abbrev candsRoot {α : Type} (p : Codec α) {n : Nat} (s : Bytes n) (m : Nat) : Type :=
-  List { pr : α × Suffix (Suffix.drop m s).remaining //
-      pr ∈ decode p (Suffix.drop 0 (Suffix.drop m s).bytes).bytes }
-
-/-- Re-index a candidate list from the cursor root to the bare root: the two
-`decode` calls are the *same* call (their arguments differ by `bdrop 0`, the
-identity), so this is `List.cast` along that definitional equality. -/
-abbrev retypeCands {α : Type} (p : Codec α) {n : Nat} (s : Bytes n) (m : Nat)
-    (cs : candsAt p s m) : candsRoot p s m :=
-  (cs : List { pr : α × Suffix (Suffix.drop m s).remaining //
-      pr ∈ decode p (Suffix.drop 0 (Suffix.drop m s).bytes).bytes })
 
 /-- **The fast decoder's two congruences** (task 6.1a).
 
@@ -935,8 +934,8 @@ Two facts over **one** measured state
   `decodeFullFast p h s m acc = decodeFullFast p h (Suffix.drop m s).bytes 0 acc`.
 * `decodeFullFastSearch` — the same for the search. The two candidate lists are
   **the same list** at the two roots (`decode p`'s argument differs only by
-  `bdrop 0`, the identity), so the statement couples them via `retypeCands`
-  rather than quantifying two independent lists. **Quantifying them independently
+  `bdrop 0`, the identity), so the statement couples them rather than quantifying two
+  independent lists. **Quantifying them independently
   makes the `nil` case unprovable** — `cs = []` no longer constrains `cs'` — which
   is itself a recorded finding.
 
@@ -956,13 +955,13 @@ case.
 > `tasks.md` 6.1a for the full record.
 
 **The real obstacle, for the next reader:** `Membership` instance selection on the
-re-rooted candidate list. `candsRoot` spells the list at
+re-rooted candidate list. A re-rooted list would be spelled at
 `decode p (Suffix.drop 0 (Suffix.drop m s).bytes).bytes` while the search's own
 signature demands `decode p (Suffix.drop m s).bytes`. These are `rfl`-equal but not
 the same syntactic head, so `List.instMembership` unifies against the wrong one and
 `rw [decodeFullFastSearch.eq_def]` fails in the re-rooted position with
 `Application type mismatch: List.instMembership`. The proof below sidesteps it by
-never rewriting the search at the re-rooted root under a `retypeCands`-shaped list;
+never rewriting the search at the re-rooted root under a re-spelled list;
 it rewrites at the home root and lets the `[]`/`cons` reduction lemmas
 (`search_nil_cong`) do the re-indexing.
 
@@ -1010,7 +1009,7 @@ theorem remaining_at_reroot {n m r : Nat} (hr : r ≤ n - m) :
   rw [Nat.zero_add, Nat.sub_sub_self hr]
 
 /-- The re-rooted search's `[]` base, at the search's own list type. Stated
-separately because `retypeCands`'s `Suffix.drop 0 (…)` spelling does not reduce in
+separately because the `candsAt` alias's `Suffix.drop` spelling does not reduce in
 *goal* position (see `tasks.md` 6.1a's `Membership` note); naming the type here lets
 the goal see the `[]` constructor. -/
 theorem search_nil_left {α : Type} (p : Codec α) (h : ConsumesByte p)
