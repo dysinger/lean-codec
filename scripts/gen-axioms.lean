@@ -21,11 +21,20 @@ It rewrites the two regions of `Axioms.lean` delimited by
 from the **compiled environment**: every public `Codec`/`Iso` theorem.
 
 The set is defined once, in `CodecAxioms.gatedTheorems` in `Axioms.lean`, and
-mirrored here by `localGatedTheorems`. The two cannot silently disagree: if this
-mirror drifts, `CodecAxioms`' build-time coverage `run_cmd` fails the next
-`lake build` naming every theorem that ended up un-gated, so a drift is a build
-failure rather than a hole. (This script cannot simply import `Axioms`: the gate it
-regenerates has to be able to build *before* the gate does — a bootstrap cycle.)
+mirrored here by `localGatedTheorems`. **The mirror covers the THEOREM half only**
+(`codec-audit-round-five` R6-12, task §7.3): the *def*-side counts
+(`publicDefs` / mentioned / `definitionSurfaceAllowlist`) are computed by
+`Axioms.lean` from the environment at build time and asserted by `headerNumbers`
+there, but they are **not** derivable from this script — there is no def-side
+generator step, so the def counts in the header are asserted by hand and this script
+neither writes nor verifies them. The earlier sentence "the two cannot silently
+disagree" was true of the theorem half and overstated the whole.
+
+For the half it does cover: if this mirror drifts, `CodecAxioms`' build-time coverage
+`run_cmd` fails the next `lake build` naming every theorem that ended up un-gated, so
+a drift is a build failure rather than a hole. (This script cannot simply import
+`Axioms`: the gate it regenerates has to be able to build *before* the gate does — a
+bootstrap cycle.)
 
 This script is a **tool**, not part of the gate. The gate is the generated
 `#guard_msgs` blocks plus `CodecAxioms`' coverage `run_cmd`, both of which run on
@@ -48,9 +57,14 @@ def localIsGeneratedAux (n : Name) : Bool := Id.run do
   -- with `CodecAxioms.gatedTheorems`'s comment; the partition check is the guard.
   let authored : Array Name := #[`Codec.Nat.eq_irrel]
   if authored.contains n then return false
+  -- `Prop`-valued structure-field projections, recognised by name (no shared suffix:
+  -- each is `fun … => self.n`). Mirror of `CodecAxioms.propProjections`.
+  let propProjections : Array Name := #[
+    `Iso.law, `Codec.Normal.fixed, `Codec.Normalizer.idem]
+  if propProjections.contains n then return true
   let s := n.components.getLast!.toString
   return s == "eq_def" || s == "inj" || s == "injEq" || s == "sizeOf_spec" ||
-    s == "congr_simp" || s == "dec" || s == "induct"
+    s == "congr_simp" || s == "dec" || s == "induct" || s == "eq"
 
 /-- Mirror of `CodecAxioms.gatedTheorems` in `Axioms.lean`. -/
 def localGatedTheorems (env : Environment) : Array Name := Id.run do
