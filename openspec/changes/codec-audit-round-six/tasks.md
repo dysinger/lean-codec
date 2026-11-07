@@ -24,21 +24,41 @@ SHOULD = an over-claim that steers a reader wrong, or a promised mechanism that 
 absent. 12 findings. NITPICK = a wording error, a dead name, a mis-citation.
 16 findings.
 
-## Build state during implementation — read this before task 1.1
+## Build state — read this before starting
 
-**`lake build` will be RED from §1.1 until §1.5, and that is expected.** The new
-footprint arm fires on every docstring whose stated footprint disagrees with
-`collectAxioms`, and §1.2–§1.4 correct those docstrings. The counts move only at
-§7's regeneration.
+**§1 is closed and `lake build` is GREEN**, with **seven** gate lines:
 
-```bash
-nix develop --command lake build                          # run ONCE at §1.1: its failure output IS the list
-nix develop --command lake env lean Codec/Sound.lean      # per-module type check after that
+```
+axiom gate: 349 public theorems covered (0 explicit exclusion(s))
+axiom gate: 426 public theorems partitioned, 349 gated and 77 allowlisted
+axiom gate: 140 public definitions covered, 115 mentioned and 25 allowlisted (mention proxy)
+axiom gate: 54 definitions dropped by the name classifier, all reason-recorded
+axiom gate: 12 def-name patterns, each matching a recorded non-surface declaration
+axiom gate: header numbers verified (426 = 349 + 77; defs 140 = 115 + 25)
+axiom gate: stated footprints verified against the environment
 ```
 
-Run `lake build` **once** at §1.1 because its failure message is the work list.
-After that use per-module checks until §7, which is the single stated regeneration
-endpoint. §8 is where green is required.
+**No section from §2 on needs a red build.** §1's arm is verified non-vacuous by
+mutation (see task 1.5), so a green run now means something.
+
+**Three traps §1 paid for**, recorded here so §2 does not repay them:
+
+1. **A new check that passes is not evidence it runs.** §1's arm was green and
+   would have stayed green forever: a backticked _footprint_
+   (`` `[propext, Quot.sound]` ``) was parsed as a backticked _declaration name_,
+   so every claim was attributed away from its own declaration. Only inserting a
+   deliberately false claim and watching it **fail** found this. **Mutate every new
+   check before believing it** — this is the same failure shape the check exists to
+   catch, one level up, and it is the single most transferable lesson of the round.
+2. **`String.trim` does not exist** in Lean 4.35.0 (`trimAscii` returns a `Slice`),
+   and `String.join` takes only a `List String` — no separator argument. Both cost
+   compile cycles in §1 and will again in §2.3.
+3. **Test the false-positive control too.** A survey docstring (`LengthDet`'s
+   four-way table) states _other_ theorems' footprints; an attribution rule that
+   fires on it makes the check unusable in the other direction.
+
+**Regeneration:** §7.1 already ran for `codec`'s §1. **§2 and §6.6 change `basen`'s
+counts and each needs its own regeneration** — do not assume §7 is fully closed.
 
 ## Issue ledger (the index — every id is fixed by a task below)
 
