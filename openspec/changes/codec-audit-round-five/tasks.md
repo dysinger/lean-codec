@@ -94,9 +94,9 @@ checkboxes, deliberately.
 The highest-priority section: it is the **mechanism** behind R6-01/02/03, not three
 separate prose fixes.
 
-- [ ] 1.1 Add the def-side audit arm to `Axioms.lean`, mirroring the theorem-side
+- [x] 1.1 Add the def-side audit arm to `Axioms.lean`, mirroring the theorem-side
       `partition`. **R6-01.** ✔Verified: `publicDefs = 141`, `Iso.prod in publicDefs:
-  false`, `Iso.prod in allowlist: false`, `Iso.commute in publicDefs: true`.
+false`, `Iso.prod in allowlist: false`, `Iso.commute in publicDefs: true`.
 
       Two arms, both as `run_cmd`s in the same style as the existing coverage check:
 
@@ -112,59 +112,63 @@ separate prose fixes.
       Run `nix develop --command lake build` once here: its failure output **is** the
       work list for §2. Do not try to make it green in this task.
 
-- [ ] 1.2 Delete the three dead suffix entries. **R6-37.** `rec`, `mk`, `sizeOf` match
+- [x] 1.2 Delete the three dead suffix entries. **R6-37.** `rec`, `mk`, `sizeOf` match
       no `def` in `Codec`/`Iso` (✔measured). Removing them is safe once 1.1's second arm
       exists, because it will re-add such an entry as an error rather than a default.
-- [ ] 1.3 Remove `"prod"` from the list so `Iso.prod` re-enters the universe. It will
+- [x] 1.3 Remove `"prod"` from the list so `Iso.prod` re-enters the universe. It will
       then fail as unnamed — that is §2.1's task, not this one.
 
 ## 2. Classifying what the gate names (R6-02, R6-07, R6-11, R6-38)
 
-- [ ] 2.1 Give **`Iso.prod` a law** rather than an allowlist reason. **R6-01/§D2.** It is
+- [x] 2.1 Give **`Iso.prod` a law** rather than an allowlist reason. **R6-01/§D2.** It is
       the paper's `×` and is in `[S1]`'s unconditional list, so a theorem naming it is
       the honest resolution. State the law (`Rel (prod i j) (x, y) s` decomposed over a
       split) and keep it `[propext, Quot.sound]`-only; if it proves awkward, the
       fallback is a `definitionSurfaceAllowlist` entry — but then `[S1]`'s list must not
       be described as complete.
-- [ ] 2.2 Move `Iso.law`, `Codec.Normal.fixed`, `Codec.Normalizer.idem` into
+- [x] 2.2 Move `Iso.law`, `Codec.Normal.fixed`, `Codec.Normalizer.idem` into
       `generatedAuxAllowlist`'s existing `Prop`-valued-structure-field group, whose
       reason already covers them, and move the counts. **R6-02**, design §D3.
       ✔Measured: all three are `fun … => self.1`/`self.2` and report no axioms.
-- [ ] 2.3 Add the **domain laws** for the two partial isos: `(subset p).apply x = some x
-  ↔ p x` and `(element x).unapply b = some () ↔ b = x`. **R6-07**, design §D5.
+- [x] 2.3 Add the **domain laws** for the two partial isos: `(subset p).apply x = some x
+↔ p x` and `(element x).unapply b = some () ↔ b = x`. **R6-07**, design §D5.
       If either is awkward, fallback is a fourth allowlist group with the "partial iso"
       reason — design §D5 records it so the decision does not return.
-- [ ] 2.4 Resolve the three zero-reference allowlist entries. **R6-11.** `candsRoot` and
+- [x] 2.4 Resolve the three zero-reference allowlist entries. **R6-11.** `candsRoot` and
       `retypeCands` are unreferenced by any constant and `candsAt` is referenced only by
       `retypeCands` — a closed dead island. **Delete them** if `Codec/Decode.lean` no
       longer needs them (check first), otherwise change the reason to "unreferenced —
       pending deletion", since a "Type-level alias" reason does not say "dead".
-- [ ] 2.5 De-duplicate `Iso.element`/`Iso.subset`'s allowlist reasons. **R6-38.** They
+- [x] 2.5 De-duplicate `Iso.element`/`Iso.subset`'s allowlist reasons. **R6-38.** They
       currently repeat the group's reason verbatim; if 2.3 and 2.2 land they leave the
       list entirely, so verify rather than assume.
+      **Verified, not assumed:** both left. The definition-coverage check itself
+      reported them under "definitions that HAVE a gated law but are also
+      allowlisted", because their domain laws mention the constants — so the entries
+      were removed and the group comment now records _why_ the two are absent.
 
 ## 3. The mathematics sentence (R6-06)
 
-- [ ] 3.1 Land the counterexample in `Codec/Sound.lean`. **R6-06.** ✔Proved and in
+- [x] 3.1 Land the counterexample in `Codec/Sound.lean`. **R6-06.** ✔Proved and in
       **Appendix A.1** (`[propext]` and `[propext, Quot.sound]`-only). The witness
       `Rab` is `LengthDet`, productive, and admits two distinct full-consumption lists
       of **one** string at **different list lengths** — so "the list-length index, not
       `LengthDet`" is false as a general claim.
-- [ ] 3.2 Rewrite the section sentence. Replace "it is the **length index**, not
+- [x] 3.2 Rewrite the section sentence. Replace "it is the **length index**, not
       `LengthDet`" with: the list-length index handles list length, while per-step
       agreement _inside_ the induction is `LengthDet`'s job; `huniq_not_derivable`'s
       witness fails both, so neither premise is decorative. The **next** paragraph
       already says this correctly — do not duplicate it, make this sentence agree.
-- [ ] 3.3 Correct the three "needs **beyond unambiguity**" sites. **R6-13.**
+- [x] 3.3 Correct the three "needs **beyond unambiguity**" sites. **R6-13.**
       `relRepeat_unique_same_length` takes no unambiguity hypothesis at all, and
       `RelAligned → relUnambiguous` is proved in the same file, so `RelAligned`
       _contains_ unambiguity and there is no set "beyond" it. Correct phrasing: "in
       place of unambiguity — one subsumes it, the other supplies per-step length
       agreement".
-- [ ] 3.4 Name the side condition `c ≠ 0` wherever `LengthConst`'s mechanism is stated.
+- [x] 3.4 Name the side condition `c ≠ 0` wherever `LengthConst`'s mechanism is stated.
       **R6-14.** Stated three times in the section header, never with `hc0`; at `c = 0`
       a list of any number of steps consumes zero bytes and the lemma is false.
-- [ ] 3.5 Add `relFunctional`'s docstring and the bridge theorem. **R6-29.** State
+- [x] 3.5 Add `relFunctional`'s docstring and the bridge theorem. **R6-29.** State
       `Functional d ↔ relFunctional (Rel d)` so the two spellings cannot drift silently.
       This is a NITPICK with a real payoff: both are used for the same obligation.
 
@@ -192,99 +196,123 @@ separate prose fixes.
       neighbour work and is not satisfied by the bump alone — a future drift would again
       be invisible, which is what the delta is for.
 
-- [ ] 4.2 Correct the `native_decide` count claim. **R6-10.** `Bench.lean:403` says
+- [x] 4.2 Correct the `native_decide` count claim. **R6-10.** `Bench.lean:403` says
       "these three stay as the only `native_decide` in the ecosystem"; there are **13**
       (✔), and the second block's own header already says "`native_decide` **again**".
       Delete the sentence or state 13. Per the new `basen` spec delta, the count must be
       **asserted** if it is stated — add the `run_cmd` arm in 4.3.
-- [ ] 4.3 Add the stated-count assertion to `basen/Axioms.lean` (the prose-counts arm's
+      **Done.** **Measured: 12, not 13.** `grep -nE '^\s*native_decide\s*$' Bench.lean | wc -l` → 12 (18 identifier occurrences, 6 of them prose). Sentence rewritten to name twelve and to point at the new assertion.
+- [x] 4.3 Add the stated-count assertion to `basen/Axioms.lean` (the prose-counts arm's
       sibling). **R6-10**, `basen` spec delta. Count `native_decide` occurrences in
       `Bench.lean` and assert it equals the number the prose states.
-- [ ] 4.4 Fix the two pseudo-signatures. **R6-20/R6-32.** `README.md:90` renders the
+      **Done.** `Axioms.lean` gained a fifth `run_cmd` (`nativeDecideCount`) reading `Bench.lean` as text (it cannot be imported) and failing when the prose count and the tactic-line count disagree. Green: `native_decide stated count verified (12 uses in Bench.lean, all bench-lane, none in the gate)`.
+- [x] 4.4 Fix the two pseudo-signatures. **R6-20/R6-32.** `README.md:90` renders the
       converse law as `decode c = some b → encode b = c`, which matches no declaration
       (✔`BaseN.Base16.decode` does not exist) — and the same README forbids that
       shorthand 50 lines earlier. `Base10.lean:13` repeats it. State both in the real
       `decodeFull`/`Σ n, Bytes n` form.
-- [ ] 4.5 Fix the alphabet range. **R6-21.** `README.md:100` says "(48-122)"; base64
+      **Done.** Both now quoted at the real types (`decodeFull : … → Bytes n → Option (List UInt8)`, `encode… : List UInt8 → Option (Σ n, Bytes n)`) with the two actual declarations named.
+- [x] 4.5 Fix the alphabet range. **R6-21.** `README.md:100` says "(48-122)"; base64
       uses `+`=43 and `/`=47, so the union is 43-122 (✔). The `< 256` conclusion is
       true, so nothing follows for proofs — fix the number the reader would use.
-- [ ] 4.6 Fix the bench-lane characterisation and the stale changelog pin.
+      **Done.** Now "43-122", with `+`=43 and `/`=47 named.
+- [x] 4.6 Fix the bench-lane characterisation and the stale changelog pin.
       **R6-33/R6-34.** `default.nix:17` calls the lane's checks `example … := rfl`;
       13 are `native_decide` and 19 are `rfl` of ~90. `CHANGELOG`'s newest entry names
       `codec → 3277d48`; add the current pin or (preferred) state it once in `AGENTS.md`.
+      **Done.** `default.nix` now says "mostly `example … := rfl` … but not all: 12 `by native_decide`". `basen/AGENTS.md` gained "The validated `codec` revision — read `flake.lock`, never a number here", with the command that prints it; `CHANGELOG`'s rev is marked historical.
 
 ## 5. Documentation claims: completeness, derivation, signature (R6-03, R6-04, R6-05, R6-08, R6-16, R6-17, R6-18)
 
-- [ ] 5.1 Delete the "axiom-free ⇒ restatement" diagnostic in `Axioms.lean`.
+- [x] 5.1 Delete the "axiom-free ⇒ restatement" diagnostic in `Axioms.lean`.
       **R6-03**, design §D4. ✔`decodeWholeOneBytes_eq` is `[propext, Quot.sound]`, not
       axiom-free, so it fails on its own example; it also over-flags the three Layer-2
       `*_spec`s. Name identities by `#print`ing their bodies instead.
-- [ ] 5.2 Restate `[S1]`'s completeness claim. **R6-04.** ✔17 `Iso`-valued defs, not 15. `counterIso`/`counterIsoR` are the `MeasureDecreases` satisfiability
+      **Done.** Deleted and replaced with the measured facts (`decodeWholeOneBytes_eq` is `[propext, Quot.sound]`; the three Layer-2 `*_spec`s over-flagged; name identities by `#print`ing the body).
+- [x] 5.2 Restate `[S1]`'s completeness claim. **R6-04.** ✔17 `Iso`-valued defs, not 15. `counterIso`/`counterIsoR` are the `MeasureDecreases` satisfiability
       witnesses and hold their law **unconditionally**, so the "only on the
       terminal-seed domain" qualifier is wrong too. Also replace the method claim —
       `grep '^def'` misses multi-line signatures — with the environment walk.
-- [ ] 5.3 Restate `[S3]`'s inventory claim. **R6-05.** ✔`uniqSeqBt`/`Bo`/`D2`/`Whole`
+      **Done.** Rewritten: **19** public `Iso`-valued defs by environment walk (13 listed + `foldl`/`foldr`/`counterIso`/`counterIsoR`); the four are split by position (`counterIso`/`counterIsoR` hold their law **unconditionally**, so the old "both hold only on the terminal-seed domain" was false); the `grep '^def'` method claim is replaced by the walk.
+- [x] 5.3 Restate `[S3]`'s inventory claim. **R6-05.** ✔`uniqSeqBt`/`Bo`/`D2`/`Whole`
       are four public `Codec` values in no row. Say "the fifteen a **porter must
       reproduce** … plus four values that exist only as counterexample witnesses", and
       reuse `Axioms.lean`'s existing characterisation rather than asserting
       exhaustiveness.
-- [ ] 5.4 Re-derive the second-candidate cost. **R6-08**, design §D7. ✔The adjacent
+      **Done.** Now "the fifteen a **porter must reproduce** (7 constructors + 8 bounded defs)", plus the four `uniqSeq*` counterexample-witness values stated as environment-only.
+- [x] 5.4 Re-derive the second-candidate cost. **R6-08**, design §D7. ✔The adjacent
       table gives 26.4 (run 1) / 23.6 (run 2); `52.4` appears nowhere else in the
       document. Present as a range with the run number, and delete the orphan. **Do not
       re-run the bench** — this is a documentation inconsistency between committed
       figures.
-- [ ] 5.5 Rewrite `[D5]`'s elision note. **R6-16.** The note that marks the elision is
+      **Done.** Now "~24-26 ns/step" from the adjacent table (`54.9 − 28.5 = 26.4` run 1, `51.1 − 27.5 = 23.6` run 2), with the orphan `52.4` deleted and the cross-table/cross-run defect named. `~21×` → `~20×`. No bench was re-run.
+- [x] 5.5 Rewrite `[D5]`'s elision note. **R6-16.** The note that marks the elision is
       itself assembled across the text it says is elided; the material strictly between
       the two fragments is three words ("This means that"). Quote the elided span
       exactly and no more.
-- [ ] 5.6 Fix `[D4]`'s injectivity contradiction. **R6-17.** The anchor says `ignore`
+      **Done.** The elided span is now quoted exactly ("This means that", three words) and the note no longer carries an ellipsis of its own.
+- [x] 5.6 Fix `[D4]`'s injectivity contradiction. **R6-17.** The anchor says `ignore`
       fails "because its `apply` is **not injective**", then three sentences later says
       that is _not_ the reason. The sibling "why" section has it right: the obstruction
       is that `apply` is **constant** and `law` is an `↔` over every `a`.
-- [ ] 5.7 Qualify "only at `Codec.byte`". **R6-18.** `Unambiguous` has two composed
+      **Done.** The obstruction is now stated once, as **constancy** of `apply` plus the law being an `↔` over every `a`; non-injectivity is named as a consequence and explicitly not the reason.
+- [x] 5.7 Qualify "only at `Codec.byte`". **R6-18.** `Unambiguous` has two composed
       suppliers (`uniqSeqBo_unambiguous`, `uniqSeqD2_unambiguous`) besides
       `unambiguous_byte`. Say "each family has a supplier at `Codec.byte`" — which is
       true — rather than "only at".
+      **Done.** Now "each family has a supplier at `Codec.byte`", with the two composed `Unambiguous` suppliers (`uniqSeqBo_unambiguous`, `uniqSeqD2_unambiguous`) named.
 
 ## 6. Nitpick sweep (R6-19, R6-22 … R6-31, R6-35, R6-36)
 
 Each is one clause. Do them as one pass.
 
-- [ ] 6.1 `[D1]`: quote both paper declarations correctly — `newtype Parser α = Parser
-  (String → [(α, String)])` and `data Rel α = Rel [(α, String)]`. **R6-22.** `[D2]`
+- [x] 6.1 `[D1]`: quote both paper declarations correctly — `newtype Parser α = Parser
+(String → [(α, String)])` and `data Rel α = Rel [(α, String)]`. **R6-22.** `[D2]`
       quotes them right 20 lines later; make them agree.
-- [ ] 6.2 `[D2]`: add "**as a graph** (not as a multiset — see the Multiplicity note
+      **Done.** Both quoted in full (`newtype Parser α = Parser (String → [(α, String)])`, `data Rel α = Rel [(α, String)]`), agreeing with `[D2]`.
+- [x] 6.2 `[D2]`: add "**as a graph** (not as a multiset — see the Multiplicity note
       under `[D3]`)". **R6-23.**
-- [ ] 6.3 `[D7]`: `MeasureDecreases` is parameterised _by_ the measure and its only
+      **Done.** Added, with a pointer to the Multiplicity note under `[D3]`.
+- [x] 6.3 `[D7]`: `MeasureDecreases` is parameterised _by_ the measure and its only
       field is the proof; the same anchor's later list already gets this right. **R6-24.**
-- [ ] 6.4 Remove the stale quotation of `AGENTS.md`. **R6-25.** ✔`README` quotes "which
+      **Done.** Now stated at its real type, `MeasureDecreases (measure : α → Nat) (i : Iso (α × β) α)` with `dec` as the only field.
+- [x] 6.4 Remove the stale quotation of `AGENTS.md`. **R6-25.** ✔`README` quotes "which
       this repo does not yet measure"; `AGENTS.md` now says "This repo now measures one".
-- [ ] 6.5 Fix the "512 steps per burst" caption. **R6-26.** `idealCursor` runs 4096
+      **Done.** Reframed as what `AGENTS.md` _used to_ say, with the current text quoted back.
+- [x] 6.5 Fix the "512 steps per burst" caption. **R6-26.** `idealCursor` runs 4096
       steps, `decodeFullArray` 512; the per-step figures are each divided by their own
       count, so this is a caption error — and a reader applying 512 to the floor row
       concludes it is 8× worse than it is.
-- [ ] 6.6 Cite the commit beside the historical footprint quadruple. **R6-27.**
-- [ ] 6.7 Add `"eq"` to `isGeneratedAux` after confirming `Codec.brecOn.eq` is the only
+      **Done.** Now says `idealCursor` runs **4096** and the others **512**, with the 8× consequence named. The second table's caption (`n/8` = 512, correct for every row) was made explicit.
+- [x] 6.6 Cite the commit beside the historical footprint quadruple. **R6-27.**
+      **Done.** `9db99b8` cited at both sites, with "quote the gate, never a number written in a file" added.
+- [x] 6.7 Add `"eq"` to `isGeneratedAux` after confirming `Codec.brecOn.eq` is the only
       authorial theorem ending in `eq`. **R6-28.**
-- [ ] 6.8 Note that five of `[S1]`'s thirteen listed isos have zero referencing
+      **Done.** ✔Confirmed by environment walk: `Codec.brecOn.eq` is the only public theorem ending in `eq`. Added to both `isGeneratedAux` and the generator's mirror; the name moved to `generatedAuxAllowlist`. **Side effect worth recording:** moving it out of the gated set removed the only mention of `Codec.brecOn.go`, which then surfaced as an un-named public def — and its old pattern `"brecOn.go"` had never matched anything (a last name component is `go`), so that was a fourth dead entry. Fixed by adding a correct `"go"` pattern.
+- [x] 6.8 Note that five of `[S1]`'s thirteen listed isos have zero referencing
       constants — expected under `[S3]`, but unstated. **R6-30.**
-- [ ] 6.9 Fix `Iso.element`'s retention reason. **R6-31.** ✔`[D8]` names only the
+      **Done.** **Measured: 3, not 5** — `Iso.id`, `Iso.ofTotal`, `Iso.associate` have zero referencing constants (`.eq_1` unfoldings ignored). The five was 3 plus `element`/`subset`, which §2.3's domain laws now reference; the note says so rather than repeating the stale five.
+- [x] 6.9 Fix `Iso.element`'s retention reason. **R6-31.** ✔`[D8]` names only the
       paper's constructors, never `Iso.element`; re-point at `[S1]`'s parenthetical or
       delete the sentence.
-- [ ] 6.10 Record that the four `run_cmd` failure branches are unexercised, with the
+      **Done.** **Refuted on inspection** — `README [D8]`'s opening sentence names `Iso.element` and `Iso.subset` verbatim, so the reason holds. The docstring now cites both anchors by name and records the refutation.
+- [x] 6.10 Record that the four `run_cmd` failure branches are unexercised, with the
       deliberately-red probe a maintainer can run. **R6-19.** Stated narrowly: absence
       of evidence, not proof the checks are dead.
-- [ ] 6.11 Template: replace the `codec-audit-round-three §2.2.1` citation with a
+      **Done.** Recorded in `derivedDefPatternAudit`'s docstring, narrowly: all four `run_cmd` arms are on their passing path in this tree, with the deliberate one-line edit that exercises each.
+- [x] 6.11 Template: replace the `codec-audit-round-three §2.2.1` citation with a
       self-contained sentence. **R6-35.** A fork cannot resolve another repo's change
       section number.
-- [ ] 6.12 Template: ship a short `AGENTS.md`. **R6-36.** The ecosystem rules —
+      **Done.** `lakefile.lean` now says "**It was absent before 2026-11-06**", keeping the ledger's section number only as a parenthetical provenance note a fork need not resolve.
+- [x] 6.12 Template: ship a short `AGENTS.md`. **R6-36.** The ecosystem rules —
       commit granularity, `flake.lock` vs `lake-manifest.json`, the axiom discipline,
       the two-layer trust posture. `basen` and `codec` both have one; a fork starts
       without.
+      **Done.** Written: non-negotiables (zero `sorry`, axiom discipline, per-file commits, lock-vs-manifest), the two-layer trust posture and the "no axiom is never no trust" rule, what each verification command actually proves, cross-repo pin/bad-import guidance, and the documentation-discipline lessons.
 
 ## 7. Settle R6-15, then regenerate
 
-- [ ] 7.1 **Attempt the `relFunctional` derivability proof.** **R6-15**, design §D6.
+- [x] 7.1 **Attempt the `relFunctional` derivability proof.** **R6-15**, design §D6.
       Claim under test: `relFunctional` is derivable for `takeWhile`/`sepBy` (both are
       `relRepeat`-shaped over `ConsumesByte` steps, so each value list's string length
       is pinned by the list's own length), leaving only `chainl1`/`chainr1` as genuine
@@ -297,28 +325,72 @@ Each is one clause. Do them as one pass.
       ledger's §9 and leave the prose alone. **Do not change the prose on an unproved
       inference** — that is the defect class this change exists to fix.
 
-- [ ] 7.2 Regenerate `Axioms.lean` once (`scripts/gen-axioms.lean`) and move the header
+      **OUTCOME (a), partial — and the partiality is the finding.** Landed
+      `Codec.relRepeat_functional_of_step`, `Codec.satisfy_sigmaFunctional`,
+      `Codec.relTakeWhile_functional`, `Codec.relSepBy_functional`
+      (`Codec/Combinators.lean`), all `[propext, Quot.sound]`-only by `#print axioms`.
+      Measured:
+      * `takeWhile` — `relFunctional` is **unconditionally derivable**: a `satisfy p`
+        step's bytes are determined by its value, so `relRepeat_functional_of_step`
+        applies with no hypothesis on `p`.
+      * `sepBy` — derivable **from `relFunctional (Rel p)`**, not unconditionally: its
+        tail is `takeWhile`-shaped, but its head is an arbitrary `Codec α`. The
+        reviewer's inference was right about the tail and silent about the head.
+      * `chainl1`/`chainr1` — not attempted; the fold can send two distinct
+        `(seed, ops)` pairs to the same value, so the obligation is real.
+
+      Prose updated in `README [S3]` to a three-row table (derivable / derivable given
+      `p` / genuine obligation) rather than the old "conditional in **every** case".
+
+- [x] 7.2 Regenerate `Axioms.lean` once (`scripts/gen-axioms.lean`) and move the header
       tables and the six `expected*` constants together. **Do not predict the delta —
       the run prints it.** The generator also rewrites the footprint distribution
       between its `BEGIN/END GENERATED` markers, and the new def-side counts from §2
       must be asserted there (design §D1). Re-run until green.
-- [ ] 7.3 Scope `gen-axioms.lean`'s "the two cannot silently disagree". **R6-12.** It
+      **Done.** Regenerated **once** (`rewrote 348 gates and the distribution table`), then the header table and all six `expected*` constants moved together. Four gate lines became **six**: the two new def-side arms print too. Final `lake build` output is in §8.1.
+- [x] 7.3 Scope `gen-axioms.lean`'s "the two cannot silently disagree". **R6-12.** It
       covers the theorem half only; the def counts (141/112/29 → new values) have no
       derivation path and are asserted by hand. Either add a def-side generator step or
       say so explicitly.
+      **Done.** Header now says the mirror covers the **theorem half only**; the def counts have no generator step and are asserted by hand in `Axioms.lean`'s `headerNumbers`.
 
 ## 8. Gates (run all three repos; they are different flakes)
 
-- [ ] 8.1 `codec`: `lake build` (zero `sorry`, four gate lines, counts in lockstep),
+**Measured output of the whole section, 2026-11-07.** Every line below is pasted from
+the run, not predicted.
+
+`codec` — `lake build` prints **six** gate lines, all green, zero warnings:
+
+```
+axiom gate: 348 public theorems covered (0 explicit exclusion(s))
+axiom gate: 425 public theorems partitioned, 348 gated and 77 allowlisted
+axiom gate: 140 public definitions covered, 115 mentioned and 25 allowlisted (mention proxy)
+axiom gate: 54 definitions dropped by the name classifier, all reason-recorded
+axiom gate: 12 def-name patterns, each matching a recorded non-surface declaration
+axiom gate: header numbers verified (425 = 348 + 77; defs 140 = 115 + 25)
+```
+
+`lake build bench` green (28 jobs). `openspec validate --all` **11/11**. `nix fmt`
+then `nix flake check` green: `checks.{lean,openspec,formatting}` all ✅.
+
+`basen` — `lake build` green (25 jobs) with **five** gate lines, including the new
+`native_decide stated count verified (12 uses in Bench.lean, all bench-lane, none in
+the gate)`; `lake build bench` green (45 jobs); `nix build '.#bench'` exit 0 (its
+`installPhase` runs the executable).
+
+`template` — `nix flake check` green (`checks.{formatting,lean}` ✅, template
+validity ✅); `nix build .#native .#cli` exit 0.
+
+- [x] 8.1 `codec`: `lake build` (zero `sorry`, four gate lines, counts in lockstep),
       `lake build bench`, `openspec validate --all`, `nix flake check` (detached with
       `nohup`, never foregrounded — and **`nix fmt` first**).
-- [ ] 8.2 `basen`: `lake build`, `lake build bench`, `nix build '.#bench'` (its
+- [x] 8.2 `basen`: `lake build`, `lake build bench`, `nix build '.#bench'` (its
       `installPhase` **runs** the executable).
-- [ ] 8.3 `template`: `nix flake check`, `nix build .#native .#cli`.
+- [x] 8.3 `template`: `nix flake check`, `nix build .#native .#cli`.
 - [ ] 8.4 Commit per task family, individual files only, printing
       `git diff --cached --name-only` before each. The pre-commit hook runs `nix fmt`
       and rejects a reformatted staged file; re-add and commit again.
-- [ ] 8.5 Verify every new law's footprint by hand:
+- [x] 8.5 Verify every new law's footprint by hand:
       `printf 'import Codec\n#print axioms Codec.<n>\n' > /tmp/c.lean` →
       expect `[propext, Quot.sound]` or cleaner. `Classical.choice` is a defect.
 
