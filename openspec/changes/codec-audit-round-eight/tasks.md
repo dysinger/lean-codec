@@ -295,9 +295,22 @@ bench`, `openspec validate --all`, `nix flake check` (detached with `nohup`).
         fix is for the generator to be run when a law is added — which `AGENTS`
         already says, and which this task is the evidence for.
 
-- [ ] 7.3 Commit per task family, individual files, printing
+- [x] 7.3 Commit per task family, individual files, printing
       `git diff --cached --name-only`; push; bump `lean-basen`'s pin **only** if
       `codec` changed (it will, so: bump, re-run its three gates, push).
+      **DONE.** Three commits in `codec`, each staged file-by-file with
+      `git diff --cached --name-only` printed first — `217b7e5` (Axioms +
+      `gen-axioms.lean`), `0c014bf` (README/CHANGELOG/AGENTS), `14b54fa` (this ledger) —
+      pushed as `841c2bb..14b54fa`. `lean-basen`: `nix flake update codec` +
+      `lake update codec` to `14b54fa`, then its gates **re-run, not assumed** —
+      `lake build` prints all **8** of its lines (`490 = 444 + 46` theorems,
+      `137 = 122 + 15` defs, `10` def-name patterns, `native_decide 12`, **46**
+      footprint claim sites) and `lake build bench` is 45 jobs; **no `BaseN` source
+      changed**, as expected (the bump moved gate machinery, not the API). Committed
+      `4806fb8` and pushed as `c32db88..4806fb8`.
+      **`nix flake check` was re-run to completion after the final edits** — the
+      earlier run was cancelled, and a cancelled check is not a pass. Result and any
+      caveat are in this change's closing note below, not in a commit message.
 
 ## 8. Recorded, deliberately not in this change
 
