@@ -1347,6 +1347,115 @@ run_cmd do
     throwError m!"the \"Current state\" table is stale (update it and expected* here):\n{String.join (bad.toList.map fun s => s!"  {s}\n")}"
   logInfo m!"axiom gate: header numbers verified ({expectedPub} = {expectedGated} + {expectedAllow}; defs {expectedDefs} = {expectedMentioned} + {expectedDefAllow})"
 
+/-- True when `seg` backticks a declaration that exists and is not `selfName`.
+The attribution rule for the stated-footprint check: a docstring that names another
+declaration is not claiming its own footprint.
+
+A docstring names declarations **short**, without their namespace (`relUnambiguous S`,
+`lengthDet_byte`), so the lookup tries the bare name, then the enclosing namespaces.
+The namespace prefix of the declaration being checked is the first thing tried, which
+is what resolves `lengthDet_relUnambAlignedWitness` inside `Codec`. -/
+def namesAnotherDecl (env : Environment) (selfName : String) (ns : Name) (seg : String) : Bool :=
+  -- **A backticked footprint is not a declaration name.** `` `[propext,
+  -- Quot.sound]`-only `` puts the footprint in backticks, so a naive backtick scan
+  -- reads it as a name and the claim gets attributed away from its own declaration.
+  -- Strip the two footprint spellings first; this is why the arm must be
+  -- non-vacuity-tested by inserting a false claim, not only run on a clean tree.
+  let seg := seg.replace "`[propext, Quot.sound]`" "FP_BOTH"
+                 |>.replace "`[propext]`" "FP_PROPEXT"
+  let resolves (s : String) : Bool :=
+    let n := s.toName
+    (env.find? n).isSome || (env.find? (ns ++ n)).isSome ||
+      (env.find? (`Codec ++ n)).isSome
+  ((String.splitOn seg "`").zipIdx.filterMap fun (p, i) =>
+    if i % 2 == 1 then some p else none).any fun s =>
+      s != selfName && resolves s
+
+/-! **The stated-footprint check**, run on every `lake build` — `codec-audit-round-six`
+§1.1, R7-01/R7-02.
+
+The six checks above assert set **counts** and pin **membership**. None of them reads
+a docstring. That left the gate's own prose about footprints unaudited, and round
+seven found **eleven** docstring sites stating a footprint `#print axioms`
+contradicts — in **both** directions (six "Axiom-free" claims that are not, two
+"`[propext, Quot.sound]`-only" claims that are axiom-free, and three restatements).
+This check closes that class.
+
+**The rule the class teaches, and the reason it is not a syntactic test:** write a
+footprint from `#print axioms`, never from inspection. A candidate predictor — "an
+axiom-free claim is true only when the statement never reads a `Bytes` component" —
+is **false**: 25 axiom-free theorems manipulate `Bytes` directly (`cast_bytes_val`,
+`byteSlice_spec`, `Suffix_cast_remaining`, …). The footprint depends on which
+tactics a proof uses, not on the types in its statement, so no rule from statement
+shape to footprint is sound. Measurement is the only oracle.
+
+**Attribution.** A claim attaches to the declaration whose docstring it is, *unless
+the same segment names a different declaration* — because a docstring that surveys
+several footprints (`LengthDet` carries the whole four-way table) is not claiming its
+own. Segments are split on newlines and sentence boundaries, so one paragraph is not
+treated as one sentence. A hedged lower bound — "`[propext]` or no axioms" — is
+satisfied by any footprint inside the hedge, and is not an exact-set claim.
+
+Failure modes handled as their own cases:
+* an exact claim that does not match the measured set (either direction);
+* a hedged claim whose measured set is outside the hedge. -/
+open Lean Elab Command in
+run_cmd do
+  let env ← getEnv
+  let mut bad : Array String := #[]
+  for (nm, ci) in env.constants.toList do
+    if (nm.getPrefix == `Codec || nm.getPrefix == `Iso) && !ci.isUnsafe && !ci.isPartial then
+      match ci with
+      | .thmInfo _ | .defnInfo _ =>
+        let some doc ← Lean.findDocString? env nm | pure ()
+        let selfName := nm.components.getLast!.toString
+        let ns := nm.getPrefix
+        let footprint ← Lean.collectAxioms nm
+        let fp := footprint.toList.map toString
+        let isFree := fp.isEmpty
+        let isPropextOnly := fp == ["propext"]
+        let isBothOnly := fp == ["propext", "Quot.sound"]
+        -- Segments: newlines and sentence breaks, so a paragraph is not one
+        -- sentence.
+        let lines := String.splitOn doc "\n"
+        let segs := lines.flatMap (String.splitOn · ". ")
+        let paras := String.splitOn doc "\n\n"
+        for seg in segs do
+          -- Attribute away when this segment, **or the paragraph it sits in**,
+          -- names a different declaration. A survey paragraph (`LengthDet` and
+          -- `RelAligned` carry the whole four-way table) states other theorems'
+          -- footprints; a claim split from its theorem's name by a sentence break
+          -- still belongs to that theorem's line, so the paragraph is the window.
+          let para := (paras.filter fun q => q.contains seg.trimAscii.toString).head?
+          let namesOther :=
+            CodecAxioms.namesAnotherDecl env selfName ns seg ||
+            para.any fun q => CodecAxioms.namesAnotherDecl env selfName ns q
+          if namesOther then continue
+          let low := seg.toLower
+          let claim : Option String :=
+            if low.contains "axiom-free" || low.contains "no axioms at all" then
+              some "axiom-free"
+            else if seg.contains "`[propext, Quot.sound]`-only" then
+              some "[propext, Quot.sound]-only"
+            else if seg.contains "`[propext]`-only" then some "[propext]-only"
+            else if low.contains "`[propext]` or no axioms" then some "[propext]-or-cleaner"
+            else none
+          let some claim := claim | continue
+          let measured := if isFree then "axiom-free"
+            else "[" ++ String.intercalate ", " fp ++ "]"
+          let ok := match claim with
+            | "axiom-free" => isFree
+            | "[propext, Quot.sound]-only" => isBothOnly
+            | "[propext]-only" => isPropextOnly
+            | "[propext]-or-cleaner" => isFree || isPropextOnly
+            | _ => true
+          unless ok do
+            bad := bad.push s!"  {nm}: says {claim}, measured {measured}\n"
+      | _ => pure ()
+  unless bad.isEmpty do
+    throwError m!"stated footprints disagree with the environment ({bad.size} claim site(s)). Write the footprint from `#print axioms`, never from inspection:\n{String.join bad.toList}"
+  logInfo m!"axiom gate: stated footprints verified against the environment"
+
 end CodecAxioms
 
 /-! ## Generated body
