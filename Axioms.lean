@@ -106,11 +106,11 @@ failure mode. **It is not soundness.**
 
 ## Current state
 
-**426** public theorems are covered, by a partition with no third route:
+**425** public theorems are covered, by a partition with no third route:
 
 | side | count | what it is |
 | --- | --- | --- |
-| gated (`gatedNames`) | **349** | footprint pinned by `#print axioms` |
+| gated (`gatedNames`) | **348** | footprint pinned by `#print axioms` |
 | allowlisted (`generatedAuxAllowlist`) | **77** | not a law; reason recorded in place |
 | un-gated and unlisted | **0** | a build failure, by construction |
 
@@ -121,12 +121,12 @@ Gated footprint distribution — **generated** from the same `collectAxioms` res
 
 | footprint | count |
 | --- | --- |
-| `[propext, Quot.sound]` | 223 |
+| `[propext, Quot.sound]` | 222 |
 | `[propext]` | 92 |
 | `[Quot.sound]` | 4 |
 | axiom-free | 30 |
 | anything else | 0 |
-| **total** | **349** |
+| **total** | **348** |
 
 `[propext, Classical.choice, Quot.sound]` rows: **0** — every gated law is
 inside the discipline.
@@ -880,7 +880,6 @@ def gatedNames : List Lean.Name := [
   ,`Codec.decodeNormal_of_fixed
   ,`Codec.decodeOne_mem
   ,`Codec.decodeRepeat_eq
-  ,`Codec.decodeRepeat_mem_iff
   ,`Codec.decodeRepeat_mem_iff_general
   ,`Codec.decodeRepeat_spec
   ,`Codec.decodeSepBy_spec
@@ -1321,8 +1320,8 @@ run_cmd do
   let gated := gatedNames.length
   let allow := CodecAxioms.generatedAuxAllowlist.size
   -- Lockstep with "Current state" above.
-  let expectedPub := 426
-  let expectedGated := 349
+  let expectedPub := 425
+  let expectedGated := 348
   let expectedAllow := 77
   let expectedDefs := 140
   let expectedMentioned := 115
@@ -1928,9 +1927,6 @@ why it was fixed instead of documented.
 /-- info: 'Codec.decodeRepeat_eq' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.decodeRepeat_eq
-/-- info: 'Codec.decodeRepeat_mem_iff' depends on axioms: [propext, Quot.sound] -/
-#guard_msgs in
-#print axioms Codec.decodeRepeat_mem_iff
 /-- info: 'Codec.decodeRepeat_mem_iff_general' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.decodeRepeat_mem_iff_general
