@@ -26,20 +26,35 @@ absent. 12 findings. NITPICK = a wording error, a dead name, a mis-citation.
 
 ## Build state — read this before starting
 
-**§1 is closed and `lake build` is GREEN**, with **seven** gate lines:
+**All eight sections are closed and both gates are GREEN.**
+
+`codec` — **seven** gate lines:
 
 ```
-axiom gate: 349 public theorems covered (0 explicit exclusion(s))
-axiom gate: 426 public theorems partitioned, 349 gated and 77 allowlisted
+axiom gate: 348 public theorems covered (0 explicit exclusion(s))
+axiom gate: 425 public theorems partitioned, 348 gated and 77 allowlisted
 axiom gate: 140 public definitions covered, 115 mentioned and 25 allowlisted (mention proxy)
 axiom gate: 54 definitions dropped by the name classifier, all reason-recorded
 axiom gate: 12 def-name patterns, each matching a recorded non-surface declaration
-axiom gate: header numbers verified (426 = 349 + 77; defs 140 = 115 + 25)
+axiom gate: header numbers verified (425 = 348 + 77; defs 140 = 115 + 25)
 axiom gate: stated footprints verified against the environment
 ```
 
-**No section from §2 on needs a red build.** §1's arm is verified non-vacuous by
-mutation (see task 1.5), so a green run now means something.
+`basen` — **six** gate lines, the sixth of which §6.6 added:
+
+```
+basen axiom gate: 444 pinned + 46 allowlisted = 490 of 490 public theorems (0 explicit exclusion(s))
+basen axiom gate: 490 public theorems partitioned, 444 pinned and 46 allowlisted
+basen axiom gate: header numbers verified (490 = 444 + 46); prose paragraph says 447 pins = 444 BaseN + 3 Codec
+basen axiom gate: 137 public definitions covered, 122 mentioned and 15 allowlisted (mention proxy)
+basen axiom gate: native_decide stated count verified (12 uses in Bench.lean, all bench-lane, none in the gate)
+basen axiom gate: stated footprints verified against the environment (46 claim site(s))
+```
+
+**Every new arm is mutated before it is believed** — that is the rule §1 cost a
+session to learn, and §2 and §6.6 each reproduced the failure it prevents (`basen`'s
+ported footprint arm was green on 6 of 52 claim sites until the attribution rule was
+fixed). The mutations and their outputs are in the tasks' own evidence cells.
 
 **Three traps §1 paid for**, recorded here so §2 does not repay them:
 
@@ -484,17 +499,48 @@ separate prose fixes.
 
 ## 8. Gates (run all three repos; they are different flakes)
 
-- [ ] 8.1 `codec`: `nix fmt` first, then `lake build` (zero `sorry`, four-plus gate
+- [x] 8.1 `codec`: `nix fmt` first, then `lake build` (zero `sorry`, four-plus gate
       lines, counts in lockstep), `lake build bench`, `openspec validate --all`,
       `nix flake check` (**detached with `nohup`, never foregrounded**).
-- [ ] 8.2 `basen`: `lake build`, `lake build bench`, `nix build '.#bench'`.
-- [ ] 8.3 `template`: `nix flake check`, `nix build .#native .#cli`.
-- [ ] 8.4 Commit per task family, individual files only, printing
+      **Done, all green.** `nix fmt` (197 files, 2 changed); `lake build` — 15 jobs,
+      zero warnings, **seven** gate lines `425 = 348 + 77`, `140 = 115 + 25`; `lake
+    build bench` — 28 jobs; `openspec validate --all` — **11 passed, 0 failed**
+      (3 pre-existing >500-char warnings, no errors); `nix flake check` detached via
+      `nohup` — `checks.aarch64-darwin.{formatting,lean,openspec}` all ✅.
+- [x] 8.2 `basen`: `lake build`, `lake build bench`, `nix build '.#bench'`.
+      **Done, all green.** `lake build` — 25 jobs, **six** gate lines
+      (444 pinned + 46 = 490; 137 defs; **stated footprints verified, 46 claim
+      sites**); `lake build bench` — 45 jobs; `nix build '.#bench'` — exit 0.
+- [x] 8.3 `template`: `nix flake check`, `nix build .#native .#cli`.
+      **Done, all green.** `nix fmt` then `nix flake check` —
+      `checks.aarch64-darwin.{formatting,lean}` ✅; `nix build .#native .#cli` — exit 0.
+      (The first `flake check` failed `treefmt-check` on `*build*` → `_build_`; the
+      hook is what caught it.)
+- [x] 8.4 Commit per task family, individual files only, printing
       `git diff --cached --name-only` before each. The pre-commit hook runs `nix fmt`
       and rejects a reformatted staged file; re-add and commit again.
-- [ ] 8.5 Verify every new law's footprint by hand and paste the output:
+      **Done.** 5 commits in `codec` (Sound; Axioms; Combinators; README; ledger),
+      9 in `basen` (Axioms; Base16; Base2/4; Base8/10; Base32; Base64; AGENTS+nix+Bench
+      docs; README+CHANGELOG; flake.lock), 2 in `template` (AGENTS; lakefile). Every
+      commit printed `git diff --cached --name-only` first; the hook reformatted
+      nothing on the final passes. All three trees are clean.
+- [x] 8.5 Verify every new law's footprint by hand and paste the output:
       `printf 'import Codec\n#print axioms Codec.<n>\n' > /tmp/c.lean` →
       expect `[propext, Quot.sound]` or cleaner. `Classical.choice` is a defect.
+      **Done. `codec`:**
+      `     'Codec.Rab_fails_huniq_full' depends on axioms: [propext, Quot.sound]
+    'Codec.uniqSeq_not_congruent' depends on axioms: [propext, Quot.sound]
+    `
+      **`basen`:**
+      `     'BaseN.Base16.decodeHexFold_roundtrip' depends on axioms: [propext, Quot.sound]
+    'BaseN.Base16.foldByte_of_hexDigit' depends on axioms: [propext, Quot.sound]
+    'BaseN.Base16.foldByteBytes_of_encodeHex' depends on axioms: [propext, Quot.sound]
+    'BaseN.Base16.hexToNibble_range' depends on axioms: [propext, Quot.sound]
+    'BaseN.Base64.b64BytesOf_tail1_eq' does not depend on any axioms
+    'BaseN.Base32.b32BytesOf_tail1_eq' does not depend on any axioms
+    `
+      No `Classical.choice` in any. The two axiom-free rows are the ones §6.6's new
+      arm found mis-claimed as `[propext, Quot.sound]`-only.
 
 ---
 
@@ -514,6 +560,13 @@ every `- [ ]`, so a "no action" box makes 100% unreachable.
   base10's "not an RFC encoding" justification is sound; `Rab`,
   `relRepeat_functional_of_step` and `relTakeWhile_functional` are non-vacuous by
   mutation testing; there is **no** live `Classical.choice` (502-constant sweep).
+
+- **R7-14's "both CHANGELOG SHAs fail `git cat-file -t` in both repos" — REFUTED.**
+  Re-derived in the repository the changelog lives in: `9d5074e` and `3dfc249` both
+  resolve to commits in `../lean-basen`, both are ancestors of `HEAD`, and their subject
+  lines are exactly what the two entries describe. They fail only in `lean-codec`,
+  which is not where they are cited. **No edit was made**, and no citation was dropped.
+  This is the fourth round in which a reviewer's measurement failed to reproduce.
 
 - **`README [S1]` "should be 21" — REFUTED.** Reviewer B reported the count as 21.
   My own environment walk returns **19**, and the returned list contains
