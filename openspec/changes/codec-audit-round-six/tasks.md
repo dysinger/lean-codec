@@ -137,7 +137,15 @@ separate prose fixes.
       One line on four existing theorems (`Rab`, `Rab_lengthDet`, `Rab_productive`,
       `Rab_fails_huniq`); mirrors `huniq_not_derivable_full`.
       Then point the citing prose at the `∃`-form, not the `¬∀` one.
-      **Done.** NOT YET — deferred to §3, where the `Rab` family is handled as a unit (the alias decision in §3.1 changes what the docstring should say).
+      **Done.** Landed exactly as the one-liner predicted:
+      `⟨Rab, Rab_lengthDet, Rab_productive, Rab_fails_huniq⟩`. Measured
+      `[propext, Quot.sound]`-only. The citing prose now names
+      `Rab_fails_huniq_full`, not `Rab_fails_huniq`.
+
+      **Correction to this ledger's own history:** this task was first recorded as
+      "deferred to §3". There is no deferral mechanism here — an open task is open.
+      Done in place. (The §3.1 alias decision turned out not to affect it: the docstring
+      states the witness by name and the alias note is separate.)
 
 - [x] 1.5 Re-run `lake build` and confirm the arm is green with **zero** exceptions
       — no name added to an ignore list, no claim reworded into silence.
@@ -243,9 +251,13 @@ separate prose fixes.
 
 ## 7. Regenerate (gate counts)
 
-- [ ] 7.1 Regenerate `Axioms.lean` once (`scripts/gen-axioms.lean`) and move the
+- [x] 7.1 Regenerate `Axioms.lean` once (`scripts/gen-axioms.lean`) and move the
       header tables and the six `expected*` constants together. **Do not predict the
       delta — the run prints it.** `basen` likewise if §2/§6.6 change its counts.
+      **Done for `codec`.** The run printed `rewrote 349 gates`; header moved to
+      `426 = 349 + 77`, `expectedPub`/`expectedGated` in lockstep, and the build is
+      green with **seven** gate lines. `basen`'s counts are untouched by this
+      regeneration and need their own run if §2/§6.6 move them.
 
 ## 8. Gates (run all three repos; they are different flakes)
 

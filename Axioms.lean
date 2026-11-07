@@ -106,11 +106,11 @@ failure mode. **It is not soundness.**
 
 ## Current state
 
-**425** public theorems are covered, by a partition with no third route:
+**426** public theorems are covered, by a partition with no third route:
 
 | side | count | what it is |
 | --- | --- | --- |
-| gated (`gatedNames`) | **348** | footprint pinned by `#print axioms` |
+| gated (`gatedNames`) | **349** | footprint pinned by `#print axioms` |
 | allowlisted (`generatedAuxAllowlist`) | **77** | not a law; reason recorded in place |
 | un-gated and unlisted | **0** | a build failure, by construction |
 
@@ -121,12 +121,12 @@ Gated footprint distribution — **generated** from the same `collectAxioms` res
 
 | footprint | count |
 | --- | --- |
-| `[propext, Quot.sound]` | 222 |
+| `[propext, Quot.sound]` | 223 |
 | `[propext]` | 92 |
 | `[Quot.sound]` | 4 |
 | axiom-free | 30 |
 | anything else | 0 |
-| **total** | **348** |
+| **total** | **349** |
 
 `[propext, Classical.choice, Quot.sound]` rows: **0** — every gated law is
 inside the discipline.
@@ -745,6 +745,7 @@ def gatedNames : List Lean.Name := [
   ,`Codec.Normal.ext
   ,`Codec.Normal.ext_iff
   ,`Codec.Rab_fails_huniq
+  ,`Codec.Rab_fails_huniq_full
   ,`Codec.Rab_four
   ,`Codec.Rab_lengthDet
   ,`Codec.Rab_productive
@@ -1320,8 +1321,8 @@ run_cmd do
   let gated := gatedNames.length
   let allow := CodecAxioms.generatedAuxAllowlist.size
   -- Lockstep with "Current state" above.
-  let expectedPub := 425
-  let expectedGated := 348
+  let expectedPub := 426
+  let expectedGated := 349
   let expectedAllow := 77
   let expectedDefs := 140
   let expectedMentioned := 115
@@ -1522,6 +1523,9 @@ why it was fixed instead of documented.
 /-- info: 'Codec.Rab_fails_huniq' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.Rab_fails_huniq
+/-- info: 'Codec.Rab_fails_huniq_full' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.Rab_fails_huniq_full
 /-- info: 'Codec.Rab_four' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.Rab_four
