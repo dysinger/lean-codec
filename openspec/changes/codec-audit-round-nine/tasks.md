@@ -805,20 +805,109 @@ invisible to the proxy), P2-8/9/11/12, N-2/N-4.
 
 ## 9. Gates
 
-- [ ] 9.1 `nix develop --command lake build` — 10 gate lines, zero warnings; record the
+- [x] 9.1 `nix develop --command lake build` — 10 gate lines, zero warnings; record the
       new counts.
-- [ ] 9.2 `nix develop --command lake build bench`; then run the binary and paste its
+
+      **13 lines** (three arms were added), zero warnings. The counts:
+
+      ```
+      343 public theorems covered (0 explicit exclusion(s))
+      425 public theorems partitioned, 343 gated and 82 allowlisted
+      140 public definitions covered, 115 mentioned and 25 allowlisted (mention proxy)
+      ... 54 removed + 140 kept = 194 candidates ... 6 of 12 remove exactly one; 0 uncounted
+      header numbers verified (425 = 343 + 82; defs 140 = 115 + 25)
+      constant kinds — ... globally 1355 `opaque` (all Lean/stdlib) and 12 `axiom`, all Lean's own
+      stated footprints verified (769 scanned, 150 mention; 166 found = 155 checked + 11 skipped as 0/0/11)
+      ... 142 docstrings contain a backticked axiom-list literal — 140 recognised + 0 blind + 2 exempt
+      propProjections covers every bare projection (9 listed)
+      propProjections entries are all bare projections (9 listed of 12)
+      allowlisted theorems' footprints (82 entries: 39 + 24 + 19; 0 depend on Classical.choice)
+      recursion-principle promotion — findFrom.induct gated, findFrom covered by 6 theorems
+      authored exemption verified (1 entr(ies), all gated; suffix rule would have dropped 0)
+      ```
+
+      The header table moved with the promotion (`342 + 83` → `343 + 82`) and the
+      distribution regenerated to `219 + 93 + 4 + 27 = 343`.
+
+- [x] 9.2 `nix develop --command lake build bench`; then run the binary and paste its
       value-check lines **and** the new spread (min/median/max, round count) for each row.
-- [ ] 9.3 `nix develop --command openspec validate --all` — must stay 12+ passed.
-- [ ] 9.4 `nix build .#checks.aarch64-darwin.formatting --clear-cache` — the markdown gate.
+
+      Run. Every value check passed, and the two that §1 changed are visible:
+
+      ```
+      seam boundaries OK (byteSlice/findByte/blitBytes out-of-range value-checks)
+      seam aliasing OK (blitBytes src = dst, overlapping windows)
+      count step [n=1]: round trip OK        count step [n=3]: round trip OK
+      decodeFullFast root [4096]: value + bridge OK (unbenchmarked, see 6.1b)
+      decodeFullArray root [4096]: value + bridge OK (unbenchmarked, see 6.1b/6.4)
+      decodeWhole [4096]: value + decodeWhole_eq OK
+      decodeWholeBytes [4096]: agrees with decodeWhole, size preserved
+      C reference value check: 6 of 6 inputs agree with decodeWhole
+      done
+      ```
+
+      **`6 of 6`, not `4`** — §1.6's `n = 0` and `n = 1` are in the set and agree with the
+      Lean decoder. All 8 `benchBurst` call sites printed (16 `steps/burst` lines), so no
+      row's invariance assertion fired, which is the expected state and the assertion that
+      makes it a measurement instead of a hope.
+
+      **The spreads are NOT recorded as figures and §2 is not satisfied by this run.** The
+      host was not idle (see 2.1), so the numbers are load-contaminated; they are evidence
+      the lanes *work*, not evidence of what they cost. Quoting any of them here would be
+      exactly the borrow §3 deletes the `77` for.
+
+- [x] 9.3 `nix develop --command openspec validate --all` — must stay 12+ passed.
+
+      `Totals: 13 passed, 0 failed (13 items)`. One more item than the task's floor because
+      `codec/law-coverage` joined the live spec set in `codec-audit-round-three`; the only
+      diagnostics are the pre-existing "requirement text is very long" warnings.
+
+- [x] 9.4 `nix build .#checks.aarch64-darwin.formatting --clear-cache` — the markdown gate.
       **Not `nix fmt`**: this dev shell has no prettier, `nix fmt` formats `*.nix` only and
       reports "0 changed" for markdown it never opened. The check reads the **git tree**, so
       commit first or it cannot see the fix.
-- [ ] 9.5 `nix build '.#checks.aarch64-darwin.lean'` — detached with `nohup`, polled, never
+
+      **Run, green** (`formatted 222 files (0 changed)`, exit 0). Two corrections to this
+      task's command, both measured rather than assumed: **`--clear-cache` is rejected by
+      this `nix`** (`error: unrecognised flag '--clear-cache'`), and a plain re-run fails
+      with `some outputs ... are not valid, so checking is not possible` — an already-realised
+      output cannot be rebuilt. The working invocation is a fresh out-link:
+      `nix build .#checks.aarch64-darwin.formatting --no-link --print-build-logs`. Recorded
+      because the task's spelling would have looked like a gate failure to the next reader.
+
+      **The archive hazard was checked, and the delta is additive-safe** (design D7's
+      pre-archive check, done before syncing rather than at archive time):
+
+      ```
+      LIVE  requirements: 12, total scenarios: 42
+      DELTA MODIFIED requirements: 4, total scenarios: 24
+        OK  live=9  delta=10  The partition extends to public definitions, not only theorems
+        OK  live=2  delta=3   A structure-field projection is not reported as a law
+        OK  live=4  delta=5   A gate name-list asserts the property it exists to represent
+        OK  live=6  delta=6   An axiom exclusion is explicit and justified in place
+      ```
+
+      Every MODIFIED block is a **strict superset of the live one** — the three
+      `codec-gate-denominators` scenarios this change's banner warned would be dropped have
+      all been carried into the deltas verbatim, and the delta adds 7 without removing any.
+      **No live scenario is dropped.**
+
+- [x] 9.5 `nix build '.#checks.aarch64-darwin.lean'` — detached with `nohup`, polled, never
       foregrounded.
-- [ ] 9.6 Spot-check `#print axioms` on every law this change touched (the docstring edits
+      `Build completed successfully (15 jobs)` in the sandbox with the same 13 gate lines
+      and **zero** occurrences of `error` in the log.
+- [x] 9.6 Spot-check `#print axioms` on every law this change touched (the docstring edits
       touch none, so this is a regression guard): expect `[propext, Quot.sound]` or empty,
       never `Classical.choice`.
+
+      All 18 declarations the §5 docstring corrections touched re-measured
+      (`scratch/probe-axioms.lean`): `0` occurrences of `Classical.choice`. Four are
+      axiom-free (`blitBytes_spec`, `commitRemainder_spec`, `foldl_push_data`,
+      `Nat.eq_irrel`), two are `[Quot.sound]`-only (`Bytes.ext_iff`, `Bytes.ext`), three are
+      `[propext]`-only (`findByte_spec`, `relRepeat_cast`, both `Iso.counterMeasure*`), the
+      rest are the permitted pair. **No `Codec` statement was touched by this change** —
+      every Lean edit outside `Axioms.lean` is a docstring — so this is a regression guard,
+      and it fired clean.
 
 ## 10. Recorded, deliberately not in this change
 
