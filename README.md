@@ -1577,8 +1577,9 @@ other direction.
 
 **The `decodeFullArrayRoot` cold cell is now `see note`, not `49 ns/step`**
 (`codec-audit-round-eight` §4). There is no run behind the 49: every committed
-per-step value for this function in this document lies in **26.98–28.56** (the warm
-column, the per-step table above, and the two-run burst rows), the caption on this
+per-step value for this function in this document lies in **27.21–29.22** (all twelve
+non-median cells too — the warm column, the per-step table above, and the two-run burst
+rows; the **medians** are `27.37–28.54`), the caption on this
 very table says all its cold cells come from one session, and 49 is **1.72×** the
 largest of them — a factor no other row in the table shows. A number that is
 underivable from the rest of its own table is indistinguishable from a number that
@@ -1657,8 +1658,11 @@ Two calibration notes, both of which cost a wrong figure this session:
   which is exactly the confusion this section exists to keep apart.
 
 **What the numbers say, stated at the strength the evidence supports.** In a warm
-loop the packed decoder is **26.97–28.56 ns/step against a 2.46–2.61 ns/step pure-Lean
-floor** — about **10.5×** — and the whole of that gap is per-step work (a `List`
+loop the packed decoder is **27.37–28.54 ns/step** (the four committed **medians**, which is
+what this document's rule says to quote) **against a 2.46–2.61 ns/step pure-Lean
+floor** — **~10.5–11.6×** over those four medians (`27.37/2.61 = 10.49` to
+`28.54/2.46 = 11.60`), agreeing with the same-run `~10.5×` two paragraphs up because both
+terms move together — and the whole of that gap is per-step work (a `List`
 cell, the search, the accumulator), not memory bandwidth. The decoder's per-step
 figure is quoted in **one** column only — the warm one. Its cold cell is `see note`
 in the table above (`codec-audit-round-eight` §4): the `49 ns/step` this paragraph
