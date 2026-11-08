@@ -528,7 +528,7 @@ Findings: G-1 (`findFrom.induct`), G-2 (`authored` validity), G-6 (`isBareProj` 
 `And.left`), G-4/G-4b/G-4c (footprint arm `skipped` and scope), G-3 (pattern decomposition),
 G-S1 (census scope).
 
-- [ ] 6.1 **[M] `authored` validity arm — RE-SCOPED, (c) deleted.** (a) and (b) stand:
+- [x] 6.1 **[M] `authored` validity arm — RE-SCOPED, (c) deleted.** (a) and (b) stand:
       assert every name in `isGeneratedAux`'s `authored` array is a public theorem and is in
       `gatedNames`. **(c) is deleted because it is false and unassertable**: it asked that
       each name's last component be one the suffix rule _would_ have removed, but
@@ -539,6 +539,28 @@ G-S1 (census scope).
       so either delete the array or record what would break if it went. **This is a
       stronger finding than the original**: the round reported "an exemption with no
       validity arm" and the measurement says "an exemption that is dead code".
+
+      **Landed, keeping the array, on an argued rather than a convenient basis.** The
+      arm asserts the three truths and prints the fourth: entries exist, are `thmInfo`,
+      are in the gated set, and — separately — that `the suffix rule alone would have
+      dropped 0 of them`, which is the measured state made readable rather than a claim
+      a reviewer must re-derive. The array is kept because deleting it would delete its
+      *intent*, which is to name the case explicitly if a suffix pattern is ever widened
+      to reach `eq_irrel`; the arm is what makes that intent observable — if a pattern
+      widens, `wouldDrop` becomes `1` and the entry starts doing work; if the theorem is
+      renamed, the arm fails. Both directions were mutation-tested:
+
+      * adding `Codec.noSuchTheorem` → `does not exist — a stale exemption protects
+        nothing`;
+      * adding `Codec.Suffix.hle` (gated-but-allowlisted) → the partition catches it
+        first, naming it as both unpinned and a stale allowlist entry.
+
+      A third measurement the task did not ask for: the "would the suffix rule have
+      dropped it" question needs **both** classifiers' pattern lists, which are
+      different — `isGeneratedAux` tests `eq_def|inj|injEq|sizeOf_spec|congr_simp|dec|
+      induct|eq` while `derivedDefPatterns` holds `casesOn|recOn|…`. Reading only one
+      would have made the number right on this name by accident and wrong on the next.
+
 - [x] ~~6.2 **[M] Extend `isBareProj`** to a spine ending in the head-constant set
       `{And.left, And.right, Iff.mp, Iff.mpr, Prod.fst, Prod.snd}`.~~
       **DELETED — WRONG, and superseded by `codec-gate-denominators` (§2b, §3).** Measured
@@ -560,12 +582,48 @@ G-S1 (census scope).
       `342 gated + 83 allowlisted`. **The surviving half** is the prose check this task also
       asked for: confirm README `[S1]`'s unconditional-iso list is consistent with the two
       `Iso` laws having moved out of the footprint-pinned set.
-- [ ] 6.4 **[M] Promote `findFrom.induct`** (measured `[propext]`, the only non-empty
+- [x] 6.4 **[M] Promote `findFrom.induct`** (measured `[propext]`, the only non-empty
       footprint in the allowlist) to `gatedNames` **and** record the def-coverage naming it
       creates explicitly, so `Codec.findFrom` is not "covered" by its own recursion
       principle. Add the footprint pin.
-- [ ] 6.5 **[M] Add a footprint-per-allowlisted-theorem report** so an entry filed as "not
+
+      **Landed, and the promotion needed THREE edits, not one** — the measure of how
+      much this file holds in copies:
+
+      1. `Codec.findFrom.induct` left `generatedAuxAllowlist` and is now pinned in the
+         regenerated `gatedNames` block with the other 343;
+      2. `CodecAxioms.isGeneratedAux` gained
+         `promotedRecursionPrinciples.contains n` **above** its `induct` suffix test, or
+         the library's own classifier would still drop it;
+      3. `scripts/gen-axioms.lean`'s `localIsGeneratedAux` gained the same exemption —
+         without it the generator kept emitting a `gatedNames` that excluded a name the
+         gate required (see 6.12).
+
+      The accounting the task asks for is `promotedPrincipleTargets` plus an arm that
+      prints and asserts the coverage: **`Codec.findFrom` is named by 6 gated theorems
+      that are not its own principle** (`findFrom_finds`, `findFrom_sound`,
+      `findFrom_complete`, `findFrom_min`, `findFrom_least`, and `findByte_spec`), and
+      the principle adds **0** namings. So the promotion is safe *because* real laws
+      cover the definition, and the arm fails if that ever stops being true — which is
+      the vacuous-satisfaction route closed by measurement rather than by assertion.
+
+      Header moved with it: `425 = 343 + 82`, distribution
+      `219 + 93 + 4 + 27 = 343`, and the allowlisted-footprint decomposition
+      `39 + 24 + 19 = 82`. All re-asserted in `headerNumbers`/`expected*` in the same
+      commit, as the task warns they must be.
+
+- [x] 6.5 **[M] Add a footprint-per-allowlisted-theorem report** so an entry filed as "not
       a law" cannot carry a proof that consults an axiom unnoticed. Assert the count.
+
+      **Landed, and the count is a decomposition rather than a total** (the round's own
+      rule applied to itself): `82 entries: 39 axiom-free + 24 the permitted pair + 19
+      other permitted; 0 depend on `Classical.choice`, asserted`. `Classical.choice` is
+      asserted **zero outright** rather than folded into the sum — a nonzero value means
+      the "not a law" group is hiding a proof that consults the one axiom the gate
+      exists to exclude, and that must fail even if someone edits a constant. The arm
+      also fails on a non-resolving entry, and asserts the decomposition reconstructs
+      the list size.
+
 - [x] ~~6.6 **[M] Split `skipped`** into `skipped-names-other-theorem` and
       `skipped-no-owner`.~~
       **DONE by `codec-gate-denominators` §1.3 — and its premise is REFUTED.** The split
@@ -593,21 +651,62 @@ G-S1 (census scope).
       `ctorElim, ctorElimType, below, brecOn, go, «term_≫_»` — note **`eq` is not among
       them**, so this task's parenthetical example was wrong about `eq`.
       The classifier and the audit now read one rule (`derivedDefMatchingPattern`).
-- [ ] 6.9 **[S] Extend `constantKindCensus`** to walk `axiomInfo`/`opaqueInfo` **globally**
+- [x] 6.9 **[S] Extend `constantKindCensus`** to walk `axiomInfo`/`opaqueInfo` **globally**
       and allowlist the 12 known axioms by name. The repo's one authored `opaque`
       (`Codec.Bench.cRefByteMany`) currently sits outside the wire the census built.
+
+      **Landed, and the task's premise needed correcting first.** Measured
+      (`scratch/probe-global.lean`): `Codec.Bench.cRefByteMany` **is** inside the
+      namespaced walk — `Codec.Bench` is under `Codec` — so the task's claim that it
+      "currently sits outside the wire" is false. What is true, and is the real gap, is
+      that the census's scope was the two namespaces, so an `axiom` or `opaque` in any
+      *other* namespace (a new module, an `@[extern]` sibling) was in no wire at all.
+      Measured globally: **1355 `opaque`, all Lean/stdlib, none authored here; 12
+      `axiom`, all twelve Lean's own** (`sorryAx, propext, Quot.sound,
+      Classical.choice`, the `lc*` family and `isScalarObj`).
+      A bare global count cannot be asserted (it moves with the toolchain), so the arm
+      asserts the *set*: every axiom reachable in the process must be one of those
+      twelve, and anything else is a build failure naming it. Mutation-tested by deleting
+      `Classical.choice` and `Quot.sound` from the allowlist → the build fails with
+      `an `axiom` exists that this gate has no arm for and no allowlist entry names:
+      [Quot.sound, Classical.choice]`.
+
 - [x] ~~6.10 **[S] Print the projection arm's decomposition.**~~
       **DONE, in the runnable form rather than the proposed one.** The arm prints
       `9 listed of 12 bare projections in the namespaces; the rest are the dec-suffixed three`.
       So the exemption is a number. The task proposed `listed + constant-headed`;
       the implemented split is `listed + suffix-classified`, which is what the code actually
       does — "constant-headed" would describe round nine's own rejected predicate.
-- [ ] 6.11 Regenerate the header with `scripts/gen-axioms.lean`, then update the
+- [x] 6.11 Regenerate the header with `scripts/gen-axioms.lean`, then update the
       `expected*` constants **and** the prose paragraph together. The gate will fail
       loudly until both are done — that is §1.1 working, not a regression.
-- [ ] 6.12 Confirm `scripts/gen-axioms.lean`'s output actually matches the committed
+- [x] 6.12 Confirm `scripts/gen-axioms.lean`'s output actually matches the committed
       `Axioms.lean` by running it and diffing. Anything that holds a second copy of a name
       list is the round-eight mirror hazard; report every such pair.
+
+      **Run twice; idempotent** (`diff` of the committed file against the regenerated one
+      is empty). The four mirror pairs that must agree, and one that does not need to:
+
+      | what                                | `Axioms.lean`                       | `scripts/gen-axioms.lean`                 |
+      | ----------------------------------- | ----------------------------------- | ----------------------------------------- |
+      | the classifier                      | `CodecAxioms.isGeneratedAux`        | `localIsGeneratedAux`                     |
+      | the `authored` exemption            | `CodecAxioms.authoredExceptions`    | its own `authored` array                  |
+      | the projection list                 | `CodecAxioms.propProjections` (9)   | its own `propProjections` (9)             |
+      | **the promoted recursion principle** | `CodecAxioms.promotedRecursionPrinciples` | its own `promotedRecursionPrinciples` |
+      | the def patterns                    | `CodecAxioms.derivedDefPatterns`    | none (no def-side generator step)         |
+
+      **The promotion found a sixth mirror drift, live.** `6.4` first landed as a
+      one-line deletion of `Codec.findFrom.induct` from `generatedAuxAllowlist`;
+      `CodecAxioms.isGeneratedAux` was updated but the generator's mirror was not, so it
+      kept emitting a `gatedNames` that *excluded* the name the gate now required —
+      caught in one regeneration as `un-gated: Codec.findFrom.induct` plus
+      `pinned names with no matching theorem`, in opposite directions. That is the
+      round-eight hazard exactly, and this time the fix was **narrowing a pattern** in
+      the mirror rather than copying a name array — a distinction worth recording,
+      because "the mirror is a name list" was the round-eight lesson and this instance
+      was a *classifier*, so a future reader looking only for duplicate arrays would
+      miss it. `CodecAxioms.promotedRecursionPrinciples` is declared **above**
+      `isGeneratedAux` so the classifier and the accounting read one array.
 
 ## 7. README prose: overclaims and the unadvertised departure [S]
 

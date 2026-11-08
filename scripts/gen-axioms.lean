@@ -85,6 +85,17 @@ def localIsGeneratedAux (n : Name) : Bool := Id.run do
     `Codec.CandAligned_fst, `Codec.CandAligned_at, `Codec.packedCands_mem,
     `Iso.apply_eq_some_of_unapply, `Iso.unapply_eq_some_of_apply]
   if propProjections.contains n then return true
+  -- **The recursion principle promoted to gated** (`codec-audit-round-nine` §6.4).
+  -- `Codec.findFrom.induct` has a nonzero footprint (`[propext]`), which falsifies the
+  -- allowlist group's stated property ("not a law ⇒ axiom-free"), so it is pinned with
+  -- the other laws now. Without this exemption the `induct` pattern below would drop it
+  -- and the generator would emit a `gatedNames` that excludes a name the gate requires —
+  -- **the sixth time a mirror in this file has drifted from the list it mirrors**, and
+  -- the first time the fix was a *narrowing of the pattern* rather than a copy of a name
+  -- array. That is the shape worth remembering: this file has a second classifier, not
+  -- just a second list.
+  let promotedRecursionPrinciples : Array Name := #[`Codec.findFrom.induct]
+  if promotedRecursionPrinciples.contains n then return false
   let s := n.components.getLast!.toString
   return s == "eq_def" || s == "inj" || s == "injEq" || s == "sizeOf_spec" ||
     s == "congr_simp" || s == "dec" || s == "induct" || s == "eq"
