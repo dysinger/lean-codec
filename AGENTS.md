@@ -38,12 +38,12 @@ Guidance for AI coding agents working in this repository.
 > Round eight's findings were **all one shape: a check that reports nothing.** Four of
 > them, and each is now a printed, asserted count:
 >
-> | was invisible                                                                                         | now                                                                                                                                                                                                                                                                                     |
-> | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-> | `opaqueInfo`/`axiomInfo` — matched by **no arm** of eight, and `exclusions` _refuses_ an `opaque`     | a `constantKindCensus` arm prints all seven `ConstantInfo` kinds and **fails** the build on a non-zero `opaque`/`axiom`                                                                                                                                                                 |
-> | `propProjections`' validity — the docstring said a non-projection entry "would fail"; nothing checked | a second arm reads the **same** `isBareProj`; mutation-tested                                                                                                                                                                                                                           |
-> | the footprint arm's denominator — it printed how many claims it **read**, never how many existed      | `769 scanned / 144 mentioning / 154 found / 146 checked / 8 left`; **three are asserted** (`146/144/8` by `expectedFootprintCounts`), `769` and `154` are printed-only (`146 + 8 = 154`) — the tenth round measured that an earlier version of this cell claimed all five were asserted |
-> | `gen-axioms.lean`'s **mirror** of `propProjections`                                                   | drift found and fixed; it had un-pinned `Codec.Suffix.hle` while `headerNumbers` read the mirror's own count, so the numbers agreed with each other and not with the tree                                                                                                               |
+> | was invisible                                                                                         | now                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+> | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+> | `opaqueInfo`/`axiomInfo` — matched by **no arm** of eight, and `exclusions` _refuses_ an `opaque`     | a `constantKindCensus` arm prints all seven `ConstantInfo` kinds and **fails** the build on a non-zero `opaque`/`axiom`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+> | `propProjections`' validity — the docstring said a non-projection entry "would fail"; nothing checked | a second arm reads the **same** `isBareProj`; mutation-tested                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+> | the footprint arm's denominator — it printed how many claims it **read**, never how many existed      | `769 scanned / 144 mentioning / 154 found / 146 checked` + the skip split `0 other-theorem / 0 no-owner / 8 def-docstring`. **Five are asserted** (`146 checked`, `144 mentioning`, and each of the three skip causes, by `expectedFootprintCounts`); `769 scanned` and `154 found` are printed-only — `found` needs no constant because `found = checked + all three causes` is itself asserted. (Round ten measured that an earlier version of this cell said "three are asserted, `8 left`"; `codec-gate-denominators` §1.3 then split the `8` by cause, so the number of asserted quantities moved from three to five. An earlier revision said "this cell claimed all five were asserted" — that was the _round-ten_ finding, and the cell was corrected then; this note records the later change, not a contradiction.) |
+> | `gen-axioms.lean`'s **mirror** of `propProjections`                                                   | drift found and fixed; it had un-pinned `Codec.Suffix.hle` while `headerNumbers` read the mirror's own count, so the numbers agreed with each other and not with the tree                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 >
 > **The lesson, now five times over, and the fifth one is the sharpest:** a check is only
 > as good as what _enters_ it — and a **mirror list is a name list.** Round five's
@@ -264,20 +264,24 @@ a template to resume.
   construction_.** `isDerivedDefName` drops a `def` by its last name component; the name
   then leaves the universe, so the coverage check cannot report it — a dropped `def` and
   a `def` that was never written are indistinguishable to the check. Round six measured
-  it already dropping `Iso.prod`, the paper's own `×`, out of a green gate. **When you
-  add a check, ask what removes things from its input, and whether that removal is
-  recorded.** The theorem side solved this with `partition` (every dropped name needs a
-  reasoned allowlist entry); the def side had nothing until `round-five` §1 added
-  `derivedDefDeclinationAudit` + `derivedDefPatternAudit`. **The trap is the pattern, not
-  that one instance** — every future check needs the same question asked of it.
+  it already dropping `Iso.prod`, the paper's own `×`, out of a green gate. The theorem
+  side solved this with `partition` (every dropped name needs a reasoned allowlist
+  entry); the def side had nothing until `round-five` §1 added
+  `derivedDefDeclinationAudit` + `derivedDefPatternAudit`.
 
-  **This is now enforced, not advised: see "Adding a gate arm" above.** It fired
-  **fourteen** times across rounds five to ten — a name list, a prefix filter, a
-  `(…).length` sink, an attribution rule, an un-decomposed `skipped`, a predicate
-  matching `Expr.proj` where Lean emits `And.left`, two copies of one predicate, and a
-  guard testing the wrong variable. The fourteen are tabulated in
-  `openspec/changes/codec-gate-denominators/proposal.md`; read that table before concluding
-  a check is sound.
+  **The question is now a build precondition, not a thing to remember.** "What removes
+  things from this check's input, and is that removal recorded?" used to be advice a
+  reviewer had to recall; since `codec-gate-denominators` it is the rule every arm is
+  written against and every arm is checked by — see **"Adding a gate arm"** below. Read
+  that section before writing a `run_cmd`; read this bullet for why it exists.
+
+  **The trap is the pattern, not any one instance** — it fired **fourteen** times across
+  rounds five to ten: a name list, a prefix filter, a `(…).length` sink, an attribution
+  rule, an un-decomposed `skipped`, a predicate matching `Expr.proj` where Lean emits
+  `And.left`, two copies of one predicate, and a guard testing the wrong variable. The
+  full tabulation is in `openspec/changes/codec-gate-denominators/proposal.md`; read it
+  before concluding a check is sound. The four instances `codec-gate-denominators` itself
+  closed are in that change's `tasks.md` §1 and §3.
 
 - **A `Prop`-valued structure field is not a law.** `Iso.law`, `Normal.fixed`,
   `Normalizer.idem` are projections (`fun … => self.1`), and gating them measures the
@@ -432,11 +436,21 @@ Rel_iso] at hx hy` rather than unfolding.
   reported `Axioms.lean`'s footprint table as wrong (197 vs 195); re-derived it was
   correct — their parser truncated at the `?` in `attach_getElem?_corr`. Design D1
   records this. A refuted finding is a result; relaying it unverified is the defect.
-- **`native_decide` is banned for laws and does not appear anywhere in this repo.** Measured
-  `grep -c native_decide Bench.lean` → **0**; the only occurrence of the token in the tree
-  is the prose in `Axioms.lean` announcing the ban. An earlier version of this bullet said
-  it was "fine in the bench" and "appears only in `Bench.lean`" — `Bench.lean`'s checks
-  are `example`s closed by `rfl`. Never introduce it into `Codec/`.
+- **`native_decide` is banned for laws and does not appear anywhere in this repo.**
+  Measured at `codec-gate-denominators`:
+  `grep -c native_decide Bench.lean` → **0**, `grep -c native_decide Axioms.lean` → **1**
+  (the prose line announcing the ban at `Axioms.lean:12`), and `grep -rln` over `*.lean`
+  returns **`Axioms.lean` only**. So the token exists in exactly one file and in exactly
+  zero proofs — `Bench.lean`'s checks are `example`s closed by `rfl`. An earlier revision
+  of this bullet said it was "fine in the bench" and "appears only in `Bench.lean`", both
+  false; `codec-audit-round-eight` corrected them, and this change re-measured rather than
+  trusting that correction. Never introduce it into `Codec/`.
+
+  (`codec-gate-denominators` task 4.4 was authored believing this bullet still said the
+  token appears in `Bench.lean`. It did not — the correction had already landed. The
+  measurement above is recorded so the next reader does not have to re-derive whether the
+  task or the file was stale: **the task was**, and it is answered rather than closed
+  unexamined.)
 
 ### Rules about this file
 
