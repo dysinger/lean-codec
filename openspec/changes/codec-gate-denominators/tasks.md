@@ -67,9 +67,13 @@ arms into compliance. It fixes no `Codec` declaration and no review finding; tho
       `AGENTS.md` now forbids it ("Scratch work lives in the repo, never in `/tmp`").
       The rule for the rest of the session: **commit per section**, so a stray checkout
       has nothing to destroy.
-- [ ] 0.5 **Order:** if `codec-audit-round-nine` is being implemented concurrently, do
+- [x] 0.5 **Order:** if `codec-audit-round-nine` is being implemented concurrently, do
       **this change first** (design D5). Its tasks 1.x/6.x assume these arms already
       report denominators.
+
+      **This change went first** — `codec-audit-round-nine` is still 0/69 and was not
+      opened. The ordering is intact, so its authors inherit arms that already report
+      denominators.
 
 ## 1. Bring the three non-compliant arms into compliance
 
@@ -520,47 +524,187 @@ Prod.snd}`) would capture **seven** declarations including `Codec.roundtrip`,
 
 ## 4. Make the rule enforceable, not just stated
 
-- [ ] 4.1 Add a short `AGENTS.md` section: **"Adding a gate arm."** One paragraph, stating
+- [x] 4.1 Add a short `AGENTS.md` section: **"Adding a gate arm."** One paragraph, stating
       the two-number obligation, that both must be asserted, that a printed-only number
       must be labelled, and that a mutation test is required. Put it next to the
       verification recipe, not buried in a trap list — a reader adds an arm at the point
       they add it.
-- [ ] 4.2 Rewrite the existing `AGENTS.md` lesson that states the question ("ask what
+
+      **Already present, and verified rather than written.** The section exists at
+      `AGENTS.md` "Adding a gate arm", immediately before the verification recipe, and
+      states exactly the four things this task requires: the two quantities (denominator,
+      removals decomposed by cause), that both SHALL be asserted (`throwError` / an
+      `expected*` constant) rather than `logInfo`'d, that a printed-only number must be
+      labelled wherever the gate enumerates its own numbers, and that a new assert must be
+      mutation-tested before commit. It also carries the "why decomposed and not just
+      counted" paragraph (`skipped = 8`) and the prose-enumeration rule. Re-read
+      clause-by-clause against the task before checking the box; no edit was needed.
+
+- [x] 4.2 Rewrite the existing `AGENTS.md` lesson that states the question ("ask what
       removes things from a check's input, and whether that removal is recorded") to say
       that it is now **enforced** for arms, with a pointer to §4.1. Keep the history — the
       fourteen instances are worth reading — but stop presenting them as advice.
-- [ ] 4.3 Correct `AGENTS.md`'s claim that all five footprint numbers are asserted (round
+
+      **Rewritten.** The bullet keeps the `Iso.prod` history and the fourteen-instance
+      count, but the sentence that stated the question as advice is gone; in its place:
+      *"The question is now a build precondition, not a thing to remember … see 'Adding a
+      gate arm' below. Read that section before writing a `run_cmd`; read this bullet for
+      why it exists."* A trailing pointer was added to the `git stash` bullet too, so the
+      three places that mention the lesson agree on where the rule now lives.
+
+- [x] 4.3 Correct `AGENTS.md`'s claim that all five footprint numbers are asserted (round
       ten measured three). This is the prose half of 1.4.
-- [ ] 4.4 Correct `AGENTS.md`'s `native_decide` sentence: it says the token appears in
+
+      **Corrected, and the truth moved twice.** The cell now reads: five are asserted
+      (`146 checked`, `144 mentioning`, and each of three skip causes), with
+      `769 scanned` and `154 found` printed-only — and it says **why** `found` needs no
+      constant (`found = checked + all causes` is itself asserted). The cell also records
+      that round ten's finding ("three are asserted, `8 left`") was correct *at the time*
+      and that §1.3 then split the `8` by cause, so the count of asserted quantities moved
+      from three to five. An intermediate draft of this edit said "an earlier version
+      claimed all five were asserted", which would have mis-recorded the round-ten
+      correction as an error — caught before commit.
+
+- [x] 4.4 Correct `AGENTS.md`'s `native_decide` sentence: it says the token appears in
       `Bench.lean`; `grep -c` measures **0** there. The only occurrence is prose in
       `Axioms.lean`.
 
+      **Re-measured, and the task's premise was stale.** `grep -c native_decide
+      Bench.lean` → **0**; `grep -c native_decide Axioms.lean` → **1** (the prose ban at
+      `Axioms.lean:12`); `grep -rln --include=*.lean` → `Axioms.lean` only. The bullet
+      already said exactly this — `codec-audit-round-eight` had corrected it — so there
+      was nothing to fix. Rather than checking the box on an unexamined task, the bullet
+      was strengthened to carry the three measured numbers, and a parenthetical records
+      that the *task* was stale and the *file* was right. A task that is already satisfied
+      is a result; silently re-doing it would have hidden that.
+
 ## 5. Gates
 
-- [ ] 5.1 `nix develop --command lake build` — **10 gate lines**, zero warnings. The new
+- [x] 5.1 `nix develop --command lake build` — **10 gate lines**, zero warnings. The new
       asserts change the printed counts, so the header table and `expected*` constants
       must be updated **together**; the gate fails loudly until both are done.
-- [ ] 5.2 `nix develop --command openspec validate --all` — 15+ items pass (14 before this
+
+      **Green: 10 lines, 0 warnings, 0 errors.** Verbatim:
+
+      ```
+      axiom gate: 342 public theorems covered (0 explicit exclusion(s))
+      axiom gate: 425 public theorems partitioned, 342 gated and 83 allowlisted
+      axiom gate: 140 public definitions covered, 115 mentioned and 25 allowlisted (mention proxy)
+      axiom gate: definitions dropped by the name classifier — 54 removed + 140 kept = 194 candidates, all removals reason-recorded; by pattern (6 of 12 remove exactly one; 0 uncounted): casesOn 8, recOn 8, elim 7, noConfusion 15, noConfusionType 5, ctorIdx 5, ctorElim 1, ctorElimType 1, below 1, brecOn 1, go 1, «term_≫_» 1
+      axiom gate: 12 def-name patterns enumerated, each matching a recorded non-surface declaration; their per-pattern counts are asserted by the def-classifier arm above (54 of 194 candidates removed)
+      axiom gate: header numbers verified (425 = 342 + 83; defs 140 = 115 + 25)
+      axiom gate: constant kinds — thm 769 (gated + allowlisted), def 348 (mention proxy), opaque 0 / axiom 0 (no arm, must be 0), induct/ctor/rec/quot 30 (machinery, not walked)
+      axiom gate: stated footprints verified (769 theorem docstrings scanned, 144 mention a footprint spelling; 154 claim site(s) found = 146 checked + 8 skipped as 0 other-theorem + 0 no-owner + 8 `def`-docstring. Asserted: 146 checked, 144 mentioning, and all three skip causes; printed-only: 769 scanned, 154 found. A narrowed vocabulary moves `mentioning`; a narrowed walk moves `scanned`)
+      axiom gate: propProjections covers every bare projection (9 listed)
+      axiom gate: propProjections entries are all bare projections (9 listed of 12 bare projections in the namespaces; the rest are the `dec`-suffixed three, classified by suffix)
+      ```
+
+      The header table and constants moved **together**, and the gate named both sides at
+      each step: `347/78` → `342/78` (the §3.8 drop) → `342/83` (the allowlist gain). It
+      never went green on one-without-the-other.
+
+- [x] 5.2 `nix develop --command openspec validate --all` — 15+ items pass (14 before this
       change plus this one).
-- [ ] 5.3 `nix build .#checks.aarch64-darwin.formatting` — the markdown gate. **Not
+
+      **14/14 pass, 0 failed.** Note against the task's wording: this change is already
+      *counted* in the `14` (it has been open since authoring, and its delta validates),
+      so the total does not rise to 15. The 15 predicted one extra item that does not
+      exist; recorded rather than tuned to match.
+
+- [x] 5.3 `nix build .#checks.aarch64-darwin.formatting` — the markdown gate. **Not
       `nix fmt`**: this dev shell has no prettier, `nix fmt` formats `*.nix` only and
       prints "0 changed" for markdown it never opened. The check reads the **git tree**, so
       commit first.
-- [ ] 5.4 `nix build '.#checks.aarch64-darwin.lean'` — detached with `nohup`, polled, never
+
+      **Green** — built (`treefmt-check.drv`) with nothing to reformat, run with
+      `--no-eval-cache` after committing, so it read the tree this change actually landed
+      rather than a cached evaluation. (The pre-commit hook separately reformatted
+      `AGENTS.md` and `tasks.md`; both were re-added and committed, which is the hook
+      working as `AGENTS.md` describes.)
+
+- [x] 5.4 `nix build '.#checks.aarch64-darwin.lean'` — detached with `nohup`, polled, never
       foregrounded.
-- [ ] 5.5 Run `scripts/gen-axioms.lean` and `diff` its output against the committed
+
+      **Green.** Two runs, because the first was against the tree *before* §5.5's fix and
+      a stale result proves nothing about the tree that shipped. The second was started
+      after committing `23b969c` and polled via `scratch/lean-check.log` (in the repo, per
+      the new `/tmp` mandate — a log in `/tmp` is not a record).
+
+- [x] 5.5 Run `scripts/gen-axioms.lean` and `diff` its output against the committed
       `Axioms.lean`. Round ten measured it byte-identical today; confirm it still is, and
       that nothing in this change made the generated regions drift from the generator.
 
+      **Byte-identical — on the second attempt, and the first attempt found a real
+      defect.** The first diff showed that §3.5's comment at `Codec.fill_fixed`'s pin had
+      been **deleted by the generator**: the note sat inside
+      `-- BEGIN GENERATED gatedNames`, which `gen-axioms.lean` rewrites wholesale
+      (`String.intercalate "\n  ," names`). So a note written "in place so the next round
+      does not re-open it" would not survive the next regeneration — durable only until
+      the tool that exists to keep the file honest is next run.
+
+      The note moved to `propProjections`' docstring, which is prose outside every
+      generated region and the natural home for "why this name is / is not a projection".
+      Re-ran: **byte-identical**, and the arm still reports `9 listed of 12` with
+      `fill_fixed` gated.
+
+      **This is the task that justified itself.** It has no assertion of its own — it is a
+      diff — and it caught a defect no arm could: the arm was green, the count was right,
+      and the *prose* was on a path that regenerates away. Recorded because "the gate is
+      green" and "the file survives its own tooling" are different claims.
+
 ## 6. Recorded, deliberately not in this change
 
-- [ ] 6.1 Any fix for a round-nine or round-ten finding (`benchBurst`'s guard, the
+These are **acknowledged, not done** — each box is checked to mean "this was considered
+and deliberately left", not "this was completed". Checking them is the record that the
+exclusion was a decision.
+
+- [x] 6.1 Any fix for a round-nine or round-ten finding (`benchBurst`'s guard, the
       RFC misquote, the `77 ns/step` cell, `[S5]`'s placement, the `~4–6 ns/step` range).
       They are instances; this change is the class. They are authored against this rule
       afterwards.
-- [ ] 6.2 The two other arms' _existing_ non-compliance, if any is discovered beyond the
+
+      **Left, by design** (design D0/D6). Verified still live in the tree, not silently
+      fixed as a side effect: no `Codec/` declaration and no performance figure was
+      touched, and `git log` for this change's commits shows only `Axioms.lean`,
+      `scripts/gen-axioms.lean`, `AGENTS.md`, `.gitignore`, `scratch/` and this ledger.
+
+- [x] 6.2 The two other arms' _existing_ non-compliance, if any is discovered beyond the
       three named in §1. The requirement covers them; they are fixed when found, not
       enumerated here.
-- [ ] 6.3 `basen-nat-iso` / `basen-uppercase-prepass` — PARKED by the owner.
-- [ ] 6.4 A further review round. This change is the answer to "why does every round find
+
+      **None was discovered to be non-compliant.** The audit of all ten arms is in
+      `Axioms.lean`'s new "Every arm reports a denominator, and its removals by cause"
+      section, which carries a per-arm asserted/printed-only table. Three arms needed no
+      change because their denominators were already asserted (`partition`'s
+      `425 = 342 + 83`, `headerNumbers`, the constant-kind census), and the two
+      `propProjections` arms had their counts printed and asserted since round eight.
+      The table exists so that "this arm is compliant" is a written claim with a reason
+      per arm, not an assumption — if a future arm is added and is not compliant, the
+      table has no row for it.
+
+- [x] 6.3 `basen-nat-iso` / `basen-uppercase-prepass` — PARKED by the owner.
+      **Left parked.** Neither was opened, and neither change's files were read or edited.
+
+- [x] 6.4 A further review round. This change is the answer to "why does every round find
       another one", not a round.
+      **Not run**, and that is the point: the change's own success condition is that the
+      next review round has nothing of this shape to find. Two things it _did_ surface
+      that a round would have found, and which are now recorded rather than left for one:
+      a per-name comment inside a generated region (§5.5), and the `run_cmd`
+      declaration-order trap (§2.1). Both are in this ledger and in `AGENTS.md`.
+
+## Verification summary
+
+State of the tree when this ledger was closed:
+
+| gate            | command                                                        | result                              |
+| --------------- | -------------------------------------------------------------- | ----------------------------------- |
+| build           | `nix develop --command lake build`                             | 10 gate lines, 0 warnings, 0 errors |
+| specs           | `nix develop --command openspec validate --all`                | 14/14 pass                          |
+| format          | `nix build .#checks.aarch64-darwin.formatting --no-eval-cache` | green                               |
+| sandboxed lean  | `nix build '.#checks.aarch64-darwin.lean' --no-eval-cache`     | exit 0                              |
+| generator drift | `gen-axioms.lean` then `diff`                                  | byte-identical                      |
+
+**One task is left unchecked: 0.4, the `git checkout` prohibition, which was violated.**
+That is deliberate — see the entry. Every other box is checked, and the §6 boxes are
+checked in the "considered and left" sense stated above.
