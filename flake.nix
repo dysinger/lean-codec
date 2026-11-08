@@ -75,14 +75,56 @@
         # It is slow (it runs the whole bench lane, ~15 s here and much longer in the
         # sandbox), which is why the dev loop is still `lake build bench` + running
         # the binary by hand.
+        # **The build inputs are `lean4` and a C compiler, and the first version of this
+        # check declared neither** (`codec-audit-round-nine` review A-4). It ran
+        # `lake build bench` with `nativeBuildInputs = [ pkgs.git ]`, so the sandbox
+        # failed with `lake: command not found` (exit 127) — the check was **red from the
+        # day it was written** and was never built, only `nix eval`'d for its drvPath.
+        # That is the round's own defect class in its purest form: a check nobody ran,
+        # described in three comments and two documents as one that cannot be skipped.
+        # ```
+        # $ nix build .#checks.aarch64-darwin.bench
+        # codec-bench-check> line 3: lake: command not found
+        # error: builder failed with exit code 127
+        # ```
+        # `lean4` supplies `lake`/`lean`; `stdenv.cc` is what Lean's C backend needs to
+        # compile the exe and what links `byteSliceO`/`cRefO`.
         bench-check =
           pkgs.runCommand "codec-bench-check"
             {
-              nativeBuildInputs = [ pkgs.git ];
+              nativeBuildInputs = [
+                _pkg.lean4
+                pkgs.stdenv.cc
+                pkgs.git
+              ];
             }
             ''
+              # **`set -euo pipefail` is load-bearing, and its absence was the third
+              # defect found in this check** (`codec-audit-round-nine` review A-4 and its
+              # follow-ups). Two of the three defects in this derivation were invisible
+              # for the same reason — nobody built it — and this one would have stayed
+              # invisible after fixing the other two: `runCommand`'s builder does not run
+              # its body under `set -e`, so a failing `grep -q`, which is the *entire
+              # point* of the check, printed nothing and the build still exited 0.
+              #
+              # Mutation-tested after the fix: replacing the `^done$` assertion with a
+              # grep for a line that never appears makes the build fail
+              # (`exit=1, builder failed with exit code 1`); before it, the same mutation
+              # exited 0 on a freshly built, freshly timed run. Every assertion below is
+              # now a failure rather than a log line.
+              set -euo pipefail
               runHook preBuild
-              cd ${self}
+              # **Build in a writable copy.** `${self}` is a read-only store path, so
+              # `lake build` cannot create `.lake/` there — the second defect the review
+              # found in this check (`permission denied ... /nix/store/…-source/.lake`).
+              # Copying is also what makes the check hermetic: it compiles the tree the
+              # flake pins rather than whatever is in the working directory.
+              cp -r ${self} work
+              chmod -R u+w work
+              cd work
+              # A `.lake` carried over from the copy is read-only and stale; start clean
+              # rather than inherit a build directory this sandbox did not produce.
+              rm -rf .lake
               lake build bench
               ./.lake/build/bin/bench > bench.out 2>&1 || {
                 echo "bench exited non-zero — a value check or an invariance assertion failed:"

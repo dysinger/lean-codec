@@ -731,24 +731,25 @@ law like the structural isos (`[S1]`).
 repetition denotation is the least relation closed under the `nil`/`cons` rules;
 an induction principle makes "least fixpoint" a theorem rather than a claim.
 
-**One deliberate departure from the paper, recorded here because it is a _choice_ and
-a porter will not guess it** (`codec-audit-round-nine` §7.1). The paper's relation
-closes the `nil` rule at `True` — any string repeats zero times. `codec` closes it at
-**`n = 0`**: `relRepeat R [] n s ↔ n = 0` (`relRepeat_nil`, literally `Iff.rfl`),
-because the substrate's length lives in the **type**. Two consequences, and the first
-is why the choice is worth making:
+**The `nil` case is `n = 0`, and that is the paper's own closure, not a departure.**
+`relRepeat R [] n s ↔ n = 0` (`relRepeat_nil`, literally `Iff.rfl`). The paper's
+`many` closes its `nil` branch at `nil $ pure ()` (`PAPER.md:433-439`), and `pure x`
+relates `x` to the **empty string only** (`PAPER.md:647`: `pure x = Rel [(x, "")]`) —
+so the paper's closure is _the empty concrete string_, not "any string". On a
+`Bytes n` substrate the empty string is the unique inhabitant of `Bytes 0`, so `n = 0`
+**is** the same fact with the length in the type. Two things follow:
 
 - it is what makes `relRepeat_induction` an induction on the **list** rather than on
   the string's length, which is the shape every proof in this family needs;
-- `decodeRepeat_spec` is stated **against this denotation**, so its statement carries
-  the `n = 0` reading. It is unaffected — the law is about the same relation the
-  decoder implements — but a reader comparing it to the paper's `many` should read
-  `n = 0` where the paper reads `True`.
+- `decodeRepeat_spec` is stated against this denotation, so a reader comparing it to
+  the paper's `many` should read the two side by side — they agree.
 
-**Warning for a porter: the `[]` case is where this bites.** Attempting the paper's
-`True` closure on a `Bytes n` substrate forces the length out of the type and back in
-by hand, which does not close — the `n = 0` form is not a simplification of it, it is
-the only version the substrate admits.
+**A previous revision of this section claimed the paper closed at `True` and that
+`codec` "departs" to `n = 0`. That was wrong about the paper** (`codec-audit-round-nine`
+review M-1): there is no departure here, and a porter following the old warning would
+have been told to solve a problem that does not exist. The misreading is easy to make
+because `relRepeat`'s `nil` _rule_ in a least-fixpoint presentation is often written
+`True`; the paper writes it as a `pure ()`, which is not.
 
 **[S6] Unbounded `many` is _semantic_, not a `Codec` value — and the primary
 reason is `[D6]`, not laziness.** In the paper `many` is a value because it is a
@@ -1183,8 +1184,10 @@ lemma), but an earlier revision said "**none has an in-tree caller**" and that i
 **false for one of them**:
 
 - **`isoConsumesByte` _is_ called in-tree** — **once**, in
-  `Codec/Combinators.lean`'s `seqCountConsumesByte`. It is exercised by the library's own
-  `count` proofs.
+  `Codec/Combinators.lean`'s `countSuccConsumesByte` (whose result then feeds
+  `seqCountConsumesByte`). It is exercised by the library's own `count` proofs. (An
+  earlier revision of this line named `seqCountConsumesByte` as the call site, which is
+  the theorem the call's _result_ flows into; `codec-audit-round-nine` review S-1.)
 
   **And that single call is invisible to every gate.** A provenance/mention count over
   the tree finds `Codec.isoConsumesByte` in exactly three kinds of place: its own

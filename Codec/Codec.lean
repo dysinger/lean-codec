@@ -215,8 +215,8 @@ theorem Bytes.ext {n : Nat} {s₁ s₂ : Bytes n} :
   exact h i
 
 /-- `s₁ = s₂` is equivalent to pointwise equality on `Fin n` — provable by
-`funext` (left) and `congrFun` (right). Footprint: `Quot.sound` alone, one axiom out
-of the two this library permits — measured with `#print axioms` on this declaration.
+`funext` (left) and `congrFun` (right). `` `[Quot.sound]` `` — that alone, one axiom out
+of the two this library permits, measured with `#print axioms` on this declaration.
 
 **Not the pair**, which this docstring claimed until the eighth audit: the `funext`
 direction needs `Quot.sound` for `Fin`'s extensionality and never consults `propext`.
@@ -226,8 +226,11 @@ rather than this theorem's.
 
 **And it was still invisible after that fix**, which round nine measured (§5.3a): the
 literal is split across a line break in the prose above, and a literal straddling a
-newline does not match a vocabulary phrase. The rewording here is what closes it; the
-arm gains a completeness assertion so the next one cannot hide the same way. -/
+newline does not match a vocabulary phrase. **The first attempt at this rewording made
+it worse** — it wrote `` Footprint: `Quot.sound` alone ``, a spelling no vocabulary
+phrase recognises, so the claim went from *checked* to *invisible* while the prose
+claimed the hole was closed (found by the round's own review, G-01). The literal is now
+written as the bare backticked axiom list, which the arm reads and adjudicates. -/
 theorem Bytes.ext_iff {n : Nat} (s₁ s₂ : Bytes n) :
     s₁ = s₂ ↔ ∀ i : Fin n, s₁ i = s₂ i :=
   ⟨fun h i => congrFun h i, Bytes.ext⟩
@@ -334,23 +337,25 @@ whether the step itself matches the empty string. It is the constructive
 denotation of the derived `many` combinator; the decoder law is
 `Codec.decodeRepeat_spec`.
 
-**Two things a reader comparing this to the paper must be told** (`codec-audit-round-nine`
-§7.1):
+**Two things a reader comparing this to the paper must be told:**
 
-1. **The `nil` case is `n = 0`, not the paper's `True`.** That is a **choice**, not a
-   mechanical translation: the substrate's length lives in the *type*, so "any string
-   repeats zero times" is not expressible without smuggling the length back out by
-   hand — which does not close. The `n = 0` form is the only version `Bytes n` admits,
-   and it is what makes `relRepeat_induction` an induction on the **list** rather than
-   on a length. `relRepeat_nil` below states it (`Iff.rfl`).
+1. **The `nil` case is `n = 0`, which is the paper's own closure.** The paper's `many`
+   closes at `nil $ pure ()` (`PAPER.md:433-439`), and `pure x` relates `x` to the
+   **empty string only** (`PAPER.md:647`: `pure x = Rel [(x, "")]`) — so the paper's
+   `nil` relates `[]` to `""` and to nothing else. On a `Bytes n` substrate the empty
+   string is the unique inhabitant of `Bytes 0`, so `relRepeat R [] n s ↔ n = 0`
+   (`relRepeat_nil` below, `Iff.rfl`) is that same fact with the length in the type.
+   **This is not a departure from the paper**, though an earlier revision of this
+   docstring said it was (`codec-audit-round-nine` review M-2). Stating it this way is
+   what makes `relRepeat_induction` an induction on the **list** rather than on a
+   length.
 2. **The first two parameters of this `match` are not the recursion's measure.** The
    recursion descends on the *list*; `n` is carried, not decreased. Stated because a
    `unfold` at a variable list does not reduce (`count`/`relRepeat` both), so the
    recursion equation has to be stated as its own `rfl` lemma — see
    `relRepeat_cons`.
 
-A porter should read `[S5]` in `README.md` beside this, where the departure and the
-`[]`-case warning are written for them. -/
+A porter should read `[S5]` in `README.md` beside this. -/
 def relRepeat {α : Type} (R : α → {m : Nat} → Bytes m → Prop) :
     List α → (n : Nat) → Bytes n → Prop
   | [], n, _ => n = 0
