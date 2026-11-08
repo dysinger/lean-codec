@@ -185,8 +185,11 @@ pattern list: a pattern matching no declaration, or one that removes a name
 `definitionSurfaceAllowlist` calls authorial, is a build failure. That pair is what
 closed the hole this table could not see: `Iso.prod` — the paper's own `×` — had been
 removed from the universe by a `"prod"` entry in `derivedDefPatterns` and was in
-neither list, so
-`141 / 112 / 29` was a **green gate with the paper's product functor outside it**.
+neither list, so the gate was **green with the paper's product functor outside it**.
+(The triple the tables held at that moment is deliberately **not** reproduced here:
+no command reproduces a historical count, so quoting one is a number with no
+provenance — `codec-drift-closure` §2.3. Git history has it; this paragraph keeps the
+lesson, which is the part a reader can use.)
 An earlier revision called that a *suffix* entry; it is a **last-name-component**
 pattern (`derivedDefPatterns` is matched against `n.components.getLast!`, i.e. a whole
 component, not a suffix — `codec-audit-round-eight` S-6). The distinction matters
@@ -226,17 +229,19 @@ on the law side — it is axiom-free and is an authored law.
 generated** — two mechanisms, because they have different failure modes.
 
 * The *counts* are asserted by `headerNumbers` at the end of this file: a stale table
-  is a build failure. That is not decoration — this table said `364 / 292` and
-  `197 / 61 / 4 / 30` after the gated set had already reached `382 / 310` and
-  `201 / 74 / 4 / 31` (correction landed in `9db99b8`, the regeneration that swapped
+  is a build failure. That is not decoration — the tables went stale by a full
+  regeneration once (the correction landed in `9db99b8`, the regeneration that swapped
   the distribution table to generated), because `partition`/`gateCoverage` compare set
-  *membership* and never read the prose.
+  *membership* and never read the prose. What the stale numbers **were** is not
+  reproduced here: they are historical and no command reproduces them, so quoting them
+  is the defect this change closes (§2.3). The mechanism is the lesson; the figures
+  live in git history.
 * The *footprint distribution* is now **generated** by `scripts/gen-axioms.lean`
   (`codec-audit-round-three` §1.9), counting the `collectAxioms` name lists rather than
   parsing renderered prose. It keys on names, so the audit's own failure mode — a
   parser truncating at the `?` in `Codec.attach_getElem?_corr` — cannot recur (design
   D1). On the regeneration that introduced it the generated table **equalled the
-  hand-written one** (`209 / 78 / 4 / 34 = 325`), which is D1's "the table is correct
+  hand-written one**, which is D1's "the table is correct
   today" re-confirmed by the compiler rather than by re-reading it.
 
 `Codec.Nat.eq_irrel` is one of the axiom-free group above, and it is in the gated set only
@@ -1805,12 +1810,12 @@ run_cmd do
 
 /-! **Header check**, run on every `lake build`. The "Current state" tables at the top
 of this file are prose, and `partition`/`gateCoverage` compare set *membership* — so a
-regeneration leaves them stale silently. It happened: the tables read
-`364 / 292` and `197 / 61 / 4 / 30` while the tree was already at
-`382 / 310` and `201 / 74 / 4 / 31` (corrected in `9db99b8`). This check makes the
-numbers **asserted**: a mismatch fails the build naming both sides. Remember the
-figures and the commit are quoted as history; the *current* numbers are the ones this
-check prints, never a number written in a file.
+regeneration leaves them stale silently. It happened: the tables went stale by a full regeneration while the tree had already
+moved on (corrected in `9db99b8`). This check makes the numbers **asserted**: a
+mismatch fails the build naming both sides. **The stale figures and the commit are not
+reproduced here** — no command reproduces a historical count, so quoting one is the
+defect class `codec-drift-closure` §2.3 closes; git history has the values. The
+*current* numbers are the ones this check prints, never a number written in a file.
 
 Keep these constants in lockstep with the tables above. **This is the settled design,
 not a stopgap**: `codec-audit-round-three` §1.9 generated the *footprint distribution*

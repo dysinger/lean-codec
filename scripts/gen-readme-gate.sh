@@ -115,7 +115,12 @@ head, tail = src[: i + len(begin)], src[j:]
 # exactly one blank line after BEGIN and exactly one before END.
 assert head.endswith(begin), "the BEGIN marker must be the last thing in `head`"
 assert tail.startswith(end), "the END marker must be the first thing in `tail`"
-open(path, "w").write(head + "\n\n" + block + "\n" + tail.lstrip("\n"))
+# `BLOCK` comes from `$(emit_block)`, and command substitution **strips the
+# trailing newline** — so the block has no terminator of its own and the separator
+# must be written explicitly. Getting this wrong is what made an earlier version
+# non-idempotent; the blank line before END is part of the separator, not of the tail.
+assert not block.endswith("\n"), "command substitution should have stripped it"
+open(path, "w").write(head + "\n\n" + block + "\n\n" + tail.lstrip("\n"))
 PY
     echo "gen-readme-gate: rewrote the generated region in README.md" >&2
     ;;

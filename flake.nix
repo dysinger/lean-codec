@@ -279,6 +279,44 @@
               touch "$out"
               runHook postBuild
             '';
+        # **The documentation-count check** (`codec-drift-closure` §2.3,
+        # `docs-conformance`: "A count in documentation is derivable by a command").
+        #
+        # `README.md` states two counts a porter is told to reproduce: [S1]'s "19
+        # `Iso`-valued definitions" (`13 + 4 + 2`) and [S3]'s "7 constructors + 8
+        # bounded values = 15", with four further counterexample witnesses. Both were
+        # hand-derived paragraphs with no command behind them — the shape the spec
+        # calls "a completeness claim that fails silently: it is not wrong-looking, it
+        # is merely short".
+        #
+        # `scripts/count-values.lean` walks the environment, prints both lists, and
+        # **asserts** the totals against `expectedIsoValues` / `expectedCodecValues`.
+        # The predicate is in that file, including its removals (the compiler
+        # auxiliaries `_f`, `_sunfold`, `_unsafe_rec`, `_flat_ctor`, counted so the
+        # removal is visible).
+        values-check =
+          pkgs.runCommand "codec-values-check"
+            {
+              nativeBuildInputs = [
+                _pkg.lean4
+                pkgs.stdenv.cc
+                pkgs.git
+              ];
+            }
+            ''
+              set -euo pipefail
+              runHook preBuild
+              cp -r ${self} work
+              chmod -R u+w work
+              cd work
+              rm -rf .lake
+              lake build Codec > /dev/null
+              # `lean` exits non-zero on the `throwError` in the script, so the
+              # assertion is a build failure, not a log line.
+              lake env lean scripts/count-values.lean
+              touch "$out"
+              runHook postBuild
+            '';
       in
       {
         # The default target builds the native library (`lake build` → `.olean`).
@@ -300,6 +338,10 @@
         checks.reviews = reviews-check;
         # The README's quoted gate block, regenerated and diffed (§2.2).
         checks.gate-lines = gate-lines-check;
+        # The README's two stated value counts ([S1]'s 19, [S3]'s 12), re-derived by
+        # an environment walk (§2.3). A count in documentation with no command behind
+        # it is the defect class this change closes.
+        checks.values = values-check;
 
         # Formatting check (treefmt).
         checks.formatting = treefmtModule.config.build.check self;

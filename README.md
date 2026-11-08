@@ -481,6 +481,15 @@ correction: the number looks right and only the sum is wrong. The 19 is re-deriv
 for this fix by an environment walk, and that walk returns the two witnesses **by
 name** — so this is the list the method produces, not a repaired sum.
 
+**Re-derive it, do not trust this paragraph** (`codec-drift-closure` §2.3). The count
+is **asserted by a script**, not by prose: `nix develop --command lake env lean
+scripts/count-values.lean` walks the environment and fails if the total is not the
+`expected*Values` constant. The predicate is written out in that file — a `defnInfo`
+in `Codec`/`Iso` whose result type's head constant is `Iso` once the
+`forall`/typeclass binders are stripped, with the compiler auxiliaries
+(`_f`, `_sunfold`, `_unsafe_rec`, `_flat_ctor`) removed **and counted** so the removal
+is visible rather than assumed. At this writing it reports **19** and removes 7.
+
 Those six are not all in the same position, which is why "exactly two others" was
 misleading rather than merely off by two:
 
@@ -671,6 +680,15 @@ the description. Unbounded repetition is the `relRepeat`/`decodeRepeat`/
 `encodeRepeat` triple exposed as a **run value** (`[S6]`), and `takeWhile` is the
 same shape: a triple, not a `Codec` constructor, because its length is bounded only
 by the input.
+
+**The "fifteen" and the "four witnesses" are asserted, not remembered**
+(`codec-drift-closure` §2.3): `nix develop --command lake env lean
+scripts/count-values.lean` walks the environment for `Codec`-valued definitions —
+**12** of them, which is the eight bounded values plus `uniqSeqBt`, `uniqSeqBo`,
+`uniqSeqD2`, `uniqSeqWhole` — and fails if the total moves without this paragraph and
+its `expected*Values` constant moving with it. The seven constructors are
+`ctorInfo`, not `defnInfo`, so the walk does not see them; that is why the sentence
+above says **7 + 8** rather than printing a single number that mixes the two kinds.
 
 **The core module inventory**, because an earlier revision listed anchors by value but
 omitted a whole public module. Every file below is public, ships gated laws, and is
