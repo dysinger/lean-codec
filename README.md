@@ -112,8 +112,11 @@ not _extend_ a `Rel`; it **replaced an `[α]`-interpreter with the graph**. ("Tw
 counts the _decoder_ side only — the paper's third interpreter is `print`, which is
 `[S2]`'s subject; an earlier revision said "two values, not one" without the scope,
 which reads as a count of the whole paper.) The link to `parse` is a theorem
-— `decode_spec` filtered at `Suffix.empty` gives `Rel d x s ↔ (x, Suffix.empty n) ∈
-decode d s` (`bidir`) — not a definitional identity.
+— `decode_spec` specialised at `r = Suffix.empty n` gives `Rel d x s ↔ (x, Suffix.empty n) ∈
+decode d s` (`bidir`), with the `n - n = 0` transport discharged by `Rel_cast` — not a
+definitional identity. (An earlier revision said "filtered at", which describes an
+operation `bidir` does not perform: it specialises the remainder and then transports a
+cast, and nothing in the proof filters a list — `codec-audit-round-nine` review N-5.)
 
 The paper's decoder returns a _list_ of `(value, remaining)` pairs:
 
@@ -301,8 +304,12 @@ lossy direction is `decodeNormal`, the normalizer composed _outside_ the `Iso`: 
 accepts input the `Iso` rejects, has no inverse, and is explicitly not a codec
 value. Capture-verbatim is then simply the **identity normalizer** — the degenerate
 case of the layer, not a prohibition on having one. Two consequences worth stating:
-the layer is **length-preserving** (`norm : Bytes n → Bytes n`, so case folding fits
-and collapsing a whitespace run does not — that needs a different carrier), and a
+the layer is **length-preserving at any instantiation** (`norm : S → S`, so a
+`Bytes n` instance cannot change the byte count — case folding fits and collapsing a
+whitespace run does not, since that needs a different carrier; the earlier form of this
+sentence wrote `norm : Bytes n → Bytes n`, a concrete function the tree does not contain
+— `codec-audit-round-nine` review S-3 saw the same defect in `[D4]` and this was its
+surviving second site), and a
 codec using it owes the per-instance fact that its encoder emits a normal form,
 without which the normalising decoder can fail on its own encoder's output.
 
@@ -550,15 +557,7 @@ three are not cosmetic and should not be ported as if they were:
 `byte`, `satisfy` — plus the non-leaf `pure` (a value-equality check, not a
 format), **and one derived byte-run combinator, the `takeWhile` triple**.
 
-**The rule covers C as well as Lean, and there is exactly one recorded exception.**
-No per-format C, and no C that parses digits, numbers, fields or format structure
-anywhere in the library. `Codec/`'s directory holds a single file that is not part of
-the library — `Codec/CRef.c`, the bench's hand-written reference parser (moved here from
-the 400-lines-later note by `codec-audit-round-nine` §7.10, so a reader of the rule finds
-its exception in the rule). It _does_ parse bytes and says so in its own header, and it
-is legitimate only because it is **bench-only**: no `@[extern]`, not in the axiom gate,
-not reachable from any `Codec` module — it exists as the honest yardstick for the
-performance claims. Do not add a second such file. It ships
+That triple ships
 as `relTakeWhile` / `decodeTakeWhile` / `encodeTakeWhile` (`Codec/Combinators.lean`),
 with `decodeTakeWhile_spec`, `encodeTakeWhile_rel`, `encodeTakeWhile_ne_none` and
 `encodeTakeWhile_of_decode` its laws. **Stated precisely, because an earlier revision
@@ -566,7 +565,25 @@ called this "the same shape every other combinator has" and that is false:**
 `chainl1`/`chainr1` have **four** laws each (`decode…_spec`, `encode…_rel`,
 `encode…_ne_none`, `encode…_of_decode`), and since `codec-audit-round-three` §1.5
 (`openspec/changes/archive/2026-11-06-codec-audit-round-three/`) so do `takeWhile`
-and `sepBy`. The
+and `sepBy`.
+
+**The rule covers C as well as Lean, and there is exactly one recorded exception.**
+No per-format C, and no C that parses digits, numbers, fields or format structure
+anywhere in the library. `Codec/`'s directory holds a single file that is not part of
+the library — `Codec/CRef.c`, the bench's hand-written reference parser (moved into this
+anchor from the 400-lines-later note by `codec-audit-round-nine` §7.10, so a reader of the
+rule finds its exception in the rule). It _does_ parse bytes and says so in its own
+header, and it is legitimate only because it is **bench-only**: no `@[extern]`, not in the
+axiom gate, not reachable from any `Codec` module — it exists as the honest yardstick for
+the performance claims. Do not add a second such file.
+
+(That paragraph was first spliced in mid-sentence, so the following "It ships as
+`relTakeWhile`…" read with `Codec/CRef.c` as its subject — a `.c` file shipping as three
+Lean combinators. Caught by `codec-audit-round-nine`'s own review, M-1, which is the
+round's restatement of a lesson already in this file: an insertion is a change to the
+sentences _around_ it.)
+
+The
 fourth law takes a **`relFunctional`** hypothesis on the relation it transports —
 `encode…_of_decode` needs it because the encoders are only right-inverses of the
 decoders on functional descriptions. **How strong that obligation is, measured rather
