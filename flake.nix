@@ -248,22 +248,6 @@
         checks.bench = bench-check;
         checks.mirror = mirror-check;
         checks.reviews = reviews-check;
-        # **The reviewer-id reconciliation** (`P4-N2` in round-ten.md).
-        #
-        # The source cites review ids (`review P2-A4`) that resolve to rows in
-        # `openspec/changes/codec-audit-round-nine/reviews/round-ten.md`. The first version
-        # of that file claimed to hold "every id" while missing three cited ones and
-        # **colliding** on two more (three findings shared `M-1`) — a citation to nothing,
-        # which is exactly what moving the reports out of `/tmp` was supposed to fix.
-        # This check makes the reconciliation a build failure in both directions.
-        # **The mirror check** (`codec-audit-round-nine` review P3-M4). `gen-axioms.lean`
-        # cannot import `Axioms.lean`, so its copies of the classifier's name lists can
-        # drift — and `AGENTS.md` records that drift un-pinning `Codec.Suffix.hle` for a
-        # whole round. `lake build` cannot catch an *undercounting* drift, because the
-        # generator writes its smaller set into `gatedNames` and the gate then agrees with
-        # it by construction. This check compares the **two files** directly, in both
-        # directions, which is the one cross-file comparison available without the
-        # bootstrap cycle.
 
         # Formatting check (treefmt).
         checks.formatting = treefmtModule.config.build.check self;

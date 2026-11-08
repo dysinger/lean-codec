@@ -40,11 +40,20 @@ counted. That sentence was false. What is now true, and asserted by the
 
 | `ConstantInfo` constructor | in the universe? | count today |
 | --- | --- | --- |
-| `thmInfo` | **yes** — the gated/allowlist partition | 769 |
+| `thmInfo` | **yes**, but only the **public surface** of it — see the two numbers below | **771** counted, **427** in the universe |
 | `defnInfo` | **yes** — the mention proxy | 348 |
 | `opaqueInfo` | **NO, and that is a hole** — printed, so a non-zero count is loud | **0** |
 | `axiomInfo` | **NO, and that is a hole** — printed | **0** |
 | `inductInfo` / `ctorInfo` / `recInfo` / `quotInfo` | no — types and compiler machinery, no body to check | 8 / 14 / 8 / 0 |
+
+**Two `thmInfo` numbers, and confusing them was a defect** (`P4-N` finding, folded in
+here). The census walks **every** `Codec`/`Iso`-prefixed `thmInfo` — 771 today — including
+private-in-practice names, `casesOn`/`recOn` machinery and the `_eq_1` auxiliaries that
+`publicTheorems` filters out. The **partition** is over the public surface: 427 = 345
+gated + 82 allowlisted. An earlier revision of this table put `769` beside the phrase "the
+gated/allowlist partition", which reads as though the partition had 769 members and
+silently disagreed with `headerNumbers` by 348. The census row is a *census*; the
+partition is asserted elsewhere. Both numbers are printed on every build.
 
 **`opaque`/`axiom` are *deliberately out*, and the exclusion list is not the
 mechanism.** An `opaque` publishes a value with no body; an `axiom` publishes a claim

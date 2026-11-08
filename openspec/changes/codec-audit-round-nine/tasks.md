@@ -971,7 +971,6 @@ invisible to the proxy), P2-8/9/11/12, N-2/N-4.
       axiom gate: recursion-principle promotion — `Codec.findFrom.induct` is gated, and `Codec.findFrom` is covered by 6 gated theorem(s) that are not its own principle (Codec.findByte_spec, Codec.findFrom_complete, Codec.findFrom_finds, Codec.findFrom_least, Codec.findFrom_min, Codec.findFrom_sound); the principle adds 0 naming(s) and does not carry the coverage
       axiom gate: authored exemption verified (1 entr(ies), all gated; the suffix rule alone would have dropped 0 of them — 0 means the exemption is currently dead code, which is the measured state and not a defect)
       ```
-
       **Refreshed after the review round's own additions** (`alt_not_functional`,
       `functional_pure`), and that refresh is worth a note: this block was *stale by one law*
       in six places for a whole commit, because `8835519` updated `README.md`'s copy and not
