@@ -185,8 +185,8 @@ def fastEncodeRepeatAcc {α : Type} (p : Codec α) : List α → Array UInt8 →
 
 /-- Re-associating the accumulator append: `acc ++ (List.ofFn s₁).toArray ++
 (List.ofFn s₂).toArray = acc ++ (List.ofFn (concat s₁ s₂)).toArray`. Proved
-pointwise at the `List` level via `Array.ext'` + `ofFn_concat` — no
-`Classical.choice`. -/
+pointwise at the `List` level via `Array.ext'` + `ofFn_concat` — the choice axiom is
+never consulted. -/
 theorem append_toArray_ofFn_concat {m n : Nat} (acc : Array UInt8) (s₁ : Bytes m) (s₂ : Bytes n) :
     acc ++ (List.ofFn s₁).toArray ++ (List.ofFn s₂).toArray = acc ++ (List.ofFn (concat s₁ s₂)).toArray := by
   apply Array.ext'
@@ -278,7 +278,7 @@ def fastEncodeRepeat {α : Type} (p : Codec α) (xs : List α) : Option (Sigma f
   (fastEncodeRepeatAcc p xs #[]).map fun arr => ⟨arr.size, fun i : Fin arr.size => arr[i]⟩
 
 /-- The refinement: `fastEncodeRepeat p xs = encodeRepeat p xs`, pointwise.
-`[propext, Quot.sound]`-only, zero `Classical.choice`, zero `sorry`. -/
+`[propext, Quot.sound]`-only, choice-free, zero `sorry`. -/
 theorem fastEncodeRepeat_eq {α : Type} (p : Codec α) (xs : List α) :
     fastEncodeRepeat p xs = encodeRepeat p xs := by
   cases hx : encodeRepeat p xs with

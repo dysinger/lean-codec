@@ -142,7 +142,7 @@ because the `seq` case reuses `decode_seq_mem`, which is defined above and is th
 membership lemma for `seq`. `Codec/Decode.lean` cannot import `Codec/Sound.lean`
 without a cycle.
 
-Both are `[propext, Quot.sound]`-only, zero `sorry`, zero `Classical.choice`.
+Both are `[propext, Quot.sound]`-only, zero `sorry`, and choice-free.
 
 With `Codec.emptyConsumesByte` (`Codec/Decode.lean`) every **consuming** `Codec`
 constructor now has a `ConsumesByte` witness — `byte`/`satisfy` at the leaves,
@@ -1102,7 +1102,7 @@ discharged. `huniq_byte` applies that chain at `Codec.byte`, and
 `huniq` now **has** an in-tree supplier, at one concrete codec, and the original
 finding ("an unproved premise") is closed.
 
-Lemmas, all `[propext, Quot.sound]`-only with zero `Classical.choice`:
+Lemmas, all `[propext, Quot.sound]`-only with no choice principle:
 `relRepeat_prefix_inj` / `relRepeat_suffix_inj` (same-length splices agree in their
 prefix / suffix), `splice_prefix_agree` (cross-length prefix agreement),
 `relRepeat_cons_eq` (the oriented core of the induction, with the IH as a parameter so
@@ -1685,7 +1685,7 @@ theorem relRepeat_cons_eq {α : Type} (R : α → {m : Nat} → Bytes m → Prop
 `RelAligned` (unambiguity extended across lengths) and productivity, there is at most
 one value list **of a given length** that consumes a string. This is the true form of
 `decodeFull_spec`'s `huniq`; the un-indexed statement is false — see the section note.
-`[propext, Quot.sound]`-only, zero `Classical.choice`. -/
+`[propext, Quot.sound]`-only, and free of the choice axiom. -/
 theorem relRepeat_unique_same_length {α : Type} (R : α → {m : Nat} → Bytes m → Prop)
     (hld : LengthDet R) (hal : RelAligned R)
     (hprod : ∀ a {m : Nat} (t : Bytes m), R a t → m ≠ 0) :
@@ -1752,7 +1752,7 @@ codec, which is exactly the finding it closes.
 Why `LengthConst` and not the weaker `LengthDet`: `LengthDet` pins each value's own
 step length, but not how many steps a consuming list has (`huniq_not_derivable`
 exhibits exactly that gap), so it is insufficient on its own. All `[propext,
-Quot.sound]`-only, zero `Classical.choice`. -/
+Quot.sound]`-only and free of the choice axiom. -/
 
 /-- A step relation is **length-constant** when every value relates only to strings
 of one fixed length `c`. This is the hypothesis that pins the _number of steps_ of a

@@ -41,7 +41,7 @@ and never present "no axiom" as "no trust".
 
 `byteSlice` is a **standalone seam**: in this change it has *no library-internal
 caller* — the proven `decodeFullArray` (Layer 1) deliberately builds its suffix via
-the `List.toArray.drop` transport so its refinement stays `Classical.choice`-free
+the `List.toArray.drop` transport so its refinement consults no choice principle
 (an axiom-clean body, not a trusted `@[extern]`), and no other packed path consumes
 it. It exists to be *called* by a packed path when a consumer wants the floor
 suffix copy, and the bench lane is the packed-path consumer that exercises it. It
@@ -165,7 +165,7 @@ or `none` when there is no such index.
 The Lean body below is the *specification* — a constructive `Nat`-recursion
 (`findFrom`) over the backing `data` from `off`, so no `Decidable` instance with a
 classical route is consulted and every law about it is `[propext, Quot.sound]`
--only (it used to be `Array.findIdx?`, which pulled `Classical.choice` in through
+-only (an earlier body, `Array.findIdx?`, pulled a third axiom in through
 `DecidableEq UInt8` — the leak this body was rewritten to remove). The `@[extern
 "codec_findByte"]` attribute makes the running C call the matching `codec_findByte`
 symbol (a single `memchr`); that C is trusted, not proven, and is excluded from the
@@ -202,11 +202,12 @@ This law is what makes the trust seam's contract *nameable*: the C's contract is
 "the C matches the Lean body", and without a theorem fixing that body the
 contract points at a definition rather than at a checkable statement. It is the
 sibling of `blitBytes_spec`/`findByte_spec` below, so every Layer-2 seam now has
-its own `*_spec`. `rfl`-clean and **axiom-free** (no `Classical.choice`, zero
-`sorry`, no `byteSlice`-related axiom — the running C is invisible to Lean, as the
-module header records). **Axiom footprint: none** (`#print axioms
+its own `*_spec`. `rfl`-clean and **axiom-free** (zero `sorry`, and the choice axiom
+is never consulted; no `byteSlice`-related axiom either — the running C is invisible
+to Lean, as the module header records). **Axiom footprint: none** (`#print axioms
 Codec.byteSlice_spec` reports no axioms at all), the same as `blitBytes_spec` and
-unlike `findByte_spec`'s `[propext]`; see that law for why the set is not uniform.
+unlike the `findByte` law's one-axiom footprint; see that law for why the set is not
+uniform.
 
 **This docstring used to state two different footprints two sentences apart** — a
 self-contradiction `#print axioms` settles in one line (it reports no axioms). Found
@@ -220,8 +221,16 @@ theorem byteSlice_spec (a : ByteArray) (i : USize) :
 with its `[dc, dc+lc)` slice (where `dc`/`lc` are the destination-destined cursor
 and the copied run, both clamped as `Array.extract` clamps its bounds) replaced by
 `src[sc, sc+lc)`. The `USize` indices carry no `Nat ↔ USize` roundtrip the law must
-justify, so `#print axioms Codec.blitBytes_spec` reports `[propext, Quot.sound]`
-with no `blitBytes`-related axiom. `rfl`-clean. -/
+justify, and `rfl` closes it, so this law is **axiom-free**: `#print axioms` reports
+that it depends on no axioms at all, which is stronger than the two-axiom bar every
+other law here meets, and there is no `blitBytes`-related axiom.
+
+**(Measured, and this sentence was wrong for a round.** It used to state the
+two-axiom footprint; `codec-audit-round-nine` §5.1 measured the empty one, and
+`Axioms.lean`'s `#guard_msgs` for this theorem — which is the authority, not any
+prose — already said so. The claim was invisible to the footprint arm because of a
+vocabulary hole, not because the arm's filters dropped it: see §5.3a. State a
+footprint from measurement, and treat the gate's guard as the record.) -/
 theorem blitBytes_spec (dst : ByteArray) (dstOff : USize) (src : ByteArray) (srcOff : USize)
     (len : USize) :
     blitBytes dst dstOff src srcOff len =
@@ -342,16 +351,22 @@ theorem findFrom_finds (a : Array UInt8) (b : UInt8) (k : Nat)
 constructive scan `findFrom` of `a.data` from `off`.
 
 **Axiom footprint: `[propext]`** — it reduces to `findFrom`'s unfolding, which
-consults `getElem?` (a `propositional decision over the array bound), so `propext`
-is pulled in while `Quot.sound` is not. That is inside the `[propext, Quot.sound]`
--only gate, and **no `Classical.choice` appears** — the point of the rewrite. The
-earlier body (`Array.findIdx?`) reported `[propext, Classical.choice, Quot.sound]`
-while this docstring claimed `[propext]`; the measurement now matches the prose.
+consults `getElem?` (a propositional decision over the array bound), so that one axiom
+is pulled in while the other permitted one is not. It is inside the gate's allowance,
+and the third axiom is absent — the point of the rewrite. The earlier body
+(`Array.findIdx?`) reported all three while this docstring claimed one; the
+measurement now matches the prose.
+
+**The prose above was itself unread until round nine** (`codec-audit-round-nine`
+§5.3a): the two-name literal sat inside a sentence about the gate's *allowance*, not
+about this law's footprint, and the bare-spelling hole kept the whole docstring out of
+the arm. Both halves are fixed — the sentence no longer writes a footprint it does not
+claim, and the vocabulary recognises the bare form.
 
 **Honest limit, unchanged by the rewrite.** `#print axioms` sees the Lean body,
 never `Codec/ByteSlice.c`. Making this law witness-clean does **not** make the C
-proven: the Layer-2 trust contract stands, and "no `Classical.choice`" is still not
-"no trust". -/
+proven: the Layer-2 trust contract stands, and an axiom report is still not a trust
+claim. -/
 theorem findByte_spec (a : ByteArray) (off : USize) (b : UInt8) :
     findByte a off b =
       match findFrom a.data b off.toNat with

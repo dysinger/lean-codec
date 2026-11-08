@@ -45,7 +45,7 @@ namespace Codec
 
 /-- Read a contiguous `Array UInt8` back as a length-indexed `Bytes a.size`:
 `fun i => a[i.val]`. A pure `Array.get` read, no `ofFn` round-trip (which would
-leak `Classical.choice`). -/
+leak a third axiom). -/
 def arrayToBytes (a : Array UInt8) : Bytes a.size :=
   fun i => a[i.val]
 
@@ -56,8 +56,8 @@ here so that a caller does not invent its own. It goes through `List.ofFn`, whic
 is the `Fin n`-indexed enumeration; the result's size is `n` by `List.ofFn`'s own
 length fact, so the round-trip `arrayToBytes (bytesToArray s) = s` needs no
 `Array.extract`/`toList` machinery — which is the transport family `README.md`'s
-"Representations" section records as removed precisely because it was the
-`Classical.choice` source in the old `List`-carrier design.
+"Representations" section records as removed precisely because it was the choice-axiom
+source in the old `List`-carrier design.
 
 (An earlier revision of this docstring said that round-trip was "`rfl` by
 `funext`/`Fin.ext`". **It is not**: it needs `Array.getElem_toList` then
@@ -112,7 +112,7 @@ results does **zero** suffix copies, not `k`.
 What it does *not* do is call the Layer-2 `commitRemainder` seam. That seam is
 **available but unused** here — the proven path deliberately builds its suffix
 with the list-materializing `ByteArray.mk ((a.toList.drop c).toArray)` transport
-(below), so its refinement stays `Classical.choice`-free without a trusted
+(below), so its refinement consults no choice principle and needs no trusted
 `@[extern]`. `Codec/ByteSlice.lean` states the same thing from its side; the two
 headers agree, and neither calls `commitRemainder` "the deferred commit" of a path
 that never makes one.
@@ -137,7 +137,7 @@ theorem decodeArrayFast_eq {α : Type} (d : Codec α) (a : Array UInt8) (i : Nat
 /-- The packed full-consumption decoder: a single suffix copy, never
 `Option (List α × Suffix n)`. Its body is the `rfl`-clean
 `ByteArray.mk ((a.toList.drop i).toArray)` — a list-materializing transport
-(chosen so the refinement stays `Classical.choice`-free), **not**
+(chosen so the refinement consults no choice principle), **not**
 `copySlice`/`extract`. The `c` in the result is the consumed count; the packed
 suffix is the `ByteArray` of the bytes at-or-after `c`. -/
 def decodeFullArray {α : Type} (d : Codec α) (a : Array UInt8) (i : Nat) :
@@ -430,7 +430,7 @@ readback: `decodeArray d a i = (decode d (bdrop i (arrayToBytes a))).map
 `decodeArray d₂ a c₁` (over `bdrop c₁ (arrayToBytes a)`) with `decode d₂ t₁.bytes`
 via `decode_cast` and the genuine-suffix/`bdrop_add` composition
 (`bdrop_consumedAbs_eq`), with `consumedAbs_cast_trans` aligning the cursors.
-`[propext, Quot.sound]`-only, zero `sorry`, zero `Classical.choice`. -/
+`[propext, Quot.sound]`-only, zero `sorry`, and choice-free. -/
 theorem decodeArray_eq {α : Type} (d : Codec α) (a : Array UInt8) (i : Nat) :
     decodeArray d a i = (decode d (bdrop i (arrayToBytes a))).map (fun (x, t) => (x, consumedAbs a i t)) := by
   induction d generalizing a i with
@@ -564,8 +564,7 @@ deriving it with `by omega` there was what made the unfolders leak
 `Classical.choice` (see `decodeFullArrayFast_succ`), and an earlier session's
 "thread `hk` as a parameter" advice was the right instinct recorded with the wrong
 reason. `PackedCand`'s own `≤` field is what the search passes through, so the bound
-never has to be invented. `[propext, Quot.sound]`-only, zero `Classical.choice`,
-zero `sorry`. -/
+never has to be invented. `[propext, Quot.sound]`-only, choice-free, zero `sorry`. -/
 /-- A packed candidate **carrying its own strict-advance fact**. `decodeArray_consumes`
 says a `ConsumesByte` decoder's candidate always advances the cursor, so the fact is
 there for every candidate; putting it *in the type* is what lets the recursive call
@@ -1259,7 +1258,7 @@ and both sides answer `some []` there anyway.
 
 Note the specification side is **`decodeFull` directly**, not `decodeFullFastRoot`:
 6.1a already proved those equal, so routing through it would add a second bridge for
-no gain. `[propext, Quot.sound]`-only, zero `sorry`, zero `Classical.choice`. -/
+no gain. `[propext, Quot.sound]`-only, zero `sorry`, and choice-free. -/
 theorem decodeFullArrayRoot_eq {α : Type} (d : Codec α) (h : ConsumesByte d)
     (a : Array UInt8) :
     decodeFullArrayRoot d h a = decodeFull d h a.size (arrayToBytes a) := by
@@ -1484,8 +1483,8 @@ theorem decodeWholeOneBytes_eq {α : Type} (d : Codec α) (h : ConsumesByte d) {
 /-- The packed full-consumption decoder equals the *first* spec `decode` result,
 with its suffix packed as a `ByteArray` and its consumed count read back. (The
 packed carrier takes the first match, exactly as the packed `head?`-projection of
-`decode`; full backtracking is preserved by `decodeArray_eq`.) `[propext,
-Quot.sound]`-only. -/
+`decode`; full backtracking is preserved by `decodeArray_eq`.) It uses both of the
+two axioms the gate permits, and no other. -/
 theorem decodeFullArray_spec {α : Type} (d : Codec α) (a : Array UInt8) (i : Nat) :
     (decodeFullArray d a i) =
       ((decode d (bdrop i (arrayToBytes a))).head?).map (fun (_, t) => (ByteArray.mk ((a.toList.drop (consumedAbs a i t)).toArray), consumedAbs a i t)) := by
@@ -1502,8 +1501,10 @@ is exactly `ByteArray.mk (a.extract c.toNat a.size)`. No `Nat ↔ USize` roundtr
 the law needs to justify (the index is already `USize`, matching `byteSlice`'s own
 index), so **no** `System.Platform.numBits` premise enters. The `byteSlice`→C trust
 is a runtime contract invisible to Lean: `@[extern]` swaps only the emitted C, the
-Lean body still reduces, so `#print axioms Codec.commitRemainder_spec` reports
-`[propext, Quot.sound]` with no `byteSlice`-related axiom. `rfl`-clean.
+Lean body still reduces, so this law is **axiom-free** (`#print axioms` reports that
+it depends on no axioms at all) with no `byteSlice`-related axiom. `rfl`-clean.
+(**Measured.** This sentence used to state the two-axiom footprint, which the gate's
+own `#guard_msgs` contradicted; corrected by `codec-audit-round-nine` §5.3a.)
 
 This is `Codec.byteSlice_spec` at `ByteArray.mk a` — the seam law it rests on is
 that theorem, not a re-derivation of the body here (see `Codec/ByteSlice.lean`, where
@@ -1516,7 +1517,7 @@ theorem commitRemainder_spec (a : Array UInt8) (c : USize) :
 
 The two spellings of "the bytes of `a` at-or-after `c`" are
 `ByteArray.mk ((a.toList.drop c).toArray)` — the `List` transport the refinement uses,
-chosen because it is `Classical.choice`-free — and `commitRemainder a c.toUSize`, the
+chosen because it consults no choice principle — and `commitRemainder a c.toUSize`, the
 Layer-2 `memcpy` seam.
 
 **The seam genuinely pays.** Measured `n` = 65536, same run, values checked identical
@@ -1544,7 +1545,7 @@ Two consequences, both recorded rather than papered over:
 
 1. **The seam stays unwired, on evidence.** The speed-up is real and quantified; the
    axiom cost is real and quantified; the decision is that the second outweighs the
-   first for a path whose whole point is being `Classical.choice`-free. Task 2.4's
+   first for a path whose whole point is being axiom-clean. Task 2.4's
    header wording ("available but unused") is therefore still exactly right, and this
    note says *why* rather than leaving it looking like an oversight. If a future
    toolchain makes `Array.extract`'s readback axiom-clean, the wiring is one lemma and
@@ -1677,7 +1678,7 @@ theorem bpush_data (bs : ByteArray) (b : UInt8) : (bs.push b).data = bs.data.pus
   rfl
 
 /-- `List.foldl` over `ByteArray.push` projects to `List.foldl` over `Array.push`
-on the backing data. `[propext, Quot.sound]`-free (`#print axioms` ⇒ none). -/
+on the backing data. Free of axioms of every kind: measured, it depends on none. -/
 theorem foldl_push_data (acc : ByteArray) (xs : List UInt8) :
     (List.foldl (fun a b => a.push b) acc xs).data = List.foldl (fun a b => a.push b) acc.data xs := by
   induction xs generalizing acc with

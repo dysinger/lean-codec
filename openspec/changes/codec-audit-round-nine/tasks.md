@@ -312,11 +312,30 @@ Findings: P-2 (RFC misquote ×2), P-3 (constancy/quotient).
 
 Finding: N-4 (`blitBytes_spec`).
 
-- [ ] 5.1 **Measure first**: `#print axioms Codec.blitBytes_spec`. At authoring time:
+- [x] 5.1 **Measure first**: `#print axioms Codec.blitBytes_spec`. At authoring time:
       `does not depend on any axioms`, matching `Axioms.lean:2264`'s `#guard_msgs`.
-- [ ] 5.2 Correct `ByteSlice.lean:223` to state the measured footprint. Note that the
+
+      **Re-measured** (`scratch/probe-axioms.lean`):
+      `'Codec.blitBytes_spec' does not depend on any axioms`. The task's line number is
+      stale (the arm is at `Axioms.lean:2150` after `codec-gate-denominators` and this
+      change's edits); the measurement is not. The same probe re-measured all 18 blind
+      declarations: `commitRemainder_spec`, `foldl_push_data`, `Nat.eq_irrel` and
+      `blitBytes_spec` are **axiom-free**; `ext_iff`, `Bytes.ext` are `[Quot.sound]`;
+      `findByte_spec`, `relRepeat_cast`, both `Iso.counterMeasure*` are `[propext]`; the
+      rest are the two-axiom pair. Those measurements are what the corrected prose now
+      states.
+
+- [x] 5.2 Correct `ByteSlice.lean:223` to state the measured footprint. Note that the
       gate's `#guard_msgs` is the authority, not the prose.
-- [ ] 5.3 Establish **why the footprint arm did not fire here** — **MEASURED, and it is
+
+      Done, **and there were three, not one**: `blitBytes_spec` (§5.2's) and
+      `commitRemainder_spec` (in `Codec/Packed.lean`) both stated the two-axiom footprint
+      and measure empty, and `emptyConsumesByte` stated or the two-axiom pair in a
+      round-nine edit of mine and measures the pair — the third was **mine**, caught by
+      the widened arm before it landed as a false claim. All three prose sites now state
+      the measured footprint and say so where the old text disagreed.
+
+- [x] 5.3 Establish **why the footprint arm did not fire here** — **MEASURED, and it is
       none of the three candidates this task listed.** Run
       `scratch/probe-blitBytes-attrib.lean`:
 
@@ -397,6 +416,89 @@ Finding: N-4 (`blitBytes_spec`).
       **This supersedes 5.1/5.2 as the fix.** Correcting `ByteSlice.lean:223`'s sentence is
       one line and should be done (§5.2), but on its own it leaves thirteen sibling sites
       unread with a green gate — which is the defect, not the docstring.
+
+#### 5.3a — DONE. What was measured, and the two measurements that changed the plan
+
+**The independent denominator was too dirty, and that is the first result.** The authoring
+probe's predicate (`scratch/probe-vocabulary.lean`) counted a backticked span that
+`startsWith "[" && endsWith "]"`, which accepts code the tree writes inside its prose:
+`[S3]` / `[D3]` (README section tags), `[true, true]` / `[false, false, false, false]`
+(`Rab_two`/`Rab_four`, _bracket_ notations), and any `[a]`-shaped notation in a
+hypothesis. Its 22-of-159 mixed **two populations**: real footprint claims the
+vocabulary missed, and non-claims the broad predicate wrongly accepted. Measured with
+the tightened predicate (`scratch/probe-vocab2.lean`, which validates each element of the
+bracketed list is an axiom name): **18 of 155**, and the four that left the set
+(`Rab_two`, `Rab_four`, `Rel_maybe_some`, `Rel_choice`) were all never claims. So the
+hole was real but smaller than reported, and "22 of 159" must not be quoted as the size
+of the vocabulary gap.
+
+**Of the 18, eight were real unread claims, and five of those eight were unread for a
+second reason the task did not name**: the literal is **wrapped across a line** —
+`` `[propext,\nQuot.sound]` `` — so `doc.contains 
+"`[propext, Quot.sound]`"` cannot match it at any vocabulary width. `bdrop_consumedAbs_eq`,
+`foldl_push_data`, `decodeFullArray_spec`, `findByte_spec` and `Bytes.ext_iff` are all in
+this family — and `ext_iff` is the round-eight attribution site, so **the round-eight fix
+did not reach every spelling because several spellings do not exist as contiguous text.**
+A vocabulary rewrite alone would have left those five blind. That is the finding this
+sub-task's plan got wrong and measurement corrected.
+
+**What landed.**
+
+1. `footprintClaimPhrases` gains the bare forms — `` `[propext, Quot.sound]` ``,
+   `` `[propext]` ``, `` `[Quot.sound]` ``, `` `[Quot.sound]`-only `` and the three-axiom
+   form — plus `isExactPhrase`, so every backticked literal is matched verbatim and the
+   lower-case phrases case-insensitively (the spelled-out rule the docstring had already
+   stated). `classifyFootprintClaim` orders them **longest first**, so a three-axiom claim
+   is not read as a two-axiom one. Every new label has an arm in the arm's `match`, so an
+   unhandled label is a visible fallthrough rather than a silent pass.
+2. **Eight docstrings reworded** so the prose says what is measured: the five wrapped
+   literals above, `commitRemainder_spec` and `blitBytes_spec` (false footprints → the
+   measured empty one), and every `zero `Classical.choice`` / `no `Classical.choice``
+   spelling rewritten as "choice-free" / "the third axiom is absent". That last group is
+   **the honest half of the fix** rather than a vocabulary rule: a _mention_ of an axiom
+   name inside a sentence that says "this is absent" is an unreviewable claim — the arm
+   cannot tell "absent" from "present" from the token alone — so those sentences stop
+   writing footprint literals they are not claiming. Where the sentence _is_ a warning
+   ("prototyping here leaks `Classical.choice`") the source stays as it was; the rule is
+   in `Codec/ByteSlice.lean`'s header and in §7 of this ledger.
+3. **`Codec.search_nil_left`'s `[]` is a recorded exemption, not a fix.** Its bracketed
+   span is the empty _list_ constructor, named in a sentence about `Suffix.drop` not
+   reducing in goal position — editing the prose to dodge the denominator would make the
+   denominator agree by making the tree quieter, and the next genuine `[]` claim is the
+   one that would hide. `CodecAxioms.vocabularyExemptions` carries it (and
+   `bdrop_consumedAbs_eq`, whose span the broad predicate over-reads) with the reason in
+   place, and the arm asserts `exempt = the list's size` so a stale entry is a build
+   failure.
+4. **The third count is asserted.** `CodecAxioms.looksLikeAxiomList` is the independent,
+   deliberately broader predicate: it joins the docstring before scanning (so a wrapped
+   literal is read, not exempted), reads only _markup_, and never consults
+   `footprintClaimPhrases`. The arm asserts
+   `recognised + blind + exempt = mentioningLiteral` as an identity **and** pins each
+   term, and `expectedVocabularyCounts = (140, 0, 142)` is the reconciled state — **zero
+   blind**. The log line prints all three.
+
+**Mutation-tested twice, in the order the gate fires them.** Deleting ``"`[propext]"``
+from the vocabulary fails the **footprint** counts first
+(`mentioning 150 → 148`, `def`-docstrings `11 → 9`), which is correct — it is a wider
+blast radius than the vocabulary arm's. With `expectedFootprintCounts` matching the
+mutated tree, the **vocabulary** arm then fires and names the two docstrings that
+spelling was reading:
+
+```
+docstrings whose axiom-list literal the vocabulary recognises: constant says 140, environment has 138
+BLIND docstrings (a literal the vocabulary cannot see; each one is read by NOTHING):
+  constant says 0, environment has 2 — Codec.findByte_spec, Iso.counterMeasureDecreases
+```
+
+Both spellings restored; `lake build` green at 11 lines with the footprint line reading
+`150 mention a footprint spelling; 166 claim site(s) found = 155 checked + 11 skipped as
+0 other-theorem + 0 no-owner + 11 `def`-docstring` and the vocabulary as
+`142 = 140 recognised + 0 blind + 2 exempt`.
+
+**And widened vocabulary found a third mis-claim the task did not know about**, exactly as
+step 2 predicted it might: two old-theorem `[propext, Quot.sound]` statements were
+false. That is the value of the denominator — the arm now _can_ report its own
+incompleteness, which it could not before this task.
 
 ## 6. `Axioms.lean`: close four escape routes [M]
 

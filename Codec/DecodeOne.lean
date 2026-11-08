@@ -322,7 +322,7 @@ t₂.remaining`, and the genuine-suffix invariant (`decode_genuine_suffix_pointw
 read pointwise at one index and closed by `omega`) then pins the remainders `t₁ = t₂`
 (via `Suffix.ext`). Once `t₁ = t₂`, `t.prepend s₀₁ = t.prepend s₀₂`
 forces the prefixes `s₀₁ = s₀₂` (`prepend_prefix_eq`), and `Unambiguous d` forces
-`x₁ = x₂`. `[propext, Quot.sound]`-only, zero `sorry`, zero `Classical.choice`. -/
+`x₁ = x₂`. Choice-free, zero `sorry`. -/
 theorem decodeArray_unambiguous_value {α : Type} (d : Codec α) (hd : Unambiguous d)
     (a : Array UInt8) (i : Nat) :
     ∀ {x₁ x₂ : α} {c : Nat},

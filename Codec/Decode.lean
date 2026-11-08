@@ -172,8 +172,9 @@ bound — the witness is vacuous, but it is the one `Codec` constructor that had
 none. Its absence contradicted the claim made in `Codec.Sound`'s `ConsumesByte`
 section (`seqConsumesByte`/`isoConsumesByte` are presented as the fix for "every
 composed codec proved productivity by hand"): a downstream `d | empty`-shaped
-codec still had to hand-prove productivity at that node. `[propext, Quot.sound]`
--only, zero `sorry`. -/
+codec still had to hand-prove productivity at that node. Its footprint is the usual
+`propext` and `Quot.sound` pair — measured, not inherited from the shape of the
+statement, which is the rule `Axioms.lean` records for every claim in the tree. -/
 theorem emptyConsumesByte {α : Type} : ConsumesByte (Codec.empty : Codec α) := by
   intro x n s t hmem
   simp [decode] at hmem
@@ -250,7 +251,7 @@ for its proofs) and `decodeFullFastRoot` are proved equal by `decodeFullFastRoot
 and every law about `decodeFull` therefore holds for the fast path unchanged.
 
 Tail-recursive with an accumulator, so it compiles to a loop; `[propext,
-Quot.sound]`-only, zero `Classical.choice`, zero `sorry`. -/
+Quot.sound]`-only, choice-free, zero `sorry`. -/
 mutual
 def decodeFullFast {α : Type} (p : Codec α) (h : ConsumesByte p) :
     {n : Nat} → (s : Bytes n) → (m : Nat) → List α → Option (List α)
@@ -980,7 +981,7 @@ it rewrites at the home root and lets the `[]`/`cons` reduction lemmas
 3. **`obtain` the subtraction's equation BEFORE `split` or `cases`**, and note that
    `split`'s case tags are `h_1`/`h_2` — not the `_h` binder name.
 
-`[propext, Quot.sound]`-only, zero `Classical.choice`, zero `sorry`.
+`[propext, Quot.sound]`-only, choice-free, zero `sorry`.
 
 ## The arithmetic the proof needs (`remaining_at_cursor`)
 
@@ -1013,7 +1014,7 @@ theorem remaining_at_reroot {n m r : Nat} (hr : r ≤ n - m) :
 /-- The re-rooted search's `[]` base, at the search's own list type. Stated
 separately because the `candsAt` alias's `Suffix.drop` spelling does not reduce in
 *goal* position (see `tasks.md` 6.1a's `Membership` note); naming the type here lets
-the goal see the `[]` constructor. -/
+the goal see the empty-list constructor. -/
 theorem search_nil_left {α : Type} (p : Codec α) (h : ConsumesByte p)
     {n : Nat} (s : Bytes n) (m : Nat) (acc : List α) :
     decodeFullFastSearch p h s m acc ([] : candsAt p s m) = none := by
@@ -1210,7 +1211,7 @@ Two decisions make it provable, and both were expensive to find:
 Everything else is plumbing: `decodeFullFastSearch_eq` (already landed) turns the
 search into `decodeFullStep`, `spec_at_advance` re-roots the IH onto the
 candidate's bytes, and `cands_eq_nil_of_zero` kills the empty-candidate case at a
-zero cursor. `[propext, Quot.sound]`-only, zero `Classical.choice`, zero `sorry`. -/
+zero cursor. `[propext, Quot.sound]`-only, choice-free, zero `sorry`. -/
 theorem cursor_bridge {α : Type} (p : Codec α) (h : ConsumesByte p) :
     ∀ (K : Nat) (n : Nat) (s : Bytes n) (m : Nat),
       (Suffix.drop m s).remaining = K →

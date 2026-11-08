@@ -206,7 +206,8 @@ theorem Suffix.ext {n : Nat} {t₁ t₂ : Suffix n}
           subst bytes₁
           rfl
 
-/-- `Bytes n` equality is pointwise on `Fin n`, decidable without `Classical.choice`. -/
+/-- `Bytes n` equality is pointwise on `Fin n`, decidable without any classical
+principle. -/
 theorem Bytes.ext {n : Nat} {s₁ s₂ : Bytes n} :
     (∀ i : Fin n, s₁ i = s₂ i) → s₁ = s₂ := by
   intro h
@@ -214,13 +215,19 @@ theorem Bytes.ext {n : Nat} {s₁ s₂ : Bytes n} :
   exact h i
 
 /-- `s₁ = s₂` is equivalent to pointwise equality on `Fin n` — provable by
-`funext` (left) and `congrFun` (right). `[Quot.sound]`-only (measured: `#print axioms
-Codec.Bytes.ext_iff`).
+`funext` (left) and `congrFun` (right). Footprint: `Quot.sound` alone, one axiom out
+of the two this library permits — measured with `#print axioms` on this declaration.
 
-**Not both axioms**, which this docstring claimed until the eighth audit: the `funext`
-direction needs `Quot.sound` for `Fin`'s extensionality and never touches `propext`. The claim was invisible for two rounds because the attribution rule
-took the nearest resolving name in the sentence — `funext`/`congrFun` — and filed the
-claim as theirs rather than this theorem's. -/
+**Not the pair**, which this docstring claimed until the eighth audit: the `funext`
+direction needs `Quot.sound` for `Fin`'s extensionality and never consults `propext`.
+The claim was invisible for two rounds because the attribution rule took the nearest
+resolving name in the sentence — `funext`/`congrFun` — and filed the claim as theirs
+rather than this theorem's.
+
+**And it was still invisible after that fix**, which round nine measured (§5.3a): the
+literal is split across a line break in the prose above, and a literal straddling a
+newline does not match a vocabulary phrase. The rewording here is what closes it; the
+arm gains a completeness assertion so the next one cannot hide the same way. -/
 theorem Bytes.ext_iff {n : Nat} (s₁ s₂ : Bytes n) :
     s₁ = s₂ ↔ ∀ i : Fin n, s₁ i = s₂ i :=
   ⟨fun h i => congrFun h i, Bytes.ext⟩
@@ -348,7 +355,7 @@ theorem relRepeat_nil {α : Type} (R : α → {m : Nat} → Bytes m → Prop) {n
 (cast (congrArg Bytes e) s)` iff `relRepeat R xs n s` for `e : n = m`. The
 `relRepeat`-level analogue of `Rel_cast`, needed by `encodeRepeat_rel`'s `cons` case
 (where the recursive suffix length `n₂` is cast to `(n₁ + n₂) - n₁`). Proved by
-`subst`, no `Classical.choice`. -/
+`subst`, with no reliance on the choice axiom. -/
 theorem relRepeat_cast {α : Type} (R : α → {m : Nat} → Bytes m → Prop) (xs : List α)
     {n m : Nat} (e : n = m) (s : Bytes n) :
     relRepeat R xs m (cast (congrArg Bytes e) s) ↔ relRepeat R xs n s := by

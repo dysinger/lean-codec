@@ -700,8 +700,7 @@ def counterMeasure (b : Bool) : Nat := if b then 1 else 0
 
 /-- **`MeasureDecreases` is satisfiable.** The counter's single step `true ↦ false`
 drops the measure from `1` to `0`, so the structure's `dec` field holds. This is the
-witness the tree was missing; `[propext]`-clean, zero `sorry`, zero
-`Classical.choice`. -/
+witness the tree was missing; `[propext]`-clean, zero `sorry`, and choice-free. -/
 theorem counterMeasureDecreases :
     Iso.MeasureDecreases counterMeasure counterIso := by
   refine ⟨?dec⟩
@@ -849,9 +848,9 @@ def counterIsoR : Iso (Unit × Bool) Bool where
 
 /-- **`MeasureDecreasesR` is satisfiable.** The mirror of `counterMeasureDecreases`:
 the counter's single step `true ↦ false` drops the measure from `1` to `0`, and the
-`dec` field reads straight off the structure's own step. `[propext]`-clean, zero
-`sorry`, zero `Classical.choice`. With this in place both `foldl`'s and `foldr`'s
-laws are exercised against a real witness rather than an uninhabited premise. -/
+`dec` field reads straight off the structure's own step. Choice-free, zero
+`sorry`. With this in place both `foldl`'s and `foldr`'s laws are exercised against a
+real witness rather than an uninhabited premise. -/
 theorem counterMeasureDecreasesR :
     Iso.MeasureDecreasesR counterMeasure counterIsoR := by
   refine ⟨?dec⟩
