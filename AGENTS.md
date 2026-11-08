@@ -862,8 +862,67 @@ axioms` on the enclosing theorem is the only check) and all three happened here:
   equational form and `rw [hn, Nat.mul_mod_right]`.
 - **Never `git stash` / `git reset` / `git checkout -- <file>` to "start clean"** —
   it has destroyed verified work here. If a proof will not compile, stub **that one
-  theorem** to `sorry`, get the build green, and iterate in `/tmp/probe.lean`
-  against the built library. Commit per law-family so a revert is never tempting.
+  theorem** to `sorry`, get the build green, and iterate on a scratch file **inside the
+  repo** (see "Scratch work lives in the repo" below) against the built library. Commit
+  per law-family so a revert is never tempting — and see "Commit early, commit often"
+  below, which makes that a mandate rather than advice.
+
+## Scratch work lives in the repo, never in `/tmp` (MANDATORY)
+
+**`/tmp` is not under git history.** Anything written there — a probe, a spike report, a
+backup of a green file, a subagent's output — is unversioned, unreviewable, and gone at
+the next reboot or cleanup. Work has been lost here by treating `/tmp` as a workspace,
+and a snapshot in `/tmp` is not a recovery plan: it is a copy with no history, no author,
+and no diff.
+
+**Do not do working work in `/tmp`.** Concretely:
+
+- **Scratch Lean files that import the library go in `scratch/` in the repo**, which is
+  gitignored (so they never enter a commit, the flake snapshot, or the format gate). Use
+  `scratch/probe.lean`, `scratch/mwe-<topic>.lean`; reference them as `scratch/…` in
+  notes. `/tmp` is acceptable **only** for a file that is never part of the record and is
+  reproduced by a command in the same session — and even then, if what it produced is
+  evidence, paste the evidence into `tasks.md`, not a path to it.
+- **A report worth keeping goes in `openspec/`** (a change's `design.md`, `tasks.md`, or
+  `openspec/lean-notes.md` for a lesson). A reviewer's or worker's report that only lives
+  in `/tmp/r7/A.md` is a citation to a file that will not exist for the next reader.
+  Quote the finding in place; do not link to `/tmp`.
+- **Never back a file up to `/tmp` and call it a safety net.** The safety net is a
+  **commit**: work committed per law-family is recoverable, diffable, and reviewable, and
+  `git checkout`/`git stash` then has nothing to destroy. If a file is in a state worth
+  preserving, `git add <file> && git commit` — not `cp` to `/tmp`.
+
+Scratch files still must not be `sorry`-carrying modules under `Codec/`: anything that
+imports into the library's build is a law, and a law needs a proof. `scratch/` is for
+probes that `import` the built library, never for modules the library imports.
+
+## Commit early, commit often (MANDATORY)
+
+**A long-running edit must never live only in the working tree.** The commit is the
+recovery mechanism; everything else is a hope. This is a mandate, not a preference,
+because it has already cost a session: work was lost to a `git checkout` that a commit
+would have made harmless.
+
+**Commit at every one of these boundaries**, even when the next step is obviously the
+surrounding task:
+
+- **per task section** (`§1`, `§2`, …) once its gate is green — not once per change;
+- **per gate arm** when a change adds or reworks several (they are independently
+  reviewable and independently revertable);
+- **before any command that can rewrite the working tree** — `git checkout`,
+  `git restore`, a regeneration script, a mass reformat. Those are exactly the moments
+  where uncommitted work is at risk, so commit _first_, then run it;
+- **before switching approach**, so an abandoned direction is still recoverable.
+
+The commit message says **what landed and what it was measured against** (the gate line
+that went green, the mutation that failed), because that is what makes the commit useful
+when bisecting later. A commit per task section with a real message is also what makes
+`git log` a readable ledger of a change's progress — which is the point of committing at
+all rather than one squash at the end.
+
+This does **not** license `git add -A`: stage individual files and print the staged set
+(see "Git conventions"). Committing often and committing narrowly are the same
+discipline, not competing ones.
 
 ## Standing preference (the owner's bias — apply it without being asked)
 

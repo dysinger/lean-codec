@@ -16,3 +16,8 @@ result
 result-*
 
 # Openspec planning artifacts are tracked; nothing extra to ignore here.
+
+# Scratch Lean probes (`AGENTS.md` — "Scratch work lives in the repo, never in /tmp").
+# Tracked paths only; the directory itself is kept by `scratch/.gitkeep`.
+scratch/*
+!scratch/.gitkeep

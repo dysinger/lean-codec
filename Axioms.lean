@@ -407,12 +407,22 @@ def derivedDefPatterns : Array String := #[
   "«term_≫_»"
 ]
 
+/-- The classifier's rule, as **one** predicate over a name.
+
+`isDerivedDefName` is this applied to a name; `derivedDefPatternRemovals` buckets names
+by this same test, so the list of causes the audit counts and the rule the classifier
+applies cannot be two different lists. Named because the audit's reason string quotes
+it, and because a rule with two spellings is how a list and its audit drift apart
+(`codec-audit-round-eight` §7.2's mirror list is the recorded example). -/
+def derivedDefMatchingPattern (n : Name) : Option String :=
+  let last := n.components.getLast!.toString
+  if derivedDefPatterns.contains last then some last else none
+
 /-- Default classifier for `def` names that are **not** authorial surface: the
 companions Lean emits for every inductive and structure. Same status as
 `isGeneratedAux` — a heuristic, audited by the check below, never an authority. -/
-def isDerivedDefName (n : Name) : Bool := Id.run do
-  let last := n.components.getLast!.toString
-  return derivedDefPatterns.contains last
+def isDerivedDefName (n : Name) : Bool :=
+  (derivedDefMatchingPattern n).isSome
 
 /-- Every public `def` in the `Codec`/`Iso` namespaces **before** any name-based
 declination — the universe `publicDefs` and `derivedDefAllowlist` must partition.
@@ -432,6 +442,57 @@ def candidateDefs (env : Environment) : Array Name := Id.run do
           ds := ds.push name
       | _ => pure ()
   return ds.qsort (fun a b => Name.toString a < Name.toString b)
+
+/-- The classifier's removals **decomposed by pattern** — `codec-gate-denominators` §1.
+
+`isDerivedDefName` answers "is this name dropped", which is all `publicDefs` needs. It
+does **not** answer "which pattern dropped it, and how many did that pattern take",
+and that is the half the gate was missing: the audit arm printed
+`{dropped.size} definitions dropped by the name classifier` — one number for twelve
+patterns — so a pattern removing exactly one declaration was one rename away from
+matching nothing, and nothing could tell that from a pattern removing fifteen by
+design.
+
+The rule this change installs (design D1) is that every arm reports its **denominator**
+and its **removals decomposed by cause**, both asserted. For this classifier the
+denominator is the two halves of `candidateDefs` — "matching some pattern" and "not" —
+and the causes are the patterns, so the decomposition is a `(pattern, names it
+removed)` list rather than a count: a count cannot be reviewed, and a list can.
+
+Both halves are returned, so the arm can print `removed + kept = candidateDefs` — the
+identity that makes "the decomposition covers the classifier" a checked statement
+instead of an assumption. -/
+def derivedDefPatternRemovals (env : Environment) :
+    Array (String × Array Name) × Array Name :=
+  let cands := candidateDefs env
+  let pats := derivedDefPatterns.map fun p =>
+    (p, cands.filter fun n => derivedDefMatchingPattern n == some p)
+  (pats, cands.filter fun n => (derivedDefMatchingPattern n).isNone)
+
+/-- What `expectedDerivedDefPatternCounts` asserts: the discriminations that make the
+classifier's printed decomposition reviewable, as numbers, so a change to any of them
+fails the build.
+
+Four quantities, because one total would hide exactly what the decomposition is for:
+
+* `patterns` — `derivedDefPatterns.size`, the denominator of the audit: how many causes
+  the classifier *claims* to have. Deleting or adding a pattern moves this.
+* `removed` — the names the classifier actually removes. The numerator.
+* `singleton` — patterns removing **exactly one** declaration. This is the number the
+  change exists to surface: each such pattern is one rename from dead, and only
+  `derivedDefPatternAudit`'s dead-pattern arm would catch it. Measured today it is
+  **6** of 12 — `ctorElim`, `ctorElimType`, `below`, `brecOn`, `go`, `«term_≫_»` — which
+  is a fact worth seeing rather than inferring from a total.
+* `uncounted` — `candidateDefs` names in **neither** the removal decomposition nor the
+  kept half. Must be `0`, and is asserted rather than assumed: `removed + kept =
+  candidateDefs` is the identity that makes "the decomposition covers the classifier"
+  a checked statement. A single `(pattern, count)` tuple would have left it unstated —
+  be the fifteenth instance or close it.
+
+Read the numbers from the arm's log line, never from this docstring: the comment is
+prose and the `throwError` is the check (`headerNumbers`' lesson — a prose count rots
+while the gate stays green). -/
+def expectedDerivedDefPatternCounts : Nat × Nat × Nat × Nat := (12, 54, 6, 0)
 
 /-- Every public `def` in the `Codec`/`Iso` namespaces, **after** dropping compiler
 machinery and non-public names. This is the universe `definitionSurfaceAllowlist`
@@ -1354,7 +1415,36 @@ run_cmd do
       msg := msg ++ m!"`derivedDefAllowlist` entries the classifier does not drop (stale name, or a definition that IS in the universe):\n" ++
         m!"{String.join (notDropped.toList.map fun n => s!"  {Name.toString n}\n")}"
     throwError msg
-  logInfo m!"axiom gate: {dropped.size} definitions dropped by the name classifier, all reason-recorded"
+  -- **The decomposition, not the total** (`codec-gate-denominators` §1.1). This line
+  -- used to print `{dropped.size} definitions dropped ... all reason-recorded` — one
+  -- number for twelve patterns. That is a *total* whose causes are unaudited: a pattern
+  -- removing exactly one declaration and a pattern removing fifteen by design read the
+  -- same, and the second clause ("all reason-recorded") describes a different question
+  -- than the count does. Both halves are now stated: `removed + kept` against the
+  -- candidate universe, then the removals split by the pattern that made them. The
+  -- per-pattern count is what makes a one-name pattern visible; the kept half is what
+  -- makes the split a *partition* rather than a sample of it.
+  let (decomp, kept) := CodecAxioms.derivedDefPatternRemovals env
+  let removed := decomp.foldl (fun a x => a + x.2.size) 0
+  let singletons := decomp.filter fun x => x.2.size == 1
+  let uncounted := (CodecAxioms.candidateDefs env).size - removed - kept.size
+  let (expPats, expRemoved, expSingleton, expUncounted) :=
+    CodecAxioms.expectedDerivedDefPatternCounts
+  let mut drift : Array String := #[]
+  if decomp.size != expPats then
+    drift := drift.push s!"patterns: constant says {expPats}, decomposition has {decomp.size}"
+  if removed != expRemoved then
+    drift := drift.push s!"removed: constant says {expRemoved}, environment has {removed}"
+  if singletons.size != expSingleton then
+    drift := drift.push s!"patterns removing exactly one declaration: constant says {expSingleton}, environment has {singletons.size} ({String.intercalate ", " (singletons.toList.map (·.1))})"
+  if uncounted != expUncounted then
+    drift := drift.push s!"names in neither half of the decomposition: constant says {expUncounted}, environment has {uncounted}"
+  if removed != dropped.size then
+    drift := drift.push s!"removed: the decomposition sums to {removed} but `isDerivedDefName` drops {dropped.size} — classifier and decomposition disagree"
+  unless drift.isEmpty do
+    throwError m!"the def-classifier decomposition is stale (update `expectedDerivedDefPatternCounts` in lockstep with the log line):\n{String.join (drift.toList.map fun s => s!"  {s}\n")}"
+  let perPattern := String.intercalate ", " (decomp.toList.map fun (p, ns) => s!"{p} {ns.size}")
+  logInfo m!"axiom gate: definitions dropped by the name classifier — {removed} removed + {kept.size} kept = {(CodecAxioms.candidateDefs env).size} candidates, all removals reason-recorded; by pattern ({singletons.size} of {decomp.size} remove exactly one; {uncounted} uncounted): {perPattern}"
 
 /-! **Classifier audit**, run on every `lake build` — `codec-audit-round-five` §1.1's
 second arm.
@@ -1393,8 +1483,13 @@ run_cmd do
   let mut dead : Array String := #[]
   let mut unexplained : Array Name := #[]
   let mut removesAuthored : Array Name := #[]
-  for p in CodecAxioms.derivedDefPatterns do
-    let hits := candidates.filter fun n => n.components.getLast!.toString == p
+  -- **The same decomposition the classifier prints** (`codec-gate-denominators` §1.2).
+  -- This loop used to recompute `candidates.filter (getLast! == p)` itself, which is a
+  -- second copy of the classifier's rule ("last component equals a pattern") sitting
+  -- next to `isDerivedDefName`. One rule, two spellings. `derivedDefPatternRemovals`
+  -- is the single list read by the classifier and by every arm that counts it.
+  let (decomp, kept) := CodecAxioms.derivedDefPatternRemovals env
+  for (p, hits) in decomp do
     if hits.isEmpty then
       dead := dead.push p
     else
@@ -1413,7 +1508,25 @@ run_cmd do
       msg := msg ++ m!"names the classifier drops that `definitionSurfaceAllowlist` describes as authorial API (the two lists contradict each other):\n" ++
         m!"{String.join (removesAuthored.toList.map fun n => s!"  {Name.toString n}\n")}"
     throwError msg
-  logInfo m!"axiom gate: {CodecAxioms.derivedDefPatterns.size} def-name patterns, each matching a recorded non-surface declaration"
+  -- **This arm states its denominator, and points at the tuple for the rest**
+  -- (`codec-gate-denominators` §1.2). The old line printed
+  -- `{derivedDefPatterns.size} def-name patterns` — how many patterns *exist*, which is
+  -- the denominator and nothing else, printed as though it were a coverage claim. The
+  -- per-pattern counts now belong to §1.1's arm, asserted by
+  -- `expectedDerivedDefPatternCounts`; this arm asserts that the list *it* is auditing
+  -- is that same list, so the two cannot report about different pattern sets.
+  let listed := decomp.foldl (fun a x => a + x.2.size) 0
+  let (expPats, expRemoved, _, _) := CodecAxioms.expectedDerivedDefPatternCounts
+  let mut drift : Array String := #[]
+  if decomp.size != expPats then
+    drift := drift.push s!"patterns: constant says {expPats}, walk has {decomp.size}"
+  if listed != expRemoved then
+    drift := drift.push s!"matched: constant says {expRemoved}, walk matches {listed}"
+  if candidates.size != listed + kept.size then
+    drift := drift.push s!"matched + kept != candidates ({candidates.size}) — the pattern list does not cover the universe"
+  unless drift.isEmpty do
+    throwError m!"the def-name pattern audit disagrees with `expectedDerivedDefPatternCounts` (the classifier decomposition this audit is counting is not the one asserted):\n{String.join (drift.toList.map fun s => s!"  {s}\n")}"
+  logInfo m!"axiom gate: {decomp.size} def-name patterns enumerated, each matching a recorded non-surface declaration; their per-pattern counts are asserted by the def-classifier arm above ({listed} of {candidates.size} candidates removed)"
 
 /-! **Header check**, run on every `lake build`. The "Current state" tables at the top
 of this file are prose, and `partition`/`gateCoverage` compare set *membership* — so a
@@ -1652,7 +1765,7 @@ There are three numbers, not one, and they move for **different** reasons:
 
 Update all three **together with the log line**, and read the log for the current values
 rather than trusting these constants. -/
-def expectedFootprintCounts : Nat × Nat × Nat := (146, 144, 8)
+def expectedFootprintCounts : Nat × Nat × Nat × Nat × Nat := (146, 144, 0, 0, 8)
 
 /-- Every spelling the stated-footprint arm treats as **a footprint claim**, as data —
 so the arm can report how many docstrings mention one and how many of those it then
@@ -1750,7 +1863,28 @@ run_cmd do
   -- bug (139 declarations silently dropped) looked like from the log: nothing.
   let mut mentioning : Nat := 0
   let mut scanned : Nat := 0
-  let mut skipped : Nat := 0
+  -- **`skipped` is now decomposed by cause** (`codec-gate-denominators` §1.3). It was
+  -- one number covering three unrelated removal reasons, which is instance 14 of the
+  -- defect class this change exists to close. The three, and why they are different
+  -- facts about the gate:
+  --
+  -- * `skippedOtherTheorem` — a theorem docstring whose claim names a **different**
+  --   resolvable declaration (a survey paragraph, a four-way table). Legitimate by
+  --   design: the claim is about that declaration and is checked there.
+  -- * `skippedNoOwner` — a claim-shaped segment with **no** resolvable declaration name
+  --   in its prefix, in a docstring that *somewhere* names another declaration. This is
+  --   the bucket that must be **reviewed, not merely counted**: nothing owns the claim,
+  --   so nothing checks it, and a single total would hide it inside the survey count.
+  -- * `skippedDefDocstring` — a footprint claim in a `def`/`abbrev` docstring. Out of
+  --   scope by design (no proof to adjudicate), counted since R8-06.
+  let mut skippedOtherTheorem : Nat := 0
+  let mut skippedNoOwner : Nat := 0
+  let mut skippedDefDocstring : Nat := 0
+  -- **The arm's own "found" total**: every site the arm was offered and did not
+  -- ignore — a claim-shaped segment in a theorem docstring, or a footprint-mentioning
+  -- `def` docstring. `checked + every skip cause = found` is then an identity the run
+  -- can check, rather than an arithmetic restatement of the counters.
+  let mut found : Nat := 0
   for (nm, ci) in env.constants.toList do
     -- `isPrefixOf`, matching the six arms above — NOT `getPrefix`, which matched only
     -- immediate children. (`codec-audit-round-eight` R8-08 corrects the round-seven
@@ -1834,8 +1968,18 @@ run_cmd do
           -- segment names *nearest*, and a segment naming nobody is self's own.
           -- `namesOther` (the paragraph-level survey test) still excludes a
           -- docstring that tabulates several footprints without stating its own.
+          found := found + 1
           if !namesOwn && namesOther then
-            skipped := skipped + 1
+            -- **Which cause?** Both arms of this `if` are "attributed away", and they
+            -- are not the same fact. `namesAnotherDecl` on the **segment** means a
+            -- named declaration owns the claim. When only the **paragraph** matches
+            -- (`para` arm), the claim's own prefix names nothing resolvable and the
+            -- attribution came from somewhere else in the paragraph — that is the
+            -- no-owner bucket, and it is the one a reader has to look at.
+            if CodecAxioms.namesAnotherDecl env selfName ns seg then
+              skippedOtherTheorem := skippedOtherTheorem + 1
+            else
+              skippedNoOwner := skippedNoOwner + 1
             continue
           -- **One vocabulary, read here and by the denominator above**
           -- (`footprintClaimPhrases` / `classifyFootprintClaim`). The classifier used
@@ -1858,31 +2002,52 @@ run_cmd do
         -- docstring can mention a footprint, and the `thmInfo` filter above drops it.
         -- Dropping it is right (there is no proof to adjudicate); dropping it
         -- *silently* is what makes `claims` indistinguishable from "claims of 200".
+        -- Counted as its **own** cause (`codec-gate-denominators` §1.3), because a
+        -- claim with no proof and a claim with no owner are different facts.
         if let some doc ← Lean.findDocString? env nm then
-          if CodecAxioms.mentionsFootprint doc then skipped := skipped + 1
+          if CodecAxioms.mentionsFootprint doc then
+            skippedDefDocstring := skippedDefDocstring + 1
+            -- Counted in `found` too: it is a claim site the arm was offered and did
+            -- not check, which is exactly what the identity below reconciles.
+            found := found + 1
   unless bad.isEmpty do
     throwError m!"stated footprints disagree with the environment ({bad.size} claim site(s)). Write the footprint from `#print axioms`, never from inspection:\n{String.join bad.toList}"
   -- **The count is asserted, not just printed** (`codec-audit-round-eight` N-6), the way
   -- `headerNumbers` asserts the theorem and definition counts. Without this the numbers
   -- `AGENTS.md` quotes as the arm's evidence of coverage could move under a green build.
-  let (expectClaims, expectMentioning, expectLeft) := CodecAxioms.expectedFootprintCounts
+  -- **Every cause of a skip is asserted separately** (`codec-gate-denominators` §1.3):
+  -- the old single `skipped` constant could not be told apart from a change in which
+  -- "attributed away" was doing the attributing.
+  let (expectClaims, expectMentioning, expectOther, expectNoOwner, expectDefDoc) :=
+    CodecAxioms.expectedFootprintCounts
   let mut drift : Array String := #[]
   if claims != expectClaims then
     drift := drift.push s!"claim sites: constant says {expectClaims}, environment has {claims}"
   if mentioning != expectMentioning then
     drift := drift.push s!"docstrings mentioning a footprint: constant says {expectMentioning}, environment has {mentioning}"
-  if skipped != expectLeft then
-    drift := drift.push s!"claim-shaped sites left unchecked: constant says {expectLeft}, environment has {skipped}"
+  if skippedOtherTheorem != expectOther then
+    drift := drift.push s!"claim sites attributed to a named other theorem: constant says {expectOther}, environment has {skippedOtherTheorem}"
+  if skippedNoOwner != expectNoOwner then
+    drift := drift.push s!"claim sites with NO resolvable owner (review each one): constant says {expectNoOwner}, environment has {skippedNoOwner}"
+  if skippedDefDocstring != expectDefDoc then
+    drift := drift.push s!"footprint-mentioning `def` docstrings (out of scope): constant says {expectDefDoc}, environment has {skippedDefDocstring}"
   unless drift.isEmpty do
     throwError m!"the stated-footprint counts are stale (update `expectedFootprintCounts` in lockstep with the log line):\n{String.join (drift.toList.map fun s => s!"  {s}\n")}"
-  -- **Print all three.** `mentioning` is the denominator: how many docstrings in the
-  -- walked universe mention a footprint at all. `claims` is how many sites survived
-  -- segmentation **and** attribution. `scanned` is how many `thmInfo` docstrings were
-  -- offered. A narrowing of the predicate (`isPrefixOf` → `getPrefix`) shows up as
-  -- `scanned` collapsing; a narrowing of the vocabulary shows up as `mentioning` and
-  -- `claims` dropping while `scanned` holds. Neither can any longer look like "the
-  -- tree simply has fewer claims".
-  logInfo m!"axiom gate: stated footprints verified ({scanned} theorem docstrings scanned, {mentioning} mention a footprint spelling; {claims + skipped} claim site(s) found, {claims} attributed to self and checked, {skipped} attributed away or in a `def` docstring (out of scope). A narrowed vocabulary moves `mentioning`; a narrowed walk moves `scanned`)"
+  -- **The identity the decomposition must satisfy.** `checked + every cause = found`,
+  -- asserted rather than left to arithmetic: a cause that silently stops being counted
+  -- (a `continue` before the bucketing, say) shows up here, not as a smaller log line.
+  let skipped := skippedOtherTheorem + skippedNoOwner + skippedDefDocstring
+  if claims + skipped != found then
+    throwError m!"the stated-footprint arm's removal causes do not reconstruct its claim sites: {claims} checked + {skipped} skipped ({skippedOtherTheorem} other-theorem + {skippedNoOwner} no-owner + {skippedDefDocstring} `def`-docstring bucket) != {found} found. A cause has stopped being counted."
+  -- **Print every number, with the asserted ones named.** `mentioning` is the
+  -- denominator: how many docstrings in the walked universe mention a footprint at all.
+  -- `claims` is how many sites survived segmentation **and** attribution. `scanned` is
+  -- how many `thmInfo` docstrings were offered. A narrowing of the predicate
+  -- (`isPrefixOf` → `getPrefix`) shows up as `scanned` collapsing; a narrowing of the
+  -- vocabulary shows up as `mentioning` and `claims` dropping while `scanned` holds. The
+  -- skips are printed decomposed by cause, so "no claim is unowned" is a readable fact
+  -- (`0 no-owner`) rather than an inference from a single total.
+  logInfo m!"axiom gate: stated footprints verified ({scanned} theorem docstrings scanned, {mentioning} mention a footprint spelling; {claims + skipped} claim site(s) found = {claims} checked + {skipped} skipped as {skippedOtherTheorem} other-theorem + {skippedNoOwner} no-owner + {skippedDefDocstring} `def`-docstring. Asserted: {claims} checked, {mentioning} mentioning, and all three skip causes; printed-only: {scanned} scanned, {claims + skipped} found. A narrowed vocabulary moves `mentioning`; a narrowed walk moves `scanned`)"
 
 /-! **`propProjections` completeness check** — `codec-audit-round-seven` GC-04, the
 structural fix for GC-02.
