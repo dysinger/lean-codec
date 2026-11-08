@@ -178,12 +178,21 @@ mechanisms core ships for capture are **length-preserving when instantiated at `
 — and core ships the _layer_, not an instance: `Normal`'s normalizer is **parametric**,
 `norm : S → S` (`Codec/Normal.lean:126`), so an instantiation at `Bytes n` cannot change
 the byte count, and `relTakeWhile` relates a run of length `n` to a value of _all_ `n`
-bytes. (An earlier revision said "the `Normal` layer's normalizer is `norm : Bytes n → Bytes n`",
-naming a concrete function that exists nowhere in the tree — there is no `Normalizer`
-value constructed anywhere, and `grep -rn Normalizer Codec/` finds only the structure and
-the binders of `fill`/`decodeNormal`; `codec-audit-round-nine` review S-3. The parametric
-form is also the stronger claim: it rules out shrinking at _every_ instantiation rather
-than one.)
+bytes.
+
+(Two corrections live in this parenthesis, and the second was introduced by the first. An
+earlier revision said "the `Normal` layer's normalizer is `norm : Bytes n → Bytes n`",
+naming a concrete function that exists nowhere — `codec-audit-round-nine` review S-3). The
+fix then claimed "there is no `Normalizer` value constructed anywhere", citing
+`grep -rn Normalizer Codec/`. **That grep's path excluded the file that falsifies it**:
+`Bench.lean:61` is `theorem foldNz : Normalizer UInt8 foldNorm := ⟨foldNorm_idem⟩` — a
+constructed `Normalizer`, idempotence proved, on the bench's two-symbol alphabet (review
+F-1). Precisely: core ships the **layer** and no `Bytes n` instantiation of it
+(`grep -rn Normalizer Codec/` indeed finds only the structure and the binders of
+`fill`/`decodeNormal`), while the bench **does** construct one at `UInt8` to value-check
+the layer. The parametric form is the stronger claim either way — it rules out shrinking
+at _every_ instantiation rather than one — and the lesson is this session's recurring one:
+**a claim scoped by a path is only as good as the path, and `Codec/` is not the repo.**)
 
 **`takeWhile`'s denotation, because its type is the fact a porter needs and the name
 hides it** (`codec-audit-round-nine` §7.3): the captured value is a **`List UInt8`** —
@@ -304,12 +313,11 @@ lossy direction is `decodeNormal`, the normalizer composed _outside_ the `Iso`: 
 accepts input the `Iso` rejects, has no inverse, and is explicitly not a codec
 value. Capture-verbatim is then simply the **identity normalizer** — the degenerate
 case of the layer, not a prohibition on having one. Two consequences worth stating:
-the layer is **length-preserving at any instantiation** (`norm : S → S`, so a
-`Bytes n` instance cannot change the byte count — case folding fits and collapsing a
-whitespace run does not, since that needs a different carrier; the earlier form of this
-sentence wrote `norm : Bytes n → Bytes n`, a concrete function the tree does not contain
-— `codec-audit-round-nine` review S-3 saw the same defect in `[D4]` and this was its
-surviving second site), and a
+the layer is **length-preserving** (`norm : S → S`, so a `Bytes n` instantiation cannot
+change the byte count — case folding fits and collapsing a whitespace run does not, since
+that needs a different carrier; the earlier form of this sentence wrote
+`norm : Bytes n → Bytes n`, a concrete function the tree does not contain — review S-3
+saw the same defect in `[D4]` and this was its surviving second site), and a
 codec using it owes the per-instance fact that its encoder emits a normal form,
 without which the normalising decoder can fail on its own encoder's output.
 
