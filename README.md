@@ -1269,25 +1269,32 @@ is the rule working as intended, not a gap to be closed here.
 
 Every claim in this document about "gated", "pinned" or "checked" is produced by
 `Axioms.lean`, which runs on `lake build` and fails the build rather than warning.
-**14 lines of output, each a measurement**, pasted verbatim from a green build
-(long lines elided with `…`):
+The block below is **generated from a green build**, not transcribed. Regenerate it
+with `nix develop --command scripts/gen-readme-gate.sh --write`; `checks.gate-lines`
+fails the build if it disagrees with a fresh build. Long lines are elided with `…` at
+200 characters — `scripts/gen-readme-gate.sh`'s `ELIDE_AT`, which says why the
+elision is stated rather than assumed.
+
+<!-- BEGIN GENERATED gate-lines -->
 
 ```
 axiom gate: 345 public theorems covered (0 explicit exclusion(s))
 axiom gate: 427 public theorems partitioned, 345 gated and 82 allowlisted
 axiom gate: 140 public definitions covered, 115 mentioned and 25 allowlisted (mention proxy)
-axiom gate: definitions dropped by the name classifier — 54 removed + 140 kept = 194 candidates, all removals reason-recorded; by pattern (6 of 12 remove exactly one; 0 uncounted): casesOn 8, recOn 8, elim 7, noConfusion 15, noConfusionType …
+axiom gate: definitions dropped by the name classifier — 54 removed + 140 kept = 194 candidates, all removals reason-recorded; by pattern (6 of 12 remove exactly one; 0 uncounted): casesOn 8, recOn 8,…
 axiom gate: 12 def-name patterns enumerated, each matching a recorded non-surface declaration; their per-pattern counts are asserted by the def-classifier arm above (54 of 194 candidates removed)
 axiom gate: header numbers verified (427 = 345 + 82; defs 140 = 115 + 25)
-axiom gate: constant kinds — thm 771 (gated + allowlisted), def 348 (mention proxy), opaque 0 / axiom 0 (no arm, must be 0), induct/ctor/rec/quot 30 (machinery, not walked); globally 1355 `opaque` and 12 `axiom`, all of them Lean/stdlib — n …
-axiom gate: stated footprints verified (771 theorem docstrings scanned, 153 mention a footprint spelling; 170 claim site(s) found = 157 checked + 13 skipped as 0 other-theorem + 0 no-owner + 13 `def`-docstring. Asserted: 157 checked, 153 me …
+axiom gate: constant kinds — thm 771 (gated + allowlisted), def 348 (mention proxy), opaque 0 / axiom 0 (no arm, must be 0), induct/ctor/rec/quot 30 (machinery, not walked); globally 1355 `opaque` and…
+axiom gate: stated footprints verified (771 theorem docstrings scanned, 153 mention a footprint spelling; 170 claim site(s) found = 157 checked + 13 skipped as 0 other-theorem + 0 no-owner + 13 `def`-…
 axiom gate: propProjections covers every bare projection (9 listed)
 axiom gate: propProjections entries are all bare projections (9 listed of 12 bare projections in the namespaces; the rest are the `dec`-suffixed three, classified by suffix)
-axiom gate: footprint labels — 9 emitted by the classifier, all 9 declared, all 9 classified, and all 9 classes exercised in BOTH directions by a semantics-written probe (so a right-key/wrong-class remap fails)
+axiom gate: footprint labels — 9 emitted by the classifier, all 9 declared, all 9 classified, and all 9 classes exercised in BOTH directions by a semantics-written probe (so a right-key/wrong-class re…
 axiom gate: allowlisted theorems' footprints (82 entries: 39 axiom-free + 24 the permitted pair + 19 other permitted; 0 depend on `Classical.choice`; all four asserted)
-axiom gate: recursion-principle promotion — Codec.findFrom covered by 6 gated theorem(s) that are not its own principle (Codec.findByte_spec, Codec.findFrom_complete, Codec.findFrom_finds, Codec.findFrom_least, Codec.findFrom_min, Codec.fin …
-axiom gate: authored exemption verified (1 entr(ies), all gated; the suffix rule alone would have dropped 0 of them — 0 means the exemption is currently dead code, which is the measured state and not a defect)
+axiom gate: recursion-principle promotion — Codec.findFrom covered by 6 gated theorem(s) that are not its own principle (Codec.findByte_spec, Codec.findFrom_complete, Codec.findFrom_finds, Codec.findF…
+axiom gate: authored exemption verified (1 entr(ies), all gated; the suffix rule alone would have dropped 0 of them — 0 means the exemption is currently dead code, which is the measured state and not …
 ```
+
+<!-- END GENERATED gate-lines -->
 
 An earlier revision of this block said "Ten lines" and quoted ten — with **six of the ten
 values stale** (`342→343`, `83→82`, `144→152`, `146→156`, `8→13`, and the two arms added
