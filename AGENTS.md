@@ -759,6 +759,28 @@ with a dash between them.
 one you are quoting. If those two disagree about which values are inside, the sentence is
 not finished.
 
+**`codec-drift-closure` added the third form, and it is the one that survives a code
+review:** a range, a table or an **enumeration** whose parts do not sum to its stated
+total. The author wants a total, so the parts are chosen to reach it. Met three times in
+that change, twice in its own `tasks.md`:
+
+| written                                                               | why it is wrong                                                                              |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `447 + 1 + 3 + 10` presented as a classification of 461 matched lines | the rows were picked to sum to 461, and 447 of them had never been read                      |
+| `13 + 4 + 2 = 19` (round six)                                         | a **correct total with wrong parts**; only the sum was wrong                                 |
+| a historical triple with no run behind it                             | `git log -S` finds the commit that _wrote the sentence_, not a run that produced the numbers |
+
+**The rule:** when you write a table, print the sum **and** the denominator next to each
+other and check they are the same number. When a count is historical, quote the lesson and
+leave the figure to git history — a number nobody can re-derive reads as measured and is
+not, which is worse than an absent number.
+
+**And the fourth form, new here: the pointer whose stated method does not reach its
+target.** `grep 'recorded at each law'` matches only the README paragraph that told you to
+run it, so the reader loops. Before writing "see `X`" or "grep `Y`", **run it** — the
+check is one command and the failure mode is a reader who concludes the claim was false
+when only the directions were.
+
 ## Verification recipe
 
 Every command below names **its own repository**. They are different flakes with
@@ -772,7 +794,18 @@ nix develop --command lake build bench      # the bench lane (links ByteSlice.c 
 nix develop --command openspec validate --all   # after ANY spec or task edit
 nix build .#checks.aarch64-darwin.formatting   # THE markdown/nix format gate
 nix build .#checks.aarch64-darwin.bench        # builds AND runs the bench (§1.9)
+nix build .#checks.aarch64-darwin.gate-lines   # README's quoted gate block vs a fresh build
+nix build .#checks.aarch64-darwin.values       # README's stated value counts, re-derived
+nix build .#checks.aarch64-darwin.reviews      # reviewer ids reconcile both directions
+nix build .#checks.aarch64-darwin.mirror       # gen-axioms.lean's mirrors are not drifted
 ```
+
+**`gate-lines` and `values` are the two `codec-drift-closure` added, and they exist because
+the prose in this repo has already gone stale while every gate stayed green.** If you move
+an asserted count, `gate-lines` fails and the fix is
+`nix develop --command scripts/gen-readme-gate.sh --write` — _regenerate_, never hand-edit
+the block. The build is canonical; a hand-written quotation of an asserted output is what
+went 3-of-14 wrong.
 
 **`nix fmt` is not the format gate here — `checks.…formatting` is.** `nix fmt` in this
 dev shell has no `prettier`, so it formats `*.nix` only and prints "0 changed" for

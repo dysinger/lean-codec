@@ -7,6 +7,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (corrections, not features — `codec-drift-closure`)
+
+- **A quoted gate block that had gone stale inside a green build.** `README.md`'s block
+  of `axiom gate:` output is a _figure_ — a quotation of an asserted output — and it was
+  hand-transcribed. Measured at the start of this change, **3 of its 14 lines were
+  wrong** (`constant kinds`, `stated footprints`, `recursion-principle promotion`) while
+  the prose above them said "pasted verbatim from a green build". The block is now
+  **generated** by `scripts/gen-readme-gate.sh` from a real `lake build`, and the new
+  `checks.gate-lines` regenerates it and diffs, failing the build naming the region. The
+  generator asserts its own denominator (14 lines), so a build that stops emitting the
+  gate cannot "match" a zero-line region vacuously; and `--write` is idempotent, which
+  an earlier version was not (command substitution strips the trailing newline, so the
+  separator has to be written explicitly) — found by mutation-testing the check.
+- **Two README counts with no command behind them.** `[S1]`'s "19 `Iso`-valued
+  definitions (`13 + 4 + 2`)" and `[S3]`'s "15 = 7 constructors + 8 bounded, plus four
+  witnesses" were hand-derived paragraphs. Both are correct, and neither could be
+  re-derived: `scripts/count-values.lean` now walks the environment, prints both lists,
+  writes its predicate out including its removals (the compiler auxiliaries `_f`,
+  `_sunfold`, `_unsafe_rec`, `_flat_ctor`, counted so the removal is visible) and
+  **asserts** the totals; `checks.values` runs it. Mutation-tested.
+- **Three historical count triples deleted from `Axioms.lean`.** Each explained a past
+  defect and each was unverifiable — `git log -S` on `141 / 112 / 29` finds only the
+  commit that _wrote the sentence_, not a run that produced the numbers. A historical
+  count with no provenance is the padded-range defect wearing a citation. The lessons
+  stay; the figures live in git history.
+- **Four sentences whose stated method was not their code's method.** Two said the
+  footprint vocabulary is "ordered longest-match-first" — a rule that is **false of the
+  correct list** (a 14-character phrase precedes a 9-character one), and the arm's own
+  note two screens away already said so, so the file contradicted itself. One said
+  "`grep -rn decodeWholeOne Codec/` shows exactly those two laws", where the grep returns
+  thirteen lines; the claim (two laws) is true but the method shown does not demonstrate
+  it, and it now cites the environment walk. One pointed a reader at `grep 'recorded at
+each law'` — a phrase that occurs only in the README, so the pointer sent them back to
+  the sentence that sent them. All four are the class round nine's review named: a claim
+  whose stated method is not its code's method.
+- **`AGENTS.md` quoted two stale counts and one of them was the gate's own.** The
+  verification recipe said "13 gate lines" where the gate prints **14**, and the
+  round-eight footprint cell presented `769 scanned / 144 mentioning / 154 found / 146
+checked` as current where the gate prints `771 / 153 / 170 / 157`. Both are now
+  pointers; the rule "quote the gate, never a number written in a file" is backed by
+  `checks.gate-lines` and `checks.values` in this repo instead of being advice.
+
+### Added (`codec-drift-closure`)
+
+- `scripts/gen-readme-gate.sh`, `scripts/count-values.lean`,
+  `scripts/audit-method-sentences.py` and the flake checks `checks.gate-lines`,
+  `checks.values`. The audit script reports a method-sentence enumeration with a
+  **denominator** (4,991 prose lines scanned, 728 matched) and the vocabulary's own
+  denominator (9 markers declared, 9 fire), so the audit cannot report a clean run on
+  nothing.
+
+### Deferred (`codec-drift-closure`, recorded not done)
+
+- **The benchmark re-run is still open.** `codec-audit-round-nine`'s `tasks.md` `2.1`/`2.3`
+  are this change's Group A, and they could not be taken: the host carried a stray
+  `lean /tmp/p3.lean` from another session at 99 % of a core for the whole session (load
+  `4.89` at start, `2.51` at the end, the same process throughout). Every committed burst
+  median is therefore still a measurement of the pre-round-nine program. It is recorded
+  in `tasks.md` §1.1 with both readings rather than restamped from a loaded machine.
+- `design.md` D5 asserts that this change and `codec-audit-round-nine` modify the same two
+  `codec/axiom-gate` requirements. Measured, their delta requirement sets are **disjoint**;
+  the archive-order conclusion survives on a different reason (`tasks.md` §4.3).
+
 ### Fixed (corrections, not features — `codec-audit-round-nine`)
 
 - **A withdrawn performance figure.** `README.md`'s `decodeFullFastRoot` cold cell

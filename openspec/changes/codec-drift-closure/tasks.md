@@ -423,20 +423,87 @@ comparison, path, and the census-vs-partition cell).
 
 ## 5. [S] Gates and docs
 
-- [ ] 5.1 `lake build` — record the line count and every asserted count.
-- [ ] 5.2 `openspec validate --all`.
-- [ ] 5.3 `checks.formatting` (treefmt + sandboxed prettier — **not** `nix fmt`, and note
+All measured this session, on the tree at commit `befd369` + the §5 edits. Every line
+below is a command's exit status, not a recollection.
+
+- [x] 5.1 `lake build` — record the line count and every asserted count.
+
+      **14 gate lines, `Build completed successfully (15 jobs)`.** The count is what
+      `scripts/gen-readme-gate.sh` asserts (`EXPECTED_GATE_LINES = 14`), so this number is
+      checked in two places rather than quoted. Every asserted count is the gate's own
+      `expected*` constants; the README's copy of the 14 lines is now generated from this
+      run (§2.2).
+
+- [x] 5.2 `openspec validate --all`.
+
+      `Totals: 14 passed, 0 failed (14 items)`. Three `>500 characters` warnings on the
+      template's own requirements are pre-existing and unrelated.
+
+- [x] 5.3 `checks.formatting` (treefmt + sandboxed prettier — **not** `nix fmt`, and note
       that `--clear-cache` is not a flag this `nix` accepts; use
       `--no-link --print-build-logs`).
-- [ ] 5.4 `checks.reviews`, `checks.mirror`, and the new generator check from 2.2.
-- [ ] 5.5 `checks.bench` — builds **and runs**; note it needs `lean4` + `stdenv.cc`, not
+
+      `treefmt-check> traversed 256 files / emitted 229 files / formatted 229 files
+      (0 changed)`, exit 0. Run on **committed** files: the check reads the git tree, so
+      this was re-run after the final commit rather than accepted from an earlier pass.
+
+- [x] 5.4 `checks.reviews`, `checks.mirror`, and the new generator check from 2.2.
+
+      | check | result |
+      | --- | --- |
+      | `checks.reviews` | `reviewer ids reconcile: 27 cited, 27 tabled, zero orphans`, exit 0 |
+      | `checks.mirror` | `mirror check: the generator is idempotent against the committed Axioms.lean`, exit 0 |
+      | `checks.gate-lines` | `gate-lines check: README's quoted gate block matches a fresh build`, exit 0 |
+      | `checks.values` | `Iso-valued definitions: 19 (plus 7 compiler auxiliary(ies) removed)` / `Codec-valued definitions: 12`, exit 0 |
+
+- [x] 5.5 `checks.bench` — builds **and runs**; note it needs `lean4` + `stdenv.cc`, not
       just `git`, and `set -euo pipefail`, or its greps cannot fail the build.
-- [ ] 5.6 `checks.lean` sandboxed, detached with `nohup`, polled.
-- [ ] 5.7 Spot-check `#print axioms` on anything this change touches. Expect
+
+      Exit 0 — `Build completed successfully (28 jobs)` then the run, with every pinned
+      value-check line present. Untouched by this change (it has no Lean edits), so this
+      is a regression check, not a new claim.
+
+- [x] 5.6 `checks.lean` sandboxed, detached with `nohup`, polled.
+
+      Exit 0. Detached (`nohup … > /tmp/lean5.txt 2>&1 &`) and polled; never
+      foregrounded. `/tmp` here holds a **build log**, not work product, and the result is
+      recorded in this file.
+
+- [x] 5.7 Spot-check `#print axioms` on anything this change touches. Expect
       `[propext, Quot.sound]` or empty, never `Classical.choice`.
-- [ ] 5.8 `CHANGELOG.md` — one entry in the register of a **correction**, and
+
+      **Nothing this change touches changes a proof, and that is checkable rather than
+      asserted:** `git diff --stat HEAD~6 -- Codec/` is **empty**, so no `Codec`
+      declaration was edited. `Axioms.lean`'s diff is prose only (verified by filtering
+      the diff for non-comment lines). Spot-checked anyway, on the declarations the README
+      was edited *about*:
+
+      ```
+      Codec.roundtrip              [propext, Quot.sound]
+      Codec.decodeWholeOneBytes_eq [propext, Quot.sound]
+      Codec.findByte_spec          [propext]
+      Iso.prod                     [propext]
+      ```
+
+      No `Classical.choice`, as documented. The new `scripts/count-values.lean` is a
+      **script**, not a library module — it is not in `Codec/`, is imported by nothing, and
+      proves nothing, so it is outside the axiom discipline by construction and by position.
+
+- [x] 5.8 `CHANGELOG.md` — one entry in the register of a **correction**, and
       `AGENTS.md`'s lessons section gains the two new shapes (**padded range**,
       **scope word**).
+
+      `CHANGELOG.md` gained a `codec-drift-closure` corrections block (a stale quoted gate
+      block, two counts with no command, three deleted historical triples, four
+      method-not-code sentences, two stale AGENTS.md counts), an `Added` block for the
+      scripts and checks, and a **`Deferred`** block for the two things genuinely not done
+      (the benchmark re-run, and D5's false premise).
+
+      `AGENTS.md`'s lessons section already carried both shapes from round nine; what this
+      change **adds** to them is the form it kept re-finding — **a total whose parts do not
+      sum to it**, and **a pointer whose stated method does not reach its target** — with
+      this change's own three instances tabulated, `447 + 1 + 3 + 10` among them. The
+      verification recipe also gained the four new `checks.*` commands.
 
 ## 6. Recorded, deliberately not in this change
 
