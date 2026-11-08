@@ -652,6 +652,19 @@ them. They are the _hypothesis_ a caller supplies, not theorems about it. An ear
 revision listed them beside `decodeNormal_encode`/`decodeNormal_of_fixed` as "gated
 laws", which is the same category error it applies to `Iso.law` a paragraph later.
 
+**And the list above is not closed by inspection.** A predicate that looked only at a
+theorem's head constant and arity classified seven declarations as projections including
+`Codec.roundtrip` — the library's central theorem — because Lean elaborates `hal.1` as
+`And.left hal`, and `And.left`'s own body _is_ a projection. The gate now decides
+structurally (`CodecAxioms.isBareProj`): a projection constant applied, at its first
+explicit declared argument, to something that is itself a projection of a hypothesis. On
+that test five further declarations are projections rather than laws and are allowlisted
+as such: `Codec.CandAligned_fst`, `Codec.CandAligned_at`, `Codec.packedCands_mem`
+(it _names_ a membership callers would otherwise spell out, but asserts nothing), and
+`Iso.apply_eq_some_of_unapply` / `Iso.unapply_eq_some_of_apply`. `Codec.roundtrip`,
+`Codec.findFrom_finds` and `Codec.CandAligned_tail` stay gated — `CandAligned_tail` is a
+real proof about an invariant, not a selection.
+
 It is `UInt8`-specialised and says so: its docstring names `varint` and UTF-8 as
 the intended uses, i.e. it is the _shape_ those formats need, not any of them.
 Every concrete format (`u8`/`utf8`/`varint`/…) still lives downstream
@@ -1141,6 +1154,45 @@ is the rule working as intended, not a gap to be closed here.
   of this line named `lean-binary`, which does not exist; the repo was renamed.)
 - **`lean-text`** (downstream): `utf8` plus `text`/`identifier`/`whitespace` —
   the paper's §6 text domain, re-based on bytes.
+
+## The gate that keeps the gates honest
+
+Every claim in this document about "gated", "pinned" or "checked" is produced by
+`Axioms.lean`, which runs on `lake build` and fails the build rather than warning. Ten
+lines of output, each a measurement:
+
+```
+axiom gate: 342 public theorems covered (0 explicit exclusion(s))
+axiom gate: 425 public theorems partitioned, 342 gated and 83 allowlisted
+axiom gate: 140 public definitions covered, 115 mentioned and 25 allowlisted (mention proxy)
+axiom gate: definitions dropped by the name classifier — 54 removed + 140 kept = 194 candidates, …
+axiom gate: 12 def-name patterns enumerated, …
+axiom gate: header numbers verified (425 = 342 + 83; defs 140 = 115 + 25)
+axiom gate: constant kinds — thm 769 …, opaque 0 / axiom 0 (no arm, must be 0), …
+axiom gate: stated footprints verified (769 theorem docstrings scanned, 144 mention a footprint spelling; 154 claim site(s) found = 146 checked + 8 skipped as 0 other-theorem + 0 no-owner + 8 `def`-docstring …)
+axiom gate: propProjections covers every bare projection (9 listed)
+axiom gate: propProjections entries are all bare projections (9 listed of 12 bare projections …)
+```
+
+**Each line reports a denominator and its removals decomposed by cause, and both are
+asserted.** A count that only gets printed rots silently — the history of this file
+records that happening four times — so a number that cannot fail the build is treated as
+weaker evidence than one that can, and the gate's prose says which is which.
+
+Two lessons are worth more than the individual lines:
+
+- **A check is only as good as what _enters_ it.** Ten audit rounds found no soundness
+  defect — no `Classical.choice`, no `sorry`, every law `[propext, Quot.sound]`-only — and
+  found the same _class_ of defect fourteen times: a filter on a check's input that nothing
+  audits. `codec-gate-denominators` made that a precondition on adding an arm instead of
+  something a reviewer must remember.
+- **A vocabulary is a filter too.** The stated-footprint arm recognised
+  `` `[propext, Quot.sound]`-only `` but not the same literal without `-only`, so claims
+  spelled that way never became claim sites at all — 22 of 159 docstrings containing a
+  backticked axiom list were invisible, including two this document previously cited as
+  audited. The fix is a _third_ reported number: the denominator of the matcher itself,
+  measured by an independently written broader predicate, reconciled against what the
+  vocabulary recognised. A list can be audited against shrinkage and still be far too short.
 
 ## Performance — two proof layers, and where the speed goes
 
