@@ -1285,7 +1285,7 @@ axiom gate: propProjections covers every bare projection (9 listed)
 axiom gate: propProjections entries are all bare projections (9 listed of 12 bare projections in the namespaces; the rest are the `dec`-suffixed three, classified by suffix)
 axiom gate: footprint labels — 9 emitted by the classifier, all 9 declared, all 9 classified, and all 9 classes exercised in BOTH directions by a semantics-written probe (so a right-key/wrong-class remap fails)
 axiom gate: allowlisted theorems' footprints (82 entries: 39 axiom-free + 24 the permitted pair + 19 other permitted; 0 depend on `Classical.choice`; all four asserted)
-axiom gate: recursion-principle promotion — `Codec.findFrom.induct` is gated, and `Codec.findFrom` is covered by 6 gated theorem(s) that are not its own principle (Codec.findByte_spec, Codec.findFrom_complete, Codec.findFrom_finds, Codec.fi …
+axiom gate: recursion-principle promotion — Codec.findFrom covered by 6 gated theorem(s) that are not its own principle (Codec.findByte_spec, Codec.findFrom_complete, Codec.findFrom_finds, Codec.findFrom_least, Codec.findFrom_min, Codec.fin …
 axiom gate: authored exemption verified (1 entr(ies), all gated; the suffix rule alone would have dropped 0 of them — 0 means the exemption is currently dead code, which is the measured state and not a defect)
 ```
 

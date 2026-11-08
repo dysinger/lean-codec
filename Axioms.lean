@@ -3031,26 +3031,39 @@ run_cmd do
         bad := bad.push s!"  {principle}: not a theorem"
     unless CodecAxioms.gatedNames.contains principle do
       bad := bad.push s!"  {principle}: is NOT in `gatedNames`, so the promotion did not land"
-  -- How many gated theorems name each target, excluding the principle itself?
-  let mut coveredBy : Nat := 0
-  let mut naming : Array String := #[]
-  let mut principleNames : Nat := 0
-  for t in CodecAxioms.gatedTheorems env do
-    match env.find? t with
-    | some (.thmInfo ti) =>
-      for (principle, target) in CodecAxioms.promotedPrincipleTargets do
+  -- **Per pair, not summed** (`P4-N0`/S-6 in `round-ten.md`). The accumulator used to be a
+  -- single `coveredBy` across all promotions, so with two entries target A's covering laws
+  -- would mask target B having none — the guard would pass while one promoted principle
+  -- carried its whole definition. It is now reset per pair.
+  let mut reports : Array String := #[]
+  for (principle, target) in CodecAxioms.promotedPrincipleTargets do
+    let mut coveredBy : Nat := 0
+    let mut naming : Array String := #[]
+    let mut principleNames : Nat := 0
+    for t in CodecAxioms.gatedTheorems env do
+      match env.find? t with
+      | some (.thmInfo ti) =>
         if ti.type.getUsedConstants.contains target then
           if t == principle then principleNames := principleNames + 1
           else
             coveredBy := coveredBy + 1
             naming := naming.push s!"{t}"
-    | _ => pure ()
+      | _ => pure ()
+    -- The vacuity guard, **per target**: coverage must not rest on the principle.
+    if coveredBy == 0 then
+      bad := bad.push s!"  {target}: is covered ONLY by its own recursion principle {principle} ({principleNames} naming(s)). A recursion principle naming its own `def` proves the recursion terminates, not that the function has a law."
+    reports := reports.push s!"{target} covered by {coveredBy} gated theorem(s) that are not its own principle ({String.intercalate ", " naming.toList}); the principle adds {principleNames} naming(s) and does not carry the coverage"
   unless bad.isEmpty do
     throwError m!"promoted recursion-principle accounting is broken:\n{String.join bad.toList}"
-  -- The vacuity guard: coverage must not rest on the principle.
-  if coveredBy == 0 then
-    throwError m!"`Codec.findFrom` is now covered ONLY by its own recursion principle ({principleNames} naming(s) from `Codec.findFrom.induct`). A recursion principle naming its own `def` proves the recursion terminates, not that the function has a law — give `findFrom` a real law or record the exemption explicitly."
-  logInfo m!"axiom gate: recursion-principle promotion — `Codec.findFrom.induct` is gated, and `Codec.findFrom` is covered by {coveredBy} gated theorem(s) that are not its own principle ({String.intercalate ", " naming.toList}); the principle adds {principleNames} naming(s) and does not carry the coverage"
+  logInfo m!"axiom gate: recursion-principle promotion — {String.intercalate "; " reports.toList}"
+  -- **`exclusions ∩ gatedNames` is checked too** (`P4-N0`/S-7 in `round-ten.md`). The arm
+  -- checked `exclusions ∩ allowlist`, but `gatedNames` is the other side of the same
+  -- partition, and the two records contradict each other there in the same way. Latent
+  -- today (`exclusions` is empty) — which is exactly why it is cheap to close now.
+  let excl := CodecAxioms.exclusions
+  for n in excl do
+    if CodecAxioms.gatedNames.contains n then
+      throwError m!"{n} is in `exclusions` AND in `gatedNames`: an exclusion that is also pinned says both \"not admitted\" and \"admitted\", so one of the two records is wrong"
 
 /-! ### The `authored` exemption: checked in both directions
 
