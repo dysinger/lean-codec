@@ -279,13 +279,13 @@ Findings: N-1's consequence, S-1 (no `steps/burst` column), N-4 (floor range), S
 
 Finding: N-2 (`77 ns/step`).
 
-- [ ] 3.1 Set `decodeFullFastRoot`'s cold cell to `see note`, exactly as round eight did
+- [x] 3.1 Set `decodeFullFastRoot`'s cold cell to `see note`, exactly as round eight did
       one row above for `49 ns/step`.
-- [ ] 3.2 Write the note: the lane value- and bridge-checks but prints **no** timing, by
+- [x] 3.2 Write the note: the lane value- and bridge-checks but prints **no** timing, by
       design, because every in-process attempt gave an impossible number (`0 ns/op`, then
       `41 ns/op`); the reproducible figure is the out-of-band `~1,250–1,500 ns/byte` in its
       docstring, and it must **not** be placed in an `ns/step` column.
-- [ ] 3.3 Record the provenance of the deleted `77` in the comment so it is not
+- [x] 3.3 Record the provenance of the deleted `77` in the comment so it is not
       re-derived: `2026-11-01-codec-review-remediation/tasks.md:2407`, an A/B control at
       `n = 65536` in `ns/byte`. State that this is the same defect class as the deleted
       `49`, in the citation form rather than the subtraction form.
@@ -294,19 +294,41 @@ Finding: N-2 (`77 ns/step`).
 
 Findings: P-2 (RFC misquote ×2), P-3 (constancy/quotient).
 
-- [ ] 4.1 `Normal.lean:10`: replace "requires a Base16 decoder to accept both" with the
+- [x] 4.1 `Normal.lean:10`: replace "requires a Base16 decoder to accept both" with the
       standard's own text — §8 says decoders **MAY** accept lowercase letters; accepting
       both cases is a _permission_, not an obligation. Confirm the quote against the
       standard rather than against `README.md`, then confirm it matches `README.md:264–274`.
-- [ ] 4.2 `Normal.lean:196`: the sentence puts the withdrawn `MUST` **inside quotation
+- [x] 4.2 `Normal.lean:196`: the sentence puts the withdrawn `MUST` **inside quotation
       marks** as the standard's text. Replace with a paraphrase that does not present it as
       a quotation, or quote §8 correctly with the `MAY`.
-- [ ] 4.3 `Normal.lean:196`: "it has no inverse, because `norm` is many-to-one" → attribute
+- [x] 4.3 `Normal.lean:196`: "it has no inverse, because `norm` is many-to-one" → attribute
       the loss to `fill`'s identification of every spelling in one class (cite
       `fill_inj`, `Normal.lean:181`), not to `norm`. This is the same distinction
       `README [D4]` draws for `ignore`.
-- [ ] 4.4 Grep the whole tree for any other occurrence of the withdrawn `MUST` wording.
+- [x] 4.4 Grep the whole tree for any other occurrence of the withdrawn `MUST` wording.
       Round eight fixed the README and missed the module it cites; assume a third site.
+
+      **Found, and it is the third site the task predicted.**
+      `grep -rn 'MUST accept both' Codec/ README.md Bench.lean Axioms.lean` returns
+      three before the fix — `Codec/Normal.lean:10`, `Codec/Normal.lean:196` (the two
+      this task names) and **`Bench.lean:43`**, which is not a module the README cites
+      and which no reviewer flagged. After the fix the only remaining hit is
+      `README.md:264`, which is `codec-audit-round-eight`'s own *historical record* of
+      the misquote — correct as history, and left as it is.
+
+      On 4.1's "confirm the quote against the standard": the standard's text is
+      _"Base 16 encoding does not require case insensitivity; however, Base 16 decoders
+      MAY accept lowercase letters."_ That wording is now quoted in `Codec/Normal.lean`'s
+      header and agrees with `README.md:264–274`, which round eight had already
+      corrected — so the README and the module it cites are consistent for the first
+      time. Nothing in the tree machine-checks a standards quotation, which is why this
+      took two rounds; recording it rather than leaving it looking checked.
+
+      On 4.3: the attribution is now to `fill` with `fill_inj` cited in place, plus the
+      explicit contrast with the constancy/quotient distinction `[D4]` draws for
+      `ignore`. The one-line "no inverse, because `norm` is many-to-one" was doubly
+      wrong: `norm` many-to-one is what makes the quotient *exist*, and a many-to-one
+      function is injective *on the quotient*.
 
 ## 5. `Codec/ByteSlice.lean`: one footprint sentence the gate contradicts [M]
 

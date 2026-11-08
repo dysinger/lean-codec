@@ -7,8 +7,14 @@ import Codec.Iso
 # Normal forms: the information-free-variation layer
 
 A binary format often accepts more than one concrete spelling of the same value:
-RFC 4648 §8 requires a Base16 *decoder* to accept both `6F` and `6f`, because the
-case of a hexadecimal digit carries no information. **The same shape covers
+RFC 4648 §8 **permits** a Base16 *decoder* to accept both `6F` and `6f`, because the
+case of a hexadecimal digit carries no information. It is a permission, not an
+obligation — the standard's own text is _"Base 16 encoding does not require case
+insensitivity; however, Base 16 decoders MAY accept lowercase letters."_ — so a
+decoder rejecting `6f` is conformant, and an earlier revision of this paragraph said
+the RFC *required* both cases (`codec-audit-round-eight` M-1 fixed that claim in
+`README.md` and missed this module, which that page cites; corrected here in
+`codec-audit-round-nine` §4). **The same shape covers
 everything that is syntactically permitted and semantically inert** — a redundant
 leading zero in a numeral (`"01"` names the same value as `"1"`, so it is padding,
 not a digit), an overlong integer encoding, optional whitespace. In every case the
@@ -193,10 +199,17 @@ theorem fill_inj {S : Type} {norm : S → S} (nz : Normalizer S norm) (s t : S) 
 `Iso α (Normal S norm)`.
 
 This is the lossy half of the layer and it is deliberately **not** an `Iso`: it has
-no inverse, because `norm` is many-to-one. It accepts input the strict `Iso` itself
-rejects — that is the entire point (RFC 4648 §8's "a decoder MUST accept both
-cases"), and it is why it must never be presented as a codec value, a combinator,
-or an inverse of the encoder.
+no inverse. **The loss is `fill`'s, not `norm`'s** — `fill` identifies every spelling
+in one class, so `fill_inj` (above) says two inputs share a `Normal` exactly when they
+normalise equally, and the map from classes to spellings has no inverse. `norm` being
+many-to-one is what makes the quotient *exist*; a many-to-one function would be
+injective on the quotient, which is the opposite of the problem. (The distinction is
+the one `README [D4]` draws for `ignore`: a constancy is not a quotient, and the
+converse. An earlier revision of this docstring blamed `norm`; corrected in
+`codec-audit-round-nine` §4.) It accepts input the strict `Iso` itself rejects — that
+is the entire point (the RFC allows a decoder to accept both cases; see this module's
+header, where an earlier revision wrongly made that an obligation), and it is why it
+must never be presented as a codec value, a combinator, or an inverse of the encoder.
 
 It introduces no alternative results either: `norm` is a *function*, so one input
 still yields at most one value. Widening the input domain is constrained by the

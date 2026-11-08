@@ -40,8 +40,10 @@ open Codec
 These are `example`s, not timing lanes: the layer is a *type*, so its content is
 proved, and the bench's job is to value-check the concrete instance a consumer
 would build (here: a two-symbol alphabet folded to one canonical case). They back
-RFC 4648 §8's "a decoder MUST accept both cases" over an ordinary `Iso` — no `Iso`
-relaxation anywhere.
+a decoder accepting both cases — which RFC 4648 §8 **permits** for Base16 rather than
+requiring (an earlier revision quoted it as a `MUST`; corrected in
+`codec-audit-round-nine` §4.4, the third site of that misquote) — over an ordinary
+`Iso`, with no `Iso` relaxation anywhere.
 
 Kept deliberately tiny (`UInt8` → `Bool`), so the arithmetic is decidable and the
 checks reduce; a real base's fold is the same shape over its own alphabet. -/

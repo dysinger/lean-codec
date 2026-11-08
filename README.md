@@ -1399,11 +1399,31 @@ and it is the same defect one layer down from the one the warm/cold split fixed.
 | `decodeArray` single step (`List (α × Nat)` result)      | `decodeArray step`             | see note                     | —                           | the per-step `List`                        |
 | `packedCands` alone (now an `attach.map`)                | `packedCands (per step)`       | 430–650                      | —                           | cold-input dominated; see below            |
 | `decodeFullArrayRoot` (packed `Array` + `Nat` cursor)    | `decodeFullArray` (+`(burst)`) | see note                     | **~27.4–28.3**              | the whole decode, one candidate searched   |
-| `decodeFullFastRoot` (`Bytes`/`Suffix` cursor)           | `decodeFullFast`               | 77                           | —                           | the `Suffix`/`bdrop` path                  |
+| `decodeFullFastRoot` (`Bytes`/`Suffix` cursor)           | `decodeFullFast`               | see note                     | —                           | the `Suffix`/`bdrop` path                  |
 | `decodeFull` (the `Bytes n` specification itself)        | `benchDecodeFull`              | no per-step figure committed | —                           | super-linear: re-walks the suffix per step |
 
 All cold cells except the last are from the same two-run session and move with load;
 they are order-of-magnitude, not point measurements.
+
+**The `decodeFullFastRoot` cold cell is now `see note`, not `77 ns/step`**
+(`codec-audit-round-nine` §3). The lane that would have to produce it,
+`benchDecodeFullFast`, prints `"decodeFullFast root [n]: value + bridge OK
+(unbenchmarked, see 6.1b)"` — it value- and bridge-checks the decoder **and prints no
+timing at all**, which its docstring states twice: every in-process attempt produced an
+impossible number (first `0 ns/op`, then `41 ns/op`, i.e. clock granularity and an
+artefact respectively), so the lane was reduced to a check rather than left printing a
+figure nobody should quote. The `77` was therefore never a cell of this session's run:
+it traces to `openspec/changes/archive/2026-11-01-codec-review-remediation/tasks.md`
+line 2407, an A/B **control** column (`| decodeFullFastRoot (control) | 76–77 | 74–75 |`)
+measured at `n = 65536` in **`ns/byte`**, on **2026-11-01** — a different date, a
+different `n`, and a different unit borrowed into an `ns/step` column. This is the same
+defect as the `49` one row above, and it is the **citation** form of the subtraction
+`AGENTS.md` forbids: the error is quoting another run's control rather than subtracting
+two cells, which is why no arithmetic check would have caught it. The reproducible
+figure for this path is the out-of-band `~1,250–1,500 ns/byte` recorded in the lane's
+own docstring; it must **not** be placed in an `ns/step` column, because it is a
+per-_byte_ quantity from a different harness — reinstating the category error in the
+other direction.
 
 **The `decodeFullArrayRoot` cold cell is now `see note`, not `49 ns/step`**
 (`codec-audit-round-eight` §4). There is no run behind the 49: every committed
@@ -1418,9 +1438,10 @@ the lane that prints the figure is `benchRatio "decodeFullArray"` (`Bench.lean`)
 quote _its_ output with _its_ run vintage if you need a cold number. What it measures
 is the _interleaved_ lane, which is a throughput question, not a compute floor.
 
-**Three rows now carry no `ns/step` figure** — two deliberately
-(`codec-audit-round-seven` N-02, N-03), one because its figure was unsourced
-(`codec-audit-round-eight` §4, the `decodeFullArrayRoot` cold cell above). The first
+**Four rows now carry no `ns/step` figure** — two deliberately
+(`codec-audit-round-seven` N-02, N-03), and two because their figures were unsourced
+(`codec-audit-round-eight` §4's `decodeFullArrayRoot` cold cell and `codec-audit-round-nine`
+§3's `decodeFullFastRoot` cold cell, both above). The first
 two are one-level quantities the table used to divide by `n` anyway:
 
 - **`arrayRead`** performs **one** `getD` per call, and `benchRatio` prints `ns/op`.
@@ -1436,8 +1457,10 @@ two are one-level quantities the table used to divide by `n` anyway:
 
 Both rows are still in the table because the lanes exist and the _warm_ figure for the
 first is sound; what was removed is only the per-step division that made them wrong.
-(Third of the three: the `decodeFullArrayRoot` **cold** cell above, dropped for having
-no run behind it — the warm figure in the same row is the one the lanes print.)
+(The fourth of the four is the `decodeFullFastRoot` **cold** cell above, dropped for the
+same reason as the third — no lane prints a timing for that path, and the `77` came from
+another session's `ns/byte` control. Its row has no warm figure either, because
+`benchDecodeFullFast` never times anything.)
 
 **The last row carries no per-step figure on purpose** (`codec-audit-round-six` R7-27): an earlier revision
 printed `~31,200 ns/step`, and no run table anywhere in this document produced it —
