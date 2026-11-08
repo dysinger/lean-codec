@@ -2187,6 +2187,30 @@ def footprintClassifications : Array (String × FootprintClass) := #[
   ("[propext]-or-cleaner", .atMostOne)
 ]
 
+/-- **The footprint each label must REJECT** — the negative half of the class probes.
+
+`P4-N0`/S-4 in `round-ten.md`. The positive probes prove a class accepts what its label
+names; without these, a class can be arbitrarily permissive and stay green. The mapping is
+exhaustive over `footprintClassifications` (`none` is a build failure, not a pass), so a new
+label without a negative probe fails rather than being silently un-catchable.
+
+`[propext]-or-cleaner` is the subtle one: it is a *hedge* satisfied by `propext` alone and by
+nothing at all, so the footprint it must reject is one carrying a **third** axiom — not the
+`.choice` set alone, which `.atMostOne` also rejects (that mistake left the
+`.atMostOne → .propextOnly` remap green). -/
+def negativeFootprintProbe (l : String) : Option (List String) :=
+  match l with
+  | "axiom-free" => some ["propext"]
+  | "[propext]" => some ["propext", "Quot.sound"]
+  | "[propext]-only" => some ["propext", "Quot.sound"]
+  | "[Quot.sound]" => some ["propext"]
+  | "[Quot.sound]-only" => some ["propext"]
+  | "[propext, Quot.sound]" => some ["Classical.choice"]
+  | "[propext, Quot.sound]-only" => some ["Classical.choice"]
+  | "[propext, Classical.choice, Quot.sound]" => some []
+  | "[propext]-or-cleaner" => some ["propext", "Classical.choice", "Quot.sound"]
+  | _ => none
+
 /-- Does the measured footprint satisfy a claim of class `k`? The only place a class is
 turned into a verdict, so a label cannot be adjudicated two ways. -/
 def FootprintClass.satisfiedBy (k : FootprintClass) (fp : List String) : Bool :=
@@ -2874,16 +2898,50 @@ run_cmd do
   -- And the negative direction: a class must not accept a footprint it does not name.
   -- Without this, `.atMostOne` (which accepts anything inside the discipline) would
   -- satisfy every probe above and a remap of *every* row to it would pass.
-  let rejects := CodecAxioms.footprintClassifications.filter fun (l, k) =>
-    match l with
-    | "axiom-free" => k.satisfiedBy ["propext"]
-    | "[propext]" | "[propext]-only" => k.satisfiedBy ["propext", "Quot.sound"]
-    | "[Quot.sound]" | "[Quot.sound]-only" => k.satisfiedBy ["propext"]
-    | "[propext, Quot.sound]" | "[propext, Quot.sound]-only" | "[propext]-or-cleaner" =>
-        k.satisfiedBy ["propext", "Classical.choice", "Quot.sound"]
-    | _ => false
-  for (l, _) in rejects do
-    bad := bad.push s!"  {l}: its class ACCEPTS a footprint the label does not name — the row is too permissive, so claims carrying this label pass while overstating"
+  -- **Each label gets an explicit negative probe, and the `_` arm is a *failure*, not a
+  -- pass** (`P4-N0`/S-4 in `round-ten.md`). A `_ => false` here means "this label has no
+  -- negative probe, therefore it can never be caught being too permissive" — the same
+  -- silent-pass shape the positive probes exist to remove, one column over. Any label
+  -- added to the vocabulary without a negative probe now fails the build.
+  let negativeFootprint := CodecAxioms.negativeFootprintProbe
+  -- **The vocabulary's order is a claim, and it is now asserted** (`P2-A12` in
+  -- `round-ten.md`). `classifyFootprintClaim` returns the FIRST match in list order, so the
+  -- list's order is load-bearing: the comment says "ordered longest-match-first", and a
+  -- hand edit could break it without any arm noticing.
+  --
+  -- **The property asserted is that every phrase can WIN somewhere**, not raw length and
+  -- not blanket non-shadowing. Two weaker invariants were tried first and are wrong:
+  --
+  -- * *strict length monotonicity* FAILS today (`` `[propext]`-only `` at 14 precedes
+  --   `` `[propext]` `` at 9) and is not the real requirement;
+  -- * *no phrase is a substring of an earlier one* ALSO fails today, and correctly so:
+  --   `` `[propext, Quot.sound]` `` **is** a substring of `` `[propext, Quot.sound]`-only ``,
+  --   which precedes it — and that is the intended semantics, because a segment writing the
+  --   `-only` form should be labelled `-only` and a segment writing the bare form (which
+  --   does not contain `-only`) is not matched by the `-only` phrase at all, so it reaches
+  --   the bare one. Shadowing is harmless **when the shadowing phrase requires text the
+  --   shadowed one does not**.
+  --
+  -- So the assertion is direct and behavioural: for each phrase, a synthetic segment
+  -- containing exactly that phrase must classify to that phrase's own label. That is the
+  -- only statement that matters — "the vocabulary can still express every claim it names" —
+  -- and it is what a reorder or an added prefix breaks.
+  for p in CodecAxioms.footprintVocabulary do
+    match CodecAxioms.classifyFootprintClaim s!"x {p.1} y" with
+    | some got =>
+      unless got == p.2 do
+        bad := bad.push s!"  `{p.1}`: a segment containing exactly this phrase classifies as `{got}`, not `{p.2}` — an earlier phrase shadows it or the pair is wrong"
+    | none =>
+      bad := bad.push s!"  `{p.1}`: a segment containing exactly this phrase classifies as NOTHING — the phrase cannot express its own label"
+  for (entry : String × CodecAxioms.FootprintClass) in CodecAxioms.footprintClassifications do
+    let l : String := entry.1
+    let k : CodecAxioms.FootprintClass := entry.2
+    match negativeFootprint l with
+    | none =>
+      bad := bad.push s!"  {l}: has NO negative probe — its class could be arbitrarily permissive and nothing would notice"
+    | some badFp =>
+      if k.satisfiedBy badFp then
+        bad := bad.push s!"  {l}: its class ACCEPTS {badFp}, a footprint it must reject — too permissive"
   unless bad.isEmpty do
     throwError m!"the footprint vocabulary emits labels its adjudicator does not cover:\n{String.join bad.toList}"
   logInfo m!"axiom gate: footprint labels — {emitted.size} emitted by the classifier, all {declared.size} declared, all {classified.size} classified, and all {probes.size} classes exercised in BOTH directions by a semantics-written probe (so a right-key/wrong-class remap fails)"
