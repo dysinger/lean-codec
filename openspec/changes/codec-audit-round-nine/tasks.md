@@ -781,16 +781,26 @@ invisible to the proxy), P2-8/9/11/12, N-2/N-4.
 
 ## 8. `AGENTS.md` and `CHANGELOG.md`
 
-- [ ] 8.1 Add this round's lesson to `AGENTS.md`: **"a check is only as good as what
+- [x] 8.1 Add this round's lesson to `AGENTS.md`: **"a check is only as good as what
       _enters_ it" has now fired in three layers — the gate (rounds five–eight), the
       **bench** (this round: a fold guard testing `== 0` against a constant `7`), and the
       **prose table** (a cell borrowed from another session's `ns/byte` control). Name all
       three so the pattern is recognisable rather than the instance.
-- [ ] 8.2 Correct `AGENTS.md`'s `warningAsError` sentence per 1.8.
-- [ ] 8.3 Correct `default.nix:16`, `default.nix:116–118`, `flake.nix:57–58` to name both
+- [x] 8.2 Correct `AGENTS.md`'s `warningAsError` sentence per 1.8.
+- [x] 8.3 Correct `default.nix:16`, `default.nix:116–118`, `flake.nix:57–58` to name both
       link objects (`byteSliceO`, `cRefO`) — they describe one.
-- [ ] 8.4 Correct/qualify `AGENTS.md`'s and README's "the bench checks X" claims per 1.9.
-- [ ] 8.5 `CHANGELOG.md`: one entry, naming the withdrawn `77` cell and the two
+- [x] 8.4 Correct/qualify `AGENTS.md`'s and README's "the bench checks X" claims per 1.9.
+
+      The block that needed it is `AGENTS.md`'s `basen` bench recipe, edited in place in
+      this repo's copy: it said "a **package, not a `checks` entry** ... do not add it to
+      `checks`", which is the correct rule *for `basen`* (all its checks are build-time
+      `example`s) and is now wrong for `codec` (which has eight run-time value checks).
+      Both rules are recorded with the reason they differ, so neither repo's arrangement
+      is ported to the other by pattern-matching. The verification recipe also gained
+      `nix build .#checks.aarch64-darwin.bench`, and its "10 gate lines" became "13"
+      (measured).
+
+- [x] 8.5 `CHANGELOG.md`: one entry, naming the withdrawn `77` cell and the two
       docstring corrections, in the register of a _correction_ rather than a feature.
 
 ## 9. Gates

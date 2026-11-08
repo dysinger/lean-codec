@@ -13,9 +13,10 @@
 # `native`/`check` are the SAME `lake build`; `check` is the proof gate,
 # `native` is the installable library. `bench` is a benchmark executable, **not**
 # a C-extraction step: `lakefile.lean` declares `lean_exe bench (root := `Bench,
-# moreLinkObjs := #[byteSliceO])`, and Lean's ordinary C backend compiles it.
-# The §10.5 extraction an older plan described is not implemented — do not go
-# looking for it.
+# moreLinkObjs := #[byteSliceO, cRefO])` — **two** objects, the Layer-2 seam and the
+# bench-only C reference parser (an earlier revision named one; `codec-audit-round-nine`
+# §8.3) — and Lean's ordinary C backend compiles it. The §10.5 extraction an older
+# plan described is not implemented — do not go looking for it.
 #
 # Plain nixpkgs `lean4`. The bulk fast path uses the Lean runtime's own
 # `@[extern]` C primops (`ByteArray.push`/`copySlice`), compiled by the plain
@@ -115,9 +116,11 @@ in
   };
 
   # `bench` — the benchmark executable. Builds the `bench` `lean_exe` (a plain
-  # executable: Lean's ordinary C backend compiles it, and `moreLinkObjs` links
-  # the Layer-2 seam object `Codec/ByteSlice.c` -> `byteSliceO`) and installs it.
-  # There is no C-extraction step; see the header comment.
+  # executable: Lean's ordinary C backend compiles it) and installs it. `moreLinkObjs`
+  # links **two** C objects: the Layer-2 seam `Codec/ByteSlice.c` -> `byteSliceO`, and
+  # the bench-only reference parser `Codec/CRef.c` -> `cRefO` (`codec-audit-round-nine`
+  # §8.3; an earlier revision of this comment named only the first). There is no
+  # C-extraction step; see the header comment.
   bench = mkLakeBuild {
     name = "bench";
     description = "${meta.description} (benchmark executable)";

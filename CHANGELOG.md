@@ -7,7 +7,86 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (corrections, not features — `codec-audit-round-nine`)
+
+- **A withdrawn performance figure.** `README.md`'s `decodeFullFastRoot` cold cell
+  read `77 ns/step`. The lane that would produce it (`benchDecodeFullFast`) value- and
+  bridge-checks the decoder and **prints no timing at all**, by design: every in-process
+  attempt gave an impossible number (`0 ns/op`, then `41 ns/op`), so the lane was
+  reduced to a check. The `77` traces to
+  `openspec/changes/archive/2026-11-01-codec-review-remediation/tasks.md:2407` — an A/B
+  **control** column at `n = 65536` measured in **`ns/byte`**, on **2026-11-01**, i.e. a
+  different date, `n` and unit borrowed into an `ns/step` column of a two-run table
+  captioned "from the same two-run session". The cell is now `see note`, with the
+  provenance recorded. This is the citation form of the subtraction this repository
+  already forbids, and the same defect one row above (`49 ns/step`, round eight).
+- **Two docstring footprint claims the gate contradicted.** `blitBytes_spec` and
+  `commitRemainder_spec` each stated the two-axiom footprint; `#print axioms` measures
+  **no axioms** for both. Corrected to the measurement, with the gate's `#guard_msgs`
+  named as the authority in both docstrings.
+- **A standards misquote, in three places rather than two.** RFC 4648 §8 does not
+  require a Base16 decoder to accept lowercase; it **permits** it. `Codec/Normal.lean`
+  said "requires" twice (once inside quotation marks, as the standard's text) and
+  `Bench.lean` carried the same wording a third time — a site no reviewer flagged.
+  All three corrected; the standard's own sentence is now quoted in the module header.
+- **`decodeNormal`'s loss attributed to the wrong function.** It said it has no inverse
+  "because `norm` is many-to-one". The loss is `fill`'s identification of every spelling
+  in one class (now citing `fill_inj`); `norm` many-to-one is what makes the quotient
+  exist, and such a map is injective _on_ the quotient. The same constancy-vs-quotient
+  distinction `README [D4]` spends forty lines on, reproduced two files away.
+- **The bench's burst lane could not detect a fold it existed to detect.** `benchBurst`
+  ended with `if sink == 0 then throw`, and the sink was a **constant `7`** on every
+  multi-call row: `sinkOfList` is `a*31+b` from seed `7`, `31a+1 mod 256` has period 16,
+  and each row measured a 512-byte window of an all-`1` buffer. The guard passed while
+  the loop was invariant. The shared buffer now has a non-uniform tail
+  (`i % 251`), and `benchBurst` **asserts non-invariance** (`eraseDups ≥ 2`) plus a
+  not-all-zero test, names the offending row in its error, and runs the probe outside
+  the timed window. `arrayRead`'s invariant sink was a separate `measure` defect (it
+  read indices `0..39` of a buffer that varied only at index 0) and is fixed in
+  `measure`.
+- **`benchCReference` could silently skip both timed lanes.** `| none, none => return ()`
+  exits `benchCReference` rather than continuing the loop, so one `none` from the C
+  skipped the comparison _and_ both lanes while the process still exited 0. Every
+  disagreement now throws, the cross-check set gains `n = 0` and `n = 1` (the C's two
+  real branches), and the count is asserted and printed (`6 of 6 inputs agree`).
+- **`Codec/CRef.c`'s comment described a `none` arm the code does not contain.**
+  Replaced with the fact: the function is total, `n = 0` decodes to `some #[]`, and a
+  `none` arm would disagree with `decodeWhole` on exactly the input the cross-check now
+  covers.
+- **`Codec.findFrom.induct` promoted to the gated set.** It measured `[propext]` — the
+  only allowlisted name with a non-zero footprint — which falsified the allowlist
+  group's stated property ("not a law ⇒ free of axioms"). It is pinned like any law, and
+  `Codec.findFrom`'s coverage is now an asserted number: six gated theorems name it that
+  are not its own recursion principle.
+
 ### Added
+
+- **The footprint arm now audits its own vocabulary.** It recognised
+  `` `[propext, Quot.sound]`-only `` and not the bare spelling, so a docstring stating a
+  two-axiom footprint without the suffix was not checked, not skipped and not out of
+  scope — it **did not exist** as a claim site. Measured with an independent, markup-only
+  predicate: 155 `thmInfo` docstrings contain a backticked axiom-list literal, 137 were
+  recognised, **18 were blind** (six of them because the literal is wrapped across a
+  newline, which no vocabulary width could match). The vocabulary gained the bare forms,
+  every new label got an arm, and the arm now asserts
+  **`recognised + blind + exempt = mentioningLiteral`** with `blind = 0` — the
+  denominator/decomposition rule applied to the matcher itself. Mutation-tested: dropping
+  a spelling fails the build naming the docstrings it was reading.
+- **`checks.bench`**: the benchmark binary is now built **and run** in the flake checks,
+  failing on a non-zero exit and on a missing value-check line. Its runtime checks were
+  reachable from nothing before, so a broken C reference or an invariant burst row could
+  not fail CI. `lean_exe bench` also carries `-DwarningAsError` now (an exe root is a
+  separate root; the library's flag did not reach it).
+- **`Axioms.lean` arms for four escape routes**: an `authored`-exemption validity arm
+  (which measured the exemption to be **dead code** — `Codec.Nat.eq_irrel` matches no
+  suffix pattern, so the classifier never dropped it), a **footprint report for every
+  allowlisted theorem** (`82 = 39 + 24 + 19`, with `Classical.choice` asserted zero), a
+  **global** constant-kind census (all 12 axioms in the process asserted by name), and a
+  recursion-principle coverage accounting.
+- **`README [S5]`: the `relRepeat` departure**, which was a _choice_ and was undocumented
+  — the `nil` branch is `n = 0`, not the paper's `True`, because the substrate's length
+  lives in the type. That is what makes `relRepeat_induction` an induction on the list,
+  and a porter who copies the paper's form cannot close the `[]` case.
 
 - `Codec.ByteSlice.byteSlice_spec`: the `byteSlice` trust seam's Lean law
   (`byteSlice a i = ByteArray.mk (a.data.extract i.toNat a.data.size)`, `rfl`).

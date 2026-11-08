@@ -66,8 +66,36 @@ Guidance for AI coding agents working in this repository.
 > task count, and **not the finding count either** — round nine's re-evaluation changed
 > that by more than a deletion pass would suggest.
 >
-> ### Why the ninth and tenth rounds exist, in one paragraph
+> ### The lesson has now fired in THREE layers, and round nine found the third
+
+> **"A check is only as good as what _enters_ it."** That sentence arrived in round
+> eight about the **axiom gate**. Round nine found it is not about the gate — it is
+> about checks, and it has now fired in three separate layers of this repo:
 >
+> | layer               | the check                                                                                                                                                                                  | what enters it, unaudited                                                                                                                                                                                                                 |
+> | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+> | **the gate**        | rounds five–eight: a name classifier, a prefix filter, an attribution rule, a `skipped` total, `isBareProj`, a mirror list — thirteen instances, then a **vocabulary** (round nine's 5.3a) | a phrase list that decides which docstring segments are footprint claims, so a spelling it does not know is not checked, not skipped, and not out of scope — **it does not exist**                                                        |
+> | **the bench**       | `benchBurst`'s fold guard, `if sink == 0 then throw`                                                                                                                                       | the sink is a **constant `7`** on every multi-call row: `31a+1 mod 256` has period 16, and every window was a 512-byte slice of an all-`1` buffer. The guard passed, and every committed burst median from six rows was clock granularity |
+> | **the prose table** | a committed performance cell                                                                                                                                                               | another session's `ns/byte` **control** column, at a different `n`, presented as an `ns/step` cell of this session's two-run table — the citation form of the subtraction the same file forbids                                           |
+>
+> **Name the three, not the instances.** The gate instances were each fixed individually
+> and the class survived fourteen times; the reason it keeps surviving is that "what
+> enters this check" is a question about a **place**, and a fix in one place does not
+> travel to another. So when you write a check — any check, in any of the three layers —
+> ask in order: what is the **denominator**; what are the **removals, by cause**; and if
+> the input is selected by **matching a vocabulary**, what is **the vocabulary's own
+> denominator**. The third question is round nine's addition and is the one a careful
+> author still forgets, because a vocabulary does not look like a filter.
+>
+> The bench half also has a mechanical rule now: **`benchBurst` asserts
+> non-invariance, not non-zero-ness.** The two catch different folds — a hoisted loop
+> returns one value forever whatever it is, and an elided one can return a varying set of
+> zeros — and a row whose `measure` cannot vary with the call index is a `measure` defect,
+> not a buffer one (`arrayRead` was exactly that: it read index `0..39` of a buffer that
+> varied only at index 0).
+
+### Why the ninth and tenth rounds exist, in one paragraph
+
 > Ten adversarial rounds have produced **zero soundness defects** — no
 > `Classical.choice`, no `sorry`, every law `[propext, Quot.sound]`-only. What they
 > produce, every round, is **one defect class, fourteen times over**: _a check whose input
@@ -634,10 +662,11 @@ different `checks` sets — never run one tree's recipe in the other.
 ### In `lean-codec` (this repo)
 
 ```bash
-nix develop --command lake build            # 10 gate lines; FAILS on `sorry`
-nix develop --command lake build bench      # the bench lane (links Codec/ByteSlice.c)
+nix develop --command lake build            # 13 gate lines; FAILS on `sorry`
+nix develop --command lake build bench      # the bench lane (links ByteSlice.c + CRef.c)
 nix develop --command openspec validate --all   # after ANY spec or task edit
 nix build .#checks.aarch64-darwin.formatting   # THE markdown/nix format gate
+nix build .#checks.aarch64-darwin.bench        # builds AND runs the bench (§1.9)
 ```
 
 **`nix fmt` is not the format gate here — `checks.…formatting` is.** `nix fmt` in this
@@ -663,8 +692,20 @@ stubbing `Codec.roundtrip` to `sorry` fails the build with
 `error: Codec/Sound.lean:441:8: declaration uses \`sorry\``.
 
 Because the flag is on the _library_ rather than on one consumer, every path that
-compiles `Codec` inherits it (including `bench` and the sandboxed `check`) —
+compiles the library's **modules** inherits it, including the sandboxed `check` —
 there is no separate lint to drift from the compiler.
+
+**`bench` was the exception and no longer is** (`codec-audit-round-nine` §1.8). A
+`lean_exe` is a **separate root**: `-DwarningAsError` on `lea_lib codec` rides on the
+modules _that lib compiles_, and `Bench.lean` is in neither `codec` nor `Axioms`, so a
+`sorry` in its own theorems (`foldNorm_idem`, `foldNz`) was a **warning** and the lane
+still went green. An earlier revision of this paragraph listed `bench` among the
+inheriting paths — an over-read of how the flag propagates, corrected here and enforced
+by the flag now being set on `lean_exe bench` itself. Verified load-bearing in that
+direction too: stubbing `foldNorm_idem` to `sorry` now fails with
+`error: Bench.lean:53:8: declaration uses \`sorry\``. **The general lesson: a flag on a
+library does not reach an exe root, and "every path that compiles the library" is not
+the same set as "every path that compiles the repo's Lean".**
 
 `nix build '.#checks.aarch64-darwin.lean'` is the same build, sandboxed — it is a
 **long** build: detached with `nohup … > /tmp/x.log 2>&1 &`, then poll. Never
@@ -683,18 +724,36 @@ nix develop --command lake build bench   # the bench lane (fast dev loop)
 nix build '.#bench'                      # same lane, sandboxed — BUILDS AND RUNS it
 ```
 
-`packages.bench` exists and is a **package, not a `checks` entry**: the lane
-value-checks known vectors, which is evidence, not proof, so it must not be able
-to fail the proof gate. **The checks fire at BUILD time** — every `Bench.lean` check
-is an `example` closed by `rfl` or `native_decide`, and `main` is `pure ()` — so
-`nix build '.#bench'` proves the lane **builds and links in the sandbox**, not that a
-runtime check passed. Its `installPhase` runs the binary only as a smoke test that it
-starts and exits 0. An earlier revision said the `installPhase` "verifies the vectors";
-that is the sentence `basen`'s `default.nix` records as false of the code
-(`codec-audit-round-six` R7-16), and `codec` had not been corrected
-(`codec-audit-round-seven` N-06).
-Do not add it to `checks`, and do not treat a green `lake build bench` as having
-verified anything — that only compiles.
+`packages.bench` builds the lane; **`checks.bench` runs it and can fail the
+gate.** The split is the useful thing to understand, because the two halves are
+different kinds of check and only one of them was reachable before
+(`codec-audit-round-nine` §1.9):
+
+- **The `example`s are build-time.** They are closed by `rfl`, so `lake build bench`
+  already checks them — and since §1.8 the exe root carries `-DwarningAsError`, so a
+  `sorry` in `Bench.lean` is an error too.
+- **The value checks are run-time.** `seam boundaries OK`, `seam aliasing OK`, the two
+  `count step` round trips, the three `... value + bridge OK` lines, the C-reference
+  cross-check and — since §1.3 — **the `benchBurst` non-invariance assertions** only
+  execute when the binary runs. Nothing in the repo reached them, so a broken C
+  reference or an invariant burst row could not fail CI.
+- **`checks.bench` therefore builds _and_ runs the binary**, fails on a non-zero exit,
+  and `grep -q`-pins each value-check line plus a final `done`, so a _deleted_ check is
+  a build failure rather than a shorter log. `packages.bench` stays as it was — its
+  `installPhase` runs the binary only as a smoke test that it starts and exits 0, and an
+  earlier revision claiming it "verifies the vectors" is the sentence `basen`'s
+  `default.nix` records as false of the code (`codec-audit-round-six` R7-16).
+
+**`basen`'s rule and `codec`'s differ here, deliberately, and the difference is the
+checks' nature.** `basen`'s bench is a **package, not a `checks` entry** because all of
+its checks are build-time `example`s — evidence, not proof — so it must not be able to
+fail the proof gate. `codec`'s bench has runtime value checks, and a value check that
+cannot fail the gate is not a check. Do not port one arrangement to the other repo
+without first asking which kind of checks it has.
+
+Do not treat a green `lake build bench` as having verified anything at run time, though
+it does cover the build-time checks. `nix build '.#bench'` still only proves the lane
+builds and links in the sandbox.
 
 `Axioms.lean` is a `@[default_target]` lib, so `lake build` runs its `#guard_msgs`
 gates; a `Classical.choice` regression fails the build. To check one law by hand:
