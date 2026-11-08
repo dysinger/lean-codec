@@ -93,9 +93,16 @@ function.
   because `norm` is a *function* — that is a clarification of domain, not a
   theorem. Widening a decoder's input domain is constrained by the *canonicality*
   of encode, not by unambiguity.
-- **It preserves length by construction.** The normal formats below are stated over
-  an abstract `S`, but every intended instantiation is a single `Bytes n`, since
-  `norm : Bytes n → Bytes n` cannot change the byte count. Case folding fits.
+- **A `Bytes n` instantiation preserves length by construction.** The normal formats
+  below are stated over an abstract `S`, and **the layer itself is length-agnostic** —
+  `norm : S → S` for any `S`, so a `List UInt8` normalizer that shortens its input
+  typechecks perfectly (measured: `fun _ => []` is a legal `Normalizer (List UInt8)`).
+  What cannot change the byte count is `norm : Bytes n → Bytes n`, which is the
+  instantiation every *intended* format uses. An earlier revision of this bullet said
+  "it preserves length by construction" and justified it with `norm : Bytes n → Bytes n`
+  — a function the layer does not mention, and a claim about every instantiation that a
+  `List` carrier refutes (`codec-audit-round-nine` review F-2/F-7, the third surviving
+  site of that refuted spelling). Case folding fits.
   Collapsing a whitespace run does **not**: three blanks to one is not a
   `Bytes n → Bytes n` map, and that variation needs a different carrier rather than
   a different normalizer. It is deliberately out of this layer's scope.

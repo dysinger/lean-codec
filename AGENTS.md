@@ -66,7 +66,21 @@ Guidance for AI coding agents working in this repository.
 > task count, and **not the finding count either** — round nine's re-evaluation changed
 > that by more than a deletion pass would suggest.
 >
-> ### The lesson has now fired in THREE layers, and round nine found the third
+> ### Reviewer ids in the source resolve to a file, not to `/tmp`
+
+The source cites findings by id — `review M-1`, `review A-6`, `review G-01`, `review F-1`.
+Their reports were written under `/tmp`, which is **not** under git history, so the ids are
+resolved by
+`openspec/changes/codec-audit-round-nine/reviews/round-ten.md`: a table of every id, what it
+found, and what closed it. **That file is the artifact; the `/tmp` reports never were.** If
+you cite a review id from now on, either add it there or cite a change's `tasks.md`.
+
+Round ten is also the round whose _reviews of this round_ are recorded, four passes deep,
+because the pattern it establishes is the one to carry: **every pass found defects in the
+pass before's fixes**, and three of them were defects introduced _by the fix for the
+previous defect_. A fix is a check, and a check is only as good as what enters it.
+
+### The lesson has now fired in THREE layers, and round nine found the third
 
 > **"A check is only as good as what _enters_ it."** That sentence arrived in round
 > eight about the **axiom gate**. Round nine found it is not about the gate — it is
