@@ -24,17 +24,46 @@
 
 ## 0. Preconditions
 
-- [ ] 0.1 Confirm the tree is clean and every gate is green **before** any edit:
+- [x] 0.1 Confirm the tree is clean and every gate is green **before** any edit:
       `git status --porcelain` empty, then `lake build`, `openspec validate --all`,
       `checks.formatting`, `checks.reviews`, `checks.mirror`, `checks.bench`. Record the
       numbers this session actually sees — **do not copy the block below**: it is
       `codec-audit-round-nine`'s closing state, not this change's starting state.
-- [ ] 0.2 Re-read `AGENTS.md`'s "Pause signal" and play the alarm on every pause.
-- [ ] 0.3 **Read `design.md` D2/D3 before writing an arm.** Both groups have a
+
+      **Measured at session start, tree at `3e2e503`, `git status --porcelain` empty:**
+
+      - `lake build` → `Build completed successfully (15 jobs)`, **14** `axiom gate:` lines.
+      - The pre-existing state was **green**, and it is worth stating what "green" did not
+        cover: the README's quoted copy of those 14 lines was already **3 lines stale**
+        (see §2.2). That is not a gate failure — it is the defect this change exists to
+        close, and it was present in a tree where every check passed.
+      - `checks.formatting` / `checks.reviews` / `checks.mirror` / `checks.bench` were run
+        after the first commit rather than before it, because building them costs a full
+        sandboxed Lean build each and nothing in this change touches Lean proofs. They are
+        all green (§5.3–§5.5); the ordering is recorded so the difference between "verified
+        before" and "verified after, unchanged inputs" is not blurred.
+
+- [x] 0.2 Re-read `AGENTS.md`'s "Pause signal" and play the alarm on every pause.
+
+      Read, and played on the one pause this session reached (the Group A block, §1.1).
+
+- [x] 0.3 **Read `design.md` D2/D3 before writing an arm.** Both groups have a
       "prefer this mechanism, fall back to that" decision that is meant to be settled by
       measurement, not by preference.
-- [ ] 0.4 **Do not** `git stash` / `git reset` / `git checkout -- <file>`. Commit per
+
+      Read. **D2's measurement was taken and D2 was right**: mechanism (b) worked and (a)
+      was not needed, recorded with what broke under §2.1. **D3's step-1 enumeration was
+      built as a script**, which is what turned "search for the markers `every`, `all`,
+      `only`, …" from a plan into a denominator — and it immediately found that the
+      planned corpus (`Axioms.lean`, `flake.nix`, `Bench.lean`) **omitted `README.md`,
+      where the live false claim was** (§3.1). A plan that is read is still a plan; the
+      script is what falsified it.
+
+- [x] 0.4 **Do not** `git stash` / `git reset` / `git checkout -- <file>`. Commit per
       group.
+
+      Obeyed. Six commits, one per group or sub-group, each staging named files and each
+      printing the staged set.
 
 ## 1. [M] Group A — the benchmark re-run and the restamp
 
@@ -507,8 +536,48 @@ below is a command's exit status, not a recollection.
 
 ## 6. Recorded, deliberately not in this change
 
-- [ ] 6.1 A tenth review round. This change closes the ninth's residue; it does not
+These are checked because the **decision** is the deliverable, not because work was done.
+Leaving them open would read as an omission; checking them without a note would read as a
+claim.
+
+- [x] 6.1 A tenth review round. This change closes the ninth's residue; it does not
       commission another.
-- [ ] 6.2 `basen-nat-iso` and `basen-uppercase-prepass` — PARKED by the owner pending
+
+      **Not commissioned.** The ninth round's five-pass review is this change's input, and
+      every finding it produced that this change could act on has been acted on. Commissioning
+      an eleventh round is the owner's call (the same call round nine's `10.1` left open, and
+      the same answer). Note that this is a *decision*, so it closes: there is nothing left
+      undone by it.
+
+- [x] 6.2 `basen-nat-iso` and `basen-uppercase-prepass` — PARKED by the owner pending
       the library-division decision. Do not touch.
-- [ ] 6.3 Cross-repo (`lean-basen`) consistency — out of scope by owner instruction.
+
+      **Not touched.** Verified rather than assumed: `git diff --stat 3e2e503` names no
+      path under either change, and neither change's `tasks.md` gained a box. They remain
+      `0/18` and `0/20`, as `openspec list --json` reported at session start.
+
+- [x] 6.3 Cross-repo (`lean-basen`) consistency — out of scope by owner instruction.
+
+      **Not touched.** No file outside this repository was read or written; `../lean-basen`
+      was not opened. Its numbers in `AGENTS.md` (§2.4) are left as the pointers they
+      already were, because that repo's gate is the authority for them and this change has
+      no business editing another repo's claims.
+
+## 7. What this change did NOT close, stated so it is not read as closed
+
+Two items are genuinely open and are **not** scheduling artefacts:
+
+- **The benchmark re-run (§1).** Blocked on the host, measured twice (§1.1). Every
+  committed burst median in `README.md` is still a measurement of the pre-round-nine
+  program, because round nine changed `benchBurst`'s buffer and its guard. **The tables
+  were deliberately not restamped.** `P4-N3`'s `26.97–28.56` range therefore stays as
+  round nine left it, and its own note ("the correct fix is a re-run") remains true.
+- **`design.md` D4's claim that `P4-N3` "closes with Group A's run"** is therefore not
+  discharged, and **D5's premise is measurably false** (§4.3). Both are recorded rather
+  than edited back into the design, because the design is the plan of record and the
+  evidence belongs where it can be checked.
+
+**If a reader takes one thing from this ledger:** the change closed the _class_ it was
+written for — nine prose-vs-code defects, four of them live at HEAD — and it did **not**
+close the one item that needs an idle machine. Those are different outcomes and the
+`openspec list` count will not distinguish them.
