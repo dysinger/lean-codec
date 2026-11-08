@@ -150,6 +150,53 @@
               touch "$out"
               runHook postBuild
             '';
+        # **The mirror check** (`codec-audit-round-nine` review M-4).
+        #
+        # `gen-axioms.lean` cannot import `Axioms.lean` (bootstrap cycle), so its copies
+        # of the classifier's name lists can drift — and `AGENTS.md` records that drift
+        # un-pinning `Codec.Suffix.hle` for a whole round. `lake build` **cannot** catch
+        # an *undercounting* drift: the generator writes its smaller set into the
+        # generated `gatedNames` region, so `partition`/`gateCoverage` then read that list
+        # and agree with it by construction. `headerNumbers`' `expectedGated` is only a
+        # speed bump, because the same regenerating session bumps it.
+        #
+        # The check that works is this one: **run the generator and diff.** A drifted
+        # mirror produces a different `Axioms.lean`, and a diff needs no parsing of Lean
+        # literals — which is the fragility that made a first attempt at this check report
+        # vacuous agreement (two lists that both failed to parse compared equal).
+        mirror-check =
+          pkgs.runCommand "codec-mirror-check"
+            {
+              nativeBuildInputs = [
+                _pkg.lean4
+                pkgs.stdenv.cc
+                pkgs.git
+              ];
+            }
+            ''
+              set -euo pipefail
+              runHook preBuild
+              cp -r ${self} work
+              chmod -R u+w work
+              cd work
+              rm -rf .lake
+              lake build Codec > /dev/null
+              cp Axioms.lean Axioms.before
+              lake env lean scripts/gen-axioms.lean
+              if ! diff -q Axioms.before Axioms.lean > /dev/null; then
+                echo "gen-axioms.lean's mirrors disagree with the committed Axioms.lean:"
+                diff -u Axioms.before Axioms.lean | head -80
+                echo ""
+                echo "A mirror has drifted. Fix the mirror in scripts/gen-axioms.lean, NOT the"
+                echo "committed file: an undercounting mirror rewrites Axioms.lean with its"
+                echo "smaller set and the gate then agrees with it by construction. That is the"
+                echo "Codec.Suffix.hle regression."
+                exit 1
+              fi
+              echo "mirror check: the generator is idempotent against the committed Axioms.lean"
+              touch "$out"
+              runHook postBuild
+            '';
       in
       {
         # The default target builds the native library (`lake build` → `.olean`).
@@ -167,6 +214,16 @@
         # (§1.9) — see the `bench-check` definition for why it is a check and not a
         # package.
         checks.bench = bench-check;
+        checks.mirror = mirror-check;
+        # **The mirror check** (`codec-audit-round-nine` review M-4). `gen-axioms.lean`
+        # cannot import `Axioms.lean`, so its copies of the classifier's name lists can
+        # drift — and `AGENTS.md` records that drift un-pinning `Codec.Suffix.hle` for a
+        # whole round. `lake build` cannot catch an *undercounting* drift, because the
+        # generator writes its smaller set into `gatedNames` and the gate then agrees with
+        # it by construction. This check compares the **two files** directly, in both
+        # directions, which is the one cross-file comparison available without the
+        # bootstrap cycle.
+
         # Formatting check (treefmt).
         checks.formatting = treefmtModule.config.build.check self;
 

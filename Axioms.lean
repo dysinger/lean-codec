@@ -2830,9 +2830,52 @@ run_cmd do
   for l in classified do
     unless declared.contains l do
       bad := bad.push s!"  {l}: classified but no vocabulary phrase emits it (a stale classification)"
+  -- **The class VALUES are checked too, and that is the half the key-set comparison
+  -- cannot reach** (`codec-audit-round-nine` review M-1). The three checks above are all
+  -- statements about *keys*; nothing read the right-hand column of
+  -- `footprintClassifications`. So `("[propext]", .both)` — right key, wrong meaning —
+  -- passed every arm, and the most dangerous row is the one that **cannot** be
+  -- demonstrated by the tree, because `Codec`/`Iso` contains zero theorems with a
+  -- `Classical.choice` footprint to adjudicate against (measured: 0). A remap of the
+  -- `.choice` row would therefore never flip a live claim site.
+  --
+  -- The probes below are written from **axiom semantics**, not from `footprintVocabulary`
+  -- — a check that reads the vocabulary to validate the vocabulary answers itself, which
+  -- is the lesson this whole sub-system exists to encode. Each says "this label asserts
+  -- this footprint", and `satisfiedBy` must accept it. A mis-mapped class is then a build
+  -- failure naming the footprint it rejects.
+  let probes : Array (String × List String) := #[
+    ("axiom-free", []),
+    ("[propext]", ["propext"]),
+    ("[propext]-only", ["propext"]),
+    ("[Quot.sound]", ["Quot.sound"]),
+    ("[Quot.sound]-only", ["Quot.sound"]),
+    ("[propext, Quot.sound]", ["propext", "Quot.sound"]),
+    ("[propext, Quot.sound]-only", ["propext", "Quot.sound"]),
+    ("[propext, Classical.choice, Quot.sound]", ["propext", "Classical.choice", "Quot.sound"]),
+    ("[propext]-or-cleaner", ["propext"])]
+  for (label, fp) in probes do
+    match CodecAxioms.footprintClassifications.find? (fun (l, _) => l == label) with
+    | none => bad := bad.push s!"  {label}: no classification row"
+    | some (_, k) =>
+      unless k.satisfiedBy fp do
+        bad := bad.push s!"  {label}: `satisfiedBy` REJECTS the footprint {fp} — the row's class is wrong (right key, wrong meaning), so every claim carrying this label is adjudicated against the wrong set"
+  -- And the negative direction: a class must not accept a footprint it does not name.
+  -- Without this, `.atMostOne` (which accepts anything inside the discipline) would
+  -- satisfy every probe above and a remap of *every* row to it would pass.
+  let rejects := CodecAxioms.footprintClassifications.filter fun (l, k) =>
+    match l with
+    | "axiom-free" => k.satisfiedBy ["propext"]
+    | "[propext]" | "[propext]-only" => k.satisfiedBy ["propext", "Quot.sound"]
+    | "[Quot.sound]" | "[Quot.sound]-only" => k.satisfiedBy ["propext"]
+    | "[propext, Quot.sound]" | "[propext, Quot.sound]-only" | "[propext]-or-cleaner" =>
+        k.satisfiedBy ["propext", "Classical.choice", "Quot.sound"]
+    | _ => false
+  for (l, _) in rejects do
+    bad := bad.push s!"  {l}: its class ACCEPTS a footprint the label does not name — the row is too permissive, so claims carrying this label pass while overstating"
   unless bad.isEmpty do
     throwError m!"the footprint vocabulary emits labels its adjudicator does not cover:\n{String.join bad.toList}"
-  logInfo m!"axiom gate: footprint labels — {emitted.size} emitted by the classifier, all {declared.size} declared, and all {classified.size} classified in `footprintClassifications` (so the arm's `none` default is unreachable, both directions checked)"
+  logInfo m!"axiom gate: footprint labels — {emitted.size} emitted by the classifier, all {declared.size} declared, all {classified.size} classified, and all {probes.size} classes exercised in BOTH directions by a semantics-written probe (so a right-key/wrong-class remap fails)"
 
 /-! ### Every allowlisted theorem's footprint is reported
 

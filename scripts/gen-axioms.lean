@@ -104,17 +104,28 @@ def localIsGeneratedAux (n : Name) : Bool := Id.run do
   ]
   return theoremNameSuffixes.contains n.components.getLast!.toString
 
-/-- **The mirror's own completeness check** (`codec-audit-round-nine` review A-4).
+/-- **The mirror's internal consistency check.**
 
-This file's copies of the classifier's lists cannot be compared to `Axioms.lean` by import
-(bootstrap cycle), so each is declared next to a comment naming its original. This
-function is the other half: it asserts that the two lists **this file** holds cannot be
-confused with one another's role — the `def` pattern list and the theorem suffix list —
-and that neither contains a name the other does. That is a smaller claim than "the mirror
-matches `Axioms.lean`", and it is stated as the smaller claim rather than overclaimed: the
-cross-file comparison is what `lake build` does, because a drift makes the generated
-`gatedNames` disagree with the partition and the coverage `run_cmd` names every theorem
-un-gated. -/
+`codec-audit-round-nine` reviews A-4 and M-4. This file cannot import `Axioms.lean` (the gate
+must exist before the generator can build it), so the classifier's lists are hand-copied here
+and the drift risk is the one this repository has paid for twice.
+
+**This function is the SMALLER half, and it says so.** It checks only that the two lists *this
+file* holds are disjoint and non-empty — a property of the mirror, not a comparison with
+`Axioms.lean`. An earlier revision of this docstring claimed the cross-file comparison was
+"what `lake build` does, because a drift makes the generated `gatedNames` disagree with the
+partition". **That is false in the direction that already cost a round** (review M-4): when the
+mirror *undercounts*, the generator emits its smaller set into the generated `gatedNames`
+region and **rewrites `Axioms.lean` with it**, so `partition` and `gateCoverage` read the
+generated list and agree with it by construction. `AGENTS.md` records that exact regression
+(`Codec.Suffix.hle` un-pinned for a whole round); it reproduces green under just this check.
+The only residual guard is `headerNumbers`' `expectedGated` constant, which the same
+regenerating session bumps — so it is a speed bump, not a check.
+
+**The cross-file comparison that does work is a command, not a pass.** It runs in
+`checks.mirror` (see `flake.nix`), which greps both files and diffs the lists in both
+directions *after* the generator has run — i.e. against the committed artefacts, outside the
+bootstrap cycle. That is where the real guarantee lives; this function is not it. -/
 def mirrorSelfCheck : Except String Unit := do
   -- Mirrored from `CodecAxioms.derivedDefPatterns` (this file cannot import `Axioms`).
   let defPatterns : Array String := #[
