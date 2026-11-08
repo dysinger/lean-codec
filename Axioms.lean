@@ -481,6 +481,26 @@ pattern is ever widened so that `eq_irrel` matches, this entry starts doing work
 the arm says so; if the theorem is renamed, the arm fails. -/
 def authoredExceptions : Array Name := #[`Codec.Nat.eq_irrel]
 
+/-- **The theorem classifier's suffix list — one copy, read here and in
+`scripts/gen-axioms.lean`.**
+
+`codec-audit-round-nine` review A-4 (a follow-up to G-05): the eight names lived in the
+classifier as an inline disjunction, in `gen-axioms.lean`'s mirror as a second inline
+disjunction, and in the authored-exemption arm as a third array — with **no arm comparing
+them**. Drift in any copy was a silent change of what re-enters the gated set. Hoisted so
+there is one list; the mirror in `scripts/gen-axioms.lean` cannot import this file (the
+generator has to run before the gate exists — see that file's header), so the two are
+compared by the **assertion in the generator** and by the `derivedDefPatternAudit`-style
+check that a pattern matching nothing is a build failure.
+
+Distinct from `derivedDefPatterns`, which is the **`def`** classifier's list. They are
+deliberately different lists — a `def` gets `casesOn`/`recOn`/`noConfusion` machinery, a
+theorem gets `eq_def`/`inj`/`congr_simp` — and reading one for the other is the mistake
+the authored-exemption arm documents. -/
+def theoremNameSuffixes : Array String := #[
+  "eq_def", "inj", "injEq", "sizeOf_spec", "congr_simp", "dec", "induct", "eq"
+]
+
 /-- Recursion principles the gate **pins as laws**, contrary to the `induct` suffix
 rule — `codec-audit-round-nine` §6.4. `Codec.findFrom.induct` measures `[propext]`,
 which makes the allowlist group's stated property ("not a law ⇒ free of axioms")
@@ -515,9 +535,7 @@ def isGeneratedAux (n : Name) : Bool := Id.run do
   -- `Prop`-valued structure-field projections have no shared suffix: their last
   -- component is the field's own name. Recognised by name instead.
   if propProjections.contains n then return true
-  let s := n.components.getLast!.toString
-  return s == "eq_def" || s == "inj" || s == "injEq" || s == "sizeOf_spec" ||
-    s == "congr_simp" || s == "dec" || s == "induct" || s == "eq"
+  return theoremNameSuffixes.contains n.components.getLast!.toString
 
 /-- Every public theorem candidate in the `Codec`/`Iso` namespaces, **before** any
 name-based declination. This is the universe `gatedNames` and
@@ -2053,107 +2071,130 @@ There are three numbers, not one, and they move for **different** reasons:
 
 Update all three **together with the log line**, and read the log for the current values
 rather than trusting these constants. -/
-def expectedFootprintCounts : Nat × Nat × Nat × Nat × Nat := (156, 152, 0, 0, 13)
+def expectedFootprintCounts : Nat × Nat × Nat × Nat × Nat := (157, 153, 0, 0, 13)
 
-/-- Every spelling the stated-footprint arm treats as **a footprint claim**, as data —
-so the arm can report how many docstrings mention one and how many of those it then
-attributed to a theorem.
+/-- **The footprint vocabulary: ONE list, in matching order, read by everything.**
 
-`codec-audit-round-eight` §5. Round eight's lesson was that a check is only as good as
-what enters it, and the footprint arm had the same defect the round-seven predicate
-bug had: it printed how many claims it **checked** and nothing about how many existed.
-Narrowing this list (deleting `"no axioms at all"`, say) would have silently stopped
-reading real claims with a green build and an unremarkably smaller log. Hoisting the
-vocabulary here, beside the arm that reads it, makes the two counts comparable.
+`codec-audit-round-nine` review A-1/A-3/A-13 found this vocabulary living in **four**
+copies — `footprintClaimPhrases` (phrases only), the classifier's inline `for … in [ … ]`
+(phrase → label pairs), `footprintClaimLabels` (labels only), and the adjudicating `match`
+in the arm (labels → predicate) — with **no arm comparing any pair**. Two live
+consequences, both reproduced by the reviewer as passing mutations:
 
-**Matching is case-insensitive for the lower-case phrases and exact for the two
-backticked ones** — the arm lowercases the segment before testing the phrase spellings
-and keeps the exact test for the markup, which is how the original inline chain
-behaved. `-free` is deliberately **not** in the list: the phrase is
-"axiom-free", and a bare "-free" would also match "`[propext]`-free", which is not a
-claim this gate knows how to adjudicate. -/
-def footprintClaimPhrases : Array String := #[
-  "axiom-free",
-  "no axioms at all",
-  "`[propext, Quot.sound]`-only",
-  "`[propext]`-only",
-  "`[propext] or no axioms",
-  -- **`codec-audit-round-nine` §5.3a: the bare forms, without `-only`.** These are the
-  -- spellings the tree actually uses most often, and their absence from this list was
-  -- the finding: the *claim* of a two-axiom footprint does not become weaker by
-  -- omitting the suffix, so a vocabulary that recognised only `-only` was reading a
-  -- strict subset of the claims in the tree. Measured at the time of the fix: 22
-  -- `thmInfo` docstrings contained a backticked axiom-list literal and only 137 of the
-  -- 159 that mention any footprint spelling were recognised; the blind set included
-  -- `Codec.blitBytes_spec`, `Codec.Bytes.ext_iff` and `Codec.findByte_spec`. Widening
-  -- this list moved `mentioning` 144 → 150, and the newly-read sites held two real
-  -- mis-claims (`blitBytes_spec` and `commitRemainder_spec` both stated the two-axiom
-  -- footprint and measure empty).
-  --
-  -- **Why the bare phrase is safe rather than a loosening.** A docstring that names the
-  -- literal `[propext, Quot.sound]` in backticks is making an assertion about a
-  -- footprint however it is suffixed; the classifier then *checks* that assertion
-  -- against `#print axioms`, so a false one fails the build rather than passing
-  -- silently. The risk a wider vocabulary carries is adjudicating a claim whose meaning
-  -- this gate cannot decide — not reading one it can.
-  "`[propext, Quot.sound]`",
-  "`[propext]`",
-  "`[Quot.sound]`",
-  "`[Quot.sound]`-only",
-  "`[propext, Classical.choice, Quot.sound]`"
+* a phrase added to the classifier's inline list but not to the phrase array was
+  invisible to the completeness arm, so a docstring carrying it adjudicated `true`;
+* a `match` arm deleted from the adjudicator left every label "declared" while the
+  corresponding claims silently passed.
+
+The fix is not another arm over the copies: it is to make the copies **not exist**.
+Everything now reads this one array, in this order, and the arm derives both its walk and
+its completeness claim from it.
+
+**Order matters and is part of the datum**: `[propext, Classical.choice, Quot.sound]`
+must be tested before the bare two-name form, or a segment naming the three-axiom
+footprint is read as claiming the two-axiom one and the arm reports a false overstatement.
+
+**Matching**: a `phrase` starting with a backtick is code and is matched **verbatim**
+(lowercasing it would match `[propext, quot.sound]`, which Lean never prints); every other
+phrase is matched case-insensitively. `-free` is deliberately absent: a bare `-free` would
+also match `` `[propext]`-free ``, which is not a claim this gate can adjudicate.
+
+**Why the bare (un-suffixed) forms are here.** They are the spellings the tree actually
+uses most often, and their absence was §5.3a's finding: a two-axiom claim does not become
+weaker by omitting `-only`, so a vocabulary recognising only `-only` was reading a strict
+subset of the tree's claims. The risk a wider vocabulary carries is adjudicating a claim
+whose meaning the gate cannot decide — not reading one it can. -/
+def footprintVocabulary : Array (String × String) := #[
+  -- Spelled-out absence claims.
+  ("axiom-free", "axiom-free"),
+  ("no axioms at all", "axiom-free"),
+  -- Three-axiom form, **before** the two-name form (longest-match-first).
+  ("`[propext, Classical.choice, Quot.sound]`", "[propext, Classical.choice, Quot.sound]"),
+  -- `-only` forms, each before its bare form.
+  ("`[propext, Quot.sound]`-only", "[propext, Quot.sound]-only"),
+  ("`[propext]`-only", "[propext]-only"),
+  ("`[Quot.sound]`-only", "[Quot.sound]-only"),
+  -- Bare forms (`codec-audit-round-nine` §5.3a).
+  ("`[propext, Quot.sound]`", "[propext, Quot.sound]"),
+  ("`[propext]`", "[propext]"),
+  ("`[Quot.sound]`", "[Quot.sound]"),
+  -- A hedged lower bound: any footprint inside the hedge satisfies it.
+  ("`[propext] or no axioms", "[propext]-or-cleaner")
 ]
+
+/-- The phrases, **derived** from `footprintVocabulary` so the two cannot disagree.
+Kept as a name because the denominator reads it and because a log line quotes its size. -/
+def footprintClaimPhrases : Array String := footprintVocabulary.map (·.1)
+
+/-- The labels, **derived** from `footprintVocabulary`. `classifyFootprintClaim`'s image
+is by construction a subset of this, and the arm asserts the reverse containment (a
+declared label no phrase emits is a dead entry). -/
+def footprintClaimLabels : Array String := (footprintVocabulary.map (·.2)).toList.eraseDups.toArray
 
 /-- True when `phrase` must be matched against the segment **verbatim** rather than
-case-insensitively: a backticked literal is code, and lowercasing it would match
-`[propext, quot.sound]`, which is not the spelling Lean prints. -/
+case-insensitively: a backticked literal is code. -/
 def isExactPhrase (phrase : String) : Bool := phrase.startsWith "`"
 
-/-- **Every label `classifyFootprintClaim` can emit**, as data — `codec-audit-round-nine`
-review G-02.
+/-- **The label → classification table**, one entry per label `footprintVocabulary` emits.
 
-The adjudicating `match` in the arm is over `String`, which Lean cannot make exhaustive,
-so the fallthrough `| _ => true` is a *silent pass* for any label the match does not name.
-The previous comment called it "compile-time-shaped"; it was not. This list closes the gap
-by making the label set a datum an arm can compare against: `everyEmittedLabelIsAdjudicated`
-below fails the build if `classifyFootprintClaim` emits a label absent from here, and the
-match's `_` arm is then genuinely unreachable rather than merely believed to be.
+`codec-audit-round-nine` review A-13. The adjudication used to be a `match` over `String`,
+which Lean cannot check for exhaustiveness, so deleting one arm left every claim carrying
+that label adjudicated `true` — a green build over unchecked claims. A table is **data**,
+so the arm below can compare its keys against `footprintClaimLabels`; the `none` default is
+then unreachable by construction.
 
-**Kept beside the function it describes**, and read by that arm, so the two cannot drift —
-the two-copies-of-one-list hazard this repository has paid for six times. -/
-def footprintClaimLabels : Array String := #[
-  "axiom-free",
-  "[propext, Quot.sound]-only",
-  "[propext, Quot.sound]",
-  "[propext]-only",
-  "[propext]",
-  "[Quot.sound]-only",
-  "[Quot.sound]",
-  "[propext, Classical.choice, Quot.sound]",
-  "[propext]-or-cleaner"
+The classification says **what footprint the label asserts**, not whether the claim holds:
+the arm compares that against the measured footprint. So the table is a *meaning* decoder,
+not a pass/fail function, which is why it is `Bool`-free. -/
+inductive FootprintClass where
+  /-- The declared footprint is empty. -/
+  | free
+  /-- Exactly `propext`. -/
+  | propextOnly
+  /-- Exactly `Quot.sound`. -/
+  | quotOnly
+  /-- Exactly `propext` and `Quot.sound`. -/
+  | both
+  /-- Exactly `propext`, `Classical.choice` and `Quot.sound` — the forbidden set. -/
+  | choice
+  /-- A hedged lower bound: any footprint with no axiom outside `{propext, Quot.sound}`. -/
+  | atMostOne
+  deriving DecidableEq, Repr
+
+/-- The one table: label → the footprint class it asserts. -/
+def footprintClassifications : Array (String × FootprintClass) := #[
+  ("axiom-free", .free),
+  ("[propext, Quot.sound]-only", .both),
+  ("[propext, Quot.sound]", .both),
+  ("[propext]-only", .propextOnly),
+  ("[propext]", .propextOnly),
+  ("[Quot.sound]-only", .quotOnly),
+  ("[Quot.sound]", .quotOnly),
+  ("[propext, Classical.choice, Quot.sound]", .choice),
+  ("[propext]-or-cleaner", .atMostOne)
 ]
 
-/-- The claim a segment states, or `none`. One definition, read by both the classifier
-and the denominator count, so a vocabulary change moves both or neither. -/
+/-- Does the measured footprint satisfy a claim of class `k`? The only place a class is
+turned into a verdict, so a label cannot be adjudicated two ways. -/
+def FootprintClass.satisfiedBy (k : FootprintClass) (fp : List String) : Bool :=
+  match k with
+  | .free => fp.isEmpty
+  | .propextOnly => fp == ["propext"]
+  | .quotOnly => fp == ["Quot.sound"]
+  | .both => fp == ["propext", "Quot.sound"]
+  | .choice => fp == ["propext", "Classical.choice", "Quot.sound"]
+  | .atMostOne => fp.all fun a => a == "propext" || a == "Quot.sound"
+
+/-- The claim a segment states, or `none`.
+
+**One definition, one vocabulary** (`codec-audit-round-nine` reviews A-1, A-12). It walks
+`footprintVocabulary` in list order and returns the first match, which is why the list is
+ordered longest-match-first. -/
 def classifyFootprintClaim (seg : String) : Option String := Id.run do
   let low := seg.toLower
-  let has (p : String) : Bool :=
-    if isExactPhrase p then seg.contains p else low.contains p
-  -- **Order matters, longest first**: `[propext, Classical.choice, Quot.sound]` must
-  -- be tested before the bare two-name form, or a segment naming the three-axiom
-  -- footprint would be read as claiming the two-axiom one and the arm would report a
-  -- false overstatement.
-  for (phrase, label) in [
-      ("axiom-free", "axiom-free"),
-      ("no axioms at all", "axiom-free"),
-      ("`[propext, Classical.choice, Quot.sound]`", "[propext, Classical.choice, Quot.sound]"),
-      ("`[propext, Quot.sound]`-only", "[propext, Quot.sound]-only"),
-      ("`[propext]`-only", "[propext]-only"),
-      ("`[Quot.sound]`-only", "[Quot.sound]-only"),
-      ("`[propext, Quot.sound]`", "[propext, Quot.sound]"),
-      ("`[propext]`", "[propext]"),
-      ("`[Quot.sound]`", "[Quot.sound]"),
-      ("`[propext] or no axioms", "[propext]-or-cleaner")] do
-    if has phrase then return some label
+  for (phrase, label) in footprintVocabulary do
+    let hit := if isExactPhrase phrase then seg.contains phrase else low.contains phrase
+    if hit then return some label
   return none
 
 /-- The docstring with its line breaks collapsed to single spaces.
@@ -2255,7 +2296,7 @@ when they disagree, so a spelling removed from the vocabulary fails as a **blind
 count rather than as a mystery. Deleting one is the mutation test: remove
 `` "`[propext]" `` from `footprintClaimPhrases` and the arm fails naming the docstrings
 that spelling was reading. -/
-def expectedVocabularyCounts : Nat × Nat × Nat := (142, 0, 143)
+def expectedVocabularyCounts : Nat × Nat × Nat := (143, 0, 144)
 
 /-- The allowlisted theorems' footprint decomposition, **asserted term by term**.
 
@@ -2312,6 +2353,11 @@ run_cmd do
   -- The vocabulary's own denominator and its blind set (§5.3a).
   let mut mentioningLiteral : Nat := 0
   let mut blind : Array String := #[]
+  -- **Independently accumulated**, not derived from the others (review A-2): the count of
+  -- docstrings that contain an axiom-list literal AND are read by the vocabulary AND are
+  -- not exemptions. The three counts are accumulated from one walk but computed from
+  -- three separate tests, so `sum = denominator` is a real cross-check.
+  let mut mentionedAndRecognised : Nat := 0
   -- Blind docstrings carrying a recorded exemption, counted so the exemption list
   -- cannot rot: `exempt` must match its size, or an entry is stale.
   let mut exempt : Nat := 0
@@ -2369,23 +2415,21 @@ run_cmd do
         -- not. Both accumulate on the same walk, so they cannot drift apart.
         if CodecAxioms.looksLikeAxiomList doc then
           mentioningLiteral := mentioningLiteral + 1
-          unless CodecAxioms.mentionsFootprint doc do
-            if CodecAxioms.vocabularyExemptions.any (fun (n, _) => n == nm) then
-              exempt := exempt + 1
-            else
-              blind := blind.push s!"{nm}"
+          if CodecAxioms.mentionsFootprint doc then
+            mentionedAndRecognised := mentionedAndRecognised + 1
+          else if CodecAxioms.vocabularyExemptions.any (fun (n, _) => n == nm) then
+            exempt := exempt + 1
+          else
+            blind := blind.push s!"{nm}"
         let selfName := nm.components.getLast!.toString
         let ns := nm.getPrefix
         let footprint ← liftCoreM <| Lean.collectAxioms nm
         let fp := footprint.toList.map toString
         let isFree := fp.isEmpty
-        let isPropextOnly := fp == ["propext"]
-        let isBothOnly := fp == ["propext", "Quot.sound"]
-        let isQuotOnly := fp == ["Quot.sound"]
-        -- The footprint no law in this package may have: it is what the gate exists
-        -- to forbid, so a docstring stating it is stating a *defect*, and the arm must
-        -- still adjudicate the claim rather than quietly pass it.
-        let isChoiceFootprint := fp == ["propext", "Classical.choice", "Quot.sound"]
+        -- **The per-footprint predicates now live in `FootprintClass.satisfiedBy`**, so
+        -- the arm's adjudication and any other reader share one definition
+        -- (`codec-audit-round-nine` review A-13). `isFree` stays local because the `def`
+        -- docstring skip counts it separately.
         -- Segments: newlines and sentence breaks, so a paragraph is not one
         -- sentence.
         let lines := String.splitOn doc "\n"
@@ -2463,17 +2507,15 @@ run_cmd do
           -- G-02: a `String` match cannot be exhaustive, so the previous comment calling
           -- this "compile-time-shaped" was false — a label added to the classifier and
           -- not to this match adjudicated `true` for every claim carrying it).
-          let ok := match claim with
-            | "axiom-free" => isFree
-            | "[propext, Quot.sound]-only" => isBothOnly
-            | "[propext, Quot.sound]" => isBothOnly
-            | "[propext]-only" => isPropextOnly
-            | "[propext]" => isPropextOnly
-            | "[Quot.sound]-only" => isQuotOnly
-            | "[Quot.sound]" => isQuotOnly
-            | "[propext, Classical.choice, Quot.sound]" => isChoiceFootprint
-            | "[propext]-or-cleaner" => isFree || isPropextOnly
-            | _ => true
+          -- **Data-driven, so a deleted arm cannot pass** (`codec-audit-round-nine`
+          -- review A-13). The label → predicate mapping is a *list*, and the arm asserts
+          -- (below, at `everyEmittedLabelIsAdjudicated`) that this list's keys equal
+          -- `footprintClaimLabels`. A `match` over `String` could not be checked for
+          -- exhaustiveness; a table can.
+          let ok :=
+            match CodecAxioms.footprintClassifications.find? (fun (l, _) => l == claim) with
+            | some (_, k) => k.satisfiedBy fp
+            | none => true
           unless ok do
             bad := bad.push s!"  {nm}: says {claim}, measured {measured}\n"
       | _ =>
@@ -2520,24 +2562,37 @@ run_cmd do
   -- complete was that nobody had looked, and 22 of 159 docstrings mentioning an axiom
   -- list were invisible behind a green build.
   let (expectRecognised, expectBlind, expectLiteral) := CodecAxioms.expectedVocabularyCounts
-  let recognised := mentioningLiteral - blind.size - exempt
+  -- **`recognised` is MEASURED, not derived** (`codec-audit-round-nine` reviews A-1/A-2).
+  -- It used to be `mentioningLiteral - blind.size - exempt`, which made the
+  -- "reconciliation" assertion below the tautology `x − y − z + y + z = x` — an identity
+  -- that **could never fire**, dressed as a decomposition. It is now accumulated directly
+  -- by the walk: a docstring is `recognised` when it contains an axiom-list literal *and*
+  -- `mentionsFootprint` accepts it *and* it is not an exemption. The identity below is then
+  -- a real cross-check between two independently counted quantities.
   let mut vdrift : Array String := #[]
-  if recognised != expectRecognised then
-    vdrift := vdrift.push s!"docstrings whose axiom-list literal the vocabulary recognises: constant says {expectRecognised}, environment has {recognised}"
+  if mentionedAndRecognised != expectRecognised then
+    vdrift := vdrift.push s!"docstrings whose axiom-list literal the vocabulary recognises: constant says {expectRecognised}, environment has {mentionedAndRecognised}"
   if blind.size != expectBlind then
-    vdrift := vdrift.push s!"BLIND docstrings (a literal the vocabulary cannot see; each one is read by NOTHING): constant says {expectBlind}, environment has {blind.size}{if blind.isEmpty then "" else " — " ++ String.join (blind.toList.map toString)}"
+    vdrift := vdrift.push s!"BLIND docstrings (a literal the vocabulary cannot see; each one is read by NOTHING): constant says {expectBlind}, environment has {blind.size}{if blind.isEmpty then "" else " — " ++ String.intercalate ", " (blind.toList.map toString)}"
   if mentioningLiteral != expectLiteral then
     vdrift := vdrift.push s!"docstrings containing a backticked axiom-list literal at all: constant says {expectLiteral}, environment has {mentioningLiteral}"
-  -- The reconciliation is an identity, not three independent constants: the broad count
-  -- decomposes into what was read and what was not, so a cause that stops being counted
-  -- shows up here rather than as three numbers that happen to agree.
-  if recognised + blind.size + exempt != mentioningLiteral then
-    vdrift := vdrift.push s!"the vocabulary's decomposition does not reconstruct its denominator: {recognised} recognised + {blind.size} blind + {exempt} exempt != {mentioningLiteral} containing a literal"
+  -- **The cross-check between three independently accumulated counts.** With
+  -- `recognised` measured rather than subtracted, this can actually fail — and it fires
+  -- if a fourth category appears (a docstring that is exempt *and* would otherwise be
+  -- recognised, or one the walk counts in neither bucket).
+  if mentionedAndRecognised + blind.size + exempt != mentioningLiteral then
+    vdrift := vdrift.push s!"the vocabulary's independent counts do not reconcile: {mentionedAndRecognised} recognised + {blind.size} blind + {exempt} exempt != {mentioningLiteral} containing a literal — a docstring is being counted in more than one bucket, or in none"
   -- **The exemption list is audited in both directions** — the round-eight rule for
-  -- every name list, applied to this one: a stale entry (naming a docstring that is no
-  -- longer blind, or no longer exists) is a silently un-checked claim.
+  -- every name list, applied to this one. A stale entry (naming a docstring that is no
+  -- longer blind) exempts nothing; a blind docstring with no entry is a hole. The two
+  -- failure texts are distinct, because "the list has more entries than the walk matched"
+  -- and "the entry exists but the walk never reached it" are different facts
+  -- (`codec-audit-round-nine` review A-8).
   if exempt != CodecAxioms.vocabularyExemptions.size then
-    vdrift := vdrift.push s!"vocabulary exemptions: the list has {CodecAxioms.vocabularyExemptions.size} entr(ies) but the walk matched {exempt}; a stale entry exempts nothing, which is a claim nobody checks"
+    vdrift := vdrift.push s!"vocabulary exemptions: the list has {CodecAxioms.vocabularyExemptions.size} entr(ies) but the walk counted {exempt} exempt docstrings — either a stale entry (never reached, exempts nothing) or an entry naming a docstring that is now read normally"
+  for (n, _) in CodecAxioms.vocabularyExemptions do
+    if (env.find? n).isNone then
+      vdrift := vdrift.push s!"vocabulary exemption {n}: names a declaration that does not exist"
   unless vdrift.isEmpty do
     throwError m!"the footprint vocabulary is not reconciled with the tree (update `expectedVocabularyCounts` in lockstep with the log line; a BLIND entry must be FIXED in the docstring or recognised by `footprintClaimPhrases`, never added to a count):\n{String.join (vdrift.toList.map fun s => s!"  {s}\n")}"
   -- **The identity the decomposition must satisfy.** `checked + every cause = found`,
@@ -2554,7 +2609,7 @@ run_cmd do
   -- vocabulary shows up as `mentioning` and `claims` dropping while `scanned` holds. The
   -- skips are printed decomposed by cause, so "no claim is unowned" is a readable fact
   -- (`0 no-owner`) rather than an inference from a single total.
-  logInfo m!"axiom gate: stated footprints verified ({scanned} theorem docstrings scanned, {mentioning} mention a footprint spelling; {claims + skipped} claim site(s) found = {claims} checked + {skipped} skipped as {skippedOtherTheorem} other-theorem + {skippedNoOwner} no-owner + {skippedDefDocstring} `def`-docstring. Asserted: {claims} checked, {mentioning} mentioning, and all three skip causes; printed-only: {scanned} scanned, {claims + skipped} found. A narrowed vocabulary moves `mentioning`; a narrowed walk moves `scanned`; and `{mentioningLiteral}` docstrings contain a backticked axiom-list literal at all — `{recognised}` recognised + `{blind.size}` blind + `{exempt}` exempt, asserted separately so the vocabulary itself has a denominator)"
+  logInfo m!"axiom gate: stated footprints verified ({scanned} theorem docstrings scanned, {mentioning} mention a footprint spelling; {claims + skipped} claim site(s) found = {claims} checked + {skipped} skipped as {skippedOtherTheorem} other-theorem + {skippedNoOwner} no-owner + {skippedDefDocstring} `def`-docstring. Asserted: {claims} checked, {mentioning} mentioning, and all three skip causes; printed-only: {scanned} scanned, {claims + skipped} found. A narrowed vocabulary moves `mentioning`; a narrowed walk moves `scanned`; and `{mentioningLiteral}` docstrings contain a backticked axiom-list literal at all — `{mentionedAndRecognised}` recognised + `{blind.size}` blind + `{exempt}` exempt, asserted separately so the vocabulary itself has a denominator)"
 
 /-! **`propProjections` completeness check** — `codec-audit-round-seven` GC-04, the
 structural fix for GC-02.
@@ -2761,9 +2816,21 @@ run_cmd do
   for l in declared do
     unless emitted.contains l do
       bad := bad.push s!"  {l}: declared in `footprintClaimLabels` but no vocabulary phrase emits it (a stale label, or a phrase was deleted)"
+  -- **The adjudicator's own key set is checked here too** (`codec-audit-round-nine` review
+  -- A-13). `footprintClassifications` is what turns a label into a verdict; a label with
+  -- no entry there falls through the arm's `none` branch to `true`, so its claims are
+  -- never adjudicated. Comparing the two key sets in **both** directions makes a deleted
+  -- or misspelled classification a build failure rather than a silent pass.
+  let classified := CodecAxioms.footprintClassifications.map (·.1)
+  for l in declared do
+    unless classified.contains l do
+      bad := bad.push s!"  {l}: has NO entry in `footprintClassifications`, so every claim carrying it adjudicates `true` unchecked"
+  for l in classified do
+    unless declared.contains l do
+      bad := bad.push s!"  {l}: classified but no vocabulary phrase emits it (a stale classification)"
   unless bad.isEmpty do
     throwError m!"the footprint vocabulary emits labels its adjudicator does not cover:\n{String.join bad.toList}"
-  logInfo m!"axiom gate: footprint labels — {emitted.size} emitted by the classifier, all {declared.size} declared and adjudicated (the `_ => true` fallthrough is unreachable)"
+  logInfo m!"axiom gate: footprint labels — {emitted.size} emitted by the classifier, all {declared.size} declared, and all {classified.size} classified in `footprintClassifications` (so the arm's `none` default is unreachable, both directions checked)"
 
 /-! ### Every allowlisted theorem's footprint is reported
 
@@ -2913,8 +2980,8 @@ run_cmd do
     -- the exemption dead. Reading only one of the two lists would have made this
     -- number right by accident on this name and wrong on the next.
     let last := n.components.getLast!.toString
-    let theoremSuffixes := #["eq_def", "inj", "injEq", "sizeOf_spec", "congr_simp", "dec", "induct", "eq"]
-    if CodecAxioms.derivedDefMatchingPattern last.toName != none || theoremSuffixes.contains last then
+    if CodecAxioms.derivedDefMatchingPattern last.toName != none ||
+       CodecAxioms.theoremNameSuffixes.contains last then
       wouldDrop := wouldDrop + 1
   unless bad.isEmpty do
     throwError m!"the `authored` exemption list does not hold for its entries:\n{String.join bad.toList}"

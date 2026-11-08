@@ -172,9 +172,15 @@ bound — the witness is vacuous, but it is the one `Codec` constructor that had
 none. Its absence contradicted the claim made in `Codec.Sound`'s `ConsumesByte`
 section (`seqConsumesByte`/`isoConsumesByte` are presented as the fix for "every
 composed codec proved productivity by hand"): a downstream `d | empty`-shaped
-codec still had to hand-prove productivity at that node. Its footprint is the usual
-`propext` and `Quot.sound` pair — measured, not inherited from the shape of the
-statement, which is the rule `Axioms.lean` records for every claim in the tree. -/
+codec still had to hand-prove productivity at that node. `` `[propext, Quot.sound]` ``,
+measured rather than inherited from the shape of the statement, which is the rule
+`Axioms.lean` records for every claim in the tree.
+
+(That footprint used to be written as prose — "the usual `propext` and `Quot.sound`
+pair" — which **no vocabulary phrase recognises**, so the claim was read by nothing while
+looking adjudicated. Caught by `codec-audit-round-nine` review A-10, and it is the third
+instance this round of a rewritten sentence moving a claim from *checked* to *invisible*:
+a footprint claim must be written as a backticked literal or the arm cannot see it.) -/
 theorem emptyConsumesByte {α : Type} : ConsumesByte (Codec.empty : Codec α) := by
   intro x n s t hmem
   simp [decode] at hmem
@@ -1129,7 +1135,16 @@ theorem decodeFullFast_zero {α : Type} (p : Codec α) (h : ConsumesByte p)
 
 /-- `Suffix.drop 0 s` is `s` itself: dropping nothing leaves the whole buffer, and
 `bdrop 0 s` is `s` pointwise. Used to align the root bridge's `Suffix.drop 0 s`
-with the specification's own `s`. -/
+with the specification's own `s`.
+
+**Disclosed duplicate** (`codec-audit-round-nine` review A-9): `Codec.drop_zero_eq_id`
+(`Codec/Codec.lean:959`) states **exactly** this proposition, and both are gated, so the
+partition counts two laws where the tree proves one statement. The two carry different
+proofs (`bdrop_zero` + `Suffix.ext` here; a `bdrop_zero` rewrite there), which is the only
+reason both exist. Not removed: deleting either moves the gate's asserted partition, which
+is a change to the gate's record rather than a correction to a proof, and should be made
+in a change that says so. A reader comparing `425` to "how many distinct statements does
+this library prove" should subtract one. -/
 theorem Suffix.drop_zero {n : Nat} (s : Bytes n) : Suffix.drop 0 s = Suffix.id n s := by
   refine Suffix.ext (t₁ := Suffix.drop 0 s) (t₂ := Suffix.id n s) ?_ ?_
   · dsimp only [Suffix.drop, Suffix.id]; omega

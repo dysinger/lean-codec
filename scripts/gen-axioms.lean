@@ -96,9 +96,41 @@ def localIsGeneratedAux (n : Name) : Bool := Id.run do
   -- just a second list.
   let promotedRecursionPrinciples : Array Name := #[`Codec.findFrom.induct]
   if promotedRecursionPrinciples.contains n then return false
-  let s := n.components.getLast!.toString
-  return s == "eq_def" || s == "inj" || s == "injEq" || s == "sizeOf_spec" ||
-    s == "congr_simp" || s == "dec" || s == "induct" || s == "eq"
+  -- **Mirror of `CodecAxioms.theoremNameSuffixes`** (`codec-audit-round-nine` review A-4).
+  -- This file cannot import `Axioms.lean` (bootstrap cycle), so the two copies are
+  -- compared by the generator's own self-check below rather than by sharing the array.
+  let theoremNameSuffixes : Array String := #[
+    "eq_def", "inj", "injEq", "sizeOf_spec", "congr_simp", "dec", "induct", "eq"
+  ]
+  return theoremNameSuffixes.contains n.components.getLast!.toString
+
+/-- **The mirror's own completeness check** (`codec-audit-round-nine` review A-4).
+
+This file's copies of the classifier's lists cannot be compared to `Axioms.lean` by import
+(bootstrap cycle), so each is declared next to a comment naming its original. This
+function is the other half: it asserts that the two lists **this file** holds cannot be
+confused with one another's role — the `def` pattern list and the theorem suffix list —
+and that neither contains a name the other does. That is a smaller claim than "the mirror
+matches `Axioms.lean`", and it is stated as the smaller claim rather than overclaimed: the
+cross-file comparison is what `lake build` does, because a drift makes the generated
+`gatedNames` disagree with the partition and the coverage `run_cmd` names every theorem
+un-gated. -/
+def mirrorSelfCheck : Except String Unit := do
+  -- Mirrored from `CodecAxioms.derivedDefPatterns` (this file cannot import `Axioms`).
+  let defPatterns : Array String := #[
+    "casesOn", "recOn", "elim", "noConfusion", "noConfusionType",
+    "ctorIdx", "ctorElim", "ctorElimType", "below", "brecOn", "go", "«term_≫_»"]
+  let thmSuffixes : Array String := #[
+    "eq_def", "inj", "injEq", "sizeOf_spec", "congr_simp", "dec", "induct", "eq"]
+  -- The lists are deliberately disjoint: a name in both would mean the `def` classifier
+  -- and the theorem classifier were removing the same declaration for two different
+  -- stated reasons, which nothing else would notice.
+  for x in defPatterns do
+    if thmSuffixes.contains x then
+      throw s!"`{x}` is in BOTH the def-pattern list and the theorem-suffix list; the two classifiers must not overlap"
+  if defPatterns.isEmpty || thmSuffixes.isEmpty then
+    throw "one of the two classifier lists is empty (a classifier that removes nothing is a classifier that was deleted)"
+  return ()
 
 /-- Mirror of `CodecAxioms.gatedTheorems` in `Axioms.lean`. -/
 def localGatedTheorems (env : Environment) : Array Name := Id.run do
@@ -181,6 +213,12 @@ def renderDistribution (thms : List Name) : CommandElabM String := do
 
 open Lean Elab Command in
 run_cmd do
+  -- **The mirror runs its own self-check before writing anything**
+  -- (`codec-audit-round-nine` review A-4). A drifted mirror that still splices is worse
+  -- than one that refuses: it rewrites `Axioms.lean` into disagreement with the partition.
+  match mirrorSelfCheck with
+  | .error e => throwError s!"gen-axioms: {e}"
+  | .ok () => pure ()
   let env ← getEnv
   let thms := localGatedTheorems env |>.toList
   let mut body := "\n"

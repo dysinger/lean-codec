@@ -69,6 +69,12 @@ def bytesToArray {n : Nat} (s : Bytes n) : Array UInt8 :=
 /-- The packing transport is size-preserving: `(bytesToArray s).size = n`.
 `rfl`, because `Array.mk`'s size is the list's length and `List.ofFn`'s is its
 index. -/
+-- **Disclosed duplicate** (`codec-audit-round-nine` review A-9): `Codec.decodeWholeBytes_size`
+-- (`Codec/Decode.lean`) states **exactly** this proposition and is literally
+-- `bytesToArray_size s`, so the partition counts two laws where one statement is proved.
+-- Kept because `decodeWholeBytes_size` is the name a caller of `decodeWholeBytes` looks
+-- for, and removing either moves the gate's asserted partition — a change to the gate's
+-- record, not a correction to a proof.
 theorem bytesToArray_size {n : Nat} (s : Bytes n) : (bytesToArray s).size = n := by
   -- Named lemmas only: `simp [bytesToArray]` reaches `List.length_ofFn` through a
   -- classical route and leaks `Classical.choice` (checked with `#print axioms`),
