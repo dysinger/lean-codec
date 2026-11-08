@@ -53,15 +53,51 @@ Two `let rec isBareProj` literals exist, at `Axioms.lean:1915` and `:1988`, unde
 comment claiming they are one definition. They are not; `run_cmd` blocks cannot share a
 `let rec`, so this must become a top-level `def` in `CodecAxioms`.
 
-- [ ] 2.1 Add `def CodecAxioms.isBareProj (e : Expr) : Bool` beside `propProjections`, with
-      the body of the existing predicate unchanged.
-- [ ] 2.2 Point **both** arms at it; delete both local copies.
-- [ ] 2.3 Confirm the two arms' outputs are unchanged by the hoist (same counts, same set)
-      — a refactor that moves a number is a behaviour change wearing a refactor.
+- [ ] 2.1 Add `def CodecAxioms.isBareProj (env : Environment) (e : Expr) : Bool` beside
+      `propProjections`. **The body is the fixed predicate from 3.3, not the existing one.**
+      The hoist and the fix are **one edit**, not two: a spike measured that hoisting the
+      current bare-`.proj` test and then fixing it would be two passes over the same line,
+      and the second would have to revisit every call site.
+- [ ] 2.2 Point **both** arms at it; delete both local copies (`Axioms.lean:1915`,
+      `:1988`).
+- [ ] 2.3 The two arms' outputs **are expected to move** for the five new captures (3.4).
+      Record the before/after classification of all twelve captured names, so "it changed"
+      is a measured statement with a known cause rather than a surprise.
 - [ ] 2.4 **Mutation-test the hoist**: change the shared predicate in one place and confirm
       **both** arms' behaviour moves together. That is the property the comment claims and
       nothing currently checks. Before the hoist this mutation would have moved only one
       arm; after it, both. Say which.
+
+## 2b. The predicate the spike established
+
+A spike (`/tmp/spike-isBareProj.md`) measured and mutation-tested a predicate that meets
+all four acceptance criteria with **no name list**. It is reproduced here so the
+implementation does not have to re-derive it; it was independently re-run against the
+five criteria before being written down.
+
+- [ ] 2b.1 The working definition, verbatim. `peelLamsMdata` strips `lam`/`mdata`;
+      `appSpine` decomposes the outermost application spine; `firstExplicitIdx` reads the
+      **declared telescope** of the head constant to find the operand being selected from;
+      `isProjConst` asks whether the constant's own body peels to a bare `Expr.proj`;
+      `isProjOfHyp` recurses. `isBareProj` is a bare `.proj`, or a projection constant
+      applied at its first explicit argument to a projection-of-a-hypothesis. See the
+      spike report for the source; paste it rather than retyping.
+- [ ] 2b.2 **Why it works, in one sentence** (put this in the docstring): a genuine
+      projection in this library has a **`proj` body** (`Iso.law`, `And.left`,
+      `Subtype.property`, `Codec.Normal.fixed` all peel to `proj#0`), while a proved
+      theorem that merely has an `↔`/`∧` **result type** does not (`Codec.bidir`'s body is a
+      `let`; `Option.ne_none_iff_exists'` is `Iff.trans`). That is the whole
+      theorem-vs-hypothesis distinction — **not** the head constant and **not** the arity.
+- [ ] 2b.3 Use `firstExplicitIdx` (from the declared telescope), **not** `args.getLast?`.
+      A spike mutation showed the two agree on today's tree — so the wrong one passes every
+      test — while `CandAligned_at`'s operand is `args[2]` and `args[7]` is a different
+      bound variable. Record this in the docstring: an accessor that agrees by luck is the
+      `isDerivedDefName` shape again.
+- [ ] 2b.4 Name the predicate's **four** recorded blind spots in its docstring: (1) false
+      positive on `fun (x : α × β) => x.1` (safe direction, kept); (2) false negative on a
+      named projection constant (closed by `isProjConst`); (3) hypothesis-vs-theorem
+      (closed by the operand recursion); (4) an under-applied projection constant would be
+      accepted (`args[i]? = none → true`) — unreachable today, and the safe direction.
 
 ## 3. Fix the predicate's blind spot — with a measurable acceptance criterion
 
@@ -78,28 +114,43 @@ Prod.snd}`) would capture **seven** declarations including `Codec.roundtrip`,
       constant is applied to. The distinguishing fact: `roundtrip` unwraps
       `Codec.bidir d x n s` (a **proved theorem**); `unapply_eq_some_of_apply` unwraps
       `Iso.law i a b` (a **field**). Arity cannot separate them — both are 4.
-- [ ] 3.3 Implement a predicate that separates them structurally. Accept either:
-      (a) `And.left`/`And.right` at their declared arity only, which round ten measured
-      captures exactly the three true Prop-selectors; or (b) the above plus a **recursive**
-      test for `Iff.mp`/`Iff.mpr` requiring the iff argument to itself be projection-headed
-      on a bound variable.
-      **Do not** accept `Iff.mp`/`Iff.mpr` on head-and-arity alone.
+- [ ] 3.3 Implement a predicate that separates them structurally. **Do not** accept
+      `Iff.mp`/`Iff.mpr` on head-and-arity alone, and **do not** use "`And.left`/`And.right`
+      at their declared arity": a spike measured that `And.right` is reached at arity 8 in
+      `CandAligned_at` and arity 3 elsewhere, so "declared arity" is a category mismatch,
+      not a mechanism. The predicate that works is in §2b — a **projection constant** (its
+      own body peels to a bare `Expr.proj`) applied, at its first explicit declared
+      argument, to something recursively a projection of a hypothesis.
 - [ ] 3.4 **Acceptance criterion — all four must hold, measured:** - `Codec.roundtrip` **stays gated** (this is the one that matters); - `Codec.findFrom_finds` stays gated; - `CandAligned_fst` and `CandAligned_at` are classified as projections; - `Codec.CandAligned_tail` **stays gated** — it is a real proof about an invariant
       (`And.casesOn hal fun hlen hpt => ⟨…, …⟩`), not a projection. Round nine's task 6.3
       would have moved it; that is wrong.
       A predicate meeting fewer than four is rejected, and the rejection is recorded.
-- [ ] 3.5 Decide `Codec.fill_fixed` (`Codec/Normal.lean:163`) deliberately. Its body is
-      `(fill nz s).fixed`, its docstring says "not a separate law", it has **zero
-      consumers**, and it is gated. Classify it with the projections and extend the
-      predicate to see a head constant whose own body is a projection — or keep it gated
-      and record why. Either is defensible; silence is not.
-- [ ] 3.6 Decide `Codec.packedCands_mem` (body `c.property.1`) deliberately. It is a
-      projection but it _names_ a membership callers would otherwise spell out. Record the
-      decision and the reason.
-- [ ] 3.7 Update the predicate's docstring to name **all three** blind spots it has had:
-      the false positive on `fun (x : α × β) => x.1`, the false negative on a named
-      projection constant, and the new hypothesis-vs-theorem distinction. The docstring
-      currently records two of the three, and the missing one is the one that cost a round.
+- [ ] 3.5 **Decided by measurement, record it in place.** `Codec.fill_fixed`
+      (`Codec/Normal.lean:163`) **stays gated**: its operand is `Codec.fill nz s`, a
+      **constructed value**, not a caller-supplied hypothesis — `isProjConst Codec.fill` is
+      `false`, so the recursion rejects it for the same principled reason it rejects
+      `Codec.bidir`. (It has zero _theorem_ consumers, but `Bench.lean:103` calls it, so
+      "zero consumers" would have been wrong.) Add the one-line comment to the pin saying
+      why, so the next round does not re-open it.
+- [ ] 3.6 **Decided by measurement.** `Codec.packedCands_mem` (body `c.property.1`) is
+      **classified with the projections**. It is a genuine selection, and it must be added
+      to `propProjections` with a reason carrying the caveat: it asserts nothing, but it
+      _names_ a membership (`c.val ∈ decodeArray d a k`) that callers would otherwise spell
+      out, so it earns its keep as documentation. Do not drop it; do not leave it gated and
+      uncommented.
+- [ ] 3.7 Update the predicate's docstring to name **all four** blind spots. See 2b.4. The
+      one currently missing is the one that cost a round.
+- [ ] 3.8 **The footprint count falls by five, and the gate will say so.** The five new
+      captures are pinned today: `Axioms.lean:821-823` (`CandAligned_fst`/`_at`), `:1063`
+      (`packedCands_mem`), `:1147` (`apply_eq_some_of_unapply`), `:1162`
+      (`unapply_eq_some_of_apply`), plus their `#print axioms` blocks at `:2077`, `:2080`,
+      `:2803`, `:3055`, `:3100`. Re-run `scripts/gen-axioms.lean`, then update the header
+      table and the `expected*` constants **together**. `CandAligned_tail` **stays pinned**
+      — it is gated, correctly.
+- [ ] 3.9 `propProjections` gains the five entries from 3.4/3.6, or the **completeness**
+      arm fails the build. That failure is the predicate doing its job, not a regression.
+      Once they are listed, the **validity** arm checks each one — the two-directional
+      discipline the file already claims.
 
 ## 4. Make the rule enforceable, not just stated
 
