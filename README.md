@@ -1199,11 +1199,11 @@ never one the leaves donate.
 no format.** What it now also ships are three _format-agnostic_ primitives, because
 every downstream leaf codec was otherwise blocked:
 
-| was missing                         | what it blocked downstream                                                                   | now                                                                                                |
-| ----------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| a total-bijection `Iso` constructor | writing a leaf's `law` by hand, in `UInt8`/`UInt16`/`UInt32` coercion lemmas                 | `Iso.ofTotal f g hgf hfg` — law discharged from two round-trip equations                           |
-| `ConsumesByte` for `seq`/`iso`      | every composed codec proved productivity by hand (`lean-basen` does exactly this, per block) | `seqConsumesByte`, `isoConsumesByte`                                                               |
-| a single-value decode entry point   | a leaf author could only decode a _repetition_; `decodeOne` is committed-choice and unwired  | `decodeWholeOne` / `decodeWholeOneBytes`, with `decodeWholeOne_eq` tying them to the specification |
+| was missing                         | what it blocked downstream                                                                   | now                                                                                                                                                                                                                                                                             |
+| ----------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| a total-bijection `Iso` constructor | writing a leaf's `law` by hand, in `UInt8`/`UInt16`/`UInt32` coercion lemmas                 | `Iso.ofTotal f g hgf hfg` — law discharged from two round-trip equations                                                                                                                                                                                                        |
+| `ConsumesByte` for `seq`/`iso`      | every composed codec proved productivity by hand (`lean-basen` does exactly this, per block) | `seqConsumesByte`, `isoConsumesByte`                                                                                                                                                                                                                                            |
+| a single-value decode entry point   | a leaf author could only decode a _repetition_; `decodeOne` is committed-choice and unwired  | `decodeWholeOne` / `decodeWholeOneBytes`; `decodeWholeOne_eq` ties the **`Array`** entry point to the specification, and `decodeWholeOneBytes_eq` (`rfl`) bridges the `Bytes` one to it — the two **compose** to a `Bytes`-level statement, which is not itself a named theorem |
 
 None of these names a format, an endianness, or a width — they are the shape every
 leaf needs, which is why they belong in core and the leaves do not.
@@ -1232,6 +1232,14 @@ lemma), but an earlier revision said "**none has an in-tree caller**" and that i
 
 - **`Iso.ofTotal` and `decodeWholeOne` are genuinely caller-free**: no concrete codec
   lives here to call them, by design, and their consumers are the downstream repos.
+  **One correction on the entry point's provenance** (`codec-audit-round-nine`'s review,
+  M-2): the sentence above says the entry point is "tied to the specification", and that
+  is true of `decodeWholeOne` (`Array UInt8`), whose law `decodeWholeOne_eq` names
+  `decodeFull` directly. It is _not_ a single theorem for the `Bytes`-level
+  `decodeWholeOneBytes` — that one has only `decodeWholeOneBytes_eq` (`rfl`) to
+  `decodeWholeOne`, so the `Bytes`-level link is a two-step composition nothing names.
+  Stated because a reader checking the claim will look for the theorem and not find it;
+  `grep -rn decodeWholeOne Codec/` shows exactly those two laws.
 
 `[S3]` means this package cannot demonstrate the caller-free two _by example_ — that
 is the rule working as intended, not a gap to be closed here.
@@ -1257,14 +1265,14 @@ Every claim in this document about "gated", "pinned" or "checked" is produced by
 (long lines elided with `…`):
 
 ```
-axiom gate: 343 public theorems covered (0 explicit exclusion(s))
-axiom gate: 425 public theorems partitioned, 343 gated and 82 allowlisted
+axiom gate: 344 public theorems covered (0 explicit exclusion(s))
+axiom gate: 426 public theorems partitioned, 344 gated and 82 allowlisted
 axiom gate: 140 public definitions covered, 115 mentioned and 25 allowlisted (mention proxy)
 axiom gate: definitions dropped by the name classifier — 54 removed + 140 kept = 194 candidates, all removals reason-recorded; by pattern (6 of 12 remove exactly one; 0 uncounted): casesOn 8, recOn 8, elim 7, noConfusion 15, noConfusionType …
 axiom gate: 12 def-name patterns enumerated, each matching a recorded non-surface declaration; their per-pattern counts are asserted by the def-classifier arm above (54 of 194 candidates removed)
-axiom gate: header numbers verified (425 = 343 + 82; defs 140 = 115 + 25)
-axiom gate: constant kinds — thm 769 (gated + allowlisted), def 348 (mention proxy), opaque 0 / axiom 0 (no arm, must be 0), induct/ctor/rec/quot 30 (machinery, not walked); globally 1355 `opaque` and 12 `axiom`, all of them Lean/stdlib — n …
-axiom gate: stated footprints verified (769 theorem docstrings scanned, 153 mention a footprint spelling; 170 claim site(s) found = 157 checked + 13 skipped as 0 other-theorem + 0 no-owner + 13 `def`-docstring. Asserted: 157 checked, 153 me …
+axiom gate: header numbers verified (426 = 344 + 82; defs 140 = 115 + 25)
+axiom gate: constant kinds — thm 770 (gated + allowlisted), def 348 (mention proxy), opaque 0 / axiom 0 (no arm, must be 0), induct/ctor/rec/quot 30 (machinery, not walked); globally 1355 `opaque` and 12 `axiom`, all of them Lean/stdlib — n …
+axiom gate: stated footprints verified (770 theorem docstrings scanned, 153 mention a footprint spelling; 170 claim site(s) found = 157 checked + 13 skipped as 0 other-theorem + 0 no-owner + 13 `def`-docstring. Asserted: 157 checked, 153 me …
 axiom gate: propProjections covers every bare projection (9 listed)
 axiom gate: propProjections entries are all bare projections (9 listed of 12 bare projections in the namespaces; the rest are the `dec`-suffixed three, classified by suffix)
 axiom gate: footprint labels — 9 emitted by the classifier, all 9 declared, and all 9 classified in `footprintClassifications` (so the arm's `none` default is unreachable, both directions checked)

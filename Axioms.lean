@@ -133,11 +133,11 @@ failure mode. **It is not soundness.**
 
 ## Current state
 
-**425** public theorems are covered, by a partition with no third route:
+**426** public theorems are covered, by a partition with no third route:
 
 | side | count | what it is |
 | --- | --- | --- |
-| gated (`gatedNames`) | **343** | footprint pinned by `#print axioms` |
+| gated (`gatedNames`) | **344** | footprint pinned by `#print axioms` |
 | allowlisted (`generatedAuxAllowlist`) | **82** | not a law; reason recorded in place |
 | un-gated and unlisted | **0** | a build failure, by construction |
 
@@ -149,11 +149,11 @@ Gated footprint distribution — **generated** from the same `collectAxioms` res
 | footprint | count |
 | --- | --- |
 | `[propext, Quot.sound]` | 219 |
-| `[propext]` | 93 |
+| `[propext]` | 94 |
 | `[Quot.sound]` | 4 |
 | axiom-free | 27 |
 | anything else | 0 |
-| **total** | **343** |
+| **total** | **344** |
 
 `[propext, Classical.choice, Quot.sound]` rows: **0** — every gated law is
 inside the discipline.
@@ -1187,6 +1187,7 @@ def gatedNames : List Lean.Name := [
   ,`Codec.Suffix_cast_remaining
   ,`Codec.aligned_alignedNotLengthDetWitness
   ,`Codec.altConsumesByte
+  ,`Codec.alt_not_functional
   ,`Codec.append_toArray_ofFn_concat
   ,`Codec.arrayToBytes_bytesToArray
   ,`Codec.arrayToBytes_bytesToArray_apply
@@ -1814,10 +1815,11 @@ run_cmd do
   let gated := gatedNames.length
   let allow := CodecAxioms.generatedAuxAllowlist.size
   -- Lockstep with "Current state" above.
-  let expectedPub := 425
-  -- 343 / 82 since `codec-audit-round-nine` §6.4 promoted `Codec.findFrom.induct`
-  -- (the only allowlisted name with a nonzero footprint) into the gated set.
-  let expectedGated := 343
+  let expectedPub := 426
+  -- 344 / 82: `codec-audit-round-nine` §6.4 promoted `Codec.findFrom.induct` into the
+  -- gated set, and the round's own review added `Codec.alt_not_functional` (the
+  -- `Functional`-is-not-a-congruence-for-`alt` witness).
+  let expectedGated := 344
   let expectedAllow := 82
   let expectedDefs := 140
   let expectedMentioned := 115
@@ -3149,6 +3151,9 @@ why it was fixed instead of documented.
 /-- info: 'Codec.altConsumesByte' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.altConsumesByte
+/-- info: 'Codec.alt_not_functional' depends on axioms: [propext] -/
+#guard_msgs in
+#print axioms Codec.alt_not_functional
 /-- info: 'Codec.append_toArray_ofFn_concat' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.append_toArray_ofFn_concat

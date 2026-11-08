@@ -1316,9 +1316,17 @@ be read off for the wired surface without a second set of proofs. -/
 
 /-- **The fast, whole-buffer full-consumption decoder — the surface to run.** Takes
 the packed carrier and routes straight to `decodeFullArrayRoot` (the `Array UInt8` +
-`Nat`-cursor search). Measured on an idle-ish machine at `n` = 4 KiB: **48 ns/byte**,
-against 75 for the `Bytes`/`Suffix` `decodeFullFastRoot` and a 6 ns/step ideal-loop
-floor — see `README.md`'s "Where the speed actually goes".
+`Nat`-cursor search).
+
+**No performance figure is quoted here, deliberately.** An earlier revision carried
+three — a `ns/byte` for this path, one for the `Bytes`/`Suffix` path, and a floor — and
+**all three were wrong**: the `6 ns/step` is one of the values `AGENTS.md` lists as
+*withdrawn* (a minimum-of-decaying-rounds artefact of the `8n` working set), and the other
+two were cells from a loaded session that the README has since re-derived. A number in a
+library docstring is outside every lane and outside the table's vintage stamp, so it can
+never be re-checked; `AGENTS.md`'s rule is one stamped source per figure. See
+`README.md`'s "Where the speed actually goes", which is that source
+(`codec-audit-round-nine` review S-3).
 
 This is deliberately a *named* entry point rather than a note telling readers to call
 `decodeFullArrayRoot`: a fast path that is merely available is a fast path nobody

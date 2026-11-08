@@ -988,6 +988,35 @@ theorem functional_byte : Functional Codec.byte := by
     rw [hi, hp, hq]
   rw [hss]
 
+/-! ### `Functional` is not a congruence for `alt` — proved, not assumed
+
+The `Unambiguous`/`RelAligned` non-congruence above is at **`seq`**. `Functional` fails
+somewhere else, and until `codec-audit-round-nine`'s review nothing in the tree said
+where: the prose named `Functional` among the predicates that "must be discharged for
+each concrete carrier" without recording a witness that it is not inherited.
+
+It is not inherited at **`alt`**. `pure 0` relates `0` to the empty string; `byte` relates
+`0` to `single 0`; their union relates `0` to *both*, with different lengths, so the two
+`Sigma`-packed results cannot be equal. Both leaves are `Functional` (`byte`'s instance is
+`functional_byte` below; `pure`'s is immediate from `Rel_pure`), and the composition is
+not. `[propext]`-only, zero `sorry`.
+
+**Why it matters rather than being a curiosity.** `decodeArray_unique` and
+`decodeFull_spec` are proved from a `Functional ∧ RelAligned` (or `huniq`) hypothesis, and
+`alt` is the constructor at the heart of `decodeArray`'s candidate search — so a downstream
+format that composes with `alt` cannot assume the leaves donate functionality, exactly as
+it cannot with `seq`. -/
+theorem alt_not_functional :
+    ¬ Functional (Codec.alt (Codec.pure (0 : UInt8)) Codec.byte) := by
+  intro hf
+  have h1 : Rel (Codec.alt (Codec.pure (0 : UInt8)) Codec.byte) 0 (emptyBytes : Bytes 0) :=
+    (Rel_alt _ _ _ _).2 (Or.inl ((Rel_pure 0 0 _).2 ⟨rfl, rfl⟩))
+  have h2 : Rel (Codec.alt (Codec.pure (0 : UInt8)) Codec.byte) 0 (single (0 : UInt8)) :=
+    (Rel_alt _ _ _ _).2 (Or.inr ((Rel_byte 0 _).2 ⟨rfl, rfl⟩))
+  have hEq := hf 0 (emptyBytes : Bytes 0) (single (0 : UInt8)) h1 h2
+  simp only [Sigma.mk.injEq] at hEq
+  exact absurd hEq.1 (by decide)
+
 theorem encode_of_decode {α : Type} (d : Codec α) (hd : Functional d) (x : α)
     {n : Nat} {s : Bytes n} (hdcd : (x, Suffix.empty n) ∈ decode d s) : encode d x = some ⟨n, s⟩ := by
   have hne : encode d x ≠ none := encode_ne_none d x s ((bidir d x n s).2 hdcd)
