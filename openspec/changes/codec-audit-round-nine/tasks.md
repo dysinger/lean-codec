@@ -5,6 +5,35 @@
 > **Status at hand-off:** authored and validating; **nothing implemented**. Zero tasks
 > checked, and that is correct.
 >
+> ---
+>
+> ### IMPLEMENTATION STATUS — 64 / 69, one section blocked on the HOST
+>
+> Everything except **§2's re-run** is landed and gate-green: `lake build` prints 13
+> lines, `openspec validate --all` 13 passed, the formatting check 222 files / 0
+> changed, and the sandboxed `checks.lean` `Build completed successfully (15 jobs)` with
+> zero errors. Per-section: §0 ✓, §1 ✓ (all nine, two mutation-tested), §3 ✓, §4 ✓
+> (including a **third** misquote site nobody flagged), §5 ✓ (§5.3a's vocabulary hole
+> closed with an **asserted third count** and `blind = 0`), §6 ✓ (§6.1/6.4/6.5/6.9 plus
+> regeneration; **6.2 is deleted as wrong, 6.3/6.6/6.7/6.8/6.10 were already done**),
+> §7 ✓, §8 ✓, §9 ✓.
+>
+> **The five open boxes are 2.1, 2.3, and §10's three "deliberately not in this change"
+> items — and §10's are _records of exclusion_, not work.** So the real outstanding work
+> is **2.1 and 2.3 only**: `benchBurst`'s buffer and guard changed (`i % 251`, an
+> `eraseDups` assertion), which means **every committed burst median was measured on
+> input that no longer exists**, and the three performance tables need a re-run from an
+> **idle host**. The host was not idle at any point in this session —
+> `load 2.85 → 4.88` on 10 cores, with `Chromium`/`Firefox`/`nix-daemon` at 86–98 % —
+> so the tables keep their `2026-11-07` stamp and their rows **and §2.3 stays open
+> rather than being closed against a figure that would be argued about later.** The
+> prose around them was corrected instead (§2.4–§2.9 are all derived from the
+> _committed_ cells, which needs no new run), and §3's underivable `77` cell is gone.
+>
+> **Do not archive this change until §2.3 is done.** Its own design (D1) says the old
+> medians cannot be carried forward — a median whose guard could not detect a fold has
+> no evidence behind it — and that is exactly what leaving the rows in place means.
+>
 > **⚠ RE-EVALUATED against `codec-gate-denominators` (landed 2026-11-08).** This change
 > was authored _before_ the general solution existed, and three of its MUSTs are now
 > **already done**, not merely "wrong as written". Read this table before the task list —
