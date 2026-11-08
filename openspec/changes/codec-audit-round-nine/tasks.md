@@ -257,6 +257,31 @@ Findings: N-1's consequence, S-1 (no `steps/burst` column), N-4 (floor range), S
 - [ ] 2.1 Run the bench on an **idle** machine: `lake build bench` then
       `.lake/build/bin/bench <args>`. Two runs, as the tables claim. Record wall-clock
       context in the commit message; do not run anything else concurrently.
+
+      **BLOCKED at 2026-11-08 12:40 — the machine is NOT idle, and §2 cannot be done
+      honestly yet.** Measured: `load averages: 2.85 3.14 3.69` on 10 cores, and the top
+      consumers are **not this session**: `Chromium Helper (Renderer)` (Polar) at 90.7 %
+      CPU and a Firefox `plugin-container` at 57.7 %, plus Signal's renderer. No amount
+      of waiting in-session clears them — they are another application's work — and the
+      repo's rule is explicit that a figure is sourced only from a run that produced
+      it (`AGENTS.md`: "a number is sourced because the lane, run, prints it"), with
+      load-affected runs noted as order-of-magnitude only.
+
+      **What is already done, so §2 is a re-run and not a re-derivation:** the bench
+      builds and runs green with the §1 fixes in place, all 8 `benchBurst` call sites
+      print non-invariant rows, and the cross-check prints `6 of 6`. A provisional run
+      under this load was taken and is **not** being committed as a table: it is retained
+      only to confirm the lanes work, and quoting it would be exactly the cross-session
+      borrow §3 deletes the `77` for.
+
+      **Decided, not assumed: the old tables stay with their old vintage stamp rather
+      than being restamped from a loaded run.** Design D1 asks for the tables to be re-run
+      *because* the old guard could not see a fold, so the correct end state is a genuine
+      idle-machine run; a loaded run substituted now would put a stamp on numbers that
+      inherit the very defect (an unattributable figure) the task exists to remove. The
+      tables therefore carry a dated **marker** explaining the state instead, and the
+      re-runs plus 2.2–2.9 are left open for the next session on an idle host.
+
 - [ ] 2.2 Re-derive **every** cell from the printed `ns` and `steps/burst`, with `python3`,
       not by eye. Every row must state its own span; a figure that only exists as a
       quotient must be recomputed from both terms in the same run.
