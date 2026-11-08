@@ -739,34 +739,43 @@ Findings: P-1 (`relRepeat` departure), S-1 (`everything else is kept`), S-2 (`ta
 denotation), P2-4 (porter list), P2-5 (`ignore` ruled out), P2-7 (`isoConsumesByte`
 invisible to the proxy), P2-8/9/11/12, N-2/N-4.
 
-- [ ] 7.1 **[M-adjacent] Add the `relRepeat` departure paragraph** to `[S5]`: the `nil`
+- [x] 7.1 **[M-adjacent] Add the `relRepeat` departure paragraph** to `[S5]`: the `nil`
       branch is `n = 0`, not the paper's `True`; that is what makes
       `relRepeat_induction` an induction on the **list**; `decodeRepeat_spec` is stated
       against this denotation and is unaffected. Add the matching sentence to
       `Codec/Codec.lean:327–334`'s docstring, which currently says "well-founded reading"
       without saying it is a _choice_. Add a "porter will not close the `[]` case"
       warning — that is the actionable half.
-- [ ] 7.2 **[S]** `[S6]`'s "Everything else is **kept**" contradicts `[D7]` (`iterate`
+- [x] 7.2 **[S]** `[S6]`'s "Everything else is **kept**" contradicts `[D7]` (`iterate`
       omitted) and `[S2]`/`[D1]` (`token`'s carrier changed). Reword to "Everything not
       listed under a `[Dn]` is kept".
-- [ ] 7.3 **[S]** State `takeWhile`'s denotation explicitly in `[D4]`: it relates a
+- [x] 7.3 **[S]** State `takeWhile`'s denotation explicitly in `[D4]`: it relates a
       `List UInt8`, not the paper's `[()]`. That type is the fact a porter needs.
-- [ ] 7.4 **[S]** "This is the list a porter must reproduce" → "the `Codec` list", and
+- [x] 7.4 **[S]** "This is the list a porter must reproduce" → "the `Codec` list", and
       point at `[S1]`'s thirteen `Iso` combinators.
-- [ ] 7.5 **[S]** Soften "strict isomorphism rules out `ignore`-shaped constructors": it
+- [x] 7.5 **[S]** Soften "strict isomorphism rules out `ignore`-shaped constructors": it
       rules out a lossy **`Iso`**; `Codec.pure x` is a lossy `Codec` and inhabits fine.
-- [ ] 7.6 **[S]** The `isoConsumesByte`-is-called claim is true of the source and invisible
+- [x] 7.6 **[S]** The `isoConsumesByte`-is-called claim is true of the source and invisible
       to every gate (0 referrers on both channels). Say so, so the next maintainer re-reads
       it by hand rather than trusting a green proxy count.
-- [ ] 7.7 **[N]** `birid` → `bidir`; move `findFrom` from the `Sound.lean` row to the
+
+      **Measured — and the task's "0 referrers" is half right.** `grep -rn isoConsumesByte`
+      over `Codec/`, `Axioms.lean` and `Bench.lean` returns the declaration in
+      `Codec/Sound.lean`, **exactly one call site** (`Codec/Combinators.lean:410` in
+      `seqCountConsumesByte`), and the gate's own `gatedNames`/`#print axioms` entries. So
+      there is one in-tree referrer, and the gate counts **footprints, not referrers** —
+      which is the point: deleting the call site leaves every count green. The README now
+      says that in place and tells the reader to re-read the site by hand.
+
+- [x] 7.7 **[N]** `birid` → `bidir`; move `findFrom` from the `Sound.lean` row to the
       `ByteSlice.lean` row in the module inventory.
-- [ ] 7.8 **[N]** The `Combinators.lean` inventory row claims `sepBy`/`chainl1`/`chainr1`
+- [x] 7.8 **[N]** The `Combinators.lean` inventory row claims `sepBy`/`chainl1`/`chainr1`
       symbols; there are none (the module's own header says so).
-- [ ] 7.9 **[N]** "`#check @Codec.optional` has no `Nat`" — it does take
+- [x] 7.9 **[N]** "`#check @Codec.optional` has no `Nat`" — it does take
       `[DecidableEq α]`, which the sentence omits and which `[D8]` says is an obligation.
-- [ ] 7.10 **[N]** Move the `Codec/CRef.c` carve-out into `[S3]` (one sentence), so a
+- [x] 7.10 **[N]** Move the `Codec/CRef.c` carve-out into `[S3]` (one sentence), so a
       reader of the "no C that parses" rule finds it in the rule and not 400 lines later.
-- [ ] 7.11 **[N]** `Codec/CRef.c:44–48` describes a `none` arm the C does not contain.
+- [x] 7.11 **[N]** `Codec/CRef.c:44–48` describes a `none` arm the C does not contain.
       Replace with the fact: there is deliberately no `none` arm because an empty buffer
       decodes to `some []`.
 

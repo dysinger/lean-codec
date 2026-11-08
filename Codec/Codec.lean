@@ -332,7 +332,25 @@ string of *some* length). The `cons` case splits `s : Bytes n` at a Fin index
 well-founded reading of `Rel (many p)` — total for *every* `R`, independent of
 whether the step itself matches the empty string. It is the constructive
 denotation of the derived `many` combinator; the decoder law is
-`Codec.decodeRepeat_spec`. -/
+`Codec.decodeRepeat_spec`.
+
+**Two things a reader comparing this to the paper must be told** (`codec-audit-round-nine`
+§7.1):
+
+1. **The `nil` case is `n = 0`, not the paper's `True`.** That is a **choice**, not a
+   mechanical translation: the substrate's length lives in the *type*, so "any string
+   repeats zero times" is not expressible without smuggling the length back out by
+   hand — which does not close. The `n = 0` form is the only version `Bytes n` admits,
+   and it is what makes `relRepeat_induction` an induction on the **list** rather than
+   on a length. `relRepeat_nil` below states it (`Iff.rfl`).
+2. **The first two parameters of this `match` are not the recursion's measure.** The
+   recursion descends on the *list*; `n` is carried, not decreased. Stated because a
+   `unfold` at a variable list does not reduce (`count`/`relRepeat` both), so the
+   recursion equation has to be stated as its own `rfl` lemma — see
+   `relRepeat_cons`.
+
+A porter should read `[S5]` in `README.md` beside this, where the departure and the
+`[]`-case warning are written for them. -/
 def relRepeat {α : Type} (R : α → {m : Nat} → Bytes m → Prop) :
     List α → (n : Nat) → Bytes n → Prop
   | [], n, _ => n = 0

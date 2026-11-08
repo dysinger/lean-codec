@@ -173,7 +173,16 @@ existed for is not reproduced.**
 **Read the second half of that title first, because it is the operative limit.** Both
 mechanisms core ships for capture are **length-preserving**: the `Normal` layer's
 normalizer is `norm : Bytes n → Bytes n`, and `relTakeWhile` relates a run of length
-`n` to a value of _all_ `n` bytes. The paper's `ignore` exists for a _length-changing_
+`n` to a value of _all_ `n` bytes.
+
+**`takeWhile`'s denotation, stated explicitly, because its type is the fact a porter
+needs and the name hides it** (`codec-audit-round-nine` §7.3): the captured value is a
+**`List UInt8`** — `relTakeWhile (p : UInt8 → Bool) : List UInt8 → {n} → Bytes n → Prop`
+— not the paper's `[()]`, a list of units. The paper's `ignore`-shaped capture throws the
+bytes away, which is what makes it lossy; here every captured byte is retained, so the
+relation is a bijection on the run and can be the inside of an `Iso`. That type
+difference _is_ `[D4]`'s whole content, and a porter reproducing "`takeWhile`" by copying
+the paper's `[()]` will get a lossy capture and then wonder why the law does not close. The paper's `ignore` exists for a _length-changing_
 job — collapse an **arbitrary-length** blank run to a fixed representation, i.e. a
 `Bytes m → Bytes n` map with `m ≠ n` — and **core does not reproduce it**. A carrier
 for that is a `Bytes m → Bytes n` `Iso` (or a `List`-shaped normalizer) with its own
@@ -526,7 +535,17 @@ three are not cosmetic and should not be ported as if they were:
 
 **[S3] Zero domain-specific leaf codecs.** Core ships every primitive leaf —
 `byte`, `satisfy` — plus the non-leaf `pure` (a value-equality check, not a
-format), **and one derived byte-run combinator, the `takeWhile` triple**. It ships
+format), **and one derived byte-run combinator, the `takeWhile` triple**.
+
+**The rule covers C as well as Lean, and there is exactly one recorded exception.**
+No per-format C, and no C that parses digits, numbers, fields or format structure
+anywhere in the library. `Codec/`'s directory holds a single file that is not part of
+the library — `Codec/CRef.c`, the bench's hand-written reference parser (moved here from
+the 400-lines-later note by `codec-audit-round-nine` §7.10, so a reader of the rule finds
+its exception in the rule). It _does_ parse bytes and says so in its own header, and it
+is legitimate only because it is **bench-only**: no `@[extern]`, not in the axiom gate,
+not reachable from any `Codec` module — it exists as the honest yardstick for the
+performance claims. Do not add a second such file. It ships
 as `relTakeWhile` / `decodeTakeWhile` / `encodeTakeWhile` (`Codec/Combinators.lean`),
 with `decodeTakeWhile_spec`, `encodeTakeWhile_rel`, `encodeTakeWhile_ne_none` and
 `encodeTakeWhile_of_decode` its laws. **Stated precisely, because an earlier revision
@@ -591,8 +610,10 @@ porter reads to know what they must build — and **the earlier revision called 
 | `empty`, `alt` (`\|`), `seq` (`∗`), `iso`                                            | `Codec/Codec.lean`                       | structural                                 |
 | `count`, `manyUpTo`, `optional`, `maybe`, `choice`, `seqRight`, `seqLeft`, `between` | `Codec/Combinators.lean`                 | **bounded** — hence genuine `Codec` values |
 
-**This is the list a porter must reproduce** — seven `Codec` constructors plus eight
-bounded `Codec`-valued definitions. It is **not** an enumeration of every `Codec`
+**This is the `Codec` list a porter must reproduce** — seven `Codec` constructors plus
+eight bounded `Codec`-valued definitions. (The `Iso` side is separate and is `[S1]`'s
+thirteen combinators, below; an earlier revision said "the list a porter must reproduce",
+which read as the whole surface.) It is **not** an enumeration of every `Codec`
 value in the tree, and the earlier revision's "every `Codec`-valued definition is one
 of these fifteen" was false (`codec-audit-round-five` R6-05): a walk of the compiled
 environment (the method `Axioms.lean`'s definition check uses, not a `grep '^def'`)
@@ -617,18 +638,18 @@ by the input.
 omitted a whole public module. Every file below is public, ships gated laws, and is
 part of what a porter must reproduce:
 
-| module                   | what it is                                                                                              | sample gated laws                                          |
-| ------------------------ | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `Codec/Codec.lean`       | `Bytes n`, `Rel`, the `Codec` AST, `decode`/`encode`                                                    | `Codec.decode_spec`, `Codec.encode_rel`                    |
-| `Codec/Iso.lean`         | `Iso`, the structural isos, `foldl`/`foldr`                                                             | `Iso.unfoldBy_sound`, `Iso.counterMeasureDecreases`        |
-| `Codec/Sound.lean`       | the roundtrip/birid laws, the hypothesis families, `findFrom`                                           | `Codec.roundtrip`, `Codec.huniq_not_derivable`             |
-| `Codec/Combinators.lean` | the bounded `Codec` values, `takeWhile`/`sepBy`/`chainl1`/`chainr1` triples                             | `Codec.decodeTakeWhile_spec`                               |
-| `Codec/Encode.lean`      | the encoder's accumulator lemmas (the encoder's _soundness_ law is `Codec.encode_rel`, in `Sound.lean`) | `Codec.fastEncodeRepeat_eq`                                |
-| `Codec/Decode.lean`      | `decodeFull` (the `Run` combinator)                                                                     | `Codec.decodeFull_spec`                                    |
-| `Codec/Packed.lean`      | Layer 1: `decodeArray`, `decodeWhole`                                                                   | `Codec.decodeArray_eq`                                     |
-| **`Codec/Normal.lean`**  | **`[D4]`'s quotient layer: `Normal`/`Normalizer`/`fill`/`decodeNormal`**                                | `Codec.decodeNormal_encode`, `Codec.decodeNormal_of_fixed` |
-| `Codec/DecodeOne.lean`   | the committed-choice `decodeOne` (sound, completeness open — `[D3]`)                                    | `Codec.decodeOne_mem`, `Codec.decodeArray_unique`          |
-| `Codec/ByteSlice.lean`   | Layer 2: the named C trust seams                                                                        | `Codec.findByte_spec`                                      |
+| module                   | what it is                                                                                                                                                                                            | sample gated laws                                          |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `Codec/Codec.lean`       | `Bytes n`, `Rel`, the `Codec` AST, `decode`/`encode`                                                                                                                                                  | `Codec.decode_spec`, `Codec.encode_rel`                    |
+| `Codec/Iso.lean`         | `Iso`, the structural isos, `foldl`/`foldr`                                                                                                                                                           | `Iso.unfoldBy_sound`, `Iso.counterMeasureDecreases`        |
+| `Codec/Sound.lean`       | the roundtrip/bidir laws, the hypothesis families                                                                                                                                                     | `Codec.roundtrip`, `Codec.huniq_not_derivable`             |
+| `Codec/Combinators.lean` | the bounded `Codec` values and the `takeWhile` triple (no `sepBy`/`chainl1`/`chainr1` symbol exists — the module's own header says so and an earlier row claimed them, `codec-audit-round-nine` §7.8) | `Codec.decodeTakeWhile_spec`                               |
+| `Codec/Encode.lean`      | the encoder's accumulator lemmas (the encoder's _soundness_ law is `Codec.encode_rel`, in `Sound.lean`)                                                                                               | `Codec.fastEncodeRepeat_eq`                                |
+| `Codec/Decode.lean`      | `decodeFull` (the `Run` combinator)                                                                                                                                                                   | `Codec.decodeFull_spec`                                    |
+| `Codec/Packed.lean`      | Layer 1: `decodeArray`, `decodeWhole`                                                                                                                                                                 | `Codec.decodeArray_eq`                                     |
+| **`Codec/Normal.lean`**  | **`[D4]`'s quotient layer: `Normal`/`Normalizer`/`fill`/`decodeNormal`**                                                                                                                              | `Codec.decodeNormal_encode`, `Codec.decodeNormal_of_fixed` |
+| `Codec/DecodeOne.lean`   | the committed-choice `decodeOne` (sound, completeness open — `[D3]`)                                                                                                                                  | `Codec.decodeOne_mem`, `Codec.decodeArray_unique`          |
+| `Codec/ByteSlice.lean`   | Layer 2: the named C trust seams                                                                                                                                                                      | `Codec.findByte_spec`                                      |
 
 **`Iso.law` is a _field_, not a law of this library**, and an earlier revision of the
 table above listed it as one. It is the third field of `structure Iso` — the inverse
@@ -710,6 +731,25 @@ law like the structural isos (`[S1]`).
 repetition denotation is the least relation closed under the `nil`/`cons` rules;
 an induction principle makes "least fixpoint" a theorem rather than a claim.
 
+**One deliberate departure from the paper, recorded here because it is a _choice_ and
+a porter will not guess it** (`codec-audit-round-nine` §7.1). The paper's relation
+closes the `nil` rule at `True` — any string repeats zero times. `codec` closes it at
+**`n = 0`**: `relRepeat R [] n s ↔ n = 0` (`relRepeat_nil`, literally `Iff.rfl`),
+because the substrate's length lives in the **type**. Two consequences, and the first
+is why the choice is worth making:
+
+- it is what makes `relRepeat_induction` an induction on the **list** rather than on
+  the string's length, which is the shape every proof in this family needs;
+- `decodeRepeat_spec` is stated **against this denotation**, so its statement carries
+  the `n = 0` reading. It is unaffected — the law is about the same relation the
+  decoder implements — but a reader comparing it to the paper's `many` should read
+  `n = 0` where the paper reads `True`.
+
+**Warning for a porter: the `[]` case is where this bites.** Attempting the paper's
+`True` closure on a `Bytes n` substrate forces the length out of the type and back in
+by hand, which does not close — the `n = 0` form is not a simplification of it, it is
+the only version the substrate admits.
+
 **[S6] Unbounded `many` is _semantic_, not a `Codec` value — and the primary
 reason is `[D6]`, not laziness.** In the paper `many` is a value because it is a
 polymorphic **function of the `Syntax` class** (§3.4: `many :: Syntax δ ⇒ δ α → δ
@@ -754,9 +794,11 @@ This is the
 same semantic content for `many`/`chainl1`, but it is a _representation_ difference
 (typeclass embedding vs. inductive value), not merely a cosmetic naming change.
 
-Everything else is **kept**, and kept strongly: `Rel` is preserved as the
-_specification_ (decoding is the paper's full relation, nothing narrowed on top),
-and partial encoding is preserved.
+Everything not listed under a `[Dn]` is **kept**, and kept strongly: `Rel` is
+preserved as the _specification_ (decoding is the paper's full relation, nothing
+narrowed on top), and partial encoding is preserved. (The earlier wording — "everything
+else is **kept**" — contradicted `[D7]`, which omits `iterate` entirely, and
+`[S2]`/`[D1]`, which change `token`'s carrier; `codec-audit-round-nine` §7.2.)
 
 ---
 
@@ -1033,8 +1075,11 @@ no `many`/`many1` **value**, only the relation/decoder/encoder triple, and the
 `sepBy` triple has "one or more" (non-empty) semantics. **Bounded** repetition is
 different and _is_ available as a `Codec` value — `count` and `manyUpTo` carry their
 bound (`Nat → Codec α → …`), while `optional` and `maybe` are finite because 0-or-1
-is, not because they take a bound (`#check @Codec.optional` has no `Nat`) — because a
-bound is part of the description; only the unbounded case has no node. A porter should look for these three readings, not for a
+is, not because they take a bound (`#check @Codec.optional` takes no `Nat`) — a bound is
+part of the description, and 0-or-1 needs none. `optional` does take one implicit
+argument, `[DecidableEq α]`, which is an obligation on a caller rather than a bound on
+the description — `[D8]` says so, and an earlier revision of this sentence omitted it
+(`codec-audit-round-nine` §7.9). A porter should look for these three readings, not for a
 `many` object.
 
 ---
@@ -1043,8 +1088,11 @@ bound is part of the description; only the unbounded case has no node. A porter 
 by (1) enforcing the inverse law as a type, (2) resting on bytes, (3) keeping the
 full backtracking semantics, which makes the **soundness/roundtrip** laws
 unconditional (`roundtrip`, `bidir`, `decode_spec`), (4) being strictly isomorphic
-— which _rules out_ the paper's destructive (`ignore`-shaped) constructors rather
-than needing to drop them by hand, and (5) making the description an ordinary value
+— which rules out a lossy **`Iso`**, so the paper's `ignore` could not be an `Iso` here
+at all (it is not that the constructor is banned: a lossy `Codec` value is perfectly
+inhabitable, `Codec.pure x` being the obvious one — what strict isomorphism forbids is
+presenting the lossy direction as one half of a bijection; `codec-audit-round-nine`
+§7.5), and (5) making the description an ordinary value
 you can induct over. Reproduce those first; the rest is bookkeeping you can
 re-derive.
 
@@ -1134,8 +1182,21 @@ differ.** All three are proved (`[propext, Quot.sound]`-only, `#print axioms` ru
 lemma), but an earlier revision said "**none has an in-tree caller**" and that is
 **false for one of them**:
 
-- **`isoConsumesByte` _is_ called in-tree** — by `countSuccConsumesByte` in
-  `Codec/Combinators.lean`. It is exercised by the library's own `count` proofs.
+- **`isoConsumesByte` _is_ called in-tree** — **once**, in
+  `Codec/Combinators.lean`'s `seqCountConsumesByte`. It is exercised by the library's own
+  `count` proofs.
+
+  **And that single call is invisible to every gate.** A provenance/mention count over
+  the tree finds `Codec.isoConsumesByte` in exactly three kinds of place: its own
+  declaration in `Codec/Sound.lean`, that one call site, and the gate's own
+  `gatedNames`/`#print axioms` entries. The gate pins its **footprint**, not its
+  **referrers**, so a refactor that deletes the call site leaves every count green —
+  which is precisely the "check reports nothing" shape this round is named for. The
+  claim is true of the source and unverifiable by proxy, so this note is the check:
+  **re-read the call site by hand** rather than trusting a green build. (Measured in
+  `codec-audit-round-nine` §7.6; no arm asserts it, and that is stated rather than
+  papered over.)
+
 - **`Iso.ofTotal` and `decodeWholeOne` are genuinely caller-free**: no concrete codec
   lives here to call them, by design, and their consumers are the downstream repos.
 

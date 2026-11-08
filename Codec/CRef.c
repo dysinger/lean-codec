@@ -42,10 +42,17 @@
 
 // Decode `a` (a `ByteArray`) as many `Codec.byte`: one value per byte.
 //
-// Returns `some` of a freshly allocated `Array UInt8` of the same length, or
-// `none` if the array is empty (an empty buffer decodes to `some []` in Lean, so
-// the `none` arm is unreachable for this codec — kept so the shape matches a
-// partial decoder and the caller's `match` is real).
+// Always returns `some` of a freshly allocated `Array UInt8` of the same length.
+//
+// There is deliberately **no `none` arm**, and an earlier version of this comment
+// claimed one "kept so the caller's `match` is real" that the code does not contain
+// (`codec-audit-round-nine` §7.11). The reason there is none is the fact: this codec
+// is total. `n == 0` allocates a zero-length array and the loop body never runs, so
+// an empty buffer decodes to `some #[]` — the same value `decodeWhole Codec.byte`
+// returns. Adding a `none` arm would make the reference disagree with the Lean side
+// on exactly the input the bench's `n = 0` cross-check now covers (§1.6), which is
+// why the mismatch between this comment and the code was worth fixing rather than
+// leaving as prose.
 LEAN_EXPORT lean_obj_res codec_cRefByteMany(b_lean_obj_arg a) {
     size_t n = lean_sarray_size(a);
     const uint8_t *src = lean_sarray_cptr(a);
