@@ -262,6 +262,22 @@ This is the same kind of data as `derivedDefPatterns`: a list the partition chec
 audits, so a name here that is not actually a structure-field projection would fail
 rather than silently leave a law un-gated.
 
+**`Codec.fill_fixed` is NOT here, and that decision is recorded here because it cannot
+live at its pin.** A note was first written on the `gatedNames` entry for `fill_fixed`;
+§5.5's regeneration diff showed the `gatedNames` region is **generated wholesale**, so a
+per-name comment there is destroyed by the next `gen-axioms.lean` run. The durable home
+for "why this name is/is not a projection" is this docstring, next to the predicate that
+decides it.
+
+`Codec.fill_fixed` (`Codec/Normal.lean:163`) unwraps an `h : fill nz s = …`-shaped
+hypothesis, so a body-shape-only test is tempted to call it a projection. It is not: its
+operand is `Codec.fill nz s`, a **constructed value**, not something the caller supplied,
+and `isProjConst Codec.fill` is `false` — so `isBareProj`'s operand recursion rejects it
+for the same principled reason it rejects `Codec.bidir` (`codec-gate-denominators` §3.5).
+It has zero *theorem* consumers, but `Bench.lean:103` calls it, so "zero consumers" would
+have been the wrong argument — and it is not the argument used. **It stays gated. Do not
+re-open this without measuring `isProjConst` first.**
+
 **Two directions, two arms** (`codec-audit-round-eight` §2). The *completeness* arm
 (walks the environment, requires every bare projection to be listed) has existed since
 `codec-audit-round-seven` GC-04. The *validity* arm — every **listed** name is itself
@@ -1256,14 +1272,6 @@ def gatedNames : List Lean.Name := [
   ,`Codec.fastEncodeRepeatAcc_full_size
   ,`Codec.fastEncodeRepeatAcc_full_toList
   ,`Codec.fastEncodeRepeat_eq
-  -- **`Codec.fill_fixed` stays gated, and this note is why** (`codec-gate-denominators`
-  -- §3.5). Its body unwraps `h : Codec.fill nz s = s`-shaped data — but its operand is
-  -- `Codec.fill nz s`, a **constructed value**, not a caller-supplied hypothesis, and
-  -- `isProjConst Codec.fill` is `false`, so `isBareProj`'s recursion rejects it for the
-  -- same principled reason it rejects `Codec.bidir`. (It has zero *theorem* consumers,
-  -- but `Bench.lean:103` calls it — so "zero consumers" would have been the wrong
-  -- argument, and it is not the argument used.) Do not re-open this without measuring
-  -- `isProjConst` first.
   ,`Codec.fill_fixed
   ,`Codec.fill_inj
   ,`Codec.fill_raw
