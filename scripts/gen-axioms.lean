@@ -76,7 +76,14 @@ def localIsGeneratedAux (n : Name) : Bool := Id.run do
     -- Found by the completeness arm in `Axioms.lean` (GC-02); missing here until
     -- round eight regenerated. `Suffix.hle : remaining ≤ n` is `Prop`-valued, so its
     -- `@[projection]` theorem is `fun … => self.2`.
-    `Codec.Suffix.hle]
+    `Codec.Suffix.hle,
+    -- **Five captures added by `codec-gate-denominators` §3**, mirrored here in the
+    -- same commit that added them to `CodecAxioms.propProjections`. This is the
+    -- fifth time this file has been bitten by a mirror drifting from the list it
+    -- mirrors (§7.2 above), so the mirror is updated *with* the list, not after
+    -- regenerating and wondering why the gate still pins a projection.
+    `Codec.CandAligned_fst, `Codec.CandAligned_at, `Codec.packedCands_mem,
+    `Iso.apply_eq_some_of_unapply, `Iso.unapply_eq_some_of_apply]
   if propProjections.contains n then return true
   let s := n.components.getLast!.toString
   return s == "eq_def" || s == "inj" || s == "injEq" || s == "sizeOf_spec" ||

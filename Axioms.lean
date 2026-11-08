@@ -137,8 +137,8 @@ failure mode. **It is not soundness.**
 
 | side | count | what it is |
 | --- | --- | --- |
-| gated (`gatedNames`) | **347** | footprint pinned by `#print axioms` |
-| allowlisted (`generatedAuxAllowlist`) | **78** | not a law; reason recorded in place |
+| gated (`gatedNames`) | **342** | footprint pinned by `#print axioms` |
+| allowlisted (`generatedAuxAllowlist`) | **83** | not a law; reason recorded in place |
 | un-gated and unlisted | **0** | a build failure, by construction |
 
 Gated footprint distribution — **generated** from the same `collectAxioms` results the
@@ -148,12 +148,12 @@ Gated footprint distribution — **generated** from the same `collectAxioms` res
 
 | footprint | count |
 | --- | --- |
-| `[propext, Quot.sound]` | 222 |
+| `[propext, Quot.sound]` | 219 |
 | `[propext]` | 92 |
 | `[Quot.sound]` | 4 |
-| axiom-free | 29 |
+| axiom-free | 27 |
 | anything else | 0 |
-| **total** | **347** |
+| **total** | **342** |
 
 `[propext, Classical.choice, Quot.sound]` rows: **0** — every gated law is
 inside the discipline.
@@ -281,7 +281,169 @@ def propProjections : Array Name := #[
   way". The completeness arm is what caught it, which is the argument for having a
   structural check rather than only a list. -/
   `Codec.Suffix.hle,
+  /- **Five captures added by `codec-gate-denominators` §3.** Each body is a selection out
+  of something the *caller* supplied, so each asserts nothing beyond a type a caller
+  already had. The **completeness** arm demanded them here as soon as the predicate was
+  fixed; the **validity** arm checks each entry once it is here. `CandAligned_tail` is
+  deliberately **absent** — its body is `And.casesOn hal fun hlen hpt => ⟨…, …⟩`, a
+  genuine proof about an invariant, and it stays gated (§3.4). -/
+  /- `fun hal => hal.1`, over the `RelAligned`/`LengthDet` pair. -/
+  `Codec.CandAligned_fst,
+  /- `fun hal => hal.2.1`, the same selection one field deeper. -/
+  `Codec.CandAligned_at,
+  /- `c.property.1`: a projection of an *argument*'s proof field. It asserts nothing, but
+  it **names** a membership (`c.val ∈ decodeArray d a k`) that every caller would
+  otherwise spell out, so it earns its keep as documentation rather than as a law.
+  Recorded so a later round does not "fix" it back into the gated set (§3.6). -/
+  `Codec.packedCands_mem,
+  /- `Iso.law i a b` and its twin: a selection out of the *field* of an `Iso` the caller
+  supplied. `Iso.law`'s **body** is what makes these projections while `Codec.roundtrip`
+  is not, even though both are `Iff.mpr`/`Iff.mp` at arity 4 — `isProjConst` reads the
+  body, and the recursion reads what the constant is applied to (§3.2/§3.3). -/
+  `Iso.apply_eq_some_of_unapply,
+  `Iso.unapply_eq_some_of_apply,
 ]
+
+/-! ### `isBareProj` — one definition, read by both directions
+
+`codec-gate-denominators` §2. Two `let rec isBareProj` literals sat five hundred lines
+apart in this file under a comment asserting they were "one definition … so they cannot
+drift apart". `run_cmd` blocks cannot share a `let rec`, so they **were** two copies, and
+the comment was false about the mechanism. They are now one top-level definition, and the
+hoist and the fix are the same edit: hoisting the old bare-`.proj` test and then
+replacing it would have edited the same line twice and revisited every call site.
+
+**Why this predicate and not a head-constant set.** Round ten measured (reproduced in
+`scratch/probe-headset.lean`) that accepting a spine ending in a constant from
+`{And.left, And.right, Iff.mp, Iff.mpr, Prod.fst, Prod.snd}` captures **seven**
+declarations, including `Codec.roundtrip`, `Codec.findFrom_finds`,
+`Iso.apply_eq_some_of_unapply` and `Iso.unapply_eq_some_of_apply` — four genuine laws.
+The distinguishing fact is not the head constant (shared) and not the arity
+(`Iff.mp` is at arity 4 for both `roundtrip`, a *theorem*, and
+`unapply_eq_some_of_apply`, a *field*): it is **the head constant's own body**. Every
+genuine projection here has a `proj` body (`Iso.law`, `And.left`, `Subtype.property`,
+`Codec.Normal.fixed` all peel to `proj#0`), while a proved theorem that merely has an
+`↔`/`∧` *result type* does not (`Codec.bidir`'s body is a `let`;
+`Option.ne_none_iff_exists'` is `Iff.trans`). So the discriminator is the body, and the
+recursion over the selected operand is what separates a projection of a *hypothesis* from
+an application of a *proved theorem*.
+
+**Four recorded blind spots**, all in the safe direction or unreachable:
+
+1. It flags `fun (x : α × β) => x.1` — a projection of an *argument* — as a projection.
+   Safe: the name is demanded in `propProjections` and a human decides. The alternative
+   is a false negative, which un-gates a law.
+2. It does **not** see a *wrapped* projection, `fun self => id self.law`. Measured: zero
+   such theorems exist, so the hole is latent. Closing it would change what "is a
+   projection" means for the completeness arm, which is a separate decision.
+3. Hypothesis-vs-theorem is closed by the operand recursion (above): a proved theorem
+   stops at the first step because its head is not a projection constant.
+4. An **under-applied** projection constant is accepted (`args[i]? = none → true`).
+   Unreachable today, and safe.
+
+**`firstExplicitIdx`, not `args.getLast?`.** The two produce **byte-identical output** on
+today's tree, so the wrong one passes every test — and it is wrong: `CandAligned_at`'s
+operand is `args[2]` while `args[7]` is a different bound variable. An accessor that
+agrees by luck is the `isDerivedDefName` shape again (a rule that is right for the wrong
+reason), which is why the telescope is read rather than the spine indexed from the end.
+"`And.left`/`And.right` at their declared arity" was the other tempting wrong answer: a
+spike measured `And.right` reached at arity **8** in `CandAligned_at` and arity 3
+elsewhere, so "declared arity" is a category mismatch, not a mechanism. -/
+
+/-- Peel `lam` and `mdata` wrappers, which carry no computational content. -/
+def peelLamsMdata : Expr → Expr
+  | .lam _ _ b _ => peelLamsMdata b
+  | .mdata _ b => peelLamsMdata b
+  | e => e
+
+/-- Decompose the outermost application spine as `(head, args)` with `args` left to
+right, so `args[0]` is the head constant's first argument. -/
+partial def appSpine (e : Expr) : Expr × List Expr :=
+  let rec go : Expr → List Expr → Expr × List Expr
+    | .app f a, acc => go f (a :: acc)
+    | h, acc => (h, acc)
+  go e []
+
+/-- Index of the first **explicit** binder in a declared telescope, i.e. which argument
+of the constant is the thing being selected from (the `self`, the `And`, the `iff`).
+Read off the *declared* signature, not the spine — see the section docstring. -/
+def firstExplicitIdx (ty : Expr) : Option Nat :=
+  let rec go : Expr → Nat → Option Nat
+    | .forallE _ _ b bi, i => if bi == .default then some i else go b (i + 1)
+    | _, _ => none
+  go ty 0
+
+/-- Is constant `c` a **projection constant**: does its own body peel to a bare
+`Expr.proj`? This is what separates a structure field from a proved theorem that happens
+to have an `↔`/`∧` in its type. -/
+def isProjConst (env : Environment) (c : Name) : Bool :=
+  match env.find? c with
+  | some (.thmInfo ti) =>
+    match peelLamsMdata ti.value with
+    | .proj _ _ _ => true
+    | _ => false
+  | some (.defnInfo di) =>
+    match peelLamsMdata di.value with
+    | .proj _ _ _ => true
+    | _ => false
+  | _ => false
+
+/-- `True` iff `e` is a proof term whose value is **a selection from something the caller
+supplied**: a bound/free variable, a bare projection, or a projection constant applied to
+something that is itself such.
+
+The `bvar`/`fvar` leaves are the hypothesis case (`CandAligned_fst := fun … hal =>
+hal.left`). The recursion is the field case (`Iso.law i a b` selects from `i`, a
+hypothesis). A proved theorem fails at the first step, because its head is not a
+projection constant — that is the whole distinction. -/
+partial def isProjOfHyp (env : Environment) (e : Expr) : Bool :=
+  let e := peelLamsMdata e
+  match e with
+  | .proj _ _ _ => true
+  | .bvar _ => true
+  | .fvar _ => true
+  | _ =>
+    let (h, args) := appSpine e
+    match h with
+    | .const c _ =>
+      if !isProjConst env c then false
+      else
+        match env.find? c with
+        | none => false
+        | some ci =>
+          match firstExplicitIdx ci.type with
+          | none => true
+          | some i =>
+            match args[i]? with
+            | none => true
+            | some src => isProjOfHyp env src
+    | _ => false
+
+/-- **The one definition of "this body is a bare projection"**, read by both the
+completeness arm and the validity arm. Before this, a name list was the only mechanism;
+now the mechanism is structural and the list is what the mechanism demands.
+
+Blind spots and the reason `firstExplicitIdx` replaces `args.getLast?` are in the section
+docstring above. -/
+def isBareProj (env : Environment) (e : Expr) : Bool :=
+  match peelLamsMdata e with
+  | .proj _ _ _ => true
+  | _ =>
+    let (h, args) := appSpine (peelLamsMdata e)
+    match h with
+    | .const c _ =>
+      if !isProjConst env c then false
+      else
+        match env.find? c with
+        | none => false
+        | some ci =>
+          match firstExplicitIdx ci.type with
+          | none => true
+          | some i =>
+            match args[i]? with
+            | none => true
+            | some src => isProjOfHyp env src
+    | _ => false
 
 /-- Default classifier for non-authorial theorem names: the ones the compiler emits
 for every structure or `def`.
@@ -751,6 +913,27 @@ def generatedAuxAllowlist : Array Name := #[
   `Iso.MeasureDecreasesR.dec,
   `Iso.Unfold.dec,
 
+  -- **Five more of the same classification, found by the fixed predicate**
+  -- (`codec-gate-denominators` §3.4/§3.9). These are *not* `Prop`-valued structure
+  -- fields; they are theorems whose **body** selects a field out of something the
+  -- caller supplied (`hal.1`, `hal.2.1`, `c.property.1`, `(Iso.law i).1`,
+  -- `(Iso.law i).2`). They are here, not in the gated set, because gating them measures
+  -- the shape of a hypothesis rather than any behaviour — the same principle as
+  -- `propProjections`, reached structurally rather than by a name list.
+  --
+  -- `Codec.packedCands_mem` is the one worth a second sentence: it *names* a membership
+  -- (`c.val ∈ decodeArray d a k`) that callers would otherwise spell out, so it earns
+  -- its keep as documentation (§3.6). It still asserts nothing, so it is not a law;
+  -- "useful" and "a law" are different questions and the gate asks the second.
+  --
+  -- `Codec.CandAligned_tail` is deliberately **absent**: its body is
+  -- `And.casesOn hal fun hlen hpt => ⟨…, …⟩`, a real proof about an invariant (§3.4).
+  `Codec.CandAligned_fst,
+  `Codec.CandAligned_at,
+  `Codec.packedCands_mem,
+  `Iso.apply_eq_some_of_unapply,
+  `Iso.unapply_eq_some_of_apply,
+
   -- **The recursion principle of a `def`** (`findFrom`'s structural recursion).
   `Codec.findFrom.induct,
 
@@ -879,8 +1062,6 @@ list to maintain by hand. -/
 def gatedNames : List Lean.Name := [
   `Codec.Bytes.ext
   ,`Codec.Bytes.ext_iff
-  ,`Codec.CandAligned_at
-  ,`Codec.CandAligned_fst
   ,`Codec.CandAligned_tail
   ,`Codec.Fin.cast_val
   ,`Codec.Nat.eq_irrel
@@ -1075,6 +1256,14 @@ def gatedNames : List Lean.Name := [
   ,`Codec.fastEncodeRepeatAcc_full_size
   ,`Codec.fastEncodeRepeatAcc_full_toList
   ,`Codec.fastEncodeRepeat_eq
+  -- **`Codec.fill_fixed` stays gated, and this note is why** (`codec-gate-denominators`
+  -- §3.5). Its body unwraps `h : Codec.fill nz s = s`-shaped data — but its operand is
+  -- `Codec.fill nz s`, a **constructed value**, not a caller-supplied hypothesis, and
+  -- `isProjConst Codec.fill` is `false`, so `isBareProj`'s recursion rejects it for the
+  -- same principled reason it rejects `Codec.bidir`. (It has zero *theorem* consumers,
+  -- but `Bench.lean:103` calls it — so "zero consumers" would have been the wrong
+  -- argument, and it is not the argument used.) Do not re-open this without measuring
+  -- `isProjConst` first.
   ,`Codec.fill_fixed
   ,`Codec.fill_inj
   ,`Codec.fill_raw
@@ -1121,7 +1310,6 @@ def gatedNames : List Lean.Name := [
   ,`Codec.packedCands_consumes
   ,`Codec.packedCands_eq_attach
   ,`Codec.packedCands_length_eq
-  ,`Codec.packedCands_mem
   ,`Codec.prepend_apply
   ,`Codec.prepend_assoc
   ,`Codec.prepend_drop_of_prepend_splice
@@ -1205,7 +1393,6 @@ def gatedNames : List Lean.Name := [
   ,`Codec.uniqSeq_not_congruent
   ,`Codec.uniqSeq_not_relAligned
   ,`Codec.uniqSeq_unambiguous_not_congruent
-  ,`Iso.apply_eq_some_of_unapply
   ,`Iso.bind_eq_some
   ,`Iso.counterMeasureDecreases
   ,`Iso.counterMeasureDecreasesR
@@ -1220,7 +1407,6 @@ def gatedNames : List Lean.Name := [
   ,`Iso.prod_unapply_eq_some
   ,`Iso.subset_apply_eq_some
   ,`Iso.subset_apply_eq_some_iff
-  ,`Iso.unapply_eq_some_of_apply
   ,`Iso.unfoldBy_eq
   ,`Iso.unfoldBy_of_fold
   ,`Iso.unfoldBy_sound]
@@ -1551,8 +1737,8 @@ run_cmd do
   let allow := CodecAxioms.generatedAuxAllowlist.size
   -- Lockstep with "Current state" above.
   let expectedPub := 425
-  let expectedGated := 347
-  let expectedAllow := 78
+  let expectedGated := 342
+  let expectedAllow := 83
   let expectedDefs := 140
   let expectedMentioned := 115
   let expectedDefAllow := 25
@@ -2077,12 +2263,11 @@ have to work out which of the two arms owns the reason. -/
 open Lean Elab Command in
 run_cmd do
   let env ← getEnv
-  let rec isBareProj : Expr → Bool
-    | .lam _ _ b _ => isBareProj b
-    | .mdata _ b => isBareProj b
-    | .app f _ => isBareProj f
-    | .proj _ _ _ => true
-    | _ => false
+  -- **One definition, read by both arms** (`codec-gate-denominators` §2.2). The
+  -- `let rec` that sat here was one of two copies five hundred lines apart, under a
+  -- comment claiming they were one. `CodecAxioms.isBareProj` replaces both, so the
+  -- comment is now backed by their sharing it, not by the sentence asserting it.
+  let isBareProj := CodecAxioms.isBareProj env
   let mut unlisted : Array Name := #[]
   for (nm, ci) in env.constants.toList do
     if ((`Codec).isPrefixOf nm || (`Iso).isPrefixOf nm) && !ci.isUnsafe && !ci.isPartial then
@@ -2148,14 +2333,9 @@ only in a partition failure. -/
 open Lean Elab Command in
 run_cmd do
   let env ← getEnv
-  -- The same predicate the completeness arm uses — one definition of "bare
-  -- projection", read by both directions, so they cannot drift apart.
-  let rec isBareProj : Expr → Bool
-    | .lam _ _ b _ => isBareProj b
-    | .mdata _ b => isBareProj b
-    | .app f _ => isBareProj f
-    | .proj _ _ _ => true
-    | _ => false
+  -- The same predicate the completeness arm uses — now literally the same
+  -- definition (`codec-gate-denominators` §2.2), not a second copy a comment calls one.
+  let isBareProj := CodecAxioms.isBareProj env
   let mut notProj : Array String := #[]
   let mut found : Nat := 0
   -- Count the walk's own view of the set, so the two sides of the claim are
@@ -2237,12 +2417,6 @@ why it was fixed instead of documented.
 /-- info: 'Codec.Bytes.ext_iff' depends on axioms: [Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.Bytes.ext_iff
-/-- info: 'Codec.CandAligned_at' depends on axioms: [propext, Quot.sound] -/
-#guard_msgs in
-#print axioms Codec.CandAligned_at
-/-- info: 'Codec.CandAligned_fst' depends on axioms: [propext, Quot.sound] -/
-#guard_msgs in
-#print axioms Codec.CandAligned_fst
 /-- info: 'Codec.CandAligned_tail' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.CandAligned_tail
@@ -2963,9 +3137,6 @@ why it was fixed instead of documented.
 /-- info: 'Codec.packedCands_length_eq' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.packedCands_length_eq
-/-- info: 'Codec.packedCands_mem' depends on axioms: [propext, Quot.sound] -/
-#guard_msgs in
-#print axioms Codec.packedCands_mem
 /-- info: 'Codec.prepend_apply' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Codec.prepend_apply
@@ -3215,9 +3386,6 @@ why it was fixed instead of documented.
 /-- info: 'Codec.uniqSeq_unambiguous_not_congruent' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.uniqSeq_unambiguous_not_congruent
-/-- info: 'Iso.apply_eq_some_of_unapply' does not depend on any axioms -/
-#guard_msgs in
-#print axioms Iso.apply_eq_some_of_unapply
 /-- info: 'Iso.bind_eq_some' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Iso.bind_eq_some
@@ -3260,9 +3428,6 @@ why it was fixed instead of documented.
 /-- info: 'Iso.subset_apply_eq_some_iff' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Iso.subset_apply_eq_some_iff
-/-- info: 'Iso.unapply_eq_some_of_apply' does not depend on any axioms -/
-#guard_msgs in
-#print axioms Iso.unapply_eq_some_of_apply
 /-- info: 'Iso.unfoldBy_eq' does not depend on any axioms -/
 #guard_msgs in
 #print axioms Iso.unfoldBy_eq
