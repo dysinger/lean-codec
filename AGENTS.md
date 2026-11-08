@@ -497,7 +497,7 @@ hk.symm s)` — and `subst hk; subst ha`.
   `seqRight`, `seqLeft`, `between` shipped with zero theorems while the gate was
   green. There is now a third `run_cmd` requiring every public `def` to be mentioned
   by some gated theorem's **type** or listed in `definitionSurfaceAllowlist` with a
-  reason, and the header asserts the counts (`140 = 111 + 29`). Read it as the proxy
+  reason, and the header asserts the counts (`140 = 115 + 25`). Read it as the proxy
   it is: it cannot be satisfied by _silence_, and it **can** be satisfied vacuously.
   When you add a `def`, still grep for a theorem mentioning it before believing the
   law is worth having.
@@ -849,7 +849,9 @@ in `../lean-basen`. Never "fix" it by editing the importing Lean file.
     remaining numbers as one lane each, and never as a sequence that "improved".
   - The "ideal floor" was quoted as **6 ns/step**, then **16**, then **2.4**, then
     **3.0**, and is **2.46–2.61 warm — recomputed from the two committed burst tables,
-    not remembered** (`codec-audit-round-nine` §2.5 / §2.8) **/ ~15–18 cold**. Every
+    not remembered** (`codec-audit-round-nine` §2.5 / §2.8) **/ 15 cold** — the bare
+    point the summary table's cold cell holds; an earlier revision wrote `~15–18`, whose
+    `18` appears in no cell of any table in either document (review A-7). Every
     earlier spelling of this interval in this file and in the README was a padded guess:
     `~2.5–2.6`, `~2.6–2.7`, `~2.5–2.7` and `~2.6–3.0` were four intervals, **none of which
     contained the committed cells** `2.50 / 2.61 / 2.57 / 2.46`. `codec-audit-round-eight`
@@ -861,7 +863,7 @@ in `../lean-basen`. Never "fix" it by editing the importing Lean file.
     favourable endpoint of the wrong variant. `benchBurst` now reports
     min/median/max over one L1-resident buffer, and 3.0 is its median.
   - The `Array` read was quoted as **3**; the README's stamped tables are the
-    authority, and they give **~64–67 ns per call** (burst, one read per call) with
+    authority, and they give **65–67 ns per call** (burst medians, one read per call) with
     **no** per-step figure — one read per call must not be divided by `n`. An earlier
     revision of this file said "~14–18 (cold, per `n`) / ~78 ns per call", which
     contradicted the README on both numbers and quoted the divided form the README now
@@ -906,9 +908,13 @@ in `../lean-basen`. Never "fix" it by editing the importing Lean file.
   across fourteen recorded values: the ideal floor (6 → 15 → 2.4 → 3.0 → 2.46),
   `packedCands` (91 → 32 → 430 → 3 → 75 → 86, the 3 withdrawn outright), the `Array`
   read (3 → 11–18), and the "~11×" gap derived from a cherry-picked burst round. It
-  said **eight** until `codec-audit-round-eight` S-5 counted: no reading of the
-  parenthetical — 4 quantities, 14 values, 4 explicitly withdrawn — reaches eight, and
-  a remembered count is what this file forbids believing elsewhere. **Two were caught
+  said **eight** until `codec-audit-round-eight` S-5 counted, and the count has been
+  wrong in both directions since: no reading of that parenthetical reaches eight, and
+  round nine's review (A-13) pointed out that "4 explicitly withdrawn" is itself a
+  remembered number — the sentence above marks exactly **one** value as withdrawn. So
+  this bullet now states the list and refuses to state a total: the quantities are the
+  four named, and the values are the ones enumerated in the arrows. A remembered count
+  is what this file forbids believing elsewhere, and that includes this bullet's own. **Two were caught
   by the owner asking why two committed figures could not both be true, not by a
   lane** — so an internal inconsistency between two numbers is itself a legitimate
   check, and "it came from a lane" is not sufficient.
@@ -923,7 +929,9 @@ in `../lean-basen`. Never "fix" it by editing the importing Lean file.
   **Lean ≈ 4× the C parser** (28.6 / 27.0 ns/step vs 7.03 / 6.85), so the "10–21×"
   figures are _Lean-relative_ and must never be quoted as "off C" — that was the
   category error this bullet warned about, committed by omission while no C column
-  existed. Note also the Lean floor (2.5) is _faster_ than the C reference (6.9):
+  existed. Note also the Lean floor (`2.46–2.57`) is _faster_ than the C reference
+  (`6.85–7.03`) — the actual cells, not the `2.5`/`6.9` points an earlier revision
+  quoted, which were cells of no table:
   C spends most of its time materialising an n-element value array, not parsing.
   Before timing anything here read `tasks.md` 6.1b's MEASUREMENT RULES:
   naive timing reliably produces a wrong number (dead-code elimination reporting

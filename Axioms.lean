@@ -985,14 +985,24 @@ def generatedAuxAllowlist : Array Name := #[
   `Iso.unapply_eq_some_of_apply,
 
   -- **`Codec.findFrom.induct` USED TO BE HERE.** `codec-audit-round-nine` §6.4 promoted
-  -- it to `gatedNames`: it is the only allowlisted name with a **non-empty** footprint
-  -- (`[propext]`, measured), and this list's stated property is "not a law ⇒ free of
-  -- axioms", which a footprinted entry falsifies for the group as a whole. The pin is
-  -- now in the generated block below with the other 343. The promotion carries an
-  -- explicit accounting recorded in `CodecAxioms.recursionPrincipleCoverage` rather than
-  -- a silent list edit: a recursion principle naming its own `def` is the mention
-  -- proxy's documented vacuous-satisfaction mode, so which theorems name `Codec.findFrom`
-  -- is now a printed, asserted fact.
+  -- it to `gatedNames` and the pin is in the generated block below with the other 343.
+  --
+  -- **The stated reason had to be corrected twice** (review G-11, then G-08). First it
+  -- said this was "the only allowlisted name with a **non-empty** footprint" — false, and
+  -- the very arm below measures the opposite: **43 of 82** allowlisted theorems are
+  -- footprinted (`39 axiom-free + 24 the permitted pair + 19 other`). Second it said a
+  -- recursion principle naming its own `def` is the proxy's vacuous-satisfaction mode —
+  -- also not what happened here: `findFrom.induct`'s type names no `Codec.findFrom`, and
+  -- six real laws cover it.
+  --
+  -- What is actually true and is the whole justification: **a `Prop`-valued recursion
+  -- principle that consults `propext` is a proof of something, so `[propext]` is a real
+  -- footprint and this group's stated property ("not a law ⇒ free of axioms") was false
+  -- of the group while it lived here.** Promoting it makes the group's reason uniformly
+  -- true instead of mostly true. The accounting lives in
+  -- `promotedPrincipleTargets` and its arm, which asserts that `Codec.findFrom` is
+  -- covered by six statutes rather than by its own principle. Correcting a group's
+  -- *reason* is the point; the group's size moving is a consequence.
 
   -- **`Codec.brecOn.eq` — the compiled-body equation of `def Codec.brecOn`.**
   -- `codec-audit-round-eight` §3.1 rewrote this reason. It used to say this is "the
@@ -2247,6 +2257,16 @@ count rather than as a mystery. Deleting one is the mutation test: remove
 that spelling was reading. -/
 def expectedVocabularyCounts : Nat × Nat × Nat := (142, 0, 143)
 
+/-- The allowlisted theorems' footprint decomposition, **asserted term by term**.
+
+`codec-audit-round-nine` review G-07: the arm printed `39 + 24 + 19` and asserted only
+the sum and `Classical.choice = 0`. A footprinted law moving between the categories —
+`findFrom.induct` re-entering the allowlist, or an `eq_def` gaining a `Classical.choice`
+dependency that `choice` catches — could rotate through `both`/`other` with a green build,
+and the `43 of 82` quoted in the arm's docstring would rot. Read the log line for the
+current values; these mirror it. -/
+def expectedAllowlistFootprints : Nat × Nat × Nat := (39, 24, 19)
+
 /-! **The stated-footprint check**, run on every `lake build` — `codec-audit-round-six`
 §1.1, R7-01/R7-02.
 
@@ -2682,20 +2702,30 @@ run_cmd do
 below uses to ask "is that `def` covered by anything that is **not** its own
 recursion principle?"
 
-Promoting `Codec.findFrom.induct` was not a list edit with a side effect — it is the
-mention proxy's documented failure mode in its purest form: the promoted theorem's
-*type* names `Codec.findFrom`, so a naive promotion would let `findFrom` be "covered by
-its own recursion principle". A recursion principle states that the recursion
-terminates, not what the function computes, so covering a `def` with its own principle
-covers nothing.
+**The reason this promotion is safe is a measurement, and it is NOT the reason an earlier
+revision gave** (`codec-audit-round-nine` review G-08/G-09). That revision said the
+promoted theorem's *type* names `Codec.findFrom`, so the promotion "would let `findFrom`
+be covered by its own recursion principle". **Measured: it does not.** `findFrom.induct`'s
+type mentions `Array`, `Option`, `GetElem?`, `Nat` arithmetic and `Option.none` — no
+`Codec.findFrom` anywhere — and the arm's `principleNames` counter reads `0` on the real
+tree, i.e. the guard was checking a counter that is structurally zero for this entry. The
+same docstring said **five** gated laws name `Codec.findFrom`; the measurement says
+**six**, and it had omitted `findByte_spec`.
 
-**Measured, and the answer is that `findFrom` does not need it**: five gated laws name
-`Codec.findFrom` in their *statements* — `findFrom_finds`, `findFrom_sound`,
-`findFrom_complete`, `findFrom_min`, `findFrom_least` — so the proxy is satisfied by
-real laws and the principle is not load-bearing for coverage at all. That is what the
-arm asserts, and it is why the promotion is safe. If those laws ever went away the
-`coveredBy` count would fall to 0 and the arm would fail rather than let the vacuous
-route open silently. -/
+What is true, and is what the arm actually establishes: `Codec.findFrom` is named in the
+*statements* of six gated laws — `findFrom_finds`, `findFrom_sound`, `findFrom_complete`,
+`findFrom_min`, `findFrom_least` and `findByte_spec` — so the mention proxy is satisfied
+by real laws and the recursion principle is not load-bearing for coverage. The promotion
+is therefore a **footprint-group correction** (a `[propext]`-footprinted theorem does not
+belong in a group whose stated reason is "not a law ⇒ axiom-free"), not a
+vacuity-prevention measure.
+
+**The `coveredBy == 0` guard is kept as a regression net, and labelled as one.** It
+cannot fire for the reason the old text gave, but it *can* fire if those six laws are
+ever removed or restated — at which point `findFrom` would indeed be covered by nothing
+but its own principle, and the assertion becomes load-bearing. Keeping a guard whose
+stated rationale is wrong is how a check rots; keeping it with the corrected rationale is
+how it survives. -/
 def promotedPrincipleTargets : Array (Name × Name) := #[(`Codec.findFrom.induct, `Codec.findFrom)]
 
 /-! ### Every label the vocabulary emits is adjudicated
@@ -2745,7 +2775,7 @@ nonzero footprint in the list at the time).
 
 The arm reports the **decomposition** rather than a single total: axiom-free, the
 two-axiom pair, other permitted footprints, and — separately and fatally —
-`Classical.choice`. Measured when it was written: **44 of 83** allowlisted theorems
+`Classical.choice`. Measured: **43 of 82** allowlisted theorems
 carry a non-empty footprint, all of them `eq_def` unfolders or `_spec`-shaped
 restatements whose proof really does use `propext`, and **zero** depend on
 `Classical.choice`. That is consistent with the list's reason (a `def`'s unfold lemma is
@@ -2783,7 +2813,22 @@ run_cmd do
   let total := CodecAxioms.generatedAuxAllowlist.size
   if free + both + other != total then
     throwError m!"the allowlist's footprint decomposition does not reconstruct its size: {free} + {both} + {other} != {total}"
-  logInfo m!"axiom gate: allowlisted theorems' footprints ({total} entries: {free} axiom-free + {both} the permitted pair + {other} other permitted; 0 depend on `Classical.choice`, asserted)"
+  -- **Each term is asserted, not just their sum** (`codec-audit-round-nine` review G-07).
+  -- The sum identity alone is satisfied by a `[propext]` entry moving from `other` into
+  -- `both` — a real change of what the "not a law" group contains, with a green build and
+  -- a rotted quote in the docstring above. Pinning the three terms makes a re-entry of a
+  -- footprinted law (`findFrom.induct`, say) a build failure rather than a number drift.
+  let (expectFree, expectBoth, expectOther) := CodecAxioms.expectedAllowlistFootprints
+  let mut fdrift : Array String := #[]
+  if free != expectFree then
+    fdrift := fdrift.push s!"axiom-free: constant says {expectFree}, environment has {free}"
+  if both != expectBoth then
+    fdrift := fdrift.push s!"the permitted pair: constant says {expectBoth}, environment has {both}"
+  if other != expectOther then
+    fdrift := fdrift.push s!"other permitted footprints: constant says {expectOther}, environment has {other}"
+  unless fdrift.isEmpty do
+    throwError m!"the allowlist's footprint decomposition moved (update `expectedAllowlistFootprints` in lockstep, and re-read whether the group's reason still holds):\n{String.join (fdrift.toList.map fun s => s!"  {s}\n")}"
+  logInfo m!"axiom gate: allowlisted theorems' footprints ({total} entries: {free} axiom-free + {both} the permitted pair + {other} other permitted; 0 depend on `Classical.choice`; all four asserted)"
 
 /-! ### A promoted recursion principle does not cover its own function
 

@@ -171,18 +171,31 @@ of which values relate to which strings; they do not agree as multisets.
 existed for is not reproduced.**
 
 **Read the second half of that title first, because it is the operative limit.** Both
-mechanisms core ships for capture are **length-preserving**: the `Normal` layer's
-normalizer is `norm : Bytes n → Bytes n`, and `relTakeWhile` relates a run of length
-`n` to a value of _all_ `n` bytes.
+mechanisms core ships for capture are **length-preserving when instantiated at `Bytes n`**
+— and core ships the _layer_, not an instance: `Normal`'s normalizer is **parametric**,
+`norm : S → S` (`Codec/Normal.lean:126`), so an instantiation at `Bytes n` cannot change
+the byte count, and `relTakeWhile` relates a run of length `n` to a value of _all_ `n`
+bytes. (An earlier revision said "the `Normal` layer's normalizer is `norm : Bytes n → Bytes n`",
+naming a concrete function that exists nowhere in the tree — there is no `Normalizer`
+value constructed anywhere, and `grep -rn Normalizer Codec/` finds only the structure and
+the binders of `fill`/`decodeNormal`; `codec-audit-round-nine` review S-3. The parametric
+form is also the stronger claim: it rules out shrinking at _every_ instantiation rather
+than one.)
 
-**`takeWhile`'s denotation, stated explicitly, because its type is the fact a porter
-needs and the name hides it** (`codec-audit-round-nine` §7.3): the captured value is a
-**`List UInt8`** — `relTakeWhile (p : UInt8 → Bool) : List UInt8 → {n} → Bytes n → Prop`
-— not the paper's `[()]`, a list of units. The paper's `ignore`-shaped capture throws the
-bytes away, which is what makes it lossy; here every captured byte is retained, so the
-relation is a bijection on the run and can be the inside of an `Iso`. That type
-difference _is_ `[D4]`'s whole content, and a porter reproducing "`takeWhile`" by copying
-the paper's `[()]` will get a lossy capture and then wonder why the law does not close. The paper's `ignore` exists for a _length-changing_
+**`takeWhile`'s denotation, because its type is the fact a porter needs and the name
+hides it** (`codec-audit-round-nine` §7.3): the captured value is a **`List UInt8`** —
+`relTakeWhile (p : UInt8 → Bool) : List UInt8 → (n : Nat) → Bytes n → Prop`, `n`
+**explicit** — not the paper's `[()]`, a list of units. The paper's `ignore`-shaped
+capture throws the bytes away, which is what makes it lossy; here every captured byte is
+retained. That type difference _is_ `[D4]`'s whole content, and a porter reproducing
+"`takeWhile`" by copying the paper's `[()]` will get a lossy capture and then wonder why
+the law does not close. **What is _not_ claimed**: there is no theorem asserting that the
+run-to-`List UInt8` relation is a bijection and no `Iso` built from `takeWhile`
+(`grep -n 'Iso.*takeWhile' Codec/Combinators.lean` finds none) — an earlier revision said
+"is a bijection on the run and can be the inside of an `Iso`", which is true in substance
+but was stated as though proved (review N-2).
+
+The paper's `ignore` exists for a _length-changing_
 job — collapse an **arbitrary-length** blank run to a fixed representation, i.e. a
 `Bytes m → Bytes n` map with `m ≠ n` — and **core does not reproduce it**. A carrier
 for that is a `Bytes m → Bytes n` `Iso` (or a `List`-shaped normalizer) with its own
@@ -1393,8 +1406,11 @@ prints both figures.
 per-element codec, and quoting a "× off C" ratio against it is a category error:
 `memcpy` moves a byte for ~0.03 ns — ~125 ns per 4 KiB (a bulk copy,
 hardware-accelerated), the figure the scale row below pins; an earlier revision wrote
-`~0.045` here, 48 % off the same section's own `~0.03` (`codec-audit-round-eight`
-S-3, two committed numbers that refuted each other) — while a
+`~0.045` here, **50 % off** the same section's own `~0.03` (`codec-audit-round-eight`
+S-3, two committed numbers that refuted each other; the percentage was stated as 48 % and
+is `(0.045 − 0.03)/0.03 = 50.0 %` — `codec-audit-round-nine` review A-8, which also noted
+that 48 % reproduces only by mixing a rounded `125 ns` with an exact `0.045 × 4096`) —
+while a
 parser does per-element _work_ — read, decide, advance, accumulate. The honest
 reference for a parser is a hand-written C parser over the same bytes. **This repo
 now ships one** (`Codec/CRef.c` + `benchCReference`; see "The hand-written C
@@ -1458,14 +1474,19 @@ document**: the two burst tables give `2.50 / 2.61` and `2.57 / 2.46`, so the in
 that contains every committed value is `2.46–2.61`. The `3.0` upper bound came from the
 same withdrawal as the `2.4` — it is the range of a _varying-load_ session's floor, not
 of the two runs these tables record, and quote-a-range-not-a-point is not a licence to
-quote a range that excludes the points. With `2.46–2.61` the gap to the decode row is
-**~10.5–11.6×** rather than the flat "~10–11×"; the decode row moves with the floor, so
-per-run quotients stay near `10.5`, but the floor's own span must be stated honestly.
+quote a range that excludes the points. With `2.46–2.61` the gap to the decode row spans
+**~10.5–11.5×** (`27.4/2.61 = 10.498` to `28.3/2.46 = 11.504`, both recomputed —
+`codec-audit-round-nine` review A-1, which caught a first attempt at this very sentence
+that wrote `11.6`, a bound no same-run pair produces). The decode row moves with the
+floor, so per-run quotients stay near `10.5`; the floor's own span is what widens the
+range. **The padded-range defect is worth naming explicitly**: it appeared here three
+times in one round (`~2.6–3.0`, `~20–22×`, and then `10.5–11.6`), each time by writing
+one run's value and stretching the interval until it covered the other's.
 
 | shape                                                    | lane                           | steps/burst | cold ns/step                 | warm ns/step (burst median) | note                                       |
 | -------------------------------------------------------- | ------------------------------ | ----------- | ---------------------------- | --------------------------- | ------------------------------------------ |
 | `memcpy` (`ByteArray.copySlice`, `@[extern]`), for scale | `benchCalibration`             | —           | ~0.03                        | —                           | ~125 ns / 4 KiB                            |
-| `Array` indexed read alone                               | `arrayRead`                    | 4096        | see note                     | ~64–67 ns/call              | a single read, not a loop                  |
+| `Array` indexed read alone                               | `arrayRead`                    | 4096        | see note                     | **65–67 ns/call**           | a single read, not a loop                  |
 | **ideal `Id.run` cursor loop** (`arr[k]` + `Nat`)        | `idealCursor` (+`(burst)`)     | 4096        | 15                           | **2.46–2.61**               | **the achievable pure-Lean compute floor** |
 | `decodeArray` single step (`List (α × Nat)` result)      | `decodeArray step`             | —           | see note                     | —                           | the per-step `List`                        |
 | `packedCands` alone (now an `attach.map`)                | `packedCands (per step)`       | —           | 430–650                      | —                           | cold-input dominated; see below            |
@@ -1480,7 +1501,10 @@ the whole `n`-byte buffer; `512` is `n/8`, because those rows decode an **`n/8`-
 window** per call (the decode lanes stagger a window so the input differs per call).
 A `—` means the lane is not a burst. **`arrayRead`'s `4096` does not make its cold
 cell derivable**: it is one read per call, so the steps/burst count is not a divisor —
-see the note below. The `idealCursor` warm cell is `2.46–2.61` here, matching the
+see the note below. Its warm cell is the **median range `65–67`**, not `~64–67`: the two
+run medians are `67` and `65`, and an earlier revision's `64` was a _minimum_ of one run
+mixed into a median range, which is neither the median range nor the full range
+(`63–73`) — `codec-audit-round-nine` review A-10. The `idealCursor` warm cell is `2.46–2.61` here, matching the
 correction above (§2.5); an earlier revision of this row said `~2.5–2.7`, the same
 kind of padded range.
 
@@ -1528,7 +1552,7 @@ two are one-level quantities the table used to divide by `n` anyway:
 
 - **`arrayRead`** performs **one** `getD` per call, and `benchRatio` prints `ns/op`.
   Reporting "11–12 ns/step" means dividing one read by `n` = 4096, i.e. implying a
-  single array read costs ~45,000–49,000 ns against the **~64–67 ns** the burst lane
+  single array read costs ~45,000–49,000 ns against the **65–67 ns** the burst lane
   measures for the identical one-read call — a 700× inversion. The honest figure is the
   burst one, and it is in the next column.
 - **`decodeArray step`** was quoted at cold **12** while `idealCursor` — the bare,
@@ -1556,7 +1580,7 @@ be taken from, and only as a range.
 entry here claimed **3 ns/call on a hot, constant array**. **That claim is deleted,
 not qualified.** It came from a sink of `(…).length` — a constant `1` for a codec with
 one candidate — so the optimiser dropped nearly the whole call; a function that
-indexes an array cannot cost 3 ns in a tree where the bare index measures **~64–67 ns
+indexes an array cannot cost 3 ns in a tree where the bare index measures **65–67 ns
 per call** (the `arrayRead` burst row below). An earlier revision made this argument
 against `~12`, which is the _withdrawn_ per-step division the `arrayRead` note three
 paragraphs down deletes as a 700× inversion (`codec-audit-round-eight` S-1: the
@@ -1589,7 +1613,7 @@ Two calibration notes, both of which cost a wrong figure this session:
   which is exactly the confusion this section exists to keep apart.
 
 **What the numbers say, stated at the strength the evidence supports.** In a warm
-loop the packed decoder is **~27–28 ns/step against a 2.46–2.61 ns/step pure-Lean
+loop the packed decoder is **26.97–28.56 ns/step against a 2.46–2.61 ns/step pure-Lean
 floor** — about **10.5×** — and the whole of that gap is per-step work (a `List`
 cell, the search, the accumulator), not memory bandwidth. The decoder's per-step
 figure is quoted in **one** column only — the warm one. Its cold cell is `see note`
@@ -1601,7 +1625,7 @@ _throughput_ question, which is not the compute floor the warm column measures.
 
 **One thing the table above does _not_ cover — now measured.** `Codec.byte` has
 **exactly one candidate per cursor position**, so `decodeFullArraySearch` never
-iterates on that workload: the ~10–11× is the degenerate `k = 1` case of a
+iterates on that workload: the `~10.5–11.5×` is the degenerate `k = 1` case of a
 backtracking search. The `k > 1` lane prices the difference. Its codec is
 `satisfy (fun _ => true) | satisfy (fun _ => true)` — **two candidates at every
 position**, each consuming one byte and each able to complete the buffer — and the
@@ -1653,15 +1677,19 @@ are in the git history if you need to check them.
   in this document, and `27.4` belongs to the _first_ `bench 4096 4096` table (the
   interleaved lane, run 1) — so the subtraction crossed both tables **and** runs,
   which is exactly what the "same lane in the same run" rule three bullets below
-  forbids. The orphan is deleted (`codec-audit-round-five` R6-08). The ~10–11×
+  forbids. The orphan is deleted (`codec-audit-round-five` R6-08). The `~10.5–11.5×`
   headline is therefore a **lower bound** for a real backtracking codec; the gap to the
-  floor is **~19.6–22.0×** (run 1: `54.9 / 2.50 = 21.96`; run 2: `51.1 / 2.61 = 19.58`,
+  floor is **~19.55–21.96×** (run 1: `54.9 / 2.50 = 21.96`; run 2: `51.1 / 2.61 = 19.5522`,
   both recomputed with `python3` rather than by eye — `codec-audit-round-nine` §2.7). The
-  range is the two run-points, not their midpoint, and it is **wide enough to be
-  falsified by its own lower end**: an earlier revision wrote "~20–22×", whose lower
-  bound `20` **excludes run 2's own quotient of 19.58**. A range that does not contain
-  the values it was derived from is a range written from one run and stretched to fit the
-  other; `~19.6–22.0×` is the two quotients with no padding.
+  earlier form `~19.6–22.0×` was itself a padded range — `19.58 < 19.6` and `21.96 < 22.0`
+  — which is the exact defect the paragraph is about, caught by the round's own review
+  (A-9). The
+  range is the two run-points, not their midpoint, and it must be **wide enough to
+  contain its own endpoints** — an earlier revision wrote "~20–22×", whose lower bound
+  `20` excludes run 2's own quotient of `19.55`, and the form before this one,
+  `~19.6–22.0×`, still excluded both. A range written from one run and stretched to fit
+  the other is this document's recurring defect; `~19.55–21.96×` is the two quotients
+  with no padding at either end.
 - `packedCands` moves **86 → 106 ns/call** for the extra candidate: **~20 ns** of the
   ~24–26 ns per-candidate cost. So **~4–6 ns/step is _not_ `packedCands`** — it is the
   `decodeArray` re-list plus the singleton `PackedCand` allocation in
@@ -1676,10 +1704,12 @@ are in the git history if you need to check them.
 
 **Nothing was optimised as a result.** The task was to price the term _before_
 rewriting it, and the numbers say the rewrite is worth **~4–6 ns/step** of a
-~55 ns/step decode — real, but neither the dominant term nor a change to make on a
-guess. The range is `24–26 − 20 = 4–6`, and its upper end is `26.4 − 20 = 6.4`; an
+**51.1–54.9 ns/step** decode — real, but neither the dominant term nor a change to make
+on a guess. The range is `24–26 − 20 = 4–6`, and its upper end is `26.4 − 20 = 6.4`; an
 earlier revision wrote "~4–7", which no term in the derivation produces
-(`codec-audit-round-six` R7-25).
+(`codec-audit-round-six` R7-25). The decode figure was `~55 ns/step`, a _point_ for a
+two-run range whose lower end is `51.1` — the padded-point form of the same defect the
+ranges above had (review A-11).
 
 ### The hand-written C reference — the yardstick that was missing
 
