@@ -95,6 +95,7 @@ it was accepted (see design D0).
       one landed change**, exactly as the banner warned:
 
       ```
+      (BASELINE — this is the tree *before* round nine; the current numbers are in §9.1.)
       axiom gate: 342 public theorems covered (0 explicit exclusion(s))
       axiom gate: 425 public theorems partitioned, 342 gated and 83 allowlisted
       axiom gate: 140 public definitions covered, 115 mentioned and 25 allowlisted (mention proxy)
@@ -951,25 +952,34 @@ invisible to the proxy), P2-8/9/11/12, N-2/N-4.
 - [x] 9.1 `nix develop --command lake build` — 10 gate lines, zero warnings; record the
       new counts.
 
-      **13 lines** (three arms were added), zero warnings. The counts:
+      **14 lines** (four arms were added by this change, three more by the review round
+      that audited it), zero warnings. The counts:
 
       ```
-      343 public theorems covered (0 explicit exclusion(s))
-      425 public theorems partitioned, 343 gated and 82 allowlisted
-      140 public definitions covered, 115 mentioned and 25 allowlisted (mention proxy)
-      ... 54 removed + 140 kept = 194 candidates ... 6 of 12 remove exactly one; 0 uncounted
-      header numbers verified (425 = 343 + 82; defs 140 = 115 + 25)
-      constant kinds — ... globally 1355 `opaque` (all Lean/stdlib) and 12 `axiom`, all Lean's own
-      stated footprints verified (769 scanned, 150 mention; 166 found = 155 checked + 11 skipped as 0/0/11)
-      ... 142 docstrings contain a backticked axiom-list literal — 140 recognised + 0 blind + 2 exempt
-      propProjections covers every bare projection (9 listed)
-      propProjections entries are all bare projections (9 listed of 12)
-      allowlisted theorems' footprints (82 entries: 39 + 24 + 19; 0 depend on Classical.choice)
-      recursion-principle promotion — findFrom.induct gated, findFrom covered by 6 theorems
-      authored exemption verified (1 entr(ies), all gated; suffix rule would have dropped 0)
+      axiom gate: 345 public theorems covered (0 explicit exclusion(s))
+      axiom gate: 427 public theorems partitioned, 345 gated and 82 allowlisted
+      axiom gate: 140 public definitions covered, 115 mentioned and 25 allowlisted (mention proxy)
+      axiom gate: definitions dropped by the name classifier — 54 removed + 140 kept = 194 candidates, all removals reason-recorded; by pattern (6 of 12 remove exactly one; 0 uncounted): casesOn 8, recOn 8, elim 7, noConfusion 15, noConfusionType 5, ctorIdx 5, ctorElim 1, ctorElimType 1, below 1, brecOn 1, go 1, «term_≫_» 1
+      axiom gate: 12 def-name patterns enumerated, each matching a recorded non-surface declaration; their per-pattern counts are asserted by the def-classifier arm above (54 of 194 candidates removed)
+      axiom gate: header numbers verified (427 = 345 + 82; defs 140 = 115 + 25)
+      axiom gate: constant kinds — thm 771 (gated + allowlisted), def 348 (mention proxy), opaque 0 / axiom 0 (no arm, must be 0), induct/ctor/rec/quot 30 (machinery, not walked); globally 1355 `opaque` and 12 `axiom`, all of them Lean/stdlib — none authored in `Codec`/`Iso`
+      axiom gate: stated footprints verified (771 theorem docstrings scanned, 153 mention a footprint spelling; 170 claim site(s) found = 157 checked + 13 skipped as 0 other-theorem + 0 no-owner + 13 `def`-docstring. Asserted: 157 checked, 153 mentioning, and all three skip causes; printed-only: 771 scanned, 170 found. A narrowed vocabulary moves `mentioning`; a narrowed walk moves `scanned`; and `144` docstrings contain a backticked axiom-list literal at all — `143` recognised + `0` blind + `1` exempt, asserted separately so the vocabulary itself has a denominator)
+      axiom gate: propProjections covers every bare projection (9 listed)
+      axiom gate: propProjections entries are all bare projections (9 listed of 12 bare projections in the namespaces; the rest are the `dec`-suffixed three, classified by suffix)
+      axiom gate: footprint labels — 9 emitted by the classifier, all 9 declared, all 9 classified, and all 9 classes exercised in BOTH directions by a semantics-written probe (so a right-key/wrong-class remap fails)
+      axiom gate: allowlisted theorems' footprints (82 entries: 39 axiom-free + 24 the permitted pair + 19 other permitted; 0 depend on `Classical.choice`; all four asserted)
+      axiom gate: recursion-principle promotion — `Codec.findFrom.induct` is gated, and `Codec.findFrom` is covered by 6 gated theorem(s) that are not its own principle (Codec.findByte_spec, Codec.findFrom_complete, Codec.findFrom_finds, Codec.findFrom_least, Codec.findFrom_min, Codec.findFrom_sound); the principle adds 0 naming(s) and does not carry the coverage
+      axiom gate: authored exemption verified (1 entr(ies), all gated; the suffix rule alone would have dropped 0 of them — 0 means the exemption is currently dead code, which is the measured state and not a defect)
       ```
 
-      The header table moved with the promotion (`342 + 83` → `343 + 82`) and the
+      **Refreshed after the review round's own additions** (`alt_not_functional`,
+      `functional_pure`), and that refresh is worth a note: this block was *stale by one law*
+      in six places for a whole commit, because `8835519` updated `README.md`'s copy and not
+      this one. A pasted gate output is itself a number nothing asserts — `AGENTS.md`'s rule
+      is "read the log line", and this ledger had stopped doing it (review M-5). The block
+      above is now pasted from a green build of the tree as committed.
+
+      The header table moved with the promotion (`342 + 83` → `345 + 82`) and the
       distribution regenerated to `219 + 93 + 4 + 27 = 343`.
 
 - [x] 9.2 `nix develop --command lake build bench`; then run the binary and paste its

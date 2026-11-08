@@ -998,8 +998,13 @@ each concrete carrier" without recording a witness that it is not inherited.
 It is not inherited at **`alt`**. `pure 0` relates `0` to the empty string; `byte` relates
 `0` to `single 0`; their union relates `0` to *both*, with different lengths, so the two
 `Sigma`-packed results cannot be equal. Both leaves are `Functional` (`byte`'s instance is
-`functional_byte` below; `pure`'s is immediate from `Rel_pure`), and the composition is
+`functional_byte` below; `pure`'s is `functional_pure` below that), and the composition is
 not. `[propext]`-only, zero `sorry`.
+
+(`pure`'s instance was originally asserted here as "immediate from `Rel_pure`". It is
+**not** immediate — the two `Sigma`-packed results still need their length equalities
+discharged — so it is now a named, gated lemma rather than a parenthetical. A premise
+stated in prose is a premise nothing checks, which is the finding this section is about.)
 
 **Why it matters rather than being a curiosity.** `decodeArray_unique` and
 `decodeFull_spec` are proved from a `Functional ∧ RelAligned` (or `huniq`) hypothesis, and
@@ -1016,6 +1021,25 @@ theorem alt_not_functional :
   have hEq := hf 0 (emptyBytes : Bytes 0) (single (0 : UInt8)) h1 h2
   simp only [Sigma.mk.injEq] at hEq
   exact absurd hEq.1 (by decide)
+
+/-- `pure x₀` is `Functional`: it relates `x₀` to the empty string and to nothing else, so
+the two `Sigma`-packed results are the same point.
+
+The companion of `alt_not_functional` above: together they say `Functional` is
+*satisfiable* and yet not a congruence for `alt`. The usual two-axiom pair; this docstring
+first stated a narrower footprint and the arm measured the wider one, which is the arm
+doing its job. Zero `sorry`. -/
+theorem functional_pure (x₀ : UInt8) : Functional (Codec.pure x₀) := by
+  intro x n₁ n₂ s₁ s₂ h₁ h₂
+  rw [Rel_pure] at h₁ h₂
+  obtain ⟨hx, hn₁⟩ := h₁
+  obtain ⟨_, hn₂⟩ := h₂
+  subst hx
+  subst hn₁
+  subst hn₂
+  congr 1
+  funext i
+  exact absurd i.2 (Nat.not_lt_zero _)
 
 theorem encode_of_decode {α : Type} (d : Codec α) (hd : Functional d) (x : α)
     {n : Nat} {s : Bytes n} (hdcd : (x, Suffix.empty n) ∈ decode d s) : encode d x = some ⟨n, s⟩ := by

@@ -133,11 +133,11 @@ failure mode. **It is not soundness.**
 
 ## Current state
 
-**426** public theorems are covered, by a partition with no third route:
+**427** public theorems are covered, by a partition with no third route:
 
 | side | count | what it is |
 | --- | --- | --- |
-| gated (`gatedNames`) | **344** | footprint pinned by `#print axioms` |
+| gated (`gatedNames`) | **345** | footprint pinned by `#print axioms` |
 | allowlisted (`generatedAuxAllowlist`) | **82** | not a law; reason recorded in place |
 | un-gated and unlisted | **0** | a build failure, by construction |
 
@@ -148,12 +148,12 @@ Gated footprint distribution — **generated** from the same `collectAxioms` res
 
 | footprint | count |
 | --- | --- |
-| `[propext, Quot.sound]` | 219 |
+| `[propext, Quot.sound]` | 220 |
 | `[propext]` | 94 |
 | `[Quot.sound]` | 4 |
 | axiom-free | 27 |
 | anything else | 0 |
-| **total** | **344** |
+| **total** | **345** |
 
 `[propext, Classical.choice, Quot.sound]` rows: **0** — every gated law is
 inside the discipline.
@@ -1358,6 +1358,7 @@ def gatedNames : List Lean.Name := [
   ,`Codec.foldl_push_data
   ,`Codec.functional_byte
   ,`Codec.functional_iff_relFunctional
+  ,`Codec.functional_pure
   ,`Codec.huniq_byte
   ,`Codec.huniq_not_derivable
   ,`Codec.huniq_not_derivable_full
@@ -1815,11 +1816,12 @@ run_cmd do
   let gated := gatedNames.length
   let allow := CodecAxioms.generatedAuxAllowlist.size
   -- Lockstep with "Current state" above.
-  let expectedPub := 426
-  -- 344 / 82: `codec-audit-round-nine` §6.4 promoted `Codec.findFrom.induct` into the
-  -- gated set, and the round's own review added `Codec.alt_not_functional` (the
-  -- `Functional`-is-not-a-congruence-for-`alt` witness).
-  let expectedGated := 344
+  let expectedPub := 427
+  -- 345 / 82: `codec-audit-round-nine` §6.4 promoted `Codec.findFrom.induct` into the
+  -- gated set, and the round's own review added `Codec.alt_not_functional` and
+  -- `Codec.functional_pure` (the two halves of "`Functional` is satisfiable and not a
+  -- congruence for `alt`").
+  let expectedGated := 345
   let expectedAllow := 82
   let expectedDefs := 140
   let expectedMentioned := 115
@@ -3707,6 +3709,9 @@ why it was fixed instead of documented.
 /-- info: 'Codec.functional_iff_relFunctional' depends on axioms: [propext] -/
 #guard_msgs in
 #print axioms Codec.functional_iff_relFunctional
+/-- info: 'Codec.functional_pure' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in
+#print axioms Codec.functional_pure
 /-- info: 'Codec.huniq_byte' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in
 #print axioms Codec.huniq_byte
