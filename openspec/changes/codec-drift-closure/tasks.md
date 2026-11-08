@@ -44,6 +44,34 @@ Findings: `codec-audit-round-nine` 2.1, 2.3, and `P4-N3` (the open range).
       `ps -A -o %cpu,comm -r | head -5`, recorded in the commit message. If load is
       above ~1 per 4 cores, or the top consumer is not this session, **stop and do
       Group B instead**; leave 1.1–1.6 open with a note saying why.
+
+      **BLOCKED — measured twice this session, and the second time is the decisive one.**
+
+      | when | `uptime` | top consumer |
+      | --- | --- | --- |
+      | session start | `4.89 3.51 2.74` | `lean /tmp/p3.lean`, **99 %**, etime `10:21` |
+      | after Groups B/C/D | `2.51 3.25 3.16` | the *same* `lean /tmp/p3.lean`, **99 %**, etime `10:32` |
+
+      The load fell, but the criterion is **both halves**: load above ~1 per 4 cores (10
+      cores here, so ~2.5 — the second reading sits exactly on it) **and** "the top
+      consumer is not this session". The top consumer is a **stray `lake env lean
+      /tmp/p3.lean` from a previous session**, parent PID 82234, which had been burning
+      one core for ten and a half hours before this session began and was still burning it
+      when the groups above were finished.
+
+      Per the banner: **"never restamp the tables from a loaded run."** A one-core
+      neighbour on a ten-core machine is exactly the perturbation that made round nine's
+      burst rows clock granularity. So 1.1–1.6 stay **open**, and the reason is the host,
+      not the work.
+
+      **Do not kill it to unblock.** It belongs to another session (possibly another
+      agent's live probe); killing it is a decision for the owner, not a way to make a
+      measurement look clean. **And do not work around it** by running the bench anyway and
+      stamping the result — that is the defect this group exists to prevent.
+
+      To resume: when the owner confirms the machine is idle (`uptime` in the `0.3`–`0.8`
+      range on 10 cores, top consumer this session), run 1.2–1.6 exactly as written.
+
 - [ ] 1.2 `lake build bench`, then two runs of `.lake/build/bin/bench 4096 4096`. Save
       both logs. Do not run anything else concurrently.
 - [ ] 1.3 Re-derive **every** cell with `python3` from the printed `ns` and
@@ -308,16 +336,90 @@ comparison, path, and the census-vs-partition cell).
 
 ## 4. [S] Group D — round nine's residue
 
-- [ ] 4.1 Re-read `codec-audit-round-nine/tasks.md` for any box still open that this
+- [x] 4.1 Re-read `codec-audit-round-nine/tasks.md` for any box still open that this
       change's groups do not close, and either close it or record why it stays open.
-- [ ] 4.2 Update `codec-audit-round-nine/reviews/round-ten.md` if any finding id moves.
+
+      **Command, not memory:** `grep -n '^- \[ \]'` over round nine's `tasks.md` returns
+      **exactly five** open boxes, and they are the five this change's `design.md` D4
+      already predicted:
+
+      | round nine box | this change | status |
+      | --- | --- | --- |
+      | `2.1` run the bench on an idle machine | §1.1 | **still open** — host, not work (see §1.1) |
+      | `2.3` update the three tables and move the vintage stamp | §1.5–1.6 | **still open** — same cause |
+      | `10.1` a tenth review round | §6.1 | closed by **not commissioning** one (recorded) |
+      | `10.2` `basen-*` parked | §6.2 | stays parked; not touched |
+      | `10.3` cross-repo consistency | §6.3 | stays deferred |
+
+      **Nothing else is open in round nine.** So this change closes round nine's residue
+      only partly — the two bench boxes remain, and they remain because of `§1.1`'s
+      measured host state rather than because the change ran out of scope. That is a
+      **partial** closure of D4 and is stated as such rather than as a completion.
+
+- [x] 4.2 Update `codec-audit-round-nine/reviews/round-ten.md` if any finding id moves.
       `checks.reviews` reconciles the ids in **both** directions, so a stale row is a
       build failure — the file must stay true.
-- [ ] 4.3 **Archive-ordering check** (`design.md` D5): `codec-audit-round-nine` archives
+
+      **No id moved, and no citation was added or removed** — this change cites no
+      `review P…` ids, it cites `tasks.md` sections. So `round-ten.md` is unchanged, and
+      `checks.reviews` stays green. Verified by running the flake check, not by reading
+      the file: see §5.4.
+
+      **What *did* move, and is worth recording:** `round-ten.md`'s `P4-N3` section says
+      the `26.97–28.56` range "is left open here rather than silently fixed because **the
+      correct fix is a re-run**, and the owner has deferred benchmarking". That is still
+      true — §1 could not take the re-run. So `P4-N3` **stays open**, its row is accurate
+      as written, and `design.md` D4's claim that it "closes with Group A's run" is not
+      yet discharged. Recorded here because D4 reads as though Group A happened.
+
+      **`design.md` D5 additionally has a false premise**, found while doing this task and
+      recorded under §4.3 rather than silently corrected: it says round nine modifies
+      "the same two `codec/axiom-gate` requirements" as this change. Measured, it does
+      not — the two deltas' requirement sets are disjoint. `design.md` is left as authored
+      (it is the plan of record and the correction belongs where the evidence is), with
+      this task as the pointer to it.
+
+- [x] 4.3 **Archive-ordering check** (`design.md` D5): `codec-audit-round-nine` archives
       **first**, because both changes modify the same two `codec/axiom-gate`
       requirements. Before syncing this delta, re-run the scenario-count comparison
       against the then-live spec and record it here. Do not trust D5's authoring-time
       numbers.
+
+      **D5's premise is measurably false, and the conclusion survives on a different
+      reason.** Measured by command this session (`openspec/specs/codec/axiom-gate/spec.md`
+      vs both deltas, scenario titles compared set-wise, not counted):
+
+      | requirement | live | this delta | round nine's delta |
+      | --- | --- | --- | --- |
+      | A stated measurement is a measurement, or it is a classification | 1 | **3** | — |
+      | A figure is committed only with the run that produced it | 5 | **6** | — |
+      | The partition extends to public definitions, not only theorems | 9 | — | **10** |
+      | A structure-field projection is not reported as a law | 2 | — | **3** |
+      | A gate name-list asserts the property it exists to represent | 4 | — | **5** |
+      | An axiom exclusion is explicit and justified in place | 6 | — | **6** |
+
+      **The two changes modify DISJOINT requirements.** D5 says they "both modify the same
+      two `codec/axiom-gate` requirements"; round nine's delta touches four *different*
+      ones and neither of this change's two. So there is **no MODIFIED-block collision and
+      no archive-ordering dependency from the hazard**. D5's stated reason is wrong.
+
+      **What the table does show is a real hazard, of the other kind:** round nine's delta
+      carries **more** scenarios than the live spec has for every requirement it touches
+      (`10 vs 9`, `3 vs 2`, `5 vs 4`, `6 vs 6`) — i.e. **the live spec is already behind
+      round nine's delta.** That is not a collision; it is an un-synced earlier change.
+      It is safe (a superset), and it means round nine's archive will **add** those
+      scenarios rather than drop any.
+
+      **No live scenario is dropped by either delta** — checked set-wise above, `none` in
+      all six rows.
+
+      **Ordering conclusion, on the measured reason:** **archive `codec-audit-round-nine`
+      first anyway**, because it is the earlier change and its delta is un-synced; syncing
+      a later change first would leave the live spec in a state where round nine's
+      archive then re-replaces blocks this change never touched — harmless here, but the
+      rule "earlier change first" is the one that stays true as deltas accumulate. This
+      change's delta is then synced and re-checked. **The check is re-run at archive time,
+      not trusted from this paragraph.**
 
 ## 5. [S] Gates and docs
 
