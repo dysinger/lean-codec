@@ -63,20 +63,119 @@ Findings: `codec-audit-round-nine` 2.1, 2.3, and `P4-N3` (the open range).
 Findings: the header-cell (`769` vs `427`) confusion, the stale gate-output block, and
 the four padded ranges.
 
-- [ ] 2.1 **Decide the mechanism for the generated gate-output block by trying both**
+- [x] 2.1 **Decide the mechanism for the generated gate-output block by trying both**
       (`design.md` D2): (a) a marked region + generator, (b) a check that regenerates
       and diffs. Prefer (b). Record which worked and what broke.
-- [ ] 2.2 Implement it so that the README's quoted block cannot drift from the gate.
+
+      **(b) worked, as D2 predicted**, and it was tried against a live defect rather than
+      a hypothesis. The region markers are kept **as well** (`<!-- BEGIN/END GENERATED
+      gate-lines -->`), which D2 listed as an *alternative*; keeping both is strictly
+      better here because the marker makes the generated span visible in a diff while the
+      check still, and the check is what fails the build. What broke, and had to be fixed
+      twice before it was right:
+
+      - **`--write` was not idempotent.** The first version wrote one newline before the
+        END marker where the committed file had a blank line, so `checks.gate-lines`
+        would have failed on a green tree forever. Root cause: `$(emit_block)` — command
+        substitution — **strips the trailing newline**, so the block has no terminator of
+        its own and the separator must be written explicitly. Found by mutation-testing
+        the check, which is what §2.2 asks for.
+      - **The pre-commit hook reformats markdown**, so the committed README is
+        prettier's, not the generator's. The generator must therefore be idempotent
+        *against prettier's output*, which it now is (verified by running `--write` twice
+        and getting a byte-identical file).
+
+- [x] 2.2 Implement it so that the README's quoted block cannot drift from the gate.
       Mutation-test: change one asserted count in `Axioms.lean` without regenerating, and
       confirm the build fails **naming the block**.
-- [ ] 2.3 Audit every remaining hand-written count in `Axioms.lean`'s header, `README`'s
+
+      **Landed as `scripts/gen-readme-gate.sh` + `checks.gate-lines`.** The generator
+      **asserts its own denominator**: `EXPECTED_GATE_LINES = 14`. Without it, a build
+      that stopped emitting the gate would produce a zero-line block that "matched" a
+      zero-line region — the vacuous-pass shape, in the check that exists to catch
+      vacuous passes.
+
+      **The check was red on the first sandboxed run, correctly**, with a real one-line
+      diff — that failure is what found the idempotence bug above. Green after the fix:
+      `gate-lines check: README's quoted gate block matches a fresh build`.
+
+      **Mutation-tested** (both directions):
+      - perturbing one count in the block (`345` → `344`, a stale hand-edit) makes
+        `--write` produce a diff and the check fail naming the region;
+      - `--write` twice is byte-identical.
+
+      Measured justification, not hypothetical: **3 of the 14 committed lines were stale
+      at HEAD** — `constant kinds`, `stated footprints`, `recursion-principle promotion` —
+      while the prose above them read "pasted verbatim from a green build".
+
+- [x] 2.3 Audit every remaining hand-written count in `Axioms.lean`'s header, `README`'s
       law/table prose, and `flake.nix`. For each, choose **generate**, **assert**, or
       **delete in favour of a pointer**. List them in this file with the choice, because
       the list is the completeness claim.
-- [ ] 2.4 Apply the same to `AGENTS.md`. It is full of numbers ("13 gate lines", "65–67
+
+      The enumeration came from a command, not from reading: an `Axioms.lean` prose scan
+      for bold/quoted/bare numerals outside the generated regions returned **56 sites**
+      (re-measured after the §2.3 edits; the first count, taken before them, was 45 and
+      is not the number to trust).
+      The choices, by site class:
+
+      | site | choice | how |
+      | --- | --- | --- |
+      | `Axioms.lean` header "Current state" tables (427/345/82, 140/115/25) | **assert** | `headerNumbers` `run_cmd` + `expected*` constants; unchanged, and the existing design is the right one |
+      | `Axioms.lean` footprint distribution table | **generate** | `scripts/gen-axioms.lean` (pre-existing) |
+      | `Axioms.lean` census table (771/348/0/0/8/14/8/0) | **assert** | `constantKindCensus` arm |
+      | `Axioms.lean` `expected*` constants (7 of them) | **assert** | they *are* the assertions |
+      | `Axioms.lean` history triples at former lines 176 / 216-218 / 229-230 / 1809-1810 | **delete** | three sets of historical counts (`141/112/29`, `364/292` vs `382/310`, `209/78/4/34=325`) that **no command reproduces**; the lesson is kept, the figures live in git history |
+      | `README` "14 lines of output" block | **generate** | `checks.gate-lines` (§2.2) |
+      | `README` [S1] "19 Iso-valued definitions (13+4+2)" | **assert** | `scripts/count-values.lean` → `checks.values` |
+      | `README` [S3] "fifteen = 7 constructors + 8 bounded" and the four witnesses | **assert** | same script (`12 Codec-valued`, = 8 + 4) |
+      | `README` performance tables | **untouched** | Group A's business (§1); every cell there is already a lane output or marked absent |
+      | `flake.nix` prose | **unchanged** | audited and found to contain **no** hand-written count of the gate's output — its comments describe mechanisms and quote a `nix build` recipe, not a figure. Recorded as a checked row rather than skipped, because "we did not look" and "there was nothing" are different claims |
+
+      **The three deleted triples are the interesting row.** Each was a *historical* count
+      quoted to explain a past defect, and each was unverifiable: `git log -S` on
+      `141 / 112 / 29` finds only the commit that **wrote the sentence**, not a run that
+      produced the numbers. A historical count with no provenance is the padded-range
+      defect wearing a citation, so the sentences now state the lesson and point at git
+      history for the figures. AGENTS.md's own rule — "do not quote a withdrawn figure in
+      the paragraph that forbids quoting withdrawn figures" — applies to never-measured
+      ones too.
+
+      **`scripts/count-values.lean` is a new, needed artifact**: README's two counts were
+      hand-derived paragraphs whose *reproducing command did not exist*. They now do, the
+      predicate is written out (including its removals, `_f`/`_sunfold`/`_unsafe_rec`/
+      `_flat_ctor`, counted so the removal is visible), and the totals are `throwError`ed.
+      Mutation-tested: `expectedIsoValues := 18` fails naming the README claim.
+
+- [x] 2.4 Apply the same to `AGENTS.md`. It is full of numbers ("13 gate lines", "65–67
       ns/call"). Either they are generated, or they are pointers to the file that holds
       the authority, or — where `AGENTS.md` is deliberately a _lessons_ document — they
       are deleted and replaced by the rule.
+
+      Three live errors were found and fixed, and the pattern is worth naming: **two of
+      them were in the section whose job is to stop exactly this.**
+
+      1. **"13 gate lines"** in the verification recipe — the gate prints **14**. A stale
+         count in the one place a reader trusts to tell them what a green build looks like.
+         The comment now says "runs the gate", and the count is the generated README
+         block's business.
+      2. **The round-eight footprint cell** quoted `769 scanned / 144 mentioning / 154 found
+         / 146 checked` as if current; the gate now prints `771 / 153 / 170 / 157`. A cell
+         that presents itself as the current state while holding a previous round's numbers
+         is the `P4-N3` citation defect in table form. It now states the *design* (a
+         denominator, removals by cause, and the vocabulary's own denominator) and refuses
+         to state the quantities.
+      3. **The round-eight landing summary** repeated the same stale quadruple; now a
+         pointer.
+
+      **The rule is added where it can be enforced**, under "Quote the gate, never a number
+      written in a file": that sentence is now backed by `checks.gate-lines` and
+      `checks.values`, so in `lean-codec` it is a build failure rather than advice.
+
+      **Deliberately left as numbers:** the performance attribution bullet's history
+      (`91 → 32 → 430 → 3 → 86`), because it is a *lessons* narrative whose every value is
+      already marked as withdrawn or current, and the `../lean-basen` section, whose
+      numbers are that repo's gate to print, not this file's.
 
 ## 3. [M] Group C — the "method sentence" audit
 
