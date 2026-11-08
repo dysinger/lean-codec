@@ -71,4 +71,13 @@ target cRefO (pkg) : FilePath := do
 
 lean_exe bench where
   root := `Bench
+  /- **The exe root sets its own flag** (`codec-audit-round-nine` §1.8).
+  `-DwarningAsError` on a `lean_lib` rides on the modules that lib *compiles*, so
+  `codec` and `Axioms` are covered — but `Bench.lean` is an `lean_exe` root, not a
+  module of either, so a `sorry` in its own theorems (`foldNorm_idem`, `foldNz`) was
+  a **warning** and the lane still went green. An exe is a separate root and its
+  options are its own; `AGENTS.md`'s "including `bench`" was an over-read of this
+  (corrected there in §8.2). Set here, so the bench's proofs are enforced by the
+  compiler for the same reason the library's are. -/
+  moreLeanArgs := #["-DwarningAsError=true"]
   moreLinkObjs := #[byteSliceO, cRefO]

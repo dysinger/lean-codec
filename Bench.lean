@@ -202,17 +202,43 @@ unsafe def benchBurst {α : Type} [Inhabited α] (label : String) (n : Nat) (bur
   -- **Variant B: the old 8-buffer rotation**, kept so the change is visible rather
   -- than silent, and printed *after* A so the L1-resident row is the headline.
   let rounds : Nat := 5
+  -- **The per-call sink is collected and asserted for non-invariance, not for being
+  -- non-zero** (`codec-audit-round-nine` §1.3). The guard used to be
+  -- `if sink == 0 then throw`, and it is the sharpest instance of this repo's one
+  -- recurring defect: it tests a property that an *invariant, fully folded* loop
+  -- satisfies. Measured, on the buffer this lane was applied to before §1.2: the
+  -- 512-byte windows every multi-call row decodes had `sink = 7` for **every** `j` —
+  -- non-zero, and constant. The `packedCands` lane already asserted
+  -- `eraseDups.length ≥ 2`; this lane, one level up and used by six rows, did not.
+  --
+  -- So the sink is now collected per call index, and two separate things are
+  -- asserted, because they catch different folds:
+  --
+  -- * `eraseDups.length ≥ 2` — the loop was not invariant (a hoisted loop returns
+  --   one value forever, whatever that value is);
+  -- * not *every* value is `0` — a varying sink of all zeros is still a sink the
+  --   elision pass produced, and the old guard was the only thing catching that.
+  --
+  -- The probe runs **outside** the timed window, so asserting does not pollute any
+  -- measured span; it repeats one call per index over a fixed range, which is
+  -- microseconds against a 200-call burst.
+  let sinkProbe (measure : Nat → α → UInt8) (buffers : Array α) : Array UInt8 :=
+    (Array.range 40).map fun j => measure j buffers[j % buffers.size]!
   let runVariant (tag : String) (buffers : Array α) : IO Unit := do
+    let vSink := sinkProbe measure buffers
+    let distinct := vSink.toList.eraseDups
+    if distinct.length < 2 then
+      throw (IO.userError s!"{label} {tag}: the sink is INVARIANT across all {vSink.size} probed call indices (eraseDups = {distinct.length}, value {vSink[0]!}) — the loop was folded or the input does not vary with the call index, so this is not a measurement")
+    if vSink.all (· == 0) then
+      throw (IO.userError s!"{label} {tag}: every sink value is zero — the measured work was elided")
     let mut times : List Nat := []
-    let mut sink : UInt8 := 0
     for i in [0:rounds] do
       let t0 ← IO.monoNanosNow
+      let mut sink : UInt8 := 0
       for j in [0:bursts] do
         sink := sink * 31 + measure (i + j) buffers[(i + j) % buffers.size]!
       let t1 ← IO.monoNanosNow
       times := (t1 - t0) / bursts :: times
-    if sink == 0 then
-      throw (IO.userError s!"{label}: sink is zero — the measured work was elided")
     let mx := times.foldl max 0
     let mn := times.foldl min (times.headD 0)
     let md := medianOf times
@@ -872,8 +898,23 @@ unsafe def benchDecodeShapes (n : Nat) (samples : Nat) (r : Nat) : IO Unit := do
   -- the clock's granularity (41 ns) for a multi-millisecond decode. Measured: the
   -- first version of this lane did exactly that. So every sample rebuilds the
   -- buffer with a different byte at index 0.
+  --
+  -- **The tail is non-uniform, and that is load-bearing** (`codec-audit-round-nine`
+  -- §1.2). It used to be all `1` except index 0, and then a measured **512-byte
+  -- window** (`w = n/8`, what the burst rows decode) had a sink that was the
+  -- *constant* `7` for every call index: `sinkOfList` is `a*31+b` from seed `7`,
+  -- `31a+1 mod 256` has period 16, and 512 is a multiple of 16. The loop was
+  -- invariant, the `sink == 0` guard passed (`7 ≠ 0`), and every committed burst
+  -- median from those rows was reading clock granularity. With a real tail the slide
+  -- at `j*8` changes the *multiset* per call.
+  --
+  -- **Why `% 251` and not some other modulus.** 251 is prime and co-prime to the
+  -- 8-byte stride, so a window at `j*8` is not a rotation of the previous one in any
+  -- residue class (a modulus dividing the stride — 8, 16, 256 — would make the slide
+  -- reproduce the same multiset periodically). It is also a byte-sized prime, so the
+  -- buffer stays well-spread without `UInt8.ofNat` wrapping into a shorter period.
   let bytesAt (j : Nat) : Bytes n :=
-    fun i => if i.val = 0 then UInt8.ofNat (j % 8 + 1) else (1 : UInt8)
+    fun i => if i.val = 0 then UInt8.ofNat (j % 8 + 1) else UInt8.ofNat (i.val % 251)
   let arrayAt (j : Nat) : Array UInt8 := Array.mk (List.ofFn (bytesAt j))
   -- spec: `decodeFull` over `Bytes n`, sunk through its full-consumption value.
   Codec.Bench.benchRatio "decodeFull spec " n samples r
@@ -939,8 +980,16 @@ unsafe def benchDecodeShapes (n : Nat) (samples : Nat) (r : Nat) : IO Unit := do
   Codec.Bench.benchRatio "arrayRead " n samples r
     (fun j => (j % n, arrayAt j))
     readOne
+  -- **The burst index must vary with the call index, and here it also has to vary
+  -- the *value*** (`codec-audit-round-nine` §1.1, found by the §1.3 assertion).
+  -- This `measure` is an indexed read and no fold, so its sink is one byte. The old
+  -- index `j % arr.size` with `j` cycling `0..39` read indices `0..39`, and the
+  -- buffer varied only at index 0 — so the sink was the constant `1`, invariant for
+  -- all 40 probes. A non-uniform *tail* (§1.2) does not reach it, because the tail is
+  -- never read: the fix is the stride. Cycling by 8 spreads the reads across the
+  -- whole buffer, so the value tracks the call index and the row is a measurement.
   let readAt (j : Nat) (arr : Array UInt8) : UInt8 :=
-    readOne (j % (max arr.size 1), arr)
+    readOne ((j * 8) % (max arr.size 1), arr)
   Codec.Bench.benchBurst "arrayRead " n 200 (fun _ => arrayAt 0) readAt
   -- the ideal `Id.run` cursor loop: `arr[k]` + `Nat` cursor, **no allocation**.
   -- Deliberately does NOT build an output array: a `push`-per-element version
@@ -1194,22 +1243,55 @@ reference. The C call is timed through the same `benchBurst` machinery (median o
 rounds, one L1-resident buffer, input varied per call) so the two numbers are
 produced the same way. -/
 unsafe def benchCReference (n : Nat) : IO Unit := do
+  -- The same non-uniform tail as `benchDecodeShapes`' buffer, and for the same
+  -- measured reason (`codec-audit-round-nine` §1.2): with an all-`1` tail the
+  -- 512-byte windows these two lanes decode had a **constant** sink, so neither row
+  -- was a measurement.
   let bytesAt (j : Nat) : Bytes n :=
-    fun i => if i.val = 0 then UInt8.ofNat (j % 8 + 1) else (1 : UInt8)
+    fun i => if i.val = 0 then UInt8.ofNat (j % 8 + 1) else UInt8.ofNat (i.val % 251)
   let arrayAt (j : Nat) : Array UInt8 := Array.mk (List.ofFn (bytesAt j))
   -- **Value check first.** The C must decode to the same list the Lean decoder
   -- returns, for several inputs, before any number from it is trustworthy.
-  for j in [0:4] do
-    let a := arrayAt j
+  --
+  -- **`n = 0` and `n = 1` are in the set deliberately** (`codec-audit-round-nine`
+  -- §1.6): they are the C's two real branches (`n == 0` returns an empty array; the
+  -- loop body runs once), and every other input was size `n` differing only at byte
+  -- 0 — which exercises one path, `width` times. Both decode to *distinct* small
+  -- arrays here, so neither is a duplicate of the other.
+  let xs := [n, n, n, n, 0, 1]
+  -- **The count is asserted** (§1.5): the check that matters is "every intended
+  -- input was compared", not "the loop reached the line after it".
+  let mut checked : Nat := 0
+  for (j, sz) in xs.zipIdx do
+    let a : Array UInt8 :=
+      Array.mk (List.ofFn (fun (i : Fin sz) =>
+        if i.val = 0 then UInt8.ofNat (j % 8 + 1) else UInt8.ofNat (i.val % 251)))
     let ba := ByteArray.mk a
     let c := cRefByteMany ba
     let l := decodeWhole Codec.byte byteConsumesByte a
     match c, l with
-    | some ca, some xs =>
-        if ca.toList != xs then
-          throw (IO.userError s!"C reference disagrees with decodeWhole at input {j}: {ca.size} vs {xs.length} values")
-    | none, none => return ()
-    | _, _ => throw (IO.userError "C reference and decodeWhole disagree on Some/None")
+    | some ca, some ys =>
+        if ca.toList != ys then
+          throw (IO.userError s!"C reference disagrees with decodeWhole at input {j} (n = {sz}): {ca.size} vs {ys.length} values")
+        checked := checked + 1
+    | some ca, none =>
+        throw (IO.userError s!"C reference returned {ca.size} values where decodeWhole returned none (input {j}, n = {sz})")
+    | none, some ys =>
+        -- **`pure ()`, not `return ()`** (`codec-audit-round-nine` §1.5). `return ()`
+        -- inside this `match` exits `benchCReference` itself — it is not `continue` —
+        -- so a single `none` from the C would silently skip the comparison *and both*
+        -- timed lanes below while the process still exited 0. A disagreement is a
+        -- failure; it must be thrown, not stepped over.
+        throw (IO.userError s!"C reference returned none where decodeWhole returned {ys.length} values (input {j}, n = {sz})")
+    | none, none =>
+        -- The one benign arm: both agree there is nothing to decode. `pure ()` continues
+        -- the loop; `return ()` would exit `benchCReference` and skip both timed lanes.
+        -- (Qualified, because an unqualified `pure ()` under `namespace Codec.Bench`
+        -- resolves to the package's own `Codec.pure` constructor.)
+        return ()
+  if checked < 2 then
+    throw (IO.userError s!"C reference value check ran for only {checked} of the {xs.length} intended inputs")
+  IO.println s!"C reference value check: {checked} of {xs.length} inputs agree with decodeWhole"
   -- Same input shape, same burst machinery, both sides.
   -- Both lanes decode a **different `n/8`-byte window** of the same hot buffer per
   -- call, so neither closure is loop-invariant (a fixed input is folded away — the

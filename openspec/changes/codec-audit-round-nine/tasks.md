@@ -54,15 +54,39 @@ it was accepted (see design D0).
 
 ## 0. Preconditions and the things NOT to do
 
-- [ ] 0.1 Confirm the tree is clean and the build is green **before** any edit:
+- [x] 0.1 Confirm the tree is clean and the build is green **before** any edit:
       `git status --porcelain` empty, `nix develop --command lake build` prints its 10
       gate lines. Record the baseline counts (`425 = 347 + 78` theorems,
       `140 = 115 + 25` defs, footprint distribution, claim sites). These are the numbers
       the regenerated header must be checked against, not remembered from this file.
-- [ ] 0.2 Re-read `AGENTS.md`'s "Pause signal" and play the alarm on every pause.
-- [ ] 0.3 **Do not** edit `openspec/changes/archive/**`. This is a new round; the archived
+
+      **BASELINE RECORDED 2026-11-08** (`git status --porcelain` empty at `5b4fd4e`).
+      The build printed **11** info lines (the ledger said "10" — recorded as measured
+      rather than silently reconciled), and the counts this file predicted are **stale by
+      one landed change**, exactly as the banner warned:
+
+      ```
+      axiom gate: 342 public theorems covered (0 explicit exclusion(s))
+      axiom gate: 425 public theorems partitioned, 342 gated and 83 allowlisted
+      axiom gate: 140 public definitions covered, 115 mentioned and 25 allowlisted (mention proxy)
+      axiom gate: definitions dropped by the name classifier — 54 removed + 140 kept = 194 candidates, all removals reason-recorded; by pattern (6 of 12 remove exactly one; 0 uncounted): casesOn 8, recOn 8, elim 7, noConfusion 15, noConfusionType 5, ctorIdx 5, ctorElim 1, ctorElimType 1, below 1, brecOn 1, go 1, «term_≫_» 1
+      axiom gate: 12 def-name patterns enumerated, each matching a recorded non-surface declaration; their per-pattern counts are asserted by the def-classifier arm above (54 of 194 candidates removed)
+      axiom gate: header numbers verified (425 = 342 + 83; defs 140 = 115 + 25)
+      axiom gate: constant kinds — thm 769 (gated + allowlisted), def 348 (mention proxy), opaque 0 / axiom 0 (no arm, must be 0), induct/ctor/rec/quot 30 (machinery, not walked)
+      axiom gate: stated footprints verified (769 theorem docstrings scanned, 144 mention a footprint spelling; 154 claim site(s) found = 146 checked + 8 skipped as 0 other-theorem + 0 no-owner + 8 `def`-docstring. ...)
+      axiom gate: propProjections covers every bare projection (9 listed)
+      axiom gate: propProjections entries are all bare projections (9 listed of 12 bare projections in the namespaces; the rest are the `dec`-suffixed three, classified by suffix)
+      Build completed successfully (15 jobs).
+      ```
+
+      So the baseline is `425 = 342 + 83` (not `347 + 78`), `140 = 115 + 25`, footprint
+      `154 = 146 + 8` with `144` mentioning, and 9 listed projections — the partition
+      numbers of `codec-gate-denominators`, not of this file's pre-re-evaluation text.
+
+- [x] 0.2 Re-read `AGENTS.md`'s "Pause signal" and play the alarm on every pause.
+- [x] 0.3 **Do not** edit `openspec/changes/archive/**`. This is a new round; the archived
       ledgers are history.
-- [ ] 0.4 **Do not** `git stash` / `git reset` / `git checkout -- <file>`. Commit per
+- [x] 0.4 **Do not** `git stash` / `git reset` / `git checkout -- <file>`. Commit per
       group so a revert is never tempting.
 
 ## 1. `Bench.lean` — the burst lane's fold guard cannot fire [M]
@@ -70,41 +94,160 @@ it was accepted (see design D0).
 Findings: N-1 (fold guard), N-3 (C-reference `return ()`), S-4 (bench outside every
 gate), S-5 (`warningAsError` does not cover the exe root).
 
-- [ ] 1.1 Verify the defect before fixing it, so the fix is measured rather than assumed.
+- [x] 1.1 Verify the defect before fixing it, so the fix is measured rather than assumed.
       The mechanism: `bytesAt` is all-`1` except byte 0; `sinkOfList` is `a*31+b` from
       seed `7`; `31a+1` mod 256 has period 16, so `sinkOfList([1]*k) = 7` for
       `k ∈ {16,32,512,4096}`. Print the sink for `j = 0..39` on `idealCursor` and the C
       lane and confirm it is the **single value** `7`. Record the output in this file.
-- [ ] 1.2 Replace the shared buffer's uniform tail with a non-uniform one
+
+      **MEASURED** (`scratch/probe-sink2.lean`, `lake env lean --run`; the rows as the
+      call sites feed them — see 1.4's table for which arguments each site passes):
+
+      ```
+      sinkOfList([1]*k), seed 7:  k=15 →58  k=16 →7  k=32 →7  k=512 →7  k=4096 →7
+        (period 16 confirmed; every multiple of 16 returns the seed)
+      n=4096  w=512  distinct=1  all=[7]        ← decodeFullArray, k=2, C ref, Lean lane
+      n=4096  w=4096 distinct=2  all=[7,135]    ← NOT invariant, but floored at two values
+      n=16384 w=2048 distinct=1  all=[7]
+      arrayRead (reads arr[j % n], ONE byte): distinct=1  all=[1]
+      ```
+
+      **The finding is sharper than the task's premise in one direction and narrower in
+      another, so neither version is carried forward:**
+
+      1. The task said the sink is `7` for `k ∈ {16,32,512,4096}` and predicted the defect
+         for the whole-input rows. Measured, the whole-input rows (`w = n`) are **not**
+         invariant — they alternate `7 / 135` — because 4096 is a multiple of 16 (→ floor
+         `7`) but 4095 is not (→ `135`). So "the sink is the constant `7`" is false of
+         them; what is true is that they cannot take more than **two** values, because the
+         only byte that varies is index 0 and `31^k·(31b+1)` mod 256 is 2-periodic in the
+         byte's contribution for this fold.
+      2. The **many-call** rows — `decodeFullArray`, `decodeFullArray k=2`,
+         `C reference`, `Lean decodeWhole`, all of which measure a **512-byte window**
+         (`w = n/8`) — are **exactly invariant at `7`**, which is the defect as written.
+      3. **`arrayRead` is invariant a fifth way the task did not name, and it is the one
+         the `≠ 0` guard is also blind to by construction:** its `measure` returns *one
+         byte* from `arr[j % n]` with no fold at all, and that byte is `1` for every `j`
+         (index 0, the only varying byte, is reached by `j % 4096` only at `j = 0`).
+         A one-value sink is not made non-invariant by changing the buffer's *tail* — it
+         is fixed by making the **read index** depend on `j`, which is a `measure` fix,
+         not a buffer fix. Recorded here because 1.2's buffer change alone would have left
+         this row silently invariant behind a green assertion, which is the defect class
+         this whole round is about.
+
+- [x] 1.2 Replace the shared buffer's uniform tail with a non-uniform one
       (`UInt8.ofNat (i.val % 251)`; 251 prime so slices at `j*8` differ in multiset).
       Note in the docstring **why 251** — a small prime makes the slide change the
       multiset, which a modulus that divides the stride would not.
-- [ ] 1.3 Replace `benchBurst`'s `if sink == 0` guard with a **non-invariance** assertion:
+- [x] 1.3 Replace `benchBurst`'s `if sink == 0` guard with a **non-invariance** assertion:
       collect the per-`j` sink and require `eraseDups.length ≥ 2`, matching what
       `packedCands` already does. Keep a non-zero check too; they catch different folds.
       The error message must name the row and say the loop was invariant.
-- [ ] 1.4 Audit **every** `benchBurst` call site (`Bench.lean:914, 944, 983, 1022, 1233,
+
+      Landed in `benchBurst.runVariant`: the guard is now
+      `if vSink.eraseDups.length < 2` **and** `if vSink.all (· == 0)` (two separate
+      assertions — an all-zero varying sink is still an elided sink), where `vSink` is the
+      mixed per-`j` sink collected by a pre-pass **outside** the timed window, so
+      asserting does not pollute any measured span.
+
+- [x] 1.4 Audit **every** `benchBurst` call site (`Bench.lean:914, 944, 983, 1022, 1233,
 1234` and any added since) and confirm each now produces a varying sink under 1.3.
       A row that still cannot vary must be documented as such, not silently passed.
-- [ ] 1.5 `benchCReference`: `| none, none => return ()` exits the whole function and
+
+      **The call-site list in this task is short by TWO** — measured
+      (`grep -n 'Bench.benchBurst' Bench.lean`): there are **eight**, at
+      `914, 944, 983, 1022, 1157, 1158, 1233, 1234`. The task enumerated six and was the
+      second under-count of its own kind (`codec-gate-denominators` found the same defect
+      in `benchBurst`'s own enumeration). All eight, with the argument each passes:
+
+      | line | row                     | `n`   | `mk` (buffers)         | verdict after 1.2 + 1.3 |
+      | ---- | ----------------------- | ----- | ---------------------- | ----------------------- |
+      | 914  | `decodeFullArray`       | n/8   | `#[arrayAt 0]`         | varies (was `7`, invariant) |
+      | 944  | `arrayRead`             | n     | `#[arrayAt 0]`         | varies — **required the `readAt` fix**, the buffer alone does not reach it |
+      | 983  | `idealCursor`           | n     | `#[arrayAt 0]`         | varies (`8` values before, more after) |
+      | 1022 | `decodeFullArray k=2`   | n/8   | `#[arrayAt 0]`         | varies (was `7`, invariant) |
+      | 1157 | `packedCands k=1`       | n     | `#[arr]` (own 8-buffer pool) | varies (own buffers, unchanged) |
+      | 1158 | `packedCands k=2`       | n     | `#[arr]` (own 8-buffer pool) | varies (own buffers, unchanged) |
+      | 1233 | `C reference`           | n/8   | `#[arrayAt 0]`         | varies (was `7`, invariant) |
+      | 1234 | `Lean decodeWhole`      | n/8   | `#[arrayAt 0]`         | varies (was `7`, invariant) |
+
+      No row is left documented-as-unable-to-vary: the two `packedCands` rows were already
+      non-invariant (they rotate their own `(k*7 + i) % 251` pool), and `arrayRead`'s was a
+      `measure` defect rather than a buffer one, so it was repaired in `measure`.
+
+- [x] 1.5 `benchCReference`: `| none, none => return ()` exits the whole function and
       silently skips **both** timed lanes. Change to `pure ()` so the loop continues, and
       add a count assertion that the cross-check ran for every intended input.
-- [ ] 1.6 `benchCReference`: add `n = 0` and `n = 1` to the cross-check set — these are the
+
+      **Landed, with one correction measured in the doing.** `pure ()` in that position
+      does not compile: the `for` body under `namespace Codec.Bench` resolves `pure` to
+      the package's own `Codec.pure` **constructor** (`pure ()` is `Codec Unit`, not
+      `IO Unit`), and `IO.pure` / `_root_.pure` are not in scope here either (measured:
+      `Unknown constant `IO.pure``, then `Unknown identifier `_root_.pure``). The form
+      that compiles and has the intended semantics is `return ()` **as a `do`-statement
+      inside a `match` arm** — which does *not* unwind `benchCReference`, unlike
+      `return ()` closing the arm of a non-`do` block. Both wrong spellings were tried
+      against the compiler before this one; recorded so the next reader does not repeat
+      them. Qualified in prose, so the text the task asks for is what landed.
+      The count assertion is `if checked < 2 then throw`, and the cross-check now prints
+      `C reference value check: 6 of 6 inputs agree with decodeWhole`.
+
+- [x] 1.6 `benchCReference`: add `n = 0` and `n = 1` to the cross-check set — these are the
       C's two real branches (`n == 0` and the loop body), and today's four inputs are all
       size 4096 differing only at byte 0.
-- [ ] 1.7 Mutation-test 1.3: temporarily make one row's `measure` ignore `j` (loop
+
+      Landed: the input list is `[n, n, n, n, 0, 1]`; the two new sizes build a buffer from
+      `i % 251` so each input is distinct rather than a duplicate of input 0. Every
+      disagreement arm now `throw`s (a `some`/`none` split can no longer step past), and the
+      printed line reports `6 of 6`.
+
+- [x] 1.7 Mutation-test 1.3: temporarily make one row's `measure` ignore `j` (loop
       invariant) and confirm the build **fails** naming that row. A new check that has not
       been mutated is not a check — this repo's recorded lesson.
-- [ ] 1.8 Add `moreLeanArgs := #["-DwarningAsError=true"]` to `lean_exe bench` so a `sorry`
+
+      **Mutated** (`rootWindow`'s window start pinned to `0`, so `j` is ignored) → build
+      green, run **fails** naming the row:
+
+      ```
+      uncaught exception: decodeFullArray  decodeFullArray  (burst)      : the sink is
+      INVARIANT across all 40 probed call indices (eraseDups = 1, value 203) — the loop
+      was folded or the input does not vary with the call index, so this is not a
+      measurement
+      ```
+
+      Mutation reverted; `Bench.lean` diff re-checked against `HEAD` before committing.
+
+- [x] 1.8 Add `moreLeanArgs := #["-DwarningAsError=true"]` to `lean_exe bench` so a `sorry`
       in `Bench.lean`'s own theorems (`foldNorm_idem`, `foldNz`) is an error, not a
       warning. Then correct `AGENTS.md`'s over-read ("including `bench`") to say the flag
       rides on imported modules and that the exe root sets its own.
-- [ ] 1.9 Settle whether `Bench.lean` belongs in a `checks` entry. It is outside every
+
+      **Mutation-tested:** `foldNorm_idem` stubbed to `sorry` →
+      `error: Bench.lean:53:8: declaration uses `sorry'` / `build failed`, with the trace
+      line showing `lean -DwarningAsError=true … Bench.lean` (so the flag is on the exe
+      root, which is the whole point). Reverted. The `AGENTS.md` correction is §8.2.
+
+- [x] 1.9 Settle whether `Bench.lean` belongs in a `checks` entry. It is outside every
       gate today (`flake.nix` has `checks.{lean,openspec,formatting}` and no bench), so
       the `example` checks in it cannot fail CI. Either add a `checks.bench` that runs the
       binary and asserts its value-check lines are present, or qualify the README/CHANGELOG
       prose to say the checks fire only when run by hand. **Decide on evidence**, and
       record which was chosen and why.
+
+      **Decided on evidence: add the check.** The evidence is the split between what is
+      already gated and what is not. The `example`s in `Bench.lean` are *compile-time*`rfl`
+      checks and are therefore covered by `lake build bench` — and since §1.8 a `sorry`
+      there is an error. But eight runtime checks were reachable from **nothing**:
+      `seam boundaries OK`, `seam aliasing OK`, the two `count step` round trips, the three
+      `… value + bridge OK` lines, `decodeWhole … OK`, `decodeWholeBytes …`, the C-reference
+      `6 of 6` cross-check, and the new `benchBurst` invariance assertions. Qualifying the
+      prose would have left those unreachable and added the sentence "and nothing checks
+      them", which is the class this round exists to close — a check that cannot fail the
+      gate is not a check. So `checks.bench` runs the binary, fails on a non-zero exit, and
+      `grep -q`-pins each value-check line plus `^done$` and a `steps/burst` row count ≥ 16,
+      so a *deleted* check is a build failure rather than a shorter log.
+      Recorded cost: it runs the whole lane, so it is slow in the sandbox; the dev loop stays
+      `lake build bench` + running the binary by hand.
 
 ## 2. Re-benchmark every lane and restamp the tables [M]
 
