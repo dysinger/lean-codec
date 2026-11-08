@@ -848,10 +848,13 @@ in `../lean-basen`. Never "fix" it by editing the importing Lean file.
     figure wearing a compute label (first-touching a 4 KiB array). Treat the
     remaining numbers as one lane each, and never as a sequence that "improved".
   - The "ideal floor" was quoted as **6 ns/step**, then **16**, then **2.4**, then
-    **3.0**, and is **~2.5–2.7 warm (latest burst median; the range spans every committed
-    floor, 2.46–2.67 — `codec-audit-round-eight` S-2 found this file's `~2.5–2.6` and
-    the README's `~2.6–2.7` were two intervals neither of which contained the other's
-    end) / ~15–18 cold**. Each step of that sequence was a
+    **3.0**, and is **2.46–2.61 warm — recomputed from the two committed burst tables,
+    not remembered** (`codec-audit-round-nine` §2.5 / §2.8) **/ ~15–18 cold**. Every
+    earlier spelling of this interval in this file and in the README was a padded guess:
+    `~2.5–2.6`, `~2.6–2.7`, `~2.5–2.7` and `~2.6–3.0` were four intervals, **none of which
+    contained the committed cells** `2.50 / 2.61 / 2.57 / 2.46`. `codec-audit-round-eight`
+    S-2 caught two of them by noticing they disagreed with each other; the arithmetic
+    that settles all four is `min`/`max` over the table, and that is what to re-run. Each step of that sequence was a
     different mistake: the 6 came from a lane that `Array.push`-ed every element
     (floor plus n elements of growth); the 16 is a real number but _cold_; and the
     2.4 was the **minimum of 5 decaying rounds** at an `8n` working set — the most

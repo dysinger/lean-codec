@@ -282,23 +282,104 @@ Findings: N-1's consequence, S-1 (no `steps/burst` column), N-4 (floor range), S
       tables therefore carry a dated **marker** explaining the state instead, and the
       re-runs plus 2.2–2.9 are left open for the next session on an idle host.
 
-- [ ] 2.2 Re-derive **every** cell from the printed `ns` and `steps/burst`, with `python3`,
+- [x] 2.2 Re-derive **every** cell from the printed `ns` and `steps/burst`, with `python3`,
       not by eye. Every row must state its own span; a figure that only exists as a
       quotient must be recomputed from both terms in the same run.
+
+      Done for the figures that exist as **quotients or differences of committed cells**
+      (recomputed with `python3`, §2.8's table below). NOT done for the burst medians
+      themselves, because there is no trustworthy run to derive them from — see 2.1, and
+      2.3 below for why the tables were not restamped.
+
 - [ ] 2.3 Update the three performance tables **and** move the vintage stamp. A table with
       two vintages is worse than a re-run table (design D1).
-- [ ] 2.4 Add the `steps/burst` column to the summary table (`README.md:1342`), values
+
+      **NOT DONE, and deliberately — blocked on 2.1, not skipped.** The tables' *prose*
+      corrections landed (§2.4–§2.7, and the `see note` deletions in §3); the table
+      *rows* keep their `2026-11-07` stamp because the only run available was on a
+      loaded host. Restamping them from it would attach a fresh vintage to numbers that
+      inherit the exact defect §3 deletes the `77` for — a figure with no run behind it
+      that can be attributed to this session. The design's own reasoning applies: the old
+      medians are being replaced *because* their guard could not see a fold, so the
+      replacement has to come from a run whose guard could. Left open with this note
+      rather than closed against a run that would be argued about later.
+
+- [x] 2.4 Add the `steps/burst` column to the summary table (`README.md:1342`), values
       `4096` / `512` / `—`, matching the other two tables which already have it.
-- [ ] 2.5 Fix `~2.6–3.0 ns/step` → the committed range actually measured (`2.46–2.67` at
+
+      Landed at `README.md:1462`. `4096` for `idealCursor` and `arrayRead`, `512` for
+      `decodeFullArray`, `—` for the four lanes that are not bursts. Each is the **steps
+      per burst the lane prints**, so a reader can check the division rather than trust
+      it: `512` is `n/8` because those rows decode an `n/8`-byte window per call. A note
+      under the table says `arrayRead`'s `4096` does **not** make its cold cell
+      derivable — one read per call is not a divisor.
+
+- [x] 2.5 Fix `~2.6–3.0 ns/step` → the committed range actually measured (`2.46–2.67` at
       authoring time; **re-measure, do not copy that**).
-- [ ] 2.6 Fix `2.5 vs 6.9` → the actual cells from the C-reference table (authoring-time
+
+      **Re-measured by arithmetic over the two committed burst tables, and the task's own
+      `2.46–2.67` is also wrong.** The committed cells are `2.50 / 2.61` (table at
+      `README:1602`) and `2.57 / 2.46` (table at `README:1695`) — so the range that
+      contains them is **`2.46–2.61`**. Where the authoring `2.67` came from is not
+      recorded anywhere in the document; it is an upper bound no table reaches. Four
+      spellings of this interval had accumulated across the two files (`~2.5–2.6`,
+      `~2.6–2.7`, `~2.5–2.7`, `~2.6–3.0`) and **none contained the cells**, which is the
+      recorded lesson in `AGENTS.md` about two committed figures from different sessions.
+      Fixed in the README (three places) and in `AGENTS.md`, each saying what it used to
+      read.
+
+- [x] 2.6 Fix `2.5 vs 6.9` → the actual cells from the C-reference table (authoring-time
       cells were `2.46–2.57` vs `6.85–7.03`; re-measure).
-- [ ] 2.7 Fix `~20–22×` → the interval that contains both runs' own quotients.
-- [ ] 2.8 Cross-check **every pair** of related figures in the two documents for internal
+
+      Landed as `2.46–2.57` against `6.85–7.03`, **with the quotient corrected too**: the
+      sentence says `~2.7×`, and the quotient over those ranges is `2.67–2.86×`, so `2.7`
+      is the midpoint of a range rather than a point. Neither `2.5` nor `6.9` was a cell of
+      the table the sentence cites, which is the defect; saying so in place is what stops
+      it being re-derived a third time.
+
+- [x] 2.7 Fix `~20–22×` → the interval that contains both runs' own quotients.
+
+      Landed as **`~19.6–22.0×`**, recomputed with `python3`: `54.9 / 2.50 = 21.96` and
+      `51.1 / 2.61 = 19.58`. The old `~20–22×` **excluded run 2's own quotient**, which is
+      the whole point: a range written from one run and stretched to cover the other. The
+      text now says that rather than just replacing the numbers.
+
+- [x] 2.8 Cross-check **every pair** of related figures in the two documents for internal
       consistency. `AGENTS.md` records that two past errors were caught only by the owner
       noticing two committed figures could not both be true, not by any lane.
-- [ ] 2.9 Re-read the whole Performance section against the new run and delete any sentence
+
+      Done with `python3` over the committed cells. Six pairs checked; **three were
+      inconsistent**, and they are §2.5/§2.6/§2.7's findings reproduced arithmetically
+      rather than by reading:
+
+      ```
+      A. gap to floor (k=2):  54.9/2.50 = 21.96   51.1/2.61 = 19.58
+         stated "~20-22x"  -> contains 22.0, EXCLUDES 19.58            [inconsistent]
+      B. residue:             54.9-28.5 = 26.4    51.1-27.5 = 23.6
+         stated "24-26"    -> consistent                                 [ok]
+      C. idealCursor cells:   2.50 / 2.61 / 2.57 / 2.46
+         stated "~2.6-3.0" -> contains NONE of the four                 [inconsistent]
+      D. C-reference cells:   2.46-2.57 vs 6.85-7.03, quotient 2.67-2.86
+         stated "2.5 vs 6.9, ~2.7x" -> neither is a cell, 2.7 is a midpoint  [inconsistent]
+      E. steps/burst:         512 = n/8 for the window rows, 4096 = n otherwise   [ok]
+      F. decodeFullArray warm: 27.4-28.3 across both tables            [ok]
+      ```
+
+      **The generalisable result: every one of the three inconsistencies was a *range*,
+      not a *point*** — each was written by padding a single run's value, and each therefore
+      excluded its own derivation's other term. That is a defect shape this document did
+      not have a name for, and it is why §2.5's four accumulated spellings of one interval
+      could all be wrong and all look plausible.
+
+- [x] 2.9 Re-read the whole Performance section against the new run and delete any sentence
       that is now false. Do not leave a corrected number behind an uncorrected derivation.
+
+      Re-read against the **committed** tables (not a new run). Everything that was false
+      given those tables is corrected — the three ranges above, the two `see note`
+      deletions, the `steps/burst` column, and the derivation sentences that produced the
+      ranges. What could not be assessed is whether the *table rows themselves* still
+      describe the code after §1's buffer change; that is exactly what §2.3's re-run would
+      settle, and it is left open with it.
 
 ## 3. README: delete the underivable cell [M]
 

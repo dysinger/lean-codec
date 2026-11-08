@@ -1443,25 +1443,43 @@ codec run in a loop over an already-resident buffer, the burst is the relevant o
 **The headline gap is ~10.5×, and it is stated as a range.** Taking the per-step
 medians above: `27.4 / 2.6 ≈ 10.5` in run 1 and `28.3 / 2.7 ≈ 10.5` in run 2 — the
 two runs agree to a tenth because both numbers moved together (they are measured in
-the same process under the same load). Across this session's runs under varying load
-the floor moved between ~2.6 and ~3.0 ns/step with the decode row moving with it, so
-the gap is **~10–11×**. An earlier revision of this section claimed "~11×" from a
-floor of "**2.4 ns/step**"; that 2.4 was the _minimum of 5 decaying rounds_ at an
-`8n` = 32 KiB working set, i.e. the most favourable endpoint of the wrong variant.
-The measured burst **median** at an L1-resident working set is **~2.6–3.0 ns/step**,
-and the gap is **~10–11×**. The correction is small; the reason for it is the point,
-and it is the same defect one layer down from the one the warm/cold split fixed.
+the same process under the same load). An earlier revision of this section claimed
+"~11×" from a floor of "**2.4 ns/step**"; that 2.4 was the _minimum of 5 decaying
+rounds_ at an `8n` = 32 KiB working set, i.e. the most favourable endpoint of the
+wrong variant.
 
-| shape                                                    | lane                           | cold ns/step                 | warm ns/step (burst median) | note                                       |
-| -------------------------------------------------------- | ------------------------------ | ---------------------------- | --------------------------- | ------------------------------------------ |
-| `memcpy` (`ByteArray.copySlice`, `@[extern]`), for scale | `benchCalibration`             | ~0.03                        | —                           | ~125 ns / 4 KiB                            |
-| `Array` indexed read alone                               | `arrayRead`                    | see note                     | ~64–67 ns/call              | a single read, not a loop                  |
-| **ideal `Id.run` cursor loop** (`arr[k]` + `Nat`)        | `idealCursor` (+`(burst)`)     | 15                           | **~2.5–2.7**                | **the achievable pure-Lean compute floor** |
-| `decodeArray` single step (`List (α × Nat)` result)      | `decodeArray step`             | see note                     | —                           | the per-step `List`                        |
-| `packedCands` alone (now an `attach.map`)                | `packedCands (per step)`       | 430–650                      | —                           | cold-input dominated; see below            |
-| `decodeFullArrayRoot` (packed `Array` + `Nat` cursor)    | `decodeFullArray` (+`(burst)`) | see note                     | **~27.4–28.3**              | the whole decode, one candidate searched   |
-| `decodeFullFastRoot` (`Bytes`/`Suffix` cursor)           | `decodeFullFast`               | see note                     | —                           | the `Suffix`/`bdrop` path                  |
-| `decodeFull` (the `Bytes n` specification itself)        | `benchDecodeFull`              | no per-step figure committed | —                           | super-linear: re-walks the suffix per step |
+**The floor is quoted here as `2.46–2.61 ns/step`, which is the range the committed
+tables actually contain** (`codec-audit-round-nine` §2.5). An earlier revision of this
+paragraph said `~2.6–3.0`, and **neither endpoint is a cell of any table in this
+document**: the two burst tables give `2.50 / 2.61` and `2.57 / 2.46`, so the interval
+that contains every committed value is `2.46–2.61`. The `3.0` upper bound came from the
+same withdrawal as the `2.4` — it is the range of a _varying-load_ session's floor, not
+of the two runs these tables record, and quote-a-range-not-a-point is not a licence to
+quote a range that excludes the points. With `2.46–2.61` the gap to the decode row is
+**~10.5–11.6×** rather than the flat "~10–11×"; the decode row moves with the floor, so
+per-run quotients stay near `10.5`, but the floor's own span must be stated honestly.
+
+| shape                                                    | lane                           | steps/burst | cold ns/step                 | warm ns/step (burst median) | note                                       |
+| -------------------------------------------------------- | ------------------------------ | ----------- | ---------------------------- | --------------------------- | ------------------------------------------ |
+| `memcpy` (`ByteArray.copySlice`, `@[extern]`), for scale | `benchCalibration`             | —           | ~0.03                        | —                           | ~125 ns / 4 KiB                            |
+| `Array` indexed read alone                               | `arrayRead`                    | 4096        | see note                     | ~64–67 ns/call              | a single read, not a loop                  |
+| **ideal `Id.run` cursor loop** (`arr[k]` + `Nat`)        | `idealCursor` (+`(burst)`)     | 4096        | 15                           | **2.46–2.61**               | **the achievable pure-Lean compute floor** |
+| `decodeArray` single step (`List (α × Nat)` result)      | `decodeArray step`             | —           | see note                     | —                           | the per-step `List`                        |
+| `packedCands` alone (now an `attach.map`)                | `packedCands (per step)`       | —           | 430–650                      | —                           | cold-input dominated; see below            |
+| `decodeFullArrayRoot` (packed `Array` + `Nat` cursor)    | `decodeFullArray` (+`(burst)`) | 512         | see note                     | **~27.4–28.3**              | the whole decode, one candidate searched   |
+| `decodeFullFastRoot` (`Bytes`/`Suffix` cursor)           | `decodeFullFast`               | —           | see note                     | —                           | the `Suffix`/`bdrop` path                  |
+| `decodeFull` (the `Bytes n` specification itself)        | `benchDecodeFull`              | —           | no per-step figure committed | —                           | super-linear: re-walks the suffix per step |
+
+**The `steps/burst` column was added here** (`codec-audit-round-nine` §2.4) so this
+table says what the other two already said: the burst rows are `n` calls inside one
+buffer, and whether that is `4096` or `512` decides what "per step" means. `4096` is
+the whole `n`-byte buffer; `512` is `n/8`, because those rows decode an **`n/8`-byte
+window** per call (the decode lanes stagger a window so the input differs per call).
+A `—` means the lane is not a burst. **`arrayRead`'s `4096` does not make its cold
+cell derivable**: it is one read per call, so the steps/burst count is not a divisor —
+see the note below. The `idealCursor` warm cell is `2.46–2.61` here, matching the
+correction above (§2.5); an earlier revision of this row said `~2.5–2.7`, the same
+kind of padded range.
 
 All cold cells except the last are from the same two-run session and move with load;
 they are order-of-magnitude, not point measurements.
@@ -1568,7 +1586,7 @@ Two calibration notes, both of which cost a wrong figure this session:
   which is exactly the confusion this section exists to keep apart.
 
 **What the numbers say, stated at the strength the evidence supports.** In a warm
-loop the packed decoder is **~27–28 ns/step against a ~2.5–2.7 ns/step pure-Lean
+loop the packed decoder is **~27–28 ns/step against a 2.46–2.61 ns/step pure-Lean
 floor** — about **10.5×** — and the whole of that gap is per-step work (a `List`
 cell, the search, the accumulator), not memory bandwidth. The decoder's per-step
 figure is quoted in **one** column only — the warm one. Its cold cell is `see note`
@@ -1633,9 +1651,14 @@ are in the git history if you need to check them.
   interleaved lane, run 1) — so the subtraction crossed both tables **and** runs,
   which is exactly what the "same lane in the same run" rule three bullets below
   forbids. The orphan is deleted (`codec-audit-round-five` R6-08). The ~10–11×
-  headline is therefore a **lower bound** for a real backtracking codec; the gap to the floor is **~20–22×** (run 1: `54.9 / 2.50 = 22.0`; run 2:
-  `51.1 / 2.61 = 19.6`). The range is the two run-points, not their midpoint: an earlier
-  revision said "~20×", which is true of run 2 only.
+  headline is therefore a **lower bound** for a real backtracking codec; the gap to the
+  floor is **~19.6–22.0×** (run 1: `54.9 / 2.50 = 21.96`; run 2: `51.1 / 2.61 = 19.58`,
+  both recomputed with `python3` rather than by eye — `codec-audit-round-nine` §2.7). The
+  range is the two run-points, not their midpoint, and it is **wide enough to be
+  falsified by its own lower end**: an earlier revision wrote "~20–22×", whose lower
+  bound `20` **excludes run 2's own quotient of 19.58**. A range that does not contain
+  the values it was derived from is a range written from one run and stretched to fit the
+  other; `~19.6–22.0×` is the two quotients with no padding.
 - `packedCands` moves **86 → 106 ns/call** for the extra candidate: **~20 ns** of the
   ~24–26 ns per-candidate cost. So **~4–6 ns/step is _not_ `packedCands`** — it is the
   `decodeArray` re-list plus the singleton `PackedCand` allocation in
@@ -1710,8 +1733,11 @@ defect (`R6-26`) that was fixed in the table above while this one was being writ
    this repo's own floor_, and quoting them as "off C" was the category error
    `AGENTS.md` warned about, committed by omission — there was no C column, so the
    Lean-relative number was the only one available and it read as an absolute.
-2. **The Lean floor is itself ~2.7× _faster_ than the C reference** (2.5 vs 6.9
-   ns/step). That is not a paradox and not a win: the floor sums bytes and allocates
+2. **The Lean floor is itself ~2.7× _faster_ than the C reference** (`2.46–2.57`
+   against `6.85–7.03` ns/step, the actual cells — `codec-audit-round-nine` §2.6: an
+   earlier revision wrote `2.5 vs 6.9`, and **neither is a cell of the table this
+   sentence cites**; the quotient runs `2.67–2.86×`). That is not a paradox and not a
+   win: the floor sums bytes and allocates
    nothing, while C allocates an `n`-element value array and boxes a value per byte
    to hand back the same list shape the Lean decoder returns. It is a useful
    reminder that most of the C reference's time is _materialisation_, not parsing —
