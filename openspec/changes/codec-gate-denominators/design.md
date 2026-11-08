@@ -124,3 +124,72 @@ Not in this change:
   is about the class.
 - Any `Codec` declaration. This change touches gate machinery, `AGENTS.md`, and the
   spec.
+
+## D7 — The spike: the predicate is solved, and it corrected three of my tasks
+
+A worker spiked task §3 against the real environment before any implementation. Full
+report at `/tmp/spike-isBareProj.md` (**not durable — the result is transcribed here and
+in tasks §2b so it survives a reboot**).
+
+**Result: implementable, with no name list.** The predicate is three parts:
+
+1. peel `lam`/`mdata`;
+2. decompose the outermost application spine;
+3. accept a bare `.proj`, **or** a constant whose own body peels to a bare `Expr.proj`
+   (a _projection constant_) applied, at its **first explicit declared argument**, to
+   something recursively a projection of a bound/free variable.
+
+**Why it separates a hypothesis from a theorem — the thing D3 could not state.** Measured:
+every genuine projection in this library has a `proj` body (`Iso.law`, `And.left`,
+`Subtype.property`, `Codec.Normal.fixed` all peel to `proj#0`), while every proved theorem
+that merely has an `↔`/`∧` **result type** does not (`Codec.bidir`'s body is a `let`;
+`Option.ne_none_iff_exists'` is `Iff.trans`). So the discriminator is **the head constant's
+own body**, not its name and not the arity.
+
+Independently re-run against the five acceptance criteria before being written down:
+
+```
+Codec.roundtrip              false   <- the one that matters
+Codec.findFrom_finds         false
+Codec.CandAligned_fst        true
+Codec.CandAligned_at         true
+Codec.CandAligned_tail       false   <- a real proof; stays gated
+Codec.fill_fixed             false
+Codec.packedCands_mem        true
+Iso.apply_eq_some_of_unapply true
+Iso.unapply_eq_some_of_apply true
+```
+
+Exactly **five** new captures, all genuine; nothing already allowlisted moves.
+
+**Three tasks I had written were wrong, corrected in place:**
+
+| task | what I had written                                        | measured                                                                                                                                   |
+| ---- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| 3.3  | offer "`And.left`/`And.right` at their declared arity"    | `And.right` is reached at arity **8** and **3**; "declared arity" is a category mismatch, not a mechanism                                  |
+| 2.1  | hoist "with the body of the existing predicate unchanged" | the hoist and the fix are **one edit**; splitting them edits the same line twice                                                           |
+| 3.5  | `fill_fixed` "has **zero** consumers"                     | `Bench.lean:103` calls it. It still stays gated, but for the _principled_ reason: its operand is a **constructed** value, not a hypothesis |
+
+**A trap worth carrying forward:** `args.getLast?` produces **byte-identical output** to
+the correct `firstExplicitIdx` accessor on today's tree. It passes every test and is
+wrong — `CandAligned_at`'s operand is `args[2]` while `args[7]` is a different bound
+variable. This is the `isDerivedDefName` shape (a rule that agrees by luck) and is now a
+docstring requirement (task 2b.3).
+
+## D8 — What the spike did NOT prove, and the first thing the next session must do
+
+The spike proves **task §3** (the predicate). It does **not** touch **task §1**, which is
+where the _denominator_ half of the rule actually lives:
+
+- 1.1/1.2 — the per-pattern decomposition of the def classifier, and
+- 1.3/1.4 — splitting the footprint arm's `skipped = 8` by cause.
+
+Those are unspiked. They are also the simpler half: both are "accumulate a
+`List (Name × Nat)` alongside an existing walk and assert the tuple", the pattern
+`expectedFootprintCounts` already establishes. The risk there is not _whether_ it works
+but whether the asserted counts are stable — i.e. whether the walk is deterministic. A
+spike is not required, but **the first implementation step is to print the decomposition
+before asserting it**, so the numbers are observed rather than guessed.
+
+**Stated plainly for the next session: the predicate is solved; the decomposition is not
+built.** Start at task 1.1, not task 2.

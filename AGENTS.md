@@ -2,40 +2,48 @@
 
 Guidance for AI coding agents working in this repository.
 
-> ## START HERE: `openspec list --json`, then that change's `tasks.md`
+> ## START HERE: run `openspec list --json`, then read that change's `tasks.md` banner
 >
-> **There is no open change in `codec`.** `codec-audit-round-eight` closed **22/22** and
-> archived 2026-11-07 as
-> `openspec/changes/archive/2026-11-07-codec-audit-round-eight/`. The only open changes
-> are `basen-uppercase-prepass` (0/20) and `basen-nat-iso` (0/18, blocked), and **both
-> are PARKED by the owner** pending a library-division decision — do not start them.
+> **Two `codec` changes are open, and there is a required order between them.**
 >
-> **So: if `openspec list` shows nothing open in `codec`, there is no queued `codec`
-> work.** Do not invent some from this file, and do not reopen an archived change.
-> The next `codec` change is either a ninth review round the owner commissions, or
-> nothing. That is a decision, not a backlog item.
+> 1. **`codec-gate-denominators` — DO THIS FIRST.** 0 tasks done, nothing implemented.
+>    Establishes the **arm obligation**: every diagnostic arm reports its _denominator_
+>    and its _removals decomposed by cause_, both asserted. Its `isBareProj` predicate is
+>    **spiked and solved** (design D7, tasks §2b) — do not re-derive it. **Begin at
+>    task 1.1**, not task 2.
+> 2. **`codec-audit-round-nine`** — 0 tasks done. Carries the ninth review round's
+>    findings. **Three of its tasks are known wrong** and its `tasks.md` banner says which
+>    (6.1(c), 6.2/D3, 6.3) — a tenth round measured them against the tree. Its gate work
+>    depends on (1) landing first.
 >
-> **This box has gone stale eleven times.** It said "§1.5 next" long after §1.5–§1.10
-> landed; said "no open change" while `round-four` was open; still named `round-four`
-> after it archived; still named `round-five` after it archived; said "no change is
-> open" with `round-six` open; named `round-six` at 6/32 while it ran; said "no change
-> is open" with `basen-nat-iso` open; named `basen-nat-iso` alone after a second change
-> was authored; said "no change in `codec` is open" for the hour before `round-eight`
-> was authored; and said "0/22" for the whole session in which `round-eight` was being
-> finished. **Believe the command, never this box.** It names the _change_, never a
-> task, and right now it deliberately names **none**.
+> The two `basen` changes (`basen-uppercase-prepass`, `basen-nat-iso`) are **PARKED by
+> the owner** pending a library-division decision. Do not start them.
+>
+> **This box has gone stale twelve times.** It has named a landed change, denied an open
+> one, and undercounted tasks, repeatedly. **Believe the command, never this box.** It
+> names the _change and the order_, never a task count.
+>
+> ### Why the ninth and tenth rounds exist, in one paragraph
+>
+> Ten adversarial rounds have produced **zero soundness defects** — no
+> `Classical.choice`, no `sorry`, every law `[propext, Quot.sound]`-only. What they
+> produce, every round, is **one defect class, fourteen times over**: _a check whose input
+> has a filter that nothing audits._ `codec-gate-denominators` exists to stop that at the
+> generator instead of fixing instance fifteen. Read its proposal's table of all fourteen
+> — it is the single most useful page in `openspec/` for understanding why the gate arms
+> are shaped the way they are.
 >
 > ### What round eight closed, and the one thing to carry forward
 >
 > Round eight's findings were **all one shape: a check that reports nothing.** Four of
 > them, and each is now a printed, asserted count:
 >
-> | was invisible                                                                                         | now                                                                                                                                                                       |
-> | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-> | `opaqueInfo`/`axiomInfo` — matched by **no arm** of eight, and `exclusions` _refuses_ an `opaque`     | a `constantKindCensus` arm prints all seven `ConstantInfo` kinds and **fails** the build on a non-zero `opaque`/`axiom`                                                   |
-> | `propProjections`' validity — the docstring said a non-projection entry "would fail"; nothing checked | a second arm reads the **same** `isBareProj`; mutation-tested                                                                                                             |
-> | the footprint arm's denominator — it printed how many claims it **read**, never how many existed      | `769 scanned / 144 mentioning / 154 found / 146 checked / 8 left`, all three asserted                                                                                     |
-> | `gen-axioms.lean`'s **mirror** of `propProjections`                                                   | drift found and fixed; it had un-pinned `Codec.Suffix.hle` while `headerNumbers` read the mirror's own count, so the numbers agreed with each other and not with the tree |
+> | was invisible                                                                                         | now                                                                                                                                                                                                                                                                                     |
+> | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+> | `opaqueInfo`/`axiomInfo` — matched by **no arm** of eight, and `exclusions` _refuses_ an `opaque`     | a `constantKindCensus` arm prints all seven `ConstantInfo` kinds and **fails** the build on a non-zero `opaque`/`axiom`                                                                                                                                                                 |
+> | `propProjections`' validity — the docstring said a non-projection entry "would fail"; nothing checked | a second arm reads the **same** `isBareProj`; mutation-tested                                                                                                                                                                                                                           |
+> | the footprint arm's denominator — it printed how many claims it **read**, never how many existed      | `769 scanned / 144 mentioning / 154 found / 146 checked / 8 left`; **three are asserted** (`146/144/8` by `expectedFootprintCounts`), `769` and `154` are printed-only (`146 + 8 = 154`) — the tenth round measured that an earlier version of this cell claimed all five were asserted |
+> | `gen-axioms.lean`'s **mirror** of `propProjections`                                                   | drift found and fixed; it had un-pinned `Codec.Suffix.hle` while `headerNumbers` read the mirror's own count, so the numbers agreed with each other and not with the tree                                                                                                               |
 >
 > **The lesson, now five times over, and the fifth one is the sharpest:** a check is only
 > as good as what _enters_ it — and a **mirror list is a name list.** Round five's
@@ -263,6 +271,14 @@ a template to resume.
   `derivedDefDeclinationAudit` + `derivedDefPatternAudit`. **The trap is the pattern, not
   that one instance** — every future check needs the same question asked of it.
 
+  **This is now enforced, not advised: see "Adding a gate arm" above.** It fired
+  **fourteen** times across rounds five to ten — a name list, a prefix filter, a
+  `(…).length` sink, an attribution rule, an un-decomposed `skipped`, a predicate
+  matching `Expr.proj` where Lean emits `And.left`, two copies of one predicate, and a
+  guard testing the wrong variable. The fourteen are tabulated in
+  `openspec/changes/codec-gate-denominators/proposal.md`; read that table before concluding
+  a check is sound.
+
 - **A `Prop`-valued structure field is not a law.** `Iso.law`, `Normal.fixed`,
   `Normalizer.idem` are projections (`fun … => self.1`), and gating them measures the
   structure's shape. `round-five` §2.2 moved all three into the allowlist group whose
@@ -416,9 +432,11 @@ Rel_iso] at hx hy` rather than unfolding.
   reported `Axioms.lean`'s footprint table as wrong (197 vs 195); re-derived it was
   correct — their parser truncated at the `?` in `attach_getElem?_corr`. Design D1
   records this. A refuted finding is a result; relaying it unverified is the defect.
-- **`native_decide` is banned for laws and fine in the bench.** It appears only in
-  `Bench.lean` (a `packages` entry, not a `checks` one). Never introduce it into
-  `Codec/`.
+- **`native_decide` is banned for laws and does not appear anywhere in this repo.** Measured
+  `grep -c native_decide Bench.lean` → **0**; the only occurrence of the token in the tree
+  is the prose in `Axioms.lean` announcing the ban. An earlier version of this bullet said
+  it was "fine in the bench" and "appears only in `Bench.lean`" — `Bench.lean`'s checks
+  are `example`s closed by `rfl`. Never introduce it into `Codec/`.
 
 ### Rules about this file
 
@@ -473,6 +491,37 @@ In `../lean-basen`, `codec` is a flake input threaded into `default.nix`, which
 rewrites `require codec from git …` → a local `require codec from "./codec-src"`
 path dependency, so the sandboxed `lake build` needs no network. (`lean-codec` is
 public, so the `github:` input fetches anonymously — no token, no `--impure`.)
+
+## Adding a gate arm
+
+**Read this before you write a `run_cmd` in `Axioms.lean`.** Ten review rounds produced
+zero soundness defects and **fourteen** instances of one defect class: _a check whose
+input has a filter that nothing audits_. Each was fixed individually; the class survived
+because no rule governed how a new arm is written. `codec-gate-denominators` makes this
+the rule.
+
+Every diagnostic arm **SHALL** report two quantities:
+
+1. **denominator** — the universe its claim is about, and
+2. **removals** — what it took out of that universe, **decomposed by cause**.
+
+Both **SHALL be asserted** (`throwError` / an `expected*` constant), not merely `logInfo`'d.
+A printed number rots silently; an asserted one fails the build. If a number must stay
+printed-only, say so wherever the gate enumerates its own numbers.
+
+**Why decomposed and not just counted.** Instance 14 was `skipped = 8`: the denominator
+was present (`146 + 8 = 154`), but one total summed a survey paragraph with a claim that
+had **no resolvable owner** — and the two claims carrying `decodeFull_spec`'s hypothesis
+chain were in the second bucket. A single total cannot show that.
+
+**Mutation-test the new assert before you commit.** Narrow the walk, widen a filter, or
+add a name to the list you are guarding, and confirm the build fails _naming it_. A new
+check that has not been mutated is not a check.
+
+**And when you enumerate call sites, declarations or claim sites in prose — in a task, a
+comment, or a docstring — get the count from a command and quote its output.** A short
+list is a completeness claim that fails silently. Round nine's own enumeration of
+`benchBurst` call sites was short by two.
 
 ## Verification recipe
 

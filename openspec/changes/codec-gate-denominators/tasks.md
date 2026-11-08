@@ -1,5 +1,25 @@
 # Tasks — `codec-gate-denominators`
 
+> **START HERE — read this before task 1.**
+>
+> **Status at hand-off:** all four artifacts authored and validating (`+10 / -0`); the
+> `isBareProj` predicate is **spiked and solved** (design D7, tasks §2b); **nothing has
+> been implemented**. Zero tasks are checked, and that is correct — this ledger records
+> no completed work.
+>
+> **Where to begin: task 1.1, not task 2.** The predicate (tasks §2b/§3) is the part that
+> was hard and it is done; the denominator decomposition (tasks §1) is unstarted and
+> simpler. Do not re-spike the predicate.
+>
+> **Do this change BEFORE `codec-audit-round-nine`.** Design D5: this change states the
+> obligation that change's fixes are authored against. Both modify overlapping
+> requirements in `codec/axiom-gate`; archive order is recorded in D5.
+>
+> **What this change is NOT.** It fixes no review finding. `benchBurst`'s guard, the
+> `77 ns/step` cell, the RFC 4648 misquote, `[S5]`'s placement and the `~4-6 ns/step`
+> range are all live in the tree and all belong to `codec-audit-round-nine` / the
+> unauthored round-ten findings. Do not fix them here.
+
 This change establishes a **precondition on adding a gate arm**, then brings the existing
 arms into compliance. It fixes no `Codec` declaration and no review finding; those are
 `codec-audit-round-nine`'s, and they are authored against this rule _after_ it lands

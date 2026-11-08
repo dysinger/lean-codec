@@ -1,5 +1,20 @@
 # Tasks — `codec-audit-round-nine`
 
+> **START HERE — read this before task 1.**
+>
+> **Status at hand-off:** authored and validating; **nothing implemented**. Zero tasks
+> checked, and that is correct.
+>
+> **⚠ THREE TASKS HERE ARE KNOWN WRONG and must not be implemented as written.** A tenth
+> review round (not yet authored into a change; reports at `/tmp/r10-{gate-coverage,
+numbers-build,paper-adherence}.md`) measured them against the tree:
+>
+> | task                | why it is wrong                                                                                                                                                                                                                                                                                                                |
+> | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+> | **6.1(c)**          | asserts the suffix rule "would have removed" `Codec.Nat.eq_irrel`. It would not: `eq_irrel`'s last component matches **none** of the eight suffixes. The check fails on the name it exists to protect.                                                                                                                         |
+> | **6.2 / design D3** | the proposed constant set `{And.left, And.right, Iff.mp, Iff.mpr, Prod.fst, Prod.snd}` captures **`Codec.roundtrip`** plus three other genuine laws. It would take the library's central theorem out of the gate. The working predicate is solved in `codec-gate-denominators` design D7 / tasks §2b — **use that, not this.** |
+> | **6.3**             | "move all three `CandAligned_*`" — `CandAligned_tail` is a **real proof** (`And.casesOn hal fun hlen hpt => ...`), not a projection. Only `_fst` and `_at` move.                                                                                                                                                               |
+
 Legend: **[M]** MUST, **[S]** SHOULD, **[N]** NITPICK. Every id is stable across the
 change; the three reviewer reports are `/tmp/review-{paper-adherence,gate-coverage,
 numbers-build}.md` and every MUST below was re-measured in the authoring session before
