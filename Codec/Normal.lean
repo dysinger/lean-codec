@@ -101,7 +101,7 @@ function.
   instantiation every *intended* format uses. An earlier revision of this bullet said
   "it preserves length by construction" and justified it with `norm : Bytes n → Bytes n`
   — a function the layer does not mention, and a claim about every instantiation that a
-  `List` carrier refutes (`codec-audit-round-nine` review F-2/F-7, the third surviving
+  `List` carrier refutes (`codec-audit-round-nine` review P4-N1/P4-N6, the third surviving
   site of that refuted spelling). Case folding fits.
   Collapsing a whitespace run does **not**: three blanks to one is not a
   `Bytes n → Bytes n` map, and that variation needs a different carrier rather than

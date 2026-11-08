@@ -484,7 +484,7 @@ def authoredExceptions : Array Name := #[`Codec.Nat.eq_irrel]
 /-- **The theorem classifier's suffix list — one copy, read here and in
 `scripts/gen-axioms.lean`.**
 
-`codec-audit-round-nine` review A-4 (a follow-up to G-05): the eight names lived in the
+`codec-audit-round-nine` review P2-A4 (a follow-up to G-05): the eight names lived in the
 classifier as an inline disjunction, in `gen-axioms.lean`'s mirror as a second inline
 disjunction, and in the authored-exemption arm as a third array — with **no arm comparing
 them**. Drift in any copy was a silent change of what re-enters the gated set. Hoisted so
@@ -1005,7 +1005,7 @@ def generatedAuxAllowlist : Array Name := #[
   -- **`Codec.findFrom.induct` USED TO BE HERE.** `codec-audit-round-nine` §6.4 promoted
   -- it to `gatedNames` and the pin is in the generated block below with the other 343.
   --
-  -- **The stated reason had to be corrected twice** (review G-11, then G-08). First it
+  -- **The stated reason had to be corrected twice** (review P1-G11, then G-08). First it
   -- said this was "the only allowlisted name with a **non-empty** footprint" — false, and
   -- the very arm below measures the opposite: **43 of 82** allowlisted theorems are
   -- footprinted (`39 axiom-free + 24 the permitted pair + 19 other`). Second it said a
@@ -1894,7 +1894,7 @@ run_cmd do
   -- The namespaces are the *decision surface*; the whole environment is the
   -- *denominator*, and the two are now both counted and both printed.
   --
-  -- **Correction, by measurement (`codec-audit-round-nine` review G-04).** This comment
+  -- **Correction, by measurement (`codec-audit-round-nine` review P1-G04).** This comment
   -- first claimed the repo's one authored `opaque` — `Codec.Bench.cRefByteMany` — "is in
   -- `Codec.Bench` and therefore walked, but reached by an exe root rather than the
   -- library", and that the namespaced census caught it "by luck". **False.** This file
@@ -2079,7 +2079,7 @@ def expectedFootprintCounts : Nat × Nat × Nat × Nat × Nat := (157, 153, 0, 0
 
 /-- **The footprint vocabulary: ONE list, in matching order, read by everything.**
 
-`codec-audit-round-nine` review A-1/A-3/A-13 found this vocabulary living in **four**
+`codec-audit-round-nine` review P2-A1/P2-A3/P2-A13 found this vocabulary living in **four**
 copies — `footprintClaimPhrases` (phrases only), the classifier's inline `for … in [ … ]`
 (phrase → label pairs), `footprintClaimLabels` (labels only), and the adjudicating `match`
 in the arm (labels → predicate) — with **no arm comparing any pair**. Two live
@@ -2141,7 +2141,7 @@ def isExactPhrase (phrase : String) : Bool := phrase.startsWith "`"
 
 /-- **The label → classification table**, one entry per label `footprintVocabulary` emits.
 
-`codec-audit-round-nine` review A-13. The adjudication used to be a `match` over `String`,
+`codec-audit-round-nine` review P2-A13. The adjudication used to be a `match` over `String`,
 which Lean cannot check for exhaustiveness, so deleting one arm left every claim carrying
 that label adjudicated `true` — a green build over unchecked claims. A table is **data**,
 so the arm below can compare its keys against `footprintClaimLabels`; the `none` default is
@@ -2204,7 +2204,7 @@ def classifyFootprintClaim (seg : String) : Option String := Id.run do
 /-- The docstring with its line breaks collapsed to single spaces.
 
 **Shared by both predicates** so that "which text is being scanned" is one decision
-rather than two (`codec-audit-round-nine` review G-03): a wrapped literal was visible to
+rather than two (`codec-audit-round-nine` review P1-G03): a wrapped literal was visible to
 `looksLikeAxiomList` and invisible to `mentionsFootprint`, which is how a real claim ended
 up in the exemption list with a reason that described something else. -/
 def joinDoc (doc : String) : String := String.intercalate " " (String.splitOn doc "\n")
@@ -2215,7 +2215,7 @@ Independent of attribution, of segmentation and of whether the enclosing constan
 which is the widest set the arm could ever have looked at. -/
 def mentionsFootprint (doc : String) : Bool :=
   -- **Newlines are joined before scanning**, exactly as `looksLikeAxiomList` does
-  -- (`codec-audit-round-nine` review G-03). Without this, a claim whose literal is
+  -- (`codec-audit-round-nine` review P1-G03). Without this, a claim whose literal is
   -- wrapped across a line break — `` `[propext,`` ⏎ ``Quot.sound]`-only `` — is
   -- **invisible to the vocabulary while being visible to the denominator**, which
   -- produced the only remaining entry in `vocabularyExemptions` and made that list's
@@ -2275,7 +2275,7 @@ claim broken across a newline is matched rather than exempted. **That was not tr
 this list was written** — `mentionsFootprint` scanned the raw docstring while
 `looksLikeAxiomList` scanned the joined one, so `Codec.bdrop_consumedAbs_eq` was blind to
 the vocabulary *and* visible to the denominator, and it sat in this list with a reason
-that described a different problem entirely (`codec-audit-round-nine` review G-03). It
+that described a different problem entirely (`codec-audit-round-nine` review P1-G03). It
 left the list when the two scanners were unified; the sentence above is now true of the
 code rather than aspirational.
 
@@ -2304,7 +2304,7 @@ def expectedVocabularyCounts : Nat × Nat × Nat := (143, 0, 144)
 
 /-- The allowlisted theorems' footprint decomposition, **asserted term by term**.
 
-`codec-audit-round-nine` review G-07: the arm printed `39 + 24 + 19` and asserted only
+`codec-audit-round-nine` review P1-G07: the arm printed `39 + 24 + 19` and asserted only
 the sum and `Classical.choice = 0`. A footprinted law moving between the categories —
 `findFrom.induct` re-entering the allowlist, or an `eq_def` gaining a `Classical.choice`
 dependency that `choice` catches — could rotate through `both`/`other` with a green build,
@@ -2357,7 +2357,7 @@ run_cmd do
   -- The vocabulary's own denominator and its blind set (§5.3a).
   let mut mentioningLiteral : Nat := 0
   let mut blind : Array String := #[]
-  -- **Independently accumulated**, not derived from the others (review A-2): the count of
+  -- **Independently accumulated**, not derived from the others (review P2-A2): the count of
   -- docstrings that contain an axiom-list literal AND are read by the vocabulary AND are
   -- not exemptions. The three counts are accumulated from one walk but computed from
   -- three separate tests, so `sum = denominator` is a real cross-check.
@@ -2432,7 +2432,7 @@ run_cmd do
         let isFree := fp.isEmpty
         -- **The per-footprint predicates now live in `FootprintClass.satisfiedBy`**, so
         -- the arm's adjudication and any other reader share one definition
-        -- (`codec-audit-round-nine` review A-13). `isFree` stays local because the `def`
+        -- (`codec-audit-round-nine` review P2-A13). `isFree` stays local because the `def`
         -- docstring skip counts it separately.
         -- Segments: newlines and sentence breaks, so a paragraph is not one
         -- sentence.
@@ -2512,7 +2512,7 @@ run_cmd do
           -- this "compile-time-shaped" was false — a label added to the classifier and
           -- not to this match adjudicated `true` for every claim carrying it).
           -- **Data-driven, so a deleted arm cannot pass** (`codec-audit-round-nine`
-          -- review A-13). The label → predicate mapping is a *list*, and the arm asserts
+          -- review P2-A13). The label → predicate mapping is a *list*, and the arm asserts
           -- (below, at `everyEmittedLabelIsAdjudicated`) that this list's keys equal
           -- `footprintClaimLabels`. A `match` over `String` could not be checked for
           -- exhaustiveness; a table can.
@@ -2591,7 +2591,7 @@ run_cmd do
   -- longer blind) exempts nothing; a blind docstring with no entry is a hole. The two
   -- failure texts are distinct, because "the list has more entries than the walk matched"
   -- and "the entry exists but the walk never reached it" are different facts
-  -- (`codec-audit-round-nine` review A-8).
+  -- (`codec-audit-round-nine` review P2-A8).
   if exempt != CodecAxioms.vocabularyExemptions.size then
     vdrift := vdrift.push s!"vocabulary exemptions: the list has {CodecAxioms.vocabularyExemptions.size} entr(ies) but the walk counted {exempt} exempt docstrings — either a stale entry (never reached, exempts nothing) or an entry naming a docstring that is now read normally"
   for (n, _) in CodecAxioms.vocabularyExemptions do
@@ -2762,7 +2762,7 @@ below uses to ask "is that `def` covered by anything that is **not** its own
 recursion principle?"
 
 **The reason this promotion is safe is a measurement, and it is NOT the reason an earlier
-revision gave** (`codec-audit-round-nine` review G-08/G-09). That revision said the
+revision gave** (`codec-audit-round-nine` review P1-G08/P1-G09). That revision said the
 promoted theorem's *type* names `Codec.findFrom`, so the promotion "would let `findFrom`
 be covered by its own recursion principle". **Measured: it does not.** `findFrom.induct`'s
 type mentions `Array`, `Option`, `GetElem?`, `Nat` arithmetic and `Option.none` — no
@@ -2789,7 +2789,7 @@ def promotedPrincipleTargets : Array (Name × Name) := #[(`Codec.findFrom.induct
 
 /-! ### Every label the vocabulary emits is adjudicated
 
-`codec-audit-round-nine` review G-02. The footprint arm adjudicates a claim with a
+`codec-audit-round-nine` review P1-G02. The footprint arm adjudicates a claim with a
 `String` `match`, whose `_` arm returns `true`. Lean cannot check that match for
 exhaustiveness, so the safety of that fallthrough depends entirely on the classifier
 emitting only labels the match names — and the classifier is edited independently.
@@ -2833,7 +2833,7 @@ run_cmd do
     unless declared.contains l do
       bad := bad.push s!"  {l}: classified but no vocabulary phrase emits it (a stale classification)"
   -- **The class VALUES are checked too, and that is the half the key-set comparison
-  -- cannot reach** (`codec-audit-round-nine` review M-1). The three checks above are all
+  -- cannot reach** (`codec-audit-round-nine` review P2-F13). The three checks above are all
   -- statements about *keys*; nothing read the right-hand column of
   -- `footprintClassifications`. So `("[propext]", .both)` — right key, wrong meaning —
   -- passed every arm, and the most dangerous row is the one that **cannot** be
@@ -2927,7 +2927,7 @@ run_cmd do
   let total := CodecAxioms.generatedAuxAllowlist.size
   if free + both + other != total then
     throwError m!"the allowlist's footprint decomposition does not reconstruct its size: {free} + {both} + {other} != {total}"
-  -- **Each term is asserted, not just their sum** (`codec-audit-round-nine` review G-07).
+  -- **Each term is asserted, not just their sum** (`codec-audit-round-nine` review P1-G07).
   -- The sum identity alone is satisfied by a `[propext]` entry moving from `other` into
   -- `both` — a real change of what the "not a law" group contains, with a green build and
   -- a rotted quote in the docstring above. Pinning the three terms makes a re-entry of a

@@ -96,7 +96,7 @@ def localIsGeneratedAux (n : Name) : Bool := Id.run do
   -- just a second list.
   let promotedRecursionPrinciples : Array Name := #[`Codec.findFrom.induct]
   if promotedRecursionPrinciples.contains n then return false
-  -- **Mirror of `CodecAxioms.theoremNameSuffixes`** (`codec-audit-round-nine` review A-4).
+  -- **Mirror of `CodecAxioms.theoremNameSuffixes`** (`codec-audit-round-nine` review P2-A4).
   -- This file cannot import `Axioms.lean` (bootstrap cycle), so the two copies are
   -- compared by the generator's own self-check below rather than by sharing the array.
   let theoremNameSuffixes : Array String := #[
@@ -114,7 +114,7 @@ and the drift risk is the one this repository has paid for twice.
 file* holds are disjoint and non-empty — a property of the mirror, not a comparison with
 `Axioms.lean`. An earlier revision of this docstring claimed the cross-file comparison was
 "what `lake build` does, because a drift makes the generated `gatedNames` disagree with the
-partition". **That is false in the direction that already cost a round** (review M-4): when the
+partition". **That is false in the direction that already cost a round** (review P3-M4): when the
 mirror *undercounts*, the generator emits its smaller set into the generated `gatedNames`
 region and **rewrites `Axioms.lean` with it**, so `partition` and `gateCoverage` read the
 generated list and agree with it by construction. `AGENTS.md` records that exact regression
@@ -225,7 +225,7 @@ def renderDistribution (thms : List Name) : CommandElabM String := do
 open Lean Elab Command in
 run_cmd do
   -- **The mirror runs its own self-check before writing anything**
-  -- (`codec-audit-round-nine` review A-4). A drifted mirror that still splices is worse
+  -- (`codec-audit-round-nine` review P2-A4). A drifted mirror that still splices is worse
   -- than one that refuses: it rewrites `Axioms.lean` into disagreement with the partition.
   match mirrorSelfCheck with
   | .error e => throwError s!"gen-axioms: {e}"

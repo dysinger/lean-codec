@@ -76,7 +76,7 @@
         # sandbox), which is why the dev loop is still `lake build bench` + running
         # the binary by hand.
         # **The build inputs are `lean4` and a C compiler, and the first version of this
-        # check declared neither** (`codec-audit-round-nine` review A-4). It ran
+        # check declared neither** (`codec-audit-round-nine` review P1-NB4). It ran
         # `lake build bench` with `nativeBuildInputs = [ pkgs.git ]`, so the sandbox
         # failed with `lake: command not found` (exit 127) — the check was **red from the
         # day it was written** and was never built, only `nix eval`'d for its drvPath.
@@ -100,7 +100,7 @@
             }
             ''
               # **`set -euo pipefail` is load-bearing, and its absence was the third
-              # defect found in this check** (`codec-audit-round-nine` review A-4 and its
+              # defect found in this check** (`codec-audit-round-nine` review P1-NB4 and its
               # follow-ups). Two of the three defects in this derivation were invisible
               # for the same reason — nobody built it — and this one would have stayed
               # invisible after fixing the other two: `runCommand`'s builder does not run
@@ -150,7 +150,7 @@
               touch "$out"
               runHook postBuild
             '';
-        # **The mirror check** (`codec-audit-round-nine` review M-4).
+        # **The mirror check** (`codec-audit-round-nine` review P3-M4).
         #
         # `gen-axioms.lean` cannot import `Axioms.lean` (bootstrap cycle), so its copies
         # of the classifier's name lists can drift — and `AGENTS.md` records that drift
@@ -197,6 +197,38 @@
               touch "$out"
               runHook postBuild
             '';
+        reviews-check =
+          pkgs.runCommand "codec-review-ids"
+            {
+              nativeBuildInputs = [ pkgs.python3 ];
+            }
+            ''
+              set -euo pipefail
+              runHook preBuild
+              cd ${self}
+              python3 - <<'PY'
+              import re, sys, glob
+              files = ["README.md", "Axioms.lean", "flake.nix", "Bench.lean",
+                       "scripts/gen-axioms.lean"] + sorted(glob.glob("Codec/*.lean"))
+              cited = set()
+              for f in files:
+                  cited |= set(re.findall(r"review (P[0-9]-[A-Z]+[0-9]+[a-z]?)", open(f).read()))
+              doc = "openspec/changes/codec-audit-round-nine/reviews/round-ten.md"
+              tabled = set(re.findall(r"^\| `(P[0-9]-[A-Z]+[0-9]+[a-z]?)`", open(doc).read(), re.M))
+              bad = []
+              for c in sorted(cited - tabled):
+                  bad.append(f"{c}: cited in the source but has no row in {doc}")
+              for t in sorted(tabled - cited):
+                  bad.append(f"{t}: listed in {doc} but cited nowhere in the source")
+              if bad:
+                  print("reviewer ids do not reconcile:")
+                  for b in bad: print("  " + b)
+                  sys.exit(1)
+              print(f"reviewer ids reconcile: {len(cited)} cited, {len(tabled)} tabled, zero orphans")
+              PY
+              touch "$out"
+              runHook postBuild
+            '';
       in
       {
         # The default target builds the native library (`lake build` → `.olean`).
@@ -215,7 +247,16 @@
         # package.
         checks.bench = bench-check;
         checks.mirror = mirror-check;
-        # **The mirror check** (`codec-audit-round-nine` review M-4). `gen-axioms.lean`
+        checks.reviews = reviews-check;
+        # **The reviewer-id reconciliation** (`P4-N2` in round-ten.md).
+        #
+        # The source cites review ids (`review P2-A4`) that resolve to rows in
+        # `openspec/changes/codec-audit-round-nine/reviews/round-ten.md`. The first version
+        # of that file claimed to hold "every id" while missing three cited ones and
+        # **colliding** on two more (three findings shared `M-1`) — a citation to nothing,
+        # which is exactly what moving the reports out of `/tmp` was supposed to fix.
+        # This check makes the reconciliation a build failure in both directions.
+        # **The mirror check** (`codec-audit-round-nine` review P3-M4). `gen-axioms.lean`
         # cannot import `Axioms.lean`, so its copies of the classifier's name lists can
         # drift — and `AGENTS.md` records that drift un-pinning `Codec.Suffix.hle` for a
         # whole round. `lake build` cannot catch an *undercounting* drift, because the

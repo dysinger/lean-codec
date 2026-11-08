@@ -182,7 +182,7 @@ bytes.
 
 (Two corrections live in this parenthesis, and the second was introduced by the first. An
 earlier revision said "the `Normal` layer's normalizer is `norm : Bytes n → Bytes n`",
-naming a concrete function that exists nowhere — `codec-audit-round-nine` review S-3). The
+naming a concrete function that exists nowhere — `codec-audit-round-nine` review P1-PA3). The
 fix then claimed "there is no `Normalizer` value constructed anywhere", citing
 `grep -rn Normalizer Codec/`. **That grep's path excluded the file that falsifies it**:
 `Bench.lean:61` is `theorem foldNz : Normalizer UInt8 foldNorm := ⟨foldNorm_idem⟩` — a
@@ -205,7 +205,7 @@ the law does not close. **What is _not_ claimed**: there is no theorem asserting
 run-to-`List UInt8` relation is a bijection and no `Iso` built from `takeWhile`
 (`grep -n 'Iso.*takeWhile' Codec/Combinators.lean` finds none) — an earlier revision said
 "is a bijection on the run and can be the inside of an `Iso`", which is true in substance
-but was stated as though proved (review N-2).
+but was stated as though proved (review P4-N4).
 
 The paper's `ignore` exists for a _length-changing_
 job — collapse an **arbitrary-length** blank run to a fixed representation, i.e. a
@@ -316,7 +316,7 @@ case of the layer, not a prohibition on having one. Two consequences worth stati
 the layer is **length-preserving** (`norm : S → S`, so a `Bytes n` instantiation cannot
 change the byte count — case folding fits and collapsing a whitespace run does not, since
 that needs a different carrier; the earlier form of this sentence wrote
-`norm : Bytes n → Bytes n`, a concrete function the tree does not contain — review S-3
+`norm : Bytes n → Bytes n`, a concrete function the tree does not contain — review P1-PA3
 saw the same defect in `[D4]` and this was its surviving second site), and a
 codec using it owes the per-instance fact that its encoder emits a normal form,
 without which the normalising decoder can fail on its own encoder's output.
@@ -784,7 +784,7 @@ so the paper's closure is _the empty concrete string_, not "any string". On a
 
 **A previous revision of this section claimed the paper closed at `True` and that
 `codec` "departs" to `n = 0`. That was wrong about the paper** (`codec-audit-round-nine`
-review M-1): there is no departure here, and a porter following the old warning would
+review P2-PA1): there is no departure here, and a porter following the old warning would
 have been told to solve a problem that does not exist. The misreading is easy to make
 because `relRepeat`'s `nil` _rule_ in a least-fixpoint presentation is often written
 `True`; the paper writes it as a `pure ()`, which is not.
@@ -1225,7 +1225,7 @@ lemma), but an earlier revision said "**none has an in-tree caller**" and that i
   `Codec/Combinators.lean`'s `countSuccConsumesByte` (whose result then feeds
   `seqCountConsumesByte`). It is exercised by the library's own `count` proofs. (An
   earlier revision of this line named `seqCountConsumesByte` as the call site, which is
-  the theorem the call's _result_ flows into; `codec-audit-round-nine` review S-1.)
+  the theorem the call's _result_ flows into; `codec-audit-round-nine` review P1-PA1.)
 
   **And that single call is invisible to every gate.** A provenance/mention count over
   the tree finds `Codec.isoConsumesByte` in exactly three kinds of place: its own
@@ -1293,7 +1293,7 @@ An earlier revision of this block said "Ten lines" and quoted ten — with **six
 values stale** (`342→343`, `83→82`, `144→152`, `146→156`, `8→13`, and the two arms added
 since). The excerpt had rotted while the gate stayed green, which is the exact failure mode
 this block exists to warn about: a _quotation_ of an asserted gate is itself a number, and
-nothing asserted it (`codec-audit-round-nine` review A-6).
+nothing asserted it (`codec-audit-round-nine` review P1-NB6).
 
 **Each line reports a denominator and its removals decomposed by cause, and both are
 asserted.** A count that only gets printed rots silently — the history of this file
@@ -1452,7 +1452,7 @@ per-element codec, and quoting a "× off C" ratio against it is a category error
 hardware-accelerated), the figure the scale row below pins; an earlier revision wrote
 `~0.045` here, **50 % off** the same section's own `~0.03` (`codec-audit-round-eight`
 S-3, two committed numbers that refuted each other; the percentage was stated as 48 % and
-is `(0.045 − 0.03)/0.03 = 50.0 %` — `codec-audit-round-nine` review A-8, which also noted
+is `(0.045 − 0.03)/0.03 = 50.0 %` — `codec-audit-round-nine` review P1-NB8, which also noted
 that 48 % reproduces only by mixing a rounded `125 ns` with an exact `0.045 × 4096`) —
 while a
 parser does per-element _work_ — read, decide, advance, accumulate. The honest
@@ -1520,7 +1520,7 @@ same withdrawal as the `2.4` — it is the range of a _varying-load_ session's f
 of the two runs these tables record, and quote-a-range-not-a-point is not a licence to
 quote a range that excludes the points. With `2.46–2.61` the gap to the decode row spans
 **~10.5–11.5×** (`27.4/2.61 = 10.498` to `28.3/2.46 = 11.504`, both recomputed —
-`codec-audit-round-nine` review A-1, which caught a first attempt at this very sentence
+`codec-audit-round-nine` review P1-NB1, which caught a first attempt at this very sentence
 that wrote `11.6`, a bound no same-run pair produces). The decode row moves with the
 floor, so per-run quotients stay near `10.5`; the floor's own span is what widens the
 range. **The padded-range defect is worth naming explicitly**: it appeared here three
@@ -1548,7 +1548,7 @@ cell derivable**: it is one read per call, so the steps/burst count is not a div
 see the note below. Its warm cell is the **median range `65–67`**, not `~64–67`: the two
 run medians are `67` and `65`, and an earlier revision's `64` was a _minimum_ of one run
 mixed into a median range, which is neither the median range nor the full range
-(`63–73`) — `codec-audit-round-nine` review A-10. The `idealCursor` warm cell is `2.46–2.61` here, matching the
+(`63–73`) — `codec-audit-round-nine` review P1-NB10. The `idealCursor` warm cell is `2.46–2.61` here, matching the
 correction above (§2.5); an earlier revision of this row said `~2.5–2.7`, the same
 kind of padded range.
 
@@ -1753,7 +1753,7 @@ on a guess. The range is `24–26 − 20 = 4–6`, and its upper end is `26.4 �
 earlier revision wrote "~4–7", which no term in the derivation produces
 (`codec-audit-round-six` R7-25). The decode figure was `~55 ns/step`, a _point_ for a
 two-run range whose lower end is `51.1` — the padded-point form of the same defect the
-ranges above had (review A-11).
+ranges above had (review P1-NB11).
 
 ### The hand-written C reference — the yardstick that was missing
 

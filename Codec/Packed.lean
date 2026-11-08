@@ -69,7 +69,7 @@ def bytesToArray {n : Nat} (s : Bytes n) : Array UInt8 :=
 /-- The packing transport is size-preserving: `(bytesToArray s).size = n`.
 `rfl`, because `Array.mk`'s size is the list's length and `List.ofFn`'s is its
 index. -/
--- **Disclosed duplicate** (`codec-audit-round-nine` review A-9): `Codec.decodeWholeBytes_size`
+-- **Disclosed duplicate** (`codec-audit-round-nine` review P2-G07b): `Codec.decodeWholeBytes_size`
 -- (`Codec/Decode.lean`) states **exactly** this proposition and is literally
 -- `bytesToArray_size s`, so the partition counts two laws where one statement is proved.
 -- Kept because `decodeWholeBytes_size` is the name a caller of `decodeWholeBytes` looks
@@ -1326,7 +1326,7 @@ two were cells from a loaded session that the README has since re-derived. A num
 library docstring is outside every lane and outside the table's vintage stamp, so it can
 never be re-checked; `AGENTS.md`'s rule is one stamped source per figure. See
 `README.md`'s "Where the speed actually goes", which is that source
-(`codec-audit-round-nine` review S-3).
+(`codec-audit-round-nine` review P1-PA3).
 
 This is deliberately a *named* entry point rather than a note telling readers to call
 `decodeFullArrayRoot`: a fast path that is merely available is a fast path nobody

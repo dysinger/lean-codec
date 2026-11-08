@@ -346,7 +346,7 @@ denotation of the derived `many` combinator; the decoder law is
    string is the unique inhabitant of `Bytes 0`, so `relRepeat R [] n s ↔ n = 0`
    (`relRepeat_nil` below, `Iff.rfl`) is that same fact with the length in the type.
    **This is not a departure from the paper**, though an earlier revision of this
-   docstring said it was (`codec-audit-round-nine` review M-2). Stating it this way is
+   docstring said it was (`codec-audit-round-nine` review P1-PA1b). Stating it this way is
    what makes `relRepeat_induction` an induction on the **list** rather than on a
    length.
 2. **The first two parameters of this `match` are not the recursion's measure.** The
