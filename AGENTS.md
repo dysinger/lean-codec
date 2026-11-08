@@ -4,24 +4,67 @@ Guidance for AI coding agents working in this repository.
 
 > ## START HERE: run `openspec list --json`, then read that change's `tasks.md` banner
 >
-> **Two `codec` changes are open, and there is a required order between them.**
+> **One `codec` change is open: `codec-audit-round-nine`.** It is **ready to implement**
+> and it is the only thing to start.
 >
-> 1. **`codec-gate-denominators` — DO THIS FIRST.** 0 tasks done, nothing implemented.
->    Establishes the **arm obligation**: every diagnostic arm reports its _denominator_
->    and its _removals decomposed by cause_, both asserted. Its `isBareProj` predicate is
->    **spiked and solved** (design D7, tasks §2b) — do not re-derive it. **Begin at
->    task 1.1**, not task 2.
-> 2. **`codec-audit-round-nine`** — 0 tasks done. Carries the ninth review round's
->    findings. **Three of its tasks are known wrong** and its `tasks.md` banner says which
->    (6.1(c), 6.2/D3, 6.3) — a tenth round measured them against the tree. Its gate work
->    depends on (1) landing first.
+> `codec-gate-denominators` **landed and archived** 2026-11-08 (41/41, synced
+> `+10 / -0`). It is history now — read
+> `openspec/changes/archive/2026-11-08-codec-gate-denominators/` for what it established,
+> and **do not re-implement it.** In particular its `isBareProj` predicate is landed and
+> gate-green; round nine's task 6.2 is struck because that predicate supersedes it.
 >
 > The two `basen` changes (`basen-uppercase-prepass`, `basen-nat-iso`) are **PARKED by
 > the owner** pending a library-division decision. Do not start them.
 >
-> **This box has gone stale twelve times.** It has named a landed change, denied an open
-> one, and undercounted tasks, repeatedly. **Believe the command, never this box.** It
-> names the _change and the order_, never a task count.
+> ### Before you start round nine, read its banner — it re-scopes the change
+>
+> Round nine was authored **before** `codec-gate-denominators` existed, so its `tasks.md`
+> now carries a **re-evaluation table** at the top. Eight of its findings are closed or
+> re-scoped by the landed work, and **five of its 69 boxes are struck through** — those
+> are done, not pending:
+>
+> - **6.2** is **wrong and deleted**: the head-constant set captures `Codec.roundtrip`.
+>   The landed predicate is the answer. Do not implement the task.
+> - **6.3, 6.6, 6.7, 6.8, 6.10** are **done** by the archived change. Read the strike-out
+>   note before "finding" them again.
+> - **6.1(c)** asked for an assertion that is **false and unassertable**: `eq_irrel`'s
+>   last component matches none of the eight suffixes, so the classifier never dropped it.
+>   The `authored` exception is **dead code** — a stronger finding than the original.
+> - **5.3** was re-measured and its answer is none of the three candidates it lists:
+>   see **5.3a**, a **new MUST** that is the most important thing in the change.
+>
+> **The count is therefore not "13 MUST / 17 SHOULD / 12 NITPICK".** Believe the banner
+> and the checkboxes, never this box.
+>
+> ### 5.3a is the finding to internalise: the vocabulary was never audited
+>
+> Round nine's N-4 was "`blitBytes_spec`'s docstring states a footprint the gate
+> contradicts". The question was _why the arm didn't fire_, and the three candidates
+> offered (attribution, `thmInfo` scope, the `skipped = 8` bucket) were **all wrong**.
+>
+> Measured (`scratch/probe-vocabulary.lean`): the docstring writes
+> `` `[propext, Quot.sound]` `` **without `-only`**, and `footprintClaimPhrases` only
+> recognises the `-only` spellings — so the segment **never became a claim site at all.**
+> Not checked, not skipped, not out of scope. An environment walk puts the hole at
+> **22 of 159** `thmInfo` docstrings containing a backticked axiom-list literal, and the
+> blind set includes **`Codec.Bytes.ext_iff`** and **`Codec.findByte_spec`** — both of
+> which this repo believes it audited.
+>
+> **The lesson, and it is the sharpest one yet:** `codec-gate-denominators` audited the
+> arms' **filters** — what removes things from the input — and the obligation it installed
+> is about denominators and removals. But a _vocabulary_ is a filter too, one level down,
+> and nothing asserted it was **complete over the spellings the tree actually uses**. That
+> is round eight's §5 lesson (a hoisted list that cannot be narrowed silently) failing to
+> generalise to "a list that cannot be silently too _short_". When you fix 5.3a, the arm
+> must report **two** counts — what the vocabulary recognised, and how many docstrings
+> contain a backticked axiom-list literal **at all** — and assert that they reconcile.
+>
+> ### This box has gone stale twelve times
+>
+> It has named a landed change, denied an open one, and undercounted tasks, repeatedly.
+> **Believe the command, never this box.** It names the _change and the order_, never a
+> task count, and **not the finding count either** — round nine's re-evaluation changed
+> that by more than a deletion pass would suggest.
 >
 > ### Why the ninth and tenth rounds exist, in one paragraph
 >
@@ -96,17 +139,35 @@ Guidance for AI coding agents working in this repository.
 
 | Question                       | Authoritative file                                                               |
 | ------------------------------ | -------------------------------------------------------------------------------- |
-| **What is the task right now** | whatever `openspec list --json` reports; **nothing in `codec` today**            |
+| **What is the task right now** | whatever `openspec list --json` reports; **`codec-audit-round-nine` today**      |
 | Open changes + task counts     | `nix develop --command openspec list --json`                                     |
 | Are the spec deltas sound      | `nix develop --command openspec validate --all`                                  |
 | Archived history               | `openspec/changes/archive/<date>-<name>/tasks.md` (e.g. `2026-11-05-lean-basen`) |
 | Lessons (not direction)        | `openspec/lean-notes.md`                                                         |
 
-**`codec` has no open change.** `codec-audit-round-eight` closed 22/22 on 2026-11-07
-(22 tasks; 4 ADDED `codec/axiom-gate` requirements, archived additively — `+96 / ~0 /
--0`, no scenario dropped). The only open changes are the two **PARKED** `basen` ones;
-the owner has deferred both until the library division is decided. Everything else in
-this list is archived history.
+**`codec` has one open change: `codec-audit-round-nine`, ready to implement.** It is the
+seventh such round and the first authored _after_ the gate's own generator was fixed, so
+its banner — not its original finding counts — is what to read. `codec-gate-denominators`
+closed 41/41 on 2026-11-08 and is archived; it rewrote three of the four
+`codec/axiom-gate` requirements round nine modifies, which is why round nine needed a
+re-evaluation pass rather than a straight implementation. The two **PARKED** `basen`
+changes remain deferred until the library division is decided. Everything else in this
+list is archived history.
+
+- `codec-gate-denominators` — **archived** 2026-11-08 as
+  `openspec/changes/archive/2026-11-08-codec-gate-denominators/` (41/41, synced
+  `+10 / -0`, 32 → 42 scenarios, none dropped). It installs the **arm obligation**: every
+  diagnostic arm reports its _denominator_ and its _removals decomposed by cause_, both
+  **asserted**, not logged. Three arms came into compliance (def classifier per-pattern
+  decomposition, footprint `skipped` split into three causes, the pattern audit reading
+  one rule), and `isBareProj` was hoisted from two `let rec` copies into **one** definition
+  and fixed — it now separates a projection of a _hypothesis_ from an application of a
+  proved _theorem_ by the head constant's own body, not by head-and-arity. Five captures
+  moved out of the gated set (`CandAligned_fst`/`_at`, `packedCands_mem`, both
+  `Iso.*_eq_some_of_*`); `roundtrip`, `findFrom_finds` and `CandAligned_tail` stay gated.
+  Its `tasks.md` §1 has the measured log lines, §5.5 records the regeneration diff that
+  caught a comment sitting inside a generated region, and **0.4a is a violation report**,
+  not a completed task — read it before trusting a 41/41.
 
 - `codec-audit-round-eight` — **archived** 2026-11-07 as
   `openspec/changes/archive/2026-11-07-codec-audit-round-eight/` (22/22). The eighth
@@ -536,6 +597,34 @@ check that has not been mutated is not a check.
 comment, or a docstring — get the count from a command and quote its output.** A short
 list is a completeness claim that fails silently. Round nine's own enumeration of
 `benchBurst` call sites was short by two.
+
+### The third number: a vocabulary is a filter too
+
+**A matcher's vocabulary is an input filter, and it SHALL be audited like any other.**
+`codec-gate-denominators` installed the two-number rule for _filters_; round nine's
+task 5.3a found the case it does not cover.
+
+`CodecAxioms.footprintClaimPhrases` decides which docstring segments are footprint claims.
+It recognised `` `[propext, Quot.sound]`-only `` but **not** `` `[propext, Quot.sound]` ``
+without the suffix — so `Codec.blitBytes_spec`'s claim never became a claim site **at all**.
+It was not checked, not skipped, and not out of scope: it did not exist. Measured, that
+hole is **22 of 159** `thmInfo` docstrings containing a backticked axiom-list literal, and
+the blind set includes `Codec.Bytes.ext_iff` and `Codec.findByte_spec` — both believed
+audited.
+
+So an arm whose input is selected by **matching against a list of spellings, patterns or
+prefixes** SHALL report a **third** quantity:
+
+3. **the denominator of the matcher itself** — how many items match a deliberately
+   _broader_, independently-written predicate (for the footprint arm: "contains a
+   backticked axiom-list literal"), against which the recognised count is reconciled.
+
+The broader predicate must not be defined in terms of the list it audits, or the check
+answers itself. Two counts that reconcile are the only evidence the vocabulary is
+**complete** rather than merely **un-narrowed** — a list can be audited against shrinkage
+and still be far too short, which is exactly what happened here for a whole round.
+
+Mutation-test this too: delete one spelling and confirm the reconciliation fails naming it.
 
 ## Verification recipe
 
