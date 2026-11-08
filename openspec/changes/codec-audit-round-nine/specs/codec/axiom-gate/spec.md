@@ -102,6 +102,20 @@ reason that function is considered covered.
   so the proxy's vacuous-satisfaction mode cannot be reached through the recursion
   principle.
 
+#### Scenario: A reason citing a declaration resolves
+
+- **WHEN** an allowlist entry's reason names a declaration as its supporting evidence
+- **THEN** that name resolves in the environment, so the voucher for the exemption is
+  findable rather than a stale spelling.
+
+#### Scenario: A projection of a hypothesis is distinguished from a theorem application
+
+- **WHEN** a gated theorem's body applies a constant whose arguments include a
+  caller-supplied hypothesis
+- **THEN** the classification considers what the constant is applied to, so a law whose
+  body unwraps a proved theorem is not reclassified as a mere projection of a
+  hypothesis.
+
 ### Requirement: A structure-field projection is not reported as a law
 
 Where the gate covers a `Prop`-valued structure field by name, its documentation
@@ -202,6 +216,12 @@ presuming the group is empty-footprinted.
 - **WHEN** an allowlisted theorem's footprint is non-empty
 - **THEN** the gate reports it, so an entry whose stated reason is "this is not a law"
   cannot carry a proof that consults an axiom unnoticed.
+
+#### Scenario: A predicate used by two arms has one definition
+
+- **WHEN** two arms must classify the same declarations by the same structural property
+- **THEN** both call one named definition, and a comment asserting they share it is
+  backed by their sharing it rather than by prose.
 
 ### Requirement: An axiom exclusion is explicit and justified in place
 

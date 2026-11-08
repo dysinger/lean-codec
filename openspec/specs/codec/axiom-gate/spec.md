@@ -107,6 +107,18 @@ comparison, a table), the claim SHALL name the declaration it describes, so that
 check can attribute it. A docstring that states a footprint without saying whose
 SHALL NOT be read as a claim about the declaration it is attached to.
 
+The claims the check declines to examine SHALL be reported **decomposed by the reason
+for declining**. Two declines with unrelated causes — a survey paragraph that names
+several other declarations, and a claim with no resolvable owner at all — are different
+facts, and a single total cannot show that the second is rare or absent. A decline with
+no resolvable owner SHALL be its own reported number.
+
+The check SHALL state which kinds of declaration it examines and which it does not, and
+the counts it reports SHALL be described in those terms. A check scoped to one
+`ConstantInfo` kind SHALL NOT be described as covering every footprint claim, because a
+declared footprint belongs to a docstring and docstrings are attached to definitions
+too.
+
 #### Scenario: An exclusion is explicit and justified in place
 
 - **WHEN** a Layer-2 seam's law is excluded from the `[propext, Quot.sound]`-only
@@ -137,6 +149,18 @@ SHALL NOT be read as a claim about the declaration it is attached to.
   footprint can be attributed and checked rather than silently misattributed to the
   declaration the docstring is attached to.
 
+#### Scenario: Declined claims are reported by reason
+
+- **WHEN** the footprint check skips a claim
+- **THEN** the skip is counted under its cause, and a claim with no resolvable owner
+  is its own reported number rather than part of a survey-paragraph total.
+
+#### Scenario: The kind restriction is stated
+
+- **WHEN** the footprint check examines only one constant kind
+- **THEN** its reported counts say so, and a footprint claim attached to a definition
+  is recorded as outside the check rather than as a claim that passed it.
+
 ### Requirement: The partition extends to public definitions, not only theorems
 
 The axiom gate's universe SHALL be the public **theorems** _and_ the public
@@ -166,6 +190,15 @@ classifier's pattern list SHALL itself be verified: an entry that matches no
 declaration, or one that removes authorial API, SHALL be a build failure rather than
 an unexamined default.
 
+The classifier's removals SHALL be reported **decomposed by pattern**, and each
+pattern's count SHALL be asserted. A total cannot distinguish a pattern that removes one
+declaration by coincidence from one that removes many by design, and a pattern whose
+only match is a single name is one rename away from matching nothing.
+
+A reason that cites a declaration by name SHALL have that name resolve in the
+environment. A reason naming a declaration that does not exist is an unfindable
+voucher for the exemption, and reads as evidence that is not there.
+
 The gate SHALL NOT describe a declaration as a law when the declaration is a
 structure-field projection. A `Prop`-valued field of a structure is part of the type
 a caller supplies, so gating it measures the structure's shape rather than any
@@ -173,6 +206,13 @@ behaviour; such fields SHALL be classified consistently — either all projected
 are allowlisted with that reason, or all are described as law-shaped — and the gate's
 documentation SHALL NOT argue, in one place, that gating them proves nothing while
 gating them in another.
+
+A body that projects **out of a caller-supplied hypothesis** SHALL be classified by the
+same principle, whether Lean elaborates the projection to a structure projection node or
+to a constructor applied to an argument. The test for "this body is a projection" SHALL
+distinguish a projection of a _hypothesis_ from an application of a _proved theorem_:
+both can share a head constant and an arity, so a predicate that inspects only the head
+constant and the arity SHALL NOT be used to decide the classification.
 
 #### Scenario: A public definition with no law fails the build
 
@@ -212,6 +252,27 @@ gating them in another.
   the environment, or matches an authored declaration
 - **THEN** the build fails and names the pattern, so the classifier cannot rot into a
   list of defaults that quietly removes API from the check.
+
+#### Scenario: A pattern's removals are reported individually
+
+- **WHEN** the gate prints how many declarations the classifier removed
+- **THEN** the count is decomposed per pattern, and each count is asserted, so a
+  pattern that removes exactly one declaration is a reviewed decision rather than a
+  coincidence nothing notices.
+
+#### Scenario: A reason citing a declaration resolves
+
+- **WHEN** an allowlist entry's reason names a declaration as its supporting evidence
+- **THEN** that name resolves in the environment, so the voucher for the exemption is
+  findable rather than a stale spelling.
+
+#### Scenario: A projection of a hypothesis is distinguished from a theorem application
+
+- **WHEN** a gated theorem's body applies a constant whose arguments include a
+  caller-supplied hypothesis
+- **THEN** the classification considers what the constant is applied to, so a law whose
+  body unwraps a proved theorem is not reclassified as a mere projection of a
+  hypothesis.
 
 ### Requirement: The reported footprint distribution is generated, not remembered
 
@@ -386,6 +447,17 @@ A docstring claim that a list is audited SHALL correspond to an arm that audits 
 list whose only check is "the name still exists" SHALL be described as such, and not as
 one whose "invalid entries would fail".
 
+The rule SHALL apply to **every** name list that re-admits a declaration the
+classifier would otherwise remove, not only to lists of projections. An exemption list
+that names an authored law carrying a generated-looking suffix is a list of one, and
+it SHALL be checked in both directions: the name exists, it is gated, and the
+classifier would have removed it but for the exemption.
+
+Where two arms must agree about the same predicate, the predicate SHALL be **one
+definition** read by both, not two copies that a comment asserts are the same. A
+comment claiming "one definition, so they cannot drift apart" is false of two separate
+copies, and is the same defect as a list with no completeness arm.
+
 #### Scenario: A name that does not have the list's property fails the build
 
 - **WHEN** a name is added to a list whose entries are claimed to share a structural
@@ -398,6 +470,20 @@ one whose "invalid entries would fail".
 - **WHEN** a gate's documentation says an invalid entry in a list "would fail"
 - **THEN** an arm exists that fails on such an entry; if it does not, the sentence is
   corrected to describe what is actually checked.
+
+#### Scenario: An authored-suffix exemption is checked in both directions
+
+- **WHEN** a name is exempted from the classifier because it is an authored law the
+  classifier would otherwise remove
+- **THEN** the build asserts the name exists, is a theorem, is gated, and that
+  removing the exemption would remove it, so the exemption invalidates itself when
+  either side changes.
+
+#### Scenario: A predicate used by two arms has one definition
+
+- **WHEN** two arms must classify the same declarations by the same structural property
+- **THEN** both call one named definition, and a comment asserting they share it is
+  backed by their sharing it rather than by prose.
 
 ### Requirement: A stated measurement is a measurement, or it is a classification
 
@@ -428,6 +514,28 @@ Where a cell's value cannot be derived from any other committed cell in the same
 that is evidence it came from a different session or was transcribed; the cell SHALL be
 dropped rather than qualified.
 
+The same discipline SHALL apply to a count that a **build-time check** reports. Every
+diagnostic arm SHALL report two quantities: the **denominator** — the universe of
+declarations its claim is about — and the **removals** it made from that universe,
+decomposed by the reason for each removal. A bare total SHALL NOT be accepted as a
+report: an arm that prints how many items it examined, without printing how many items
+the claim is about, cannot be distinguished from an arm that examined nothing, and a
+single removal count covering several unrelated causes cannot show that any one of those
+causes is rare or absent.
+
+Both quantities SHALL be asserted, so that a narrowing of the walk or a widening of a
+filter is a build failure rather than a smaller number in a log. Where the gate's
+documentation enumerates an arm's reported numbers it SHALL say which are asserted and
+which are printed-only, because a number that cannot fail the build is weaker evidence
+than one that can. Where an arm cannot state a denominator it SHALL record that fact and
+its reason in place, so that "no denominator" is a decision on the record rather than an
+omission.
+
+This SHALL apply to an arm whose input is a **call-site list in prose** as much as to one
+whose input is an environment walk: a completeness claim about how many call sites,
+declarations or claim sites exist SHALL be obtained by enumeration, and an enumeration
+SHALL NOT be written from memory.
+
 #### Scenario: An underivable cell is dropped
 
 - **WHEN** a per-step cell in a table cannot be reproduced from any committed row of
@@ -440,3 +548,20 @@ dropped rather than qualified.
 - **WHEN** a build-time check reports how many items it examined
 - **THEN** it also reports how many items were candidates, or otherwise distinguishes
   "checked and correct" from "not checked at all", so a narrowed scope is visible.
+
+#### Scenario: Removals are decomposed by cause
+
+- **WHEN** an arm removes items from its input for more than one reason
+- **THEN** each reason's count is reported separately, so a removal that should be
+  rare or absent can be seen to be so.
+
+#### Scenario: A printed-but-unasserted number is described as such
+
+- **WHEN** the gate's documentation enumerates an arm's reported numbers
+- **THEN** it says which are asserted and which are printed-only.
+
+#### Scenario: A prose enumeration is obtained by enumeration
+
+- **WHEN** a task, comment or docstring claims how many call sites, declarations or
+  claim sites exist
+- **THEN** the count came from a command whose output is quoted, not from recall.
