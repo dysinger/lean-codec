@@ -287,14 +287,38 @@ Findings: N-1's consequence, S-1 (no `steps/burst` column), N-4 (floor range), S
       `.lake/build/bin/bench <args>`. Two runs, as the tables claim. Record wall-clock
       context in the commit message; do not run anything else concurrently.
 
-      **BLOCKED at 2026-11-08 12:40 — the machine is NOT idle, and §2 cannot be done
-      honestly yet.** Measured: `load averages: 2.85 3.14 3.69` on 10 cores, and the top
-      consumers are **not this session**: `Chromium Helper (Renderer)` (Polar) at 90.7 %
-      CPU and a Firefox `plugin-container` at 57.7 %, plus Signal's renderer. No amount
-      of waiting in-session clears them — they are another application's work — and the
-      repo's rule is explicit that a figure is sourced only from a run that produced
-      it (`AGENTS.md`: "a number is sourced because the lane, run, prints it"), with
-      load-affected runs noted as order-of-magnitude only.
+      **DEFERRED BY THE OWNER (2026-11-08): "we can't run benchmarks yet. We will
+      later."** Not blocked, not abandoned, not a defect in the tree — **scheduled**. The
+      bench does not get run on this host for now, and §2.1/§2.3 are the two boxes that
+      wait for it. Nothing else in this change depends on them.
+
+      **Why it could not be done when the rest was:** the machine was not idle. Measured
+      at hand-off, `load averages: 2.85 → 4.88` on 10 cores with the top consumers
+      **not this session** — `Chromium Helper (Renderer)` (Polar) at 90.7 %, a Firefox
+      `plugin-container` at 57.7 %, `nix-daemon` at 86.9 % — and the repo's rule is
+      explicit that a figure is sourced only from a run that produced it (`AGENTS.md`:
+      "a number is sourced because the lane, run, prints it"), with load-affected runs
+      noted as order-of-magnitude only.
+
+      **When it is unblocked, this is the whole job** (it is a re-run, not a
+      re-derivation — all the analysis is landed):
+
+      ```bash
+      nix develop --command lake build bench
+      .lake/build/bin/bench 4096 4096   > /tmp/run1.log 2>&1   # on an idle host
+      .lake/build/bin/bench 4096 4096   > /tmp/run2.log 2>&1
+      ```
+
+      then §2.2's `python3` re-derivation of every cell, §2.3's restamp, and a re-check of
+      §2.5's floor range and §2.7's gap against the new medians. **The old medians must
+      not survive the re-run**: `benchBurst`'s buffer and guard changed in §1, so every
+      committed burst median was measured on **input that no longer exists**
+      (`bytesAt` is now `i % 251`, and `arrayRead` reads a strided index) — the numbers
+      are not merely stale, they are measurements of a different program. That is why
+      §2.3 is not optional bookkeeping and why this change **must not be archived before
+      it**. The three tables currently carry their `2026-11-07` stamp with their
+      pre-§1 rows, and §2.3's box records that.
+
 
       **What is already done, so §2 is a re-run and not a re-derivation:** the bench
       builds and runs green with the §1 fixes in place, all 8 `benchBurst` call sites
@@ -303,13 +327,14 @@ Findings: N-1's consequence, S-1 (no `steps/burst` column), N-4 (floor range), S
       only to confirm the lanes work, and quoting it would be exactly the cross-session
       borrow §3 deletes the `77` for.
 
-      **Decided, not assumed: the old tables stay with their old vintage stamp rather
-      than being restamped from a loaded run.** Design D1 asks for the tables to be re-run
+      **Decided, not assumed: the old tables keep their old vintage stamp rather than
+      being restamped from a loaded run.** Design D1 asks for the tables to be re-run
       *because* the old guard could not see a fold, so the correct end state is a genuine
       idle-machine run; a loaded run substituted now would put a stamp on numbers that
-      inherit the very defect (an unattributable figure) the task exists to remove. The
-      tables therefore carry a dated **marker** explaining the state instead, and the
-      re-runs plus 2.2–2.9 are left open for the next session on an idle host.
+      inherit the very defect (an unattributable figure) the task exists to remove. Since
+      the owner has deferred the run, the tables simply keep their `2026-11-07` stamp and
+      §2.3 records that the rows are pre-§1 measurements — which is honest and visible,
+      and better than a stamp that claims otherwise.
 
 - [x] 2.2 Re-derive **every** cell from the printed `ns` and `steps/burst`, with `python3`,
       not by eye. Every row must state its own span; a figure that only exists as a
@@ -323,15 +348,23 @@ Findings: N-1's consequence, S-1 (no `steps/burst` column), N-4 (floor range), S
 - [ ] 2.3 Update the three performance tables **and** move the vintage stamp. A table with
       two vintages is worse than a re-run table (design D1).
 
-      **NOT DONE, and deliberately — blocked on 2.1, not skipped.** The tables' *prose*
+      **WAITING ON 2.1 — the owner's deferral, not an omission.** The tables' *prose*
       corrections landed (§2.4–§2.7, and the `see note` deletions in §3); the table
-      *rows* keep their `2026-11-07` stamp because the only run available was on a
-      loaded host. Restamping them from it would attach a fresh vintage to numbers that
-      inherit the exact defect §3 deletes the `77` for — a figure with no run behind it
-      that can be attributed to this session. The design's own reasoning applies: the old
-      medians are being replaced *because* their guard could not see a fold, so the
-      replacement has to come from a run whose guard could. Left open with this note
-      rather than closed against a run that would be argued about later.
+      *rows* keep their `2026-11-07` stamp. Restamping them from a loaded run would attach
+      a fresh vintage to numbers that inherit the exact defect §3 deletes the `77` for.
+
+      **The state, stated so the next reader does not have to infer it: the rows are
+      pre-§1 measurements.** `benchBurst`'s buffer changed from all-`1`-but-byte-0 to
+      `i % 251`, `arrayRead`'s index now strides by 8, and every row's loop is now
+      *asserted* non-invariant instead of merely non-zero. So the committed burst medians
+      describe a program that no longer exists — not stale numbers, but numbers about a
+      different input. They are kept **as the honest record of what the old guard
+      measured**, which is exactly what §1's finding is about: the tables are the evidence
+      for why the guard had to change. They must not be quoted as current cost.
+
+      **Done when:** the two idle-host runs are taken, §2.2's `python3` re-derivation is
+      redone against them, and the stamp moves to the new date. Until then this box stays
+      open and the change does not archive.
 
 - [x] 2.4 Add the `steps/burst` column to the summary table (`README.md:1342`), values
       `4096` / `512` / `—`, matching the other two tables which already have it.
