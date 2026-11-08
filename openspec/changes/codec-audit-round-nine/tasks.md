@@ -319,9 +319,9 @@ G-S1 (census scope).
 - [x] ~~6.8 **[S] Decompose the classifier's removals per pattern.**~~
       **DONE by `codec-gate-denominators` §1.1/§1.2**, and the tuple is four numbers rather
       than a per-pattern list: `(12 patterns, 54 removed, 6 singletons, 0 uncounted)`,
-      printed as `casesOn 8, recOn 8, elim 7, noConfusion 15, noConfusionType 5, ctorIdx 5,
-ctorElim 1, ctorElimType 1, below 1, brecOn 1, go 1, «term_≫_» 1`. `uncounted` was
-      **added** beyond this task and makes `removed + kept = candidateDefs` a checked
+      printed as:
+      `casesOn 8, recOn 8, elim 7, noConfusion 15, noConfusionType 5, ctorIdx 5, ctorElim 1, ctorElimType 1, below 1, brecOn 1, go 1, «term_≫_» 1`.
+      `uncounted` was **added** beyond this task and makes `removed + kept = candidateDefs` a checked
       identity. Measured: the six single-name patterns are
       `ctorElim, ctorElimType, below, brecOn, go, «term_≫_»` — note **`eq` is not among
       them**, so this task's parenthetical example was wrong about `eq`.
@@ -331,8 +331,8 @@ ctorElim 1, ctorElimType 1, below 1, brecOn 1, go 1, «term_≫_» 1`. `uncounte
       (`Codec.Bench.cRefByteMany`) currently sits outside the wire the census built.
 - [x] ~~6.10 **[S] Print the projection arm's decomposition.**~~
       **DONE, in the runnable form rather than the proposed one.** The arm prints
-      `9 listed of 12 bare projections in the namespaces; the rest are the dec-suffixed
-three`, so the exemption is a number. The task proposed `listed + constant-headed`;
+      `9 listed of 12 bare projections in the namespaces; the rest are the dec-suffixed three`.
+      So the exemption is a number. The task proposed `listed + constant-headed`;
       the implemented split is `listed + suffix-classified`, which is what the code actually
       does — "constant-headed" would describe round nine's own rejected predicate.
 - [ ] 6.11 Regenerate the header with `scripts/gen-axioms.lean`, then update the
