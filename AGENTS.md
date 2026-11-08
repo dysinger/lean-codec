@@ -4,60 +4,78 @@ Guidance for AI coding agents working in this repository.
 
 > ## START HERE: run `openspec list --json`, then read that change's `tasks.md` banner
 >
-> **One `codec` change is open: `codec-audit-round-nine`.** It is **ready to implement**
-> and it is the only thing to start.
+> **One `codec` change is open: `codec-drift-closure`.** It is **ready to implement** and
+> it is the only thing to start.
 >
-> `codec-gate-denominators` **landed and archived** 2026-11-08 (41/41, synced
-> `+10 / -0`). It is history now — read
-> `openspec/changes/archive/2026-11-08-codec-gate-denominators/` for what it established,
-> and **do not re-implement it.** In particular its `isBareProj` predicate is landed and
-> gate-green; round nine's task 6.2 is struck because that predicate supersedes it.
+> `codec-audit-round-nine` **landed** and is **not archived yet** — 64 of its 69 boxes are
+> checked, and the five open ones are exactly the residue `codec-drift-closure` closes.
+> **Do not start round nine again.** Read its `tasks.md` as history; read its
+> `reviews/round-ten.md` as the evidence base for the new change. Its two open boxes
+> (`2.1`, `2.3`) are `codec-drift-closure`'s Group A.
 >
-> The two `basen` changes (`basen-uppercase-prepass`, `basen-nat-iso`) are **PARKED by
-> the owner** pending a library-division decision. Do not start them.
+> The two `basen` changes (`basen-uppercase-prepass`, `basen-nat-iso`) are **PARKED by the
+> owner** pending a library-division decision. Do not start them.
 >
-> ### Before you start round nine, read its banner — it re-scopes the change
+> ### `codec-drift-closure` attacks the one class the gate arms cannot see
 >
-> Round nine was authored **before** `codec-gate-denominators` existed, so its `tasks.md`
-> now carries a **re-evaluation table** at the top. Eight of its findings are closed or
-> re-scoped by the landed work, and **five of its 69 boxes are struck through** — those
-> are done, not pending:
+> Round nine's own five-pass adversarial review ended its **gate** axis with
+> _"NO FURTHER MUSTS FOUND"_ — the arms are mutation-tested, the vocabulary reconciles, the
+> class table is probed in both directions. What the same review produced instead was six
+> **prose** findings, five of them one shape:
 >
-> - **6.2** is **wrong and deleted**: the head-constant set captures `Codec.roundtrip`.
->   The landed predicate is the answer. Do not implement the task.
-> - **6.3, 6.6, 6.7, 6.8, 6.10** are **done** by the archived change. Read the strike-out
->   note before "finding" them again.
-> - **6.1(c)** asked for an assertion that is **false and unassertable**: `eq_irrel`'s
->   last component matches none of the eight suffixes, so the classifier never dropped it.
->   The `authored` exception is **dead code** — a stronger finding than the original.
-> - **5.3** was re-measured and its answer is none of the three candidates it lists:
->   see **5.3a**, a **new MUST** that is the most important thing in the change.
+> > **a claim whose stated method is not its code's method.**
 >
-> **The count is therefore not "13 MUST / 17 SHOULD / 12 NITPICK".** Believe the banner
-> and the checkboxes, never this box.
+> | the claim                                                                      | the code                                                        |
+> | ------------------------------------------------------------------------------ | --------------------------------------------------------------- |
+> | a header cell read `thmInfo 769 — the gated/allowlist partition`               | the partition is `427`; `769`/`771` is a _census_               |
+> | a review file said it held "every id"                                          | three cited ids missing, three findings sharing one id          |
+> | a list was described as "ordered longest-match-first"                          | not length-sorted; nothing asserted it                          |
+> | a check's docstring said "the cross-file comparison is what `lake build` does" | the check compared two lists _inside itself_                    |
+> | "`grep -rn Normalizer Codec/` finds none"                                      | `Bench.lean:61` constructs one — the **path** excluded the file |
+> | a range `26.97–28.56`                                                          | not a cell of any table; `28.56` excludes a committed `28.70`   |
 >
-> ### 5.3a is the finding to internalise: the vocabulary was never audited
+> **The fix is not a fifteenth arm.** It is `design.md` D2/D3: a number that a reader
+> cannot re-derive from a command is a number that will be wrong within one change, so
+> **generate it or delete it**; and a sentence that says _how_ a check works is a claim
+> about code, so **assert its effect or delete it**. Round nine already proved the pattern
+> with the footprint vocabulary: assert that each phrase produces its own label (an
+> effect), rather than that the list is sorted a particular way (a rule that turned out to
+> be **false of the correct list**).
 >
-> Round nine's N-4 was "`blitBytes_spec`'s docstring states a footprint the gate
-> contradicts". The question was _why the arm didn't fire_, and the three candidates
-> offered (attribution, `thmInfo` scope, the `skipped = 8` bucket) were **all wrong**.
+> **Group A is blocked on the host, not on the work.** The benchmark re-run needs an idle
+> machine. **If the host is loaded, do Groups B/C/D and leave Group A open — never restamp
+> the tables from a loaded run.** Round nine deferred it once for exactly that reason and
+> its ledger says the committed medians are pre-`§1` measurements of a program that no
+> longer exists (`benchBurst`'s buffer and guard both changed).
 >
-> Measured (`scratch/probe-vocabulary.lean`): the docstring writes
-> `` `[propext, Quot.sound]` `` **without `-only`**, and `footprintClaimPhrases` only
-> recognises the `-only` spellings — so the segment **never became a claim site at all.**
-> Not checked, not skipped, not out of scope. An environment walk puts the hole at
-> **22 of 159** `thmInfo` docstrings containing a backticked axiom-list literal, and the
-> blind set includes **`Codec.Bytes.ext_iff`** and **`Codec.findByte_spec`** — both of
-> which this repo believes it audited.
+> ### The two lessons round nine added, which you will need
 >
-> **The lesson, and it is the sharpest one yet:** `codec-gate-denominators` audited the
-> arms' **filters** — what removes things from the input — and the obligation it installed
-> is about denominators and removals. But a _vocabulary_ is a filter too, one level down,
-> and nothing asserted it was **complete over the spellings the tree actually uses**. That
-> is round eight's §5 lesson (a hoisted list that cannot be narrowed silently) failing to
-> generalise to "a list that cannot be silently too _short_". When you fix 5.3a, the arm
-> must report **two** counts — what the vocabulary recognised, and how many docstrings
-> contain a backticked axiom-list literal **at all** — and assert that they reconcile.
+> **A fix is the most likely source of the next drift.** Round nine's five review passes
+> each found defects in the pass before's fixes, and **three were introduced by the fix for
+> the previous defect.** So when you land an arm, mutation-test it _and_ re-read the
+> sentence you wrote about it.
+>
+> **The padded range.** Four times in one session a range was written by taking one run's
+> value and widening it until it covered another's — each time while fixing the previous
+> occurrence. A range must contain its own derivation's endpoints; derive both ends and say
+> which you are quoting. `~20–22×` excluded `19.58`; `~19.6–22.0×` excluded both;
+> `26.97–28.56` was not a cell of any table.
+>
+> ### Reviewer ids resolve in-repo, and the reconciliation is a build check
+>
+> The source cites findings as `review P<pass>-<axis><n>` — `P2-A4`, `P3-M4`, `P1-PA1`.
+> They resolve to `openspec/changes/codec-audit-round-nine/reviews/round-ten.md`, which
+> holds every id with what it found and what closed it. **`checks.reviews` fails the build
+> if a cited id has no row, or a row has no citation, in either direction.** An id whose
+> record lives only in `/tmp` is a citation to a file that will not exist.
+>
+> ### Archived rounds, so they are not re-invented
+>
+> `codec-gate-denominators` landed and archived 2026-11-08 (41/41, `+10 / -0`); its
+> `isBareProj` predicate is landed and gate-green, and round nine's task 6.2 was struck
+> because that predicate supersedes it. `codec-audit-round-eight`, `-six`, `-five`,
+> `-four`, `-three`, `-two` and `lean-basen` are all archived with ledgers under
+> `openspec/changes/archive/`. Read a `tasks.md` there as **history**; do not reopen it.
 >
 > ### This box has gone stale twelve times
 >
@@ -181,20 +199,32 @@ previous defect_. A fix is a check, and a check is only as good as what enters i
 
 | Question                       | Authoritative file                                                               |
 | ------------------------------ | -------------------------------------------------------------------------------- |
-| **What is the task right now** | whatever `openspec list --json` reports; **`codec-audit-round-nine` today**      |
+| **What is the task right now** | whatever `openspec list --json` reports; **`codec-drift-closure` today**         |
 | Open changes + task counts     | `nix develop --command openspec list --json`                                     |
 | Are the spec deltas sound      | `nix develop --command openspec validate --all`                                  |
 | Archived history               | `openspec/changes/archive/<date>-<name>/tasks.md` (e.g. `2026-11-05-lean-basen`) |
 | Lessons (not direction)        | `openspec/lean-notes.md`                                                         |
 
-**`codec` has one open change: `codec-audit-round-nine`, ready to implement.** It is the
-seventh such round and the first authored _after_ the gate's own generator was fixed, so
-its banner — not its original finding counts — is what to read. `codec-gate-denominators`
-closed 41/41 on 2026-11-08 and is archived; it rewrote three of the four
-`codec/axiom-gate` requirements round nine modifies, which is why round nine needed a
-re-evaluation pass rather than a straight implementation. The two **PARKED** `basen`
-changes remain deferred until the library division is decided. Everything else in this
-list is archived history.
+**`codec` has one open change: `codec-drift-closure`, ready to implement.** It is not an
+eleventh review round — it is the **closure of round nine's residue plus the one defect
+class the gate arms cannot see**: a claim whose stated method is not its code's method. Its
+`design.md` D0 has the measured table of six such claims; read it before writing an arm.
+The two **PARKED** `basen` changes remain deferred until the library division is decided.
+Everything else in this list is archived history — except `codec-audit-round-nine`, which
+**landed** (64/69) and is waiting to archive **after** this change (see its D5).
+
+- `codec-audit-round-nine` — **landed, not archived**, 64/69. Round nine's implementation
+  plus a **five-pass adversarial review of that implementation** (the review is recorded
+  in-repo at `openspec/changes/codec-audit-round-nine/reviews/round-ten.md`, with every
+  finding id resolvable and `checks.reviews` asserting it). It closed §5.3a's
+  **vocabulary hole** (22 of 155 docstrings were invisible to the footprint arm; the arm
+  now asserts `recognised + blind + exempt = mentioningLiteral` with `blind = 0`), made
+  `benchBurst` **assert non-invariance** rather than non-zero-ness, added `checks.bench`
+  (which was red from the day it was written — `nativeBuildInputs` had no Lean),
+  `checks.mirror` and `checks.reviews`, promoted `Codec.findFrom.induct`, and gated
+  `Codec.alt_not_functional` / `Codec.functional_pure` to record where `Functional` fails
+  to compose. **Its `2.1`/`2.3` are open — the benchmark re-run — and they are
+  `codec-drift-closure`'s Group A.**
 
 - `codec-gate-denominators` — **archived** 2026-11-08 as
   `openspec/changes/archive/2026-11-08-codec-gate-denominators/` (41/41, synced
@@ -667,6 +697,56 @@ answers itself. Two counts that reconcile are the only evidence the vocabulary i
 and still be far too short, which is exactly what happened here for a whole round.
 
 Mutation-test this too: delete one spelling and confirm the reconciliation fails naming it.
+
+### A claim about the tree is a check too — and it is the one nobody audits
+
+The fourteen instances above are all _code_. Round nine's review found a **fifteenth
+class, one layer out**: a **sentence** that describes how a check works is a claim, and
+nothing verified it. Five of round nine's six final findings were this shape.
+
+**The rule, in two halves.**
+
+1. **A number a reader cannot re-derive from a command will be wrong within one change.**
+   Generate it, assert it, or delete it in favour of a pointer. A _quotation_ of an
+   assertable output (the gate's own log lines, reproduced in a README) is a number, and
+   round nine's went stale **six of ten values** in one commit while the gate it quoted
+   stayed green. `codec-drift-closure` Group B exists to close this.
+2. **A sentence that states a method — a scope, an ordering, a comparison, a path — is a
+   claim about code.** Make it assertable or delete it. Two traps, both measured here:
+   - **A scope word is only as good as its path.** "`grep -rn Normalizer Codec/` finds
+     none" was false: `Bench.lean:61` constructs one, and `Codec/` is not the repo. Same
+     shape in the census comment that claimed an `opaque` in `Codec.Bench` was "therefore
+     walked" — `Axioms.lean` imports `Codec`, never `Bench`.
+   - **Assert the effect, not the rule.** "Ordered longest-match-first" is a rule that was
+     _false of the correct list_ (a strict length monotonicity fails on it). What is true
+     and sufficient is the effect: a segment containing exactly phrase _p_ classifies to
+     _p_'s label. That assertion catches a reorder; the rule assertion would have rejected
+     the right list.
+
+**And the meta-lesson, which is why this file keeps a lessons section at all: a fix is the
+most likely source of the next drift.** Round nine's five review passes each found defects
+in the previous pass's fixes, and **three were introduced by the fix for the previous
+defect**. Mutation-testing an arm is not optional, and neither is re-reading the sentence
+you wrote about it in the same commit.
+
+### The padded range: the specific way a measurement claim goes wrong
+
+Four times in one session, a range was written by taking one run's value and widening it
+until it covered a second run's — **each time while fixing the previous occurrence**. A
+range must contain its own derivation's endpoints, or it is not a range, it is two numbers
+with a dash between them.
+
+| written            | why it is wrong                                                  |
+| ------------------ | ---------------------------------------------------------------- |
+| `~20–22×`          | excludes run 2's own quotient `19.58`                            |
+| `~19.6–22.0×`      | excludes **both** endpoints (`19.578`, `21.96`)                  |
+| `~2.6–3.0 ns/step` | contains none of the committed cells `2.50 / 2.61 / 2.57 / 2.46` |
+| `26.97–28.56`      | not a cell of any table; `28.56` excludes a committed `28.70`    |
+
+**The procedure that catches it:** derive the interval **twice** — once from the medians
+(what this repo quotes) and once from the full cell range — and say in the sentence which
+one you are quoting. If those two disagree about which values are inside, the sentence is
+not finished.
 
 ## Verification recipe
 
