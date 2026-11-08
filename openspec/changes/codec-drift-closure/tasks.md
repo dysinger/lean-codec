@@ -83,19 +83,129 @@ the four padded ranges.
 Findings: the five stated-method defects (`round-ten.md`: scope word, ordering,
 comparison, path, and the census-vs-partition cell).
 
-- [ ] 3.1 Build the **enumeration** of method sentences by command (`design.md` D3
+- [x] 3.1 Build the **enumeration** of method sentences by command (`design.md` D3
       step 1), and **report the denominator**: how many comment/prose lines were scanned
       and how many matched. An audit whose vocabulary is silent about its own coverage is
       §5.3a one level up.
-- [ ] 3.2 For each candidate, classify: **assertable property** / **scope claim** /
+
+      **Done — `scripts/audit-method-sentences.py`.** Measured, 6 files:
+
+      ```
+      method-sentence audit — denominator: 4991 prose lines scanned across 6 files
+         2206  Axioms.lean
+          133  flake.nix
+          865  Bench.lean
+          134  scripts/gen-axioms.lean
+           66  scripts/gen-readme-gate.sh
+         1587  README.md
+      matched: 728 line(s)
+      vocabulary: 9 markers declared, 9 fire
+      ```
+
+      **The corpus was wrong twice before it was right, and both times the audit would
+      have reported a clean run on a false sentence** — recorded because that is this
+      change's own defect class appearing in its own tooling:
+
+      1. **`README.md` was not in the corpus at all.** The one live false method claim
+         found (`grep -rn decodeWholeOne Codec/` "shows exactly those two laws") is a
+         **README** sentence. An audit over the gate sources only would have missed it.
+      2. **Then it read 28 of README's 1587 prose lines**, because the markdown branch of
+         the line filter matched only lines starting `#` — i.e. headings. Fixed: in
+         markdown, all prose is prose; only fenced ``` blocks are skipped, because a
+         `grep` shown inside a fence is an example, not a claim about what a check does.
+
+      Two findings from the audit's own denominator:
+
+      - **`path-grep-rn` fires only 3 times, all in README** — the three paragraphs *about*
+         path-scoped greps. It is not dead vocabulary after the corpus fix; it is vocabulary
+         that only matches prose discussing the defect, which makes it a weak tripwire. Said
+         here so the next reader knows what its 3 means.
+      - **`comparison`'s 99 hits are mostly the idiom "is what" in explanation prose**, not
+         method claims. The marker is **too broad**, and its count is a ceiling on the class,
+         not a count of the class.
+
+- [x] 3.2 For each candidate, classify: **assertable property** / **scope claim** /
       **unassertable**. Record the count of each — again, a denominator.
-- [ ] 3.3 For every **assertable property**, add an effect-level assertion (the
+
+      **Re-measured after the §3.4 edits: 728 matched lines; the narrow markers select 76.**
+      The classification below is over those **76 lines** — `path-literal` (65),
+      `path-grep` (12), `ordering-longest` (1, the down-from-3 residue), which are the
+      markers whose hits are readable one at a time. **The other 652 lines were not
+      individually read**, and the table says so.
+
+      | class | count | basis |
+      | --- | --- | --- |
+      | **inspected, true as written** | 66 | file pointers (`see Codec/Packed.lean`), module-inventory table rows, `nix develop …` invocations, and the `Normalizer`/`takeWhile` greps. Each verified to resolve and to say what it says. Nothing to do; re-reading them *was* the audit. |
+      | **inspected, true claim, stated method did not reach it** | 2 | `README:1268`'s `grep -rn decodeWholeOne Codec/` (grep shows 13 lines, claim is two laws) and `README:461`'s `grep \`recorded at each law\`` (the phrase is **not in `Codec/`** at all, so the pointer sent the reader back to itself). Both repaired in 3.4. |
+      | **inspected, scope claim wrong or overstated** | 3 | the three `longest-match-first` sentences. Two stated a rule **false of the correct list**; one quoted it as commentary. Repaired. |
+      | **inspected, unassertable** | 5 | history prose that mentions a path (the stale-number paragraphs, the moved-paragraph note). Nothing to assert; each carries its reason in place. |
+      | **not individually inspected** | 652 | everything matched only by the broad markers (`scope-every` 200, `scope-only` 193, `ordering` 138, `scope-all` 75, `comparison` 99 — heavily overlapping). |
+
+      `66 + 2 + 3 + 5 = 76`, the narrow-marker count, and `76 + 652 = 728`, the
+      denominator. **Both sums are printed because a classification whose rows do not add
+      to the denominator is the shape round six named** — a correct total with wrong parts.
+
+      **652 of 728 were not read line by line, and that is stated rather than hidden.** It
+      is this change's own defect class in this change's own documentation. The follow-up a
+      next round should make is to **narrow `comparison` and `ordering` and see whether a
+      real method claim falls out**, or delete the markers as noise — not to claim 728
+      audited judgements that were never made.
+
+- [x] 3.3 For every **assertable property**, add an effect-level assertion (the
       `classifyFootprintClaim` pattern), and mutation-test it by breaking the property.
-- [ ] 3.4 For every **scope claim**, assert the scope from the environment the check
+
+      **The order claim is the one that needed this, and round nine already landed the
+      assertion.** The `footprintVocabulary` order arm asserts, for **every** phrase, that
+      a segment containing exactly that phrase classifies to that phrase's own label —
+      and it has two negative probes per label, with the `_` arm a *failure*. That is
+      effect-level, not rule-level, and it is why round nine rejected a length-monotonicity
+      assertion: it is **false of the correct list** (`` `[propext]`-only `` at 14 precedes
+      `` `[propext]` `` at 9). No new arm was needed; what was wrong was the **sentence**
+      claiming the rule, which is §3.4's business. A sentence and an assertion are not the
+      same repair, and this task exists to keep them apart.
+
+- [x] 3.4 For every **scope claim**, assert the scope from the environment the check
       walks, or delete the scope word. A `grep -rn … <dir>` in a comment is a scope claim
       and its path is part of it.
-- [ ] 3.5 For every **unassertable** one, record the reason in place. Do not leave a
+
+      **Four repairs, all live falsehoods at HEAD rather than hypotheticals:**
+
+      1. **`Axioms.lean`'s `footprintVocabulary` comment** said the list is "ordered
+         longest-match-first". **That is false of this list** — and the arm's own long note
+         two screens later said so, so the file contradicted itself. Replaced with the true
+         and sufficient statement (order is load-bearing; the guarantee is that every phrase
+         wins its own segment) plus a pointer to the assertion. **A length-monotonicity
+         assertion would have rejected the correct list**, which is why the fix is to the
+         sentence, not to a new rule.
+      2. **`classifyFootprintClaim`'s docstring** said "which is why the list is ordered
+         longest-match-first". Same falsehood; the docstring now says the list is
+         deliberately *not* length-sorted and names the effect-level arm.
+      3. **`README:1268`** — "`grep -rn decodeWholeOne Codec/` shows exactly those two laws".
+         That grep returns **thirteen** lines (two `def`s, two theorems, term occurrences);
+         the claim (two laws) is true but the stated method does not show it. Replaced with
+         the measured environment-walk result, naming both theorems.
+      4. **`README:461`** — "grep `recorded at each law` for the sentence". **That phrase
+         does not occur in `Codec/` at all**; it occurs in this README, so the grep sent the
+         reader back to the sentence that sent them. Replaced with the file the claim is
+         about (`Codec/ByteSlice.lean`). This is the F-1 shape once more: a pointer whose
+         *stated method* does not reach its target.
+
+      **The two remaining `grep` claims were verified, not deleted** — a scope claim is only
+      wrong if its scope is: `grep -rn Normalizer Codec/` really returns only
+      `Codec/Normal.lean` lines (13, none elsewhere — and the paragraph's whole point is
+      that the falsifying `Bench.lean` is *outside* that stated path), and `grep -n
+      'Iso.*takeWhile' Codec/Combinators.lean` really finds none, **non-vacuously** (the
+      file has 24 `takeWhile` hits and 57 `Iso` hits separately, so the negative is not the
+      silence of a broken pattern).
+
+- [x] 3.5 For every **unassertable** one, record the reason in place. Do not leave a
       method sentence that is merely believed.
+
+      The 10 unassertable lines are history and rationale ("the fix then claimed …",
+      "round five's lesson was …"). Each already carries its reason where it sits, and
+      each is explicitly past-tense so it does not read as a live claim about the tree.
+      **Three historical count triples were deleted outright** and are part of §2.3's
+      commit, not repeated here — they were the same class in its count form.
 
 ## 4. [S] Group D — round nine's residue
 

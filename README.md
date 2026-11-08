@@ -458,7 +458,11 @@ footprint-uniform** (`codec-audit-round-eight` S-5): `Iso.inverse` measures
 **axiom-free**, while the other twelve are `[propext]`-only. That is the kind of
 difference the trust-contract section states is "recorded at each law, not treated as
 drift", so quoting one footprint for the whole list would be the drift. Per-name
-measurement, from `#print axioms` — grep `recorded at each law` for the sentence.
+measurement, from `#print axioms` — the four Layer-2 seams' own footprints are recorded
+at each law in `Codec/ByteSlice.lean`, which is where to read them. (An earlier revision
+said "grep `recorded at each law` for the sentence"; that grep matches only this
+README, so it sent the reader back to the sentence that sent them — a pointer whose
+method does not reach its target. `codec-drift-closure` §3.4.)
 
 `Iso.foldl` and `Iso.foldr` are **deliberately excluded** from that list, and the
 list is called "full" only of the _unconditional_ structural isos. **How the count
@@ -1264,8 +1268,13 @@ lemma), but an earlier revision said "**none has an in-tree caller**" and that i
   `decodeFull` directly. It is _not_ a single theorem for the `Bytes`-level
   `decodeWholeOneBytes` — that one has only `decodeWholeOneBytes_eq` (`rfl`) to
   `decodeWholeOne`, so the `Bytes`-level link is a two-step composition nothing names.
-  Stated because a reader checking the claim will look for the theorem and not find it;
-  `grep -rn decodeWholeOne Codec/` shows exactly those two laws.
+  Stated because a reader checking the claim will look for the theorem and not find it.
+  **The count is two, and it comes from an environment walk rather than a `grep`** —
+  `codec-drift-closure` §3.4: an earlier revision said "`grep -rn decodeWholeOne Codec/`
+  shows exactly those two laws", and that grep shows **thirteen** lines (two `def`s, two
+  theorems, and term occurrences), so the stated method did not show the claim it made.
+  The walk — every `thmInfo` in the `Codec`/`Iso` namespaces with `decodeWholeOne` in a
+  name component — returns exactly `decodeWholeOne_eq` and `decodeWholeOneBytes_eq`.
 
 `[S3]` means this package cannot demonstrate the caller-free two _by example_ — that
 is the rule working as intended, not a gap to be closed here.

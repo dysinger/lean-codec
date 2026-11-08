@@ -2126,7 +2126,11 @@ def footprintVocabulary : Array (String × String) := #[
   -- Spelled-out absence claims.
   ("axiom-free", "axiom-free"),
   ("no axioms at all", "axiom-free"),
-  -- Three-axiom form, **before** the two-name form (longest-match-first).
+  -- Three-axiom form, **before** the two-name form. Order is load-bearing here (a
+  -- segment naming all three also contains `[propext, Quot.sound]`), and the ordering
+  -- claim is asserted **by its effect** — every phrase must still produce its own
+  -- label — not by a length rule, which is false of this list (`P2-A12`, and see the
+  -- long note at the vocabulary-order arm).
   ("`[propext, Classical.choice, Quot.sound]`", "[propext, Classical.choice, Quot.sound]"),
   -- `-only` forms, each before its bare form.
   ("`[propext, Quot.sound]`-only", "[propext, Quot.sound]-only"),
@@ -2230,8 +2234,13 @@ def FootprintClass.satisfiedBy (k : FootprintClass) (fp : List String) : Bool :=
 /-- The claim a segment states, or `none`.
 
 **One definition, one vocabulary** (`codec-audit-round-nine` reviews A-1, A-12). It walks
-`footprintVocabulary` in list order and returns the first match, which is why the list is
-ordered longest-match-first. -/
+`footprintVocabulary` in list order and returns the first match, so **order is
+load-bearing** — and the guarantee is not that the list is sorted any particular way. The
+list is deliberately **not** length-sorted (a `[propext]-only` phrase at 14 characters
+precedes a bare `[propext]` at 9), so the property that is checked is the one that
+matters: a segment containing exactly a phrase `p` classifies to `p`'s own label. That
+is asserted for every phrase by the vocabulary-order arm, which is what catches a
+reorder or a new shadowing prefix. -/
 def classifyFootprintClaim (seg : String) : Option String := Id.run do
   let low := seg.toLower
   for (phrase, label) in footprintVocabulary do
@@ -2911,8 +2920,10 @@ run_cmd do
   let negativeFootprint := CodecAxioms.negativeFootprintProbe
   -- **The vocabulary's order is a claim, and it is now asserted** (`P2-A12` in
   -- `round-ten.md`). `classifyFootprintClaim` returns the FIRST match in list order, so the
-  -- list's order is load-bearing: the comment says "ordered longest-match-first", and a
-  -- hand edit could break it without any arm noticing.
+  -- list's order is load-bearing — and a hand edit could break it without any arm noticing.
+  -- (An earlier revision of this note said the comment claimed "ordered longest-match-first";
+  -- that sentence was **false of the correct list** and has been replaced, because asserting
+  -- it would have rejected the right vocabulary. `codec-drift-closure` §3.4.)
   --
   -- **The property asserted is that every phrase can WIN somewhere**, not raw length and
   -- not blanket non-shadowing. Two weaker invariants were tried first and are wrong:
