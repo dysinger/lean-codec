@@ -1776,7 +1776,11 @@ are in the git history if you need to check them.
   produces**; neither is padded. An earlier revision wrote `~19.6–22.0×`, which excluded
   its own endpoints `19.58 < 19.6` and `21.96 < 22.0`, and the form before that,
   `~20–22×`, excluded run 2's quotient outright — the padded-range defect, twice, in
-  the paragraph that describes it.
+  the paragraph that describes it. The same section's headline had a third instance in
+  a one-decimal form, `~10.5–11.6×`, where `11.6` was producible from no same-run pair at
+  all (`codec-audit-round-nine` review P1-NB1) — and it was **introduced while fixing
+  this very defect**, which is why the interval above is derived from all four
+  quotients rather than written and then checked.
 - `packedCands` moves **83/86 → 101/104 ns/call** (run 1 / run 2) for the extra
   candidate: **18 ns** in both runs. So **4.0–6.4 ns/step is _not_ `packedCands`** — it is the
   `decodeArray` re-list plus the singleton `PackedCand` allocation in
