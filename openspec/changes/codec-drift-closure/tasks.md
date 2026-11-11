@@ -69,51 +69,132 @@
 
 Findings: `codec-audit-round-nine` 2.1, 2.3, and `P4-N3` (the open range).
 
-- [ ] 1.1 Confirm the host is **idle** before running anything: `uptime` and
+- [x] 1.1 Confirm the host is **idle** before running anything: `uptime` and
       `ps -A -o %cpu,comm -r | head -5`, recorded in the commit message. If load is
       above ~1 per 4 cores, or the top consumer is not this session, **stop and do
       Group B instead**; leave 1.1–1.6 open with a note saying why.
 
-      **BLOCKED — measured twice this session, and the second time is the decisive one.**
+      **Took four attempts, and the history is the useful part.** Measured each time:
 
-      | when | `uptime` | top consumer |
-      | --- | --- | --- |
-      | session start | `4.89 3.51 2.74` | `lean /tmp/p3.lean`, **99 %**, etime `10:21` |
-      | after Groups B/C/D | `2.51 3.25 3.16` | the *same* `lean /tmp/p3.lean`, **99 %**, etime `10:32` |
+      | attempt | load (1/5/15) | top consumer | verdict |
+      | --- | --- | --- | --- |
+      | session start | `4.89 / 3.51 / 2.74` | `lean /tmp/p3.lean` **99 %**, etime 10:21 | blocked |
+      | after Groups B/C/D | `2.51 / 3.25 / 3.16` | same process, **99 %**, etime 10:32 | blocked |
+      | "machine is quiet" | **`7.38 / 16.81 / 20.83`** | **Blender 127 %** + stray lean 96 % | blocked |
+      | owner killed the stray | **`1.66–2.18`**, flat | this session (`pi` 20 %) | **taken** |
 
-      The load fell, but the criterion is **both halves**: load above ~1 per 4 cores (10
-      cores here, so ~2.5 — the second reading sits exactly on it) **and** "the top
-      consumer is not this session". The top consumer is a **stray `lake env lean
-      /tmp/p3.lean` from a previous session**, parent PID 82234, which had been burning
-      one core for ten and a half hours before this session began and was still burning it
-      when the groups above were finished.
+      The third reading is the instructive one: load had *risen* to 7.38 with a 15-minute
+      average of 20.83, and a diagnostic run at that moment measured **every lane 19–23 %
+      slower in lockstep** (`idealCursor` 12,740 vs the committed 10,605/10,883;
+      `decodeFullArray` 16,925 vs 14,011/14,469; `arrayRead` 81 vs 65/67; `packedCands`
+      102 vs 86). Four lanes that share almost no code moving by the same factor is the
+      signature of a **host** change, not a program change — and it was produced by the
+      bench binary from **2026-11-08 12:18**, twelve hours older than this session's first
+      commit, so no edit of mine could have caused it. That diagnostic run was discarded.
 
-      Per the banner: **"never restamp the tables from a loaded run."** A one-core
-      neighbour on a ten-core machine is exactly the perturbation that made round nine's
-      burst rows clock granularity. So 1.1–1.6 stay **open**, and the reason is the host,
-      not the work.
+      **Attribution, because "+20 %" deserves a cause rather than an excuse:**
+      `git diff --stat -- Codec/ Bench.lean lakefile.lean` since session start is **empty**,
+      and `Bench.lean` imports `Codec` only — not `Axioms.lean` (touched for prose) and not
+      `scripts/count-values.lean` (which `lakefile.lean` does not reference, so it is in no
+      build target).
 
-      **Do not kill it to unblock.** It belongs to another session (possibly another
-      agent's live probe); killing it is a decision for the owner, not a way to make a
-      measurement look clean. **And do not work around it** by running the bench anyway and
-      stamping the result — that is the defect this group exists to prevent.
+      The stray was a prior session's **hung probe**: a 22-line, 745-byte `/tmp/p3.lean`
+      stuck in a `while t.isForall` loop, which had burned **4,527 CPU-minutes** (75
+      CPU-hours) and would never terminate. It was also a hung attempt at the exact
+      question this change answered in `scripts/count-values.lean`, so nothing was lost.
+      **Killed by the owner, not by this session** — killing another session's process is
+      the owner's call, and killing it to make a measurement look clean would have been
+      the defect rather than the fix.
 
-      To resume: when the owner confirms the machine is idle (`uptime` in the `0.3`–`0.8`
-      range on 10 cores, top consumer this session), run 1.2–1.6 exactly as written.
-
-- [ ] 1.2 `lake build bench`, then two runs of `.lake/build/bin/bench 4096 4096`. Save
+- [x] 1.2 `lake build bench`, then two runs of `.lake/build/bin/bench 4096 4096`. Save
       both logs. Do not run anything else concurrently.
-- [ ] 1.3 Re-derive **every** cell with `python3` from the printed `ns` and
+
+      `lake build bench` → `Build completed successfully (28 jobs)` (two `ld` warnings about
+      `ByteSlice.o`/`CRef.o` being built for macOS 14.4 vs 14.0 — pre-existing, benign).
+
+      Then two consecutive runs, nothing else running, load recorded at each:
+      **run 1 at `1.69 / 2.18 / 2.18`**, **run 2 at `1.66 / 2.16 / 2.17`**. The load was
+      *flat across the two runs* — which is the healthy signature, and the opposite of the
+      discarded diagnostic run where it climbed between measurements. Both logs are
+      `scratch/bench-run{1,2}.txt`, and **every number quoted below comes from them**.
+
+- [x] 1.3 Re-derive **every** cell with `python3` from the printed `ns` and
       `steps/burst` — not by eye, and not from `codec-audit-round-nine`'s recipe copied:
       read the span the lane prints (`512` for the window rows, `4096` otherwise).
-- [ ] 1.4 Derive **every** interval twice — once from the medians (which is what this
+
+      Done by parsing both logs with a `python3` regex that reads the span **from each
+      row**, so no row can be divided by a caption's span. Derived per-step medians
+      (run 1 / run 2):
+
+      | lane | span | run 1 | run 2 | ns/step |
+      | --- | --- | --- | --- | --- |
+      | `idealCursor` | 4096 | 10674 | 9987 | **2.61 / 2.44** |
+      | `decodeFullArray` k=1 | 512 | 14113 | 13638 | **27.56 / 26.64** |
+      | `decodeFullArray` k=2 | 512 | 25372 | 26130 | **49.55 / 51.04** |
+      | `decodeWhole` (Lean) | 512 | 13881 | 14052 | **27.11 / 27.45** |
+      | C reference | 512 | 4323 | 4380 | **8.44 / 8.55** |
+      | `arrayRead` | — | 65 | 67 | ns/**call**, not per step |
+      | `packedCands` k=1 / k=2 | — | 83 / 101 | 86 / 104 | ns/**call** |
+
+      **The two `ns/call` rows are the trap this task exists to prevent**: their span is
+      4096 but the lane performs *one* read per call, so dividing by the span would
+      invent a "0.02 ns/step" that is 700× inverted. They are left in call units.
+
+- [x] 1.4 Derive **every** interval twice — once from the medians (which is what this
       document quotes) and once from the full cell range — and state which is which. The
       padded-range defect has fired four times; the defence is to derive both and say
       which one the sentence is.
-- [ ] 1.5 Update the three performance tables and **move the vintage stamp**. Delete the
+
+      **Both derivations were computed, and they disagree — which is the point.** For the
+      headline gap (decode k=1 ÷ floor):
+
+      | method | interval |
+      | --- | --- |
+      | **A — from the two run medians** (what this doc quotes) | **10.22–11.31×** |
+      | B — from the full 6-cell range of each row | 9.54–11.87× |
+
+      `AGENTS.md`'s rule is that when the two disagree about what is inside, the sentence
+      must say which one it is; **README's performance prose is the median derivation and
+      says so.** Every derived claim in the section was then recomputed from the tables
+      *as written*, and all nine agree (`4.0–6.4` is the rounding of `3.99–6.40`).
+
+      One number moved under this check and is worth naming: **`~1.9×` for the k=2/k=1
+      cost was wrong** — the two runs give `1.798` and `1.916`, so the range is
+      `1.80–1.92×`, and a point `~1.9` was the padded-point form again.
+
+- [x] 1.5 Update the three performance tables and **move the vintage stamp**. Delete the
       old medians; do not caveat them.
-- [ ] 1.6 Close `P4-N3`: the `26.97–28.56` cross-table splice is replaced by whatever
+
+      All three restamped to **`run vintage: 2026-11-09`** with their per-run cells, and the
+      two derived tables and every prose figure recomputed from them. **The old medians are
+      deleted, not caveated** — the reasoning is `design.md` D1's, and it has not changed:
+      the previous values measured a program whose `benchBurst` buffer and guard round nine
+      replaced, so they were not a weaker measurement of this code, they were a measurement
+      of different code. The **derived** claims that survived unchanged are notable and
+      worth recording as a sanity check on the whole exercise: the residual-not-
+      `packedCands` band is `4.0–6.4 ns/step` here against `4–6` before, and the extra-
+      candidate cost `21.99–24.40` against `23.6–26.4`. The program's behaviour is
+      essentially where the previous analysis said it was; only the machine and the guard
+      changed.
+
+- [x] 1.6 Close `P4-N3`: the `26.97–28.56` cross-table splice is replaced by whatever
       the run produces, and the sentence that made the claim is re-read against it.
+
+      **`P4-N3` stayed open through Group D and closes here.** The deleted range spliced two
+      lanes from two sessions. What replaces it is not one wider range but **three
+      same-run quotations**, each with its lane named: `decodeWhole` at **27.11 / 27.45**,
+      `decodeFullArray` k=1 at **27.56 / 26.64**, both inside this session's single table.
+      The sentence that made the old claim is now the paragraph under the C-reference
+      table, and it makes the *opposite* kind of claim: when a ratio moves, it says **which
+      term moved**.
+
+      **That re-read produced the session's most important measurement caveat**, and it is
+      the reason not to present this restamp as a win: the Lean ÷ C ratio went `~4×` →
+      `~3.2×`, but the Lean decoder moved **−5 % / +2 %** while **the C reference moved
+      +20 % / +25 %**. A ratio that moved because its denominator did is a statement about
+      this bench's noisiest lane (the C reference runs the *shortest* burst here), not about
+      the code. README now says exactly that and tells the reader to treat `3.2×` and `4×`
+      as the same claim within this lens's noise.
 
 ## 2. [M] Group B — numbers become generated or deleted
 
