@@ -284,9 +284,29 @@ gate), S-5 (`warningAsError` does not cover the exe root).
 Findings: N-1's consequence, S-1 (no `steps/burst` column), N-4 (floor range), S-2
 (`2.5 vs 6.9` not cells).
 
-- [ ] 2.1 Run the bench on an **idle** machine: `lake build bench` then
+- [x] 2.1 Run the bench on an **idle** machine: `lake build bench` then
       `.lake/build/bin/bench <args>`. Two runs, as the tables claim. Record wall-clock
       context in the commit message; do not run anything else concurrently.
+
+      **CLOSED BY `codec-drift-closure` §1 (2026-11-12), not by this change.** The
+      deferral below was lifted by the owner and the run was taken on an idle host:
+
+      ```
+      lake build bench                     -> Build completed successfully (28 jobs)
+      bench 4096 4096  (run 1)  load 1.69 / 2.18 / 2.18   (1/5/15 min, 10 cores)
+      bench 4096 4096  (run 2)  load 1.66 / 2.16 / 2.17
+      ```
+
+      The load was **flat across the two runs** — that flatness is the evidence the host
+      was idle, and it is the opposite of the discard-threshold case. Getting there needed
+      the host cleared: a stray `lean /tmp/p3.lean` from a prior session was pinning a
+      core at 99 % (4,527 CPU-minutes on a 22-line file, hung in a `while t.isForall`
+      loop) and had produced diagnostic runs in which **every lane was 19–23 % slower in
+      lockstep** — a host artefact, proven by the bench binary predating that session by
+      twelve hours and by `git diff -- Codec/ Bench.lean lakefile.lean` being empty. The
+      owner killed it; the diagnostic runs were discarded, not stamped.
+
+      The re-run is not a re-derivation: all the analysis is §2.2/§2.5/§2.7's and stands.
 
       **DEFERRED BY THE OWNER (2026-11-08): "we can't run benchmarks yet. We will
       later."** Not blocked, not abandoned, not a defect in the tree — **scheduled**. The
@@ -346,8 +366,24 @@ Findings: N-1's consequence, S-1 (no `steps/burst` column), N-4 (floor range), S
       themselves, because there is no trustworthy run to derive them from — see 2.1, and
       2.3 below for why the tables were not restamped.
 
-- [ ] 2.3 Update the three performance tables **and** move the vintage stamp. A table with
+- [x] 2.3 Update the three performance tables **and** move the vintage stamp. A table with
       two vintages is worse than a re-run table (design D1).
+
+      **CLOSED BY `codec-drift-closure` §1.5 (2026-11-12).** All three tables restamped to
+      **`run vintage: 2026-11-09`** with per-run cells, and **the old medians deleted, not
+      caveated** — exactly what the paragraph below asks for. The re-check this box also
+      requires (§2.5's floor range, §2.7's gap, both against the *new* medians) was done:
+
+      | quantity | §2.5/§2.7 said | this run | note |
+      | --- | --- | --- | --- |
+      | floor, median range | `2.46–2.61` | **`2.44–2.61`** | §2.5 said "re-measure, do not copy" |
+      | floor, full cell range | — | **`2.39–2.76`** | newly stated alongside it |
+      | headline gap | `10.5–11.5×` | **`10.22–11.31×`** | median-derived |
+      | same gap, cell range | — | `9.54–11.87×` | derived twice, and the doc says which |
+
+      Two derived figures survived essentially unchanged, which is the sanity check that
+      this really was a re-run: the residual-not-`packedCands` band is `4.0–6.4 ns/step`
+      against `4–6` before, and the extra-candidate cost `21.99–24.40` against `23.6–26.4`.
 
       **WAITING ON 2.1 — the owner's deferral, not an omission.** The tables' *prose*
       corrections landed (§2.4–§2.7, and the `see note` deletions in §3); the table
@@ -1062,9 +1098,21 @@ invisible to the proxy), P2-8/9/11/12, N-2/N-4.
 
 ## 10. Recorded, deliberately not in this change
 
-- [ ] 10.1 A tenth review round. This carries round nine's remainder; it does not
+- [x] 10.1 A tenth review round. This carries round nine's remainder; it does not
       commission more.
-- [ ] 10.2 `basen-nat-iso` and `basen-uppercase-prepass` — PARKED by the owner pending the
+
+      **NOT COMMISSIONED** — the same decision `codec-drift-closure` §6.1 recorded for its
+      own residue. This box closes because it is a *decision*, not deferred work.
+
+- [x] 10.2 `basen-nat-iso` and `basen-uppercase-prepass` — PARKED by the owner pending the
       library-division decision. Do not touch.
-- [ ] 10.3 Cross-repo (`lean-basen`) consistency — out of scope for this round by owner
+
+      **STILL PARKED, verified untouched** at `codec-drift-closure` archive time: neither
+      change's `tasks.md` gained a box and `git diff` names no path under either. The box
+      closes as a decision.
+
+- [x] 10.3 Cross-repo (`lean-basen`) consistency — out of scope for this round by owner
       instruction. Reviewer B's axis E was explicitly skipped.
+
+      **STILL OUT OF SCOPE.** No file outside this repository was read or written during
+      the follow-on change either. Closes as a decision.

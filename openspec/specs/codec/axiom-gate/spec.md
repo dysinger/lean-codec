@@ -75,85 +75,49 @@ theorem proved about it.
 
 ### Requirement: An axiom exclusion is explicit and justified in place
 
-The gate SHALL make the excluded set explicit rather than implicit. Every theorem
-carrying `Classical.choice` that is knowingly excluded from the discipline — the
-Layer-2 trust seams — SHALL be listed by name in the gate with the reason recorded
-in place, so an exclusion is a decision on the record and never a silent omission.
+No theorem SHALL be excluded from the axiom gate without an explicit, in-place
+justification. A gate that silently skips a theorem is indistinguishable from a gate
+that would have caught nothing.
 
-An excluded law SHALL be described in prose as **excluded**, never as clean, and its
-docstring SHALL state the measured footprint rather than an aspirational one.
+Where the gate's footprint check declines to examine a claim, it SHALL report the
+declined claims **decomposed by the reason for declining**, not as a single total. Two
+declines with unrelated causes — a survey paragraph that names several other
+declarations, and a claim with no resolvable owner at all — are different facts, and a
+total that sums them cannot show that the second is rare or absent.
 
-**A stated footprint is a claim, and a claim SHALL be checked like any other.** Where
-a declaration's docstring states an axiom footprint — "axiom-free", "no axioms at
-all", "`[propext]`-only", "`[propext, Quot.sound]`-only" — the build SHALL compare
-that statement with the footprint the environment reports and SHALL fail, naming the
-declaration and both values, when they differ. The comparison SHALL run in both
-directions: a claim that is **too strong** (an "axiom-free" declaration that is not)
-and one that is **too weak** (a "`[propext, Quot.sound]`-only" declaration that uses
-fewer axioms) SHALL both be build failures, because the weaker claim understates a
-result the file elsewhere treats as evidence and the stronger one is a false
-statement of measurement.
-
-The stated footprint SHALL be written from the measurement, not from inspection of
-the statement or the proof script. No syntactic property of a theorem's statement
-SHALL be treated as predicting its footprint: a declaration whose statement mentions
-the byte substrate may be axiom-free and one whose statement is a bare `↔` between
-two definitions may report `propext`. An authored rule from statement shape to
-footprint SHALL NOT be recorded, because such a rule is falsifiable and has been
-falsified.
-
-Where a docstring discusses the footprint of a **different** declaration (a survey, a
-comparison, a table), the claim SHALL name the declaration it describes, so that the
-check can attribute it. A docstring that states a footprint without saying whose
-SHALL NOT be read as a claim about the declaration it is attached to.
-
-The claims the check declines to examine SHALL be reported **decomposed by the reason
-for declining**. Two declines with unrelated causes — a survey paragraph that names
-several other declarations, and a claim with no resolvable owner at all — are different
-facts, and a single total cannot show that the second is rare or absent. A decline with
-no resolvable owner SHALL be its own reported number.
-
-The check SHALL state which kinds of declaration it examines and which it does not, and
-the counts it reports SHALL be described in those terms. A check scoped to one
-`ConstantInfo` kind SHALL NOT be described as covering every footprint claim, because a
-declared footprint belongs to a docstring and docstrings are attached to definitions
-too.
+The footprint check SHALL state which kinds of declaration it examines and which it
+does not, and the count it reports SHALL be described in those terms. A check scoped
+to one `ConstantInfo` kind SHALL NOT be described as covering "every footprint claim",
+because a declared footprint belongs to a docstring and docstrings are attached to
+definitions too.
 
 #### Scenario: An exclusion is explicit and justified in place
 
-- **WHEN** a Layer-2 seam's law is excluded from the `[propext, Quot.sound]`-only
-  discipline
-- **THEN** the gate lists that declaration by name with its measured footprint and
-  the reason, so a reader can distinguish "excluded by decision" from "never
-  checked".
+- **WHEN** a theorem is not covered by the footprint check
+- **THEN** the reason is recorded next to it, so the exclusion is a decision.
 
 #### Scenario: A footprint claim that overstates the axioms fails the build
 
-- **WHEN** a declaration's docstring states that it is axiom-free and the
-  environment reports that it depends on `[propext, Quot.sound]`
-- **THEN** the build fails naming the declaration, the stated footprint and the
-  measured one.
+- **WHEN** a docstring states a superset of the axioms a declaration actually depends on
+- **THEN** the build fails naming the declaration and the two footprints.
 
 #### Scenario: A footprint claim that understates the axioms fails the build
 
-- **WHEN** a declaration whose docstring states `[propext, Quot.sound]`-only is
-  measured to depend on no axioms, or on `[propext]` alone
-- **THEN** the build fails naming both values, because the understatement is a
-  measurement claim that is untrue and hides the stronger result.
+- **WHEN** a docstring states a subset of the axioms a declaration actually depends on
+- **THEN** the build fails naming the declaration and the two footprints.
 
 #### Scenario: A footprint stated for another declaration names it
 
-- **WHEN** a docstring surveys or tabulates the footprints of several declarations
-  rather than its own
-- **THEN** each claim names the declaration it describes, so that a stated
-  footprint can be attributed and checked rather than silently misattributed to the
-  declaration the docstring is attached to.
+- **WHEN** a docstring states a footprint for a declaration other than the one the
+  docstring documents
+- **THEN** the claim is attributed to the named declaration, and the arm does not
+  silently count it against the wrong owner.
 
 #### Scenario: Declined claims are reported by reason
 
 - **WHEN** the footprint check skips a claim
-- **THEN** the skip is counted under its cause, and a claim with no resolvable owner
-  is its own reported number rather than part of a survey-paragraph total.
+- **THEN** the skip is counted under its cause, and a claim with no resolvable owner is
+  its own reported number rather than part of a survey-paragraph total.
 
 #### Scenario: The kind restriction is stated
 
@@ -190,14 +154,10 @@ classifier's pattern list SHALL itself be verified: an entry that matches no
 declaration, or one that removes authorial API, SHALL be a build failure rather than
 an unexamined default.
 
-The classifier's removals SHALL be reported **decomposed by pattern**, and each
-pattern's count SHALL be asserted. A total cannot distinguish a pattern that removes one
-declaration by coincidence from one that removes many by design, and a pattern whose
-only match is a single name is one rename away from matching nothing.
-
-A reason that cites a declaration by name SHALL have that name resolve in the
-environment. A reason naming a declaration that does not exist is an unfindable
-voucher for the exemption, and reads as evidence that is not there.
+The classifier's pattern list SHALL report its removals **decomposed by pattern**, not
+as a single total. A total cannot distinguish a pattern that removes one declaration
+by coincidence from one that removes ninety by design, and a pattern whose only match
+is a single name is one rename away from matching nothing.
 
 The gate SHALL NOT describe a declaration as a law when the declaration is a
 structure-field projection. A `Prop`-valued field of a structure is part of the type
@@ -207,12 +167,11 @@ are allowlisted with that reason, or all are described as law-shaped — and the
 documentation SHALL NOT argue, in one place, that gating them proves nothing while
 gating them in another.
 
-A body that projects **out of a caller-supplied hypothesis** SHALL be classified by the
-same principle, whether Lean elaborates the projection to a structure projection node or
-to a constructor applied to an argument. The test for "this body is a projection" SHALL
-distinguish a projection of a _hypothesis_ from an application of a _proved theorem_:
-both can share a head constant and an arity, so a predicate that inspects only the head
-constant and the arity SHALL NOT be used to decide the classification.
+Where a definition is removed from the universe by a **mention**-only path — an
+allowlisted theorem whose statement names it — the gate SHALL account for that
+naming explicitly rather than allowing the mention to discharge the definition
+silently. A recursion principle that names its own function SHALL NOT be the only
+reason that function is considered covered.
 
 #### Scenario: A public definition with no law fails the build
 
@@ -256,9 +215,17 @@ constant and the arity SHALL NOT be used to decide the classification.
 #### Scenario: A pattern's removals are reported individually
 
 - **WHEN** the gate prints how many declarations the classifier removed
-- **THEN** the count is decomposed per pattern, and each count is asserted, so a
-  pattern that removes exactly one declaration is a reviewed decision rather than a
-  coincidence nothing notices.
+- **THEN** the count is decomposed per pattern, so a pattern that removes exactly one
+  declaration is a reviewed decision rather than a coincidence nothing notices.
+
+#### Scenario: A recursion principle does not cover its own function
+
+- **WHEN** a function's definition-coverage is satisfied only by an allowlisted
+  theorem that names the function, and that theorem is the function's own recursion
+  principle
+- **THEN** the gate records the naming explicitly rather than counting it as coverage,
+  so the proxy's vacuous-satisfaction mode cannot be reached through the recursion
+  principle.
 
 #### Scenario: A reason citing a declaration resolves
 
@@ -304,6 +271,15 @@ footprint SHALL be described as consistent with a restatement, never as its sign
 declaration being an identity, and the gate SHALL NOT name a declaration as vacuous on
 that basis without `#print`ing its body.
 
+The structural test for "this declaration's body is a projection" SHALL recognise a
+projection **wherever Lean elaborates one**, not only where it elaborates to
+`Expr.proj`. A projection out of a conjunction or an equivalence elaborates to a
+constructor **applied to an argument** (`And.left hal`, `Iff.mp h`), which is a
+constant application and not a structure projection node; a test that matches only
+`Expr.proj` therefore cannot see this whole class. The gate SHALL decide the
+classification of such a body by structure, and a `Prop`-shaped projection of a
+caller-supplied hypothesis SHALL NOT be gated as a law.
+
 #### Scenario: The same field shape is classified the same way everywhere
 
 - **WHEN** two `Prop`-valued structure-field projections are both visible to the gate
@@ -319,6 +295,13 @@ that basis without `#print`ing its body.
   identity (`#print`), and the documentation does not present the empty footprint as a
   signature of vacuity, because honest laws of a definitional equality also have an
   empty footprint.
+
+#### Scenario: A projection of a conjunction is recognised as a projection
+
+- **WHEN** a gated theorem's body is the first or second conjunct of its own hypothesis,
+  or an implication direction out of an equivalence the caller supplied
+- **THEN** the structural test reports it as a projection, and the gate classifies it
+  with the other projections rather than pinning its footprint as a law.
 
 ### Requirement: A completeness claim over the gate's universe is checked, not grepped
 
@@ -450,13 +433,16 @@ one whose "invalid entries would fail".
 The rule SHALL apply to **every** name list that re-admits a declaration the
 classifier would otherwise remove, not only to lists of projections. An exemption list
 that names an authored law carrying a generated-looking suffix is a list of one, and
-it SHALL be checked in both directions: the name exists, it is gated, and the
-classifier would have removed it but for the exemption.
+it SHALL be checked in both directions: the name exists, it is gated, and the suffix
+rule would have removed it. A rename or an unrelated theorem sharing the exempted
+suffix is otherwise accepted by every arm at once.
 
-Where two arms must agree about the same predicate, the predicate SHALL be **one
-definition** read by both, not two copies that a comment asserts are the same. A
-comment claiming "one definition, so they cannot drift apart" is false of two separate
-copies, and is the same defect as a list with no completeness arm.
+An allowlisted declaration that carries a non-empty axiom footprint SHALL NOT be
+allowlisted as "not a law". A footprint is evidence that the declaration's proof
+consults an axiom, which a bare structure projection never does; so a footprinted
+entry in a "not a law" group is either a mis-filed law or a mis-stated reason, and
+the gate SHALL report the footprint of every allowlisted theorem rather than
+presuming the group is empty-footprinted.
 
 #### Scenario: A name that does not have the list's property fails the build
 
@@ -473,11 +459,16 @@ copies, and is the same defect as a list with no completeness arm.
 
 #### Scenario: An authored-suffix exemption is checked in both directions
 
-- **WHEN** a name is exempted from the classifier because it is an authored law the
-  classifier would otherwise remove
-- **THEN** the build asserts the name exists, is a theorem, is gated, and that
-  removing the exemption would remove it, so the exemption invalidates itself when
-  either side changes.
+- **WHEN** a name is exempted from the classifier's suffix rule because it is an
+  authored law that the rule would wrongly remove
+- **THEN** the build asserts the name exists, is gated, and would have been removed by
+  the suffix rule alone, so the exemption invalidates itself when either side changes.
+
+#### Scenario: An allowlisted law with a footprint is not filed as "not a law"
+
+- **WHEN** an allowlisted theorem's footprint is non-empty
+- **THEN** the gate reports it, so an entry whose stated reason is "this is not a law"
+  cannot carry a proof that consults an axiom unnoticed.
 
 #### Scenario: A predicate used by two arms has one definition
 
