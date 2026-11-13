@@ -4,14 +4,16 @@ Guidance for AI coding agents working in this repository.
 
 > ## START HERE: run `openspec list --json`, then read that change's `tasks.md` banner
 >
-> **One `codec` change is open: `codec-drift-closure`.** It is **ready to implement** and
-> it is the only thing to start.
+> **No `codec` change is open.** `codec-drift-closure` and `codec-audit-round-nine` both
+> **landed and archived** (2026-11-12 and 2026-11-13), each at its full task count. **Do not
+> start either again.** Read their `tasks.md` under `openspec/changes/archive/` as history;
+> round nine's `reviews/round-ten.md` is the evidence base for the prose-vs-code defect
+> class, and `codec-drift-closure`'s `design.md` D0 is the measured table of six instances
+> of it.
 >
-> `codec-audit-round-nine` **landed** and is **not archived yet** — 64 of its 69 boxes are
-> checked, and the five open ones are exactly the residue `codec-drift-closure` closes.
-> **Do not start round nine again.** Read its `tasks.md` as history; read its
-> `reviews/round-ten.md` as the evidence base for the new change. Its two open boxes
-> (`2.1`, `2.3`) are `codec-drift-closure`'s Group A.
+> The next `codec` work is an owner decision, not a resumed ledger — see
+> `openspec/` for what remains (the two PARKED `basen` changes below, and the library
+> division that gates them).
 >
 > The two `basen` changes (`basen-uppercase-prepass`, `basen-nat-iso`) are **PARKED by the
 > owner** pending a library-division decision. Do not start them.
@@ -64,7 +66,7 @@ Guidance for AI coding agents working in this repository.
 > ### Reviewer ids resolve in-repo, and the reconciliation is a build check
 >
 > The source cites findings as `review P<pass>-<axis><n>` — `P2-A4`, `P3-M4`, `P1-PA1`.
-> They resolve to `openspec/changes/codec-audit-round-nine/reviews/round-ten.md`, which
+> They resolve to `openspec/changes/archive/2026-11-13-codec-audit-round-nine/reviews/round-ten.md`, which
 > holds every id with what it found and what closed it. **`checks.reviews` fails the build
 > if a cited id has no row, or a row has no citation, in either direction.** An id whose
 > record lives only in `/tmp` is a citation to a file that will not exist.
@@ -89,7 +91,7 @@ Guidance for AI coding agents working in this repository.
 The source cites findings by id — `review M-1`, `review A-6`, `review G-01`, `review F-1`.
 Their reports were written under `/tmp`, which is **not** under git history, so the ids are
 resolved by
-`openspec/changes/codec-audit-round-nine/reviews/round-ten.md`: a table of every id, what it
+`openspec/changes/archive/2026-11-13-codec-audit-round-nine/reviews/round-ten.md`: a table of every id, what it
 found, and what closed it. **That file is the artifact; the `/tmp` reports never were.** If
 you cite a review id from now on, either add it there or cite a change's `tasks.md`.
 
@@ -205,17 +207,29 @@ previous defect_. A fix is a check, and a check is only as good as what enters i
 | Archived history               | `openspec/changes/archive/<date>-<name>/tasks.md` (e.g. `2026-11-05-lean-basen`) |
 | Lessons (not direction)        | `openspec/lean-notes.md`                                                         |
 
-**`codec` has one open change: `codec-drift-closure`, ready to implement.** It is not an
-eleventh review round — it is the **closure of round nine's residue plus the one defect
-class the gate arms cannot see**: a claim whose stated method is not its code's method. Its
-`design.md` D0 has the measured table of six such claims; read it before writing an arm.
-The two **PARKED** `basen` changes remain deferred until the library division is decided.
-Everything else in this list is archived history — except `codec-audit-round-nine`, which
-**landed** (64/69) and is waiting to archive **after** this change (see its D5).
+**`codec` has no open change.** `codec-drift-closure` (the closure of round nine's residue
+plus the one defect class the gate arms cannot see — a claim whose stated method is not its
+code's method) landed and archived 2026-11-12; `codec-audit-round-nine` landed and archived
+2026-11-13. Everything below is archived history, except the two **PARKED** `basen` changes,
+which remain deferred until the library division is decided.
 
-- `codec-audit-round-nine` — **landed, not archived**, 64/69. Round nine's implementation
+- `codec-drift-closure` — **archived** 2026-11-12 as
+  `openspec/changes/archive/2026-11-12-codec-drift-closure/` (33/33). It closed round nine's
+  residue and the one class the gate arms cannot see: **a claim whose stated method is not
+  its code's method.** What it left behind is the part worth knowing: `checks.gate-lines`
+  regenerates README's quoted gate block and fails on drift (the block was **3 of 14 lines
+  stale** at its start, while the prose said "pasted verbatim from a green build");
+  `checks.values` asserts README's two value counts from an environment walk;
+  `scripts/audit-method-sentences.py` enumerates method sentences **with a denominator**
+  (4,991 prose lines scanned, 728 matched, 9/9 markers firing). Four live falsehoods were
+  fixed, including two "ordered longest-match-first" sentences that were **false of the
+  correct list**. Its Group A also took the benchmark re-run round nine had deferred, on an
+  idle host, and restamped all three performance tables to **vintage 2026-11-09**.
+
+- `codec-audit-round-nine` — **archived** 2026-11-13 as
+  `openspec/changes/archive/2026-11-13-codec-audit-round-nine/` (69/69). Round nine's implementation
   plus a **five-pass adversarial review of that implementation** (the review is recorded
-  in-repo at `openspec/changes/codec-audit-round-nine/reviews/round-ten.md`, with every
+  in-repo at `openspec/changes/archive/2026-11-13-codec-audit-round-nine/reviews/round-ten.md`, with every
   finding id resolvable and `checks.reviews` asserting it). It closed §5.3a's
   **vocabulary hole** (22 of 155 docstrings were invisible to the footprint arm; the arm
   now asserts `recognised + blind + exempt = mentioningLiteral` with `blind = 0`), made
