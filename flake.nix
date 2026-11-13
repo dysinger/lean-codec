@@ -213,7 +213,14 @@
               cited = set()
               for f in files:
                   cited |= set(re.findall(r"review (P[0-9]-[A-Z]+[0-9]+[a-z]?)", open(f).read()))
-              doc = "openspec/changes/codec-audit-round-nine/reviews/round-ten.md"
+              # The archived path: round nine landed 2026-11-13. This line is the
+              # SECOND thing that broke when the change moved (the first was this
+              # check itself going red), and it is worth stating: `checks.reviews`
+              # resolves every `review P<pass>-<axis><n>` citation from the source to
+              # one file, so moving that file silently breaks the reconciliation in
+              # the direction it exists to catch. A future archive that moves a
+              # cited review file must update this path in the same commit.
+              doc = "openspec/changes/archive/2026-11-13-codec-audit-round-nine/reviews/round-ten.md"
               tabled = set(re.findall(r"^\| `(P[0-9]-[A-Z]+[0-9]+[a-z]?)`", open(doc).read(), re.M))
               bad = []
               for c in sorted(cited - tabled):
