@@ -129,11 +129,11 @@ of the world, not as work to do; re-verify only if the tree has moved.
       do not "fix" the `@ "master"` line (the lakefile's own comment says why pinning it to
       a SHA is the wrong move).
 
-- [ ] 0.6 Re-read `design.md` D2 (codomain is the quotient) and D5 (padded tails are out of
+- [x] 0.6 Re-read `design.md` D2 (codomain is the quotient) and D5 (padded tails are out of
       scope). Both are the decisions a careless implementation gets wrong, and both are
       stated as requirements so the gate can catch them.
 
-- [ ] 0.7 Do **not** `git stash` / `git reset` / `git checkout -- <file>`. Commit per
+- [x] 0.7 Do **not** `git stash` / `git reset` / `git checkout -- <file>`. Commit per
       section **in `../lean-basen`**, whose history is separate from this repo's — a commit
       here does not commit a `BaseN/` edit, and vice versa. `AGENTS.md` records that a stash
       has destroyed verified work in this ecosystem.
@@ -142,7 +142,7 @@ of the world, not as work to do; re-verify only if the tree has moved.
 
 Findings: `design.md` D0/D1. The whole change rests on this section being right.
 
-- [ ] 1.1 Create `BaseN/Radix.lean` with `digitVal (radix : Nat) (b : UInt8) : Option Nat`.
+- [x] 1.1 Create `BaseN/Radix.lean` with `digitVal (radix : Nat) (b : UInt8) : Option Nat`.
       It SHALL accept the RFC 4648 alphabets for 16/32/64, the bit/quartet/octal digit
       alphabets for 2/4/8, and decimal digits for 10 — **one** function, not a dispatch on
       hand-rolled copies. Prove it agrees with each base's existing **digit-value** function
@@ -176,18 +176,71 @@ Findings: `design.md` D0/D1. The whole change rests on this section being right.
       nix develop --command openspec validate --all
       ```
 
-- [ ] 1.2 `toNat (radix : Nat) (ds : List UInt8) : Option Nat` — the most-significant-first
+- [x] 1.2 `toNat (radix : Nat) (ds : List UInt8) : Option Nat` — the most-significant-first
       fold `acc := acc * radix + d`. Total on valid sequences; `none` on any out-of-alphabet
       byte, and **not** partially converted. State and prove the fold's recursion equation
       as its own lemma (`AGENTS.md`: `unfold` does not reduce a `match`-def at a variable
       argument).
-- [ ] 1.3 `ofNat (radix : Nat) (n : Nat) : List UInt8` — canonical digits, minimal, no
+- [x] 1.3 `ofNat (radix : Nat) (n : Nat) : List UInt8` — canonical digits, minimal, no
       leading zeros, and `ofNat radix 0` is that radix's **single zero digit** (D4). Prove
       `toNat radix (ofNat radix n) = some n` and `ofNat (toNat radix ds)` returns the
       canonical form, i.e. the round-trip pair at the heart of the `Iso`.
-- [ ] 1.4 Mutation-test 1.2 and 1.3: reverse the digit order in `toNat` and confirm the
+- [x] 1.4 Mutation-test 1.2 and 1.3: reverse the digit order in `toNat` and confirm the
       round-trip proofs fail. A round-trip pair that survives a reversed fold is not
       constraining anything.
+
+### Session 1 landed — MEASURED 2026-11-14
+
+`BaseN/Radix.lean` and `BaseN/RadixAlphabets.lean` are committed in `../lean-basen`
+(`c1cfe50`). The gate went from `490 = 444 + 46` / 25 jobs to
+**`533 = 484 + 49` / 27 jobs** — the job count rising by two is the evidence the two
+new modules are actually compiled (§0.4's failure mode).
+
+What the commands settled, which is the part worth carrying:
+
+| claim                                           | how it was checked                                   | result                                             |
+| ----------------------------------------------- | ---------------------------------------------------- | -------------------------------------------------- |
+| `toNat 10` of `"300"` is `300`                  | `#eval`                                              | `some 300`                                         |
+| `toNat 2` of `"01100001"` is `97`               | `#eval`                                              | `some 97`                                          |
+| round trip at all seven radices                 | `#eval` over `0,1,7,37,255,1000,123456` × 7          | all `true`                                         |
+| zero is one digit, not empty                    | `#eval ofNat b 0` × 7                                | `[48]` … `[65]` (base 32's alphabet starts at `A`) |
+| out-of-alphabet rejects, not partially converts | `toNat 8 [0x39]`, `toNat 16 [0x47]`, `toNat 10 "7x"` | `none`, `none`, `none`                             |
+
+**Two corrections to the plan's derived prose, both found by the compiler:**
+
+1. **`ofNat`'s `n+1`-then-drop-the-head trick is wrong as written.** Taking the
+   _tail_ of `n+1`'s digits gives `300 + 1 = 301`'s digits `[3,0,1]`, whose tail is
+   `[0,1]` — the number 1, not 300. Measured with `#eval` before the theorem was
+   attempted. The shipped `ofNat` spells `0` as the zero digit and otherwise maps
+   `natDigits radix n`, which is minimal by construction.
+2. **`Classical.choice` leaked from `omega` on a _conjunction_, not only a
+   disjunction.** §4.5 of this file records the disjunction shape; the conjunction
+   form is the same trap in different dress: `inWin_iff.2 (by omega)` for a goal
+   `lo ≤ c ∧ c ≤ hi` reports `[propext, Classical.choice, Quot.sound]`, while
+   `inWin_iff.2 ⟨by omega, by omega⟩` is clean. Five laws leaked this way and all
+   five were fixed; the final measurement is **zero** `Classical.choice` in the
+   module, and three laws report no axioms at all.
+
+**§1.4's mutation test, run.** A right-to-left fold over the same alphabet returns
+`some 3` for `ofNat 10 300` where `toNat` returns `some 300`, so the round-trip law
+constrains the fold's direction rather than holding vacuously.
+
+**§3.2's probe, run and thrown away.** The plan's D6 claim — that the block isos are a
+_canonicality-filtered restriction_ and not an equality — was checked directly against
+base 10 rather than trusted:
+
+```
+digBlockApply "255" -> some 255      toNat 10 "255" -> some 255      (agree)
+digBlockApply "999" -> none          toNat 10 "999" -> some 999      (do NOT agree)
+```
+
+So an equality really is false and the implication pair is the right shape. That is
+the one derived claim this session tested, and it held.
+
+**Not done, and the gate is green without them:** `numeralIso` (§2), the seven ties
+(§3.2), §4.2/§4.2b's allowlist trim, and §5/§6. §4.1's pinning _was_ done — 40 new
+`#guard_msgs` blocks and 40 `gatedNames` entries — because the coverage arm fails the
+build without it, which is the "cannot be left half-done" rule this file opens with.
 
 ## 2. [M] The quotient and the `Iso`
 
