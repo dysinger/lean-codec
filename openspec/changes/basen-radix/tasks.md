@@ -85,10 +85,10 @@ of the world, not as work to do; re-verify only if the tree has moved.
       runs in `../lean-basen`. Mixing the two up is the single likeliest first-step error.
 
 - [x] 0.4 **A new module must be registered.** Adding `BaseN/Radix.lean` is not enough:
-      `BaseN.lean` imports each base explicitly (`import BaseN.Base2` … `import
-    BaseN.Base64`). A file that is not imported by `BaseN.lean` is **not compiled by
-      `lake build`** and its laws never reach the gate — a silently unbuilt module. Add
-      `import BaseN.Radix` to that list in §1.1, and confirm the build's job count rises.
+      `BaseN.lean` imports each base explicitly, one line per base. A file that is not
+      imported by `BaseN.lean` is **not compiled by `lake build`** and its laws never reach
+      the gate — a silently unbuilt module. Add `import BaseN.Radix` to that list in §1.1,
+      and confirm the build's job count rises.
 
 - [x] 0.5 **The dev-loop `codec` copy is the pin, not `master`.** `lakefile.lean` says
       `require codec from git … @ "master"`, but `.lake/packages/codec` is checked out at
