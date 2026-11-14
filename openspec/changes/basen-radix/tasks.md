@@ -242,13 +242,54 @@ the one derived claim this session tested, and it held.
 `#guard_msgs` blocks and 40 `gatedNames` entries — because the coverage arm fails the
 build without it, which is the "cannot be left half-done" rule this file opens with.
 
+### Session 2 landed, part 1 — MEASURED 2026-11-14
+
+`BaseN/RadixCodec.lean` exists and builds (`../lean-basen` `c18b6a3`). It holds the
+normaliser, the two fixed-point laws and numeral uniqueness. **`numeralIso` itself is
+NOT finished** — see 2.2b below, which is the task this plan was missing.
+
+What the commands settled, and the three places the plan's prose was wrong:
+
+| claim                                            | how it was checked           | result                           |
+| ------------------------------------------------ | ---------------------------- | -------------------------------- |
+| `"7"`, `"007"`, `"  7"`, `"  007"` are one value | `#eval` at all seven radices | agree                            |
+| `"7 "`, `"7x"`, `"9"`@8, `""`, `"   "`, `"0x10"` | `#eval`                      | `none`                           |
+| `trimFor` of an `ofNat` is that `ofNat`          | `trimFor_ofNat` (theorem)    | proved                           |
+| `trimFor` idempotent on its image                | `trimFor_idem` (theorem)     | proved                           |
+| every law `[propext, Quot.sound]`-only           | `#print axioms` on six laws  | yes, **zero** `Classical.choice` |
+
+**Three corrections, all found by the compiler:**
+
+1. **`trimFor` cannot be `List UInt8 → List UInt8`.** `Codec.Normal` needs a total
+   endofunction, but `"7x"` names _no number_, so collapsing it to some list would make
+   `fill` a bijection onto a quotient of strings most of which denote nothing. The shipped
+   `trimFor : Nat → List UInt8 → Option (List UInt8)` rejects instead, and the total
+   `normF` (identity on rejection) is what `Codec.Normal` is instantiated with — rejected
+   spellings stay outside the `Iso`'s image because `apply` goes through `ofNat`.
+2. **Two guards is not idempotent; one pre-pass is.** Strip blanks _then_ zeros is not
+   idempotent when a blank follows a zero (` 0 7` → `7` vs ` 07`). The shipped `strip`
+   removes both in one interleaving, so its output either is empty or begins with a byte
+   that is neither, making `strip_idem` structural rather than a case analysis.
+3. **`Base2.bitVal` accepts ASCII 48 _and_ 49** (`Base2.lean:36`), not 49/50 as an earlier
+   draft of this session assumed from `valToBit`'s docstring. `digitVal 2 0x30 = some 0`, so
+   no encoder/decoder alphabet split exists and that paragraph was deleted rather than
+   shipped as a false claim. `acceptsDigitZero` remains as the `decide` that records it.
+
+**Task 2.2's stated route is incomplete, and that is the finding.** 1.3's round-trip pair
+plus `fill_surj` gives the `Iso` law's **`→`** direction only. The **`←`** direction
+needs _numeral uniqueness_: a fixed point whose fold reads `n` is exactly `ofNat b n`, which
+is false without proving that minimal-digit numerals are unique. That is now
+`natVal_inj_head` (proved), and it is why 2.2b below exists.
+
 ## 2. [M] The quotient and the `Iso`
 
 Findings: `design.md` D2/D4.
 
-- [ ] 2.1 Define `trimFor (radix : Nat) : List UInt8 → List UInt8`, absorbing leading zeros
+- [x] 2.1 Define `trimFor (radix : Nat) : List UInt8 → List UInt8`, absorbing leading zeros
       and leading whitespace, and prove it total and idempotent. It SHALL NOT absorb
       trailing whitespace, a radix prefix, or anything that changes the value (D3's table).
+      **LANDED 2026-11-14** (`../lean-basen` `5a3e1fc` → `e4d32dd` → `c18b6a3`). Note it
+      is `Option`-valued, not `List UInt8 → List UInt8` — see the landing block below.
 
       **Before writing it, read `basen-uppercase-prepass`'s `upperNormalizer`.** That parked
       change builds a `Normal`-based pre-pass with the same shape, and its §8 explicitly
@@ -263,6 +304,37 @@ Findings: `design.md` D2/D4.
       the quotient** — a version stated over raw `List UInt8` must be rejected in review,
       and this task's own acceptance is that the law holds _unconditionally_ with no
       hypothesis about spelling.
+
+      **Amended 2026-11-14: the codomain is `Normal (List UInt8) (normF b)`, not
+      `(trimFor b)`.** `trimFor` is `Option`-valued and `Codec.Normal` requires a total
+      `norm : S → S`; `normF b ds := (trimFor b ds).getD ds` is that total endofunction,
+      idempotent by `normF_idem`. The equivalence class is unchanged — `normF`'s fixed points
+      contain every canonical spelling — so D2's argument is untouched. And see 2.2b: the
+      round-trip pair is **not** sufficient for the law.
+
+- [ ] 2.2b **Prove the value↔byte bridge**, the task 2.2's route needs and does not name.
+
+      Closing the `Iso` law's `←` reduces to `toNat b f.raw = some n → ofNat b n = f.raw`
+      for a fixed point `f.raw`. With `natVal_inj_head` (landed) the remaining gap is that a
+      `isDigits` list is `vs.map (byteOfDigit b)`: `toNat` gives the digit *values* but not
+      their *bytes*. That needs `digitVal b c = some v → c = byteOfDigit b v` — the
+      converse of `digitVal_byteOfDigit` — which is not in the tree.
+
+      **Two obstacles measured, so the next session does not rediscover them.** (a)
+      `digitVal`'s `if`-chain does not reduce under `split`/`simp` at a variable radix;
+      `digitVal_lt` stalled the same way. (b) `UInt8.ofNat c` appears throughout, so every
+      window fact needs `c % 256`. The promising route is a per-arm proof with
+      `UInt8.toNat.inj` at the end, radix by radix, rather than one generic `simp` —
+      `(0x30 : UInt8).toNat = 32` *is* `decide`-able, which is what `digitVal_blank` used.
+
+- [ ] 2.2c **Wire `BaseN.RadixCodec` into `BaseN.lean` and pin its laws.** Measured
+      2026-11-14: adding `import BaseN.RadixCodec` makes the coverage arm name **99**
+      unpinned theorems plus one uncovered `def` (`isNumeral`), because the module was
+      written and built _without_ being imported — exactly §0.4's "an unimported module is
+      indistinguishable from a module with no laws" trap, working in the reassuring
+      direction: the gate stayed green through the whole session because it could not see
+      the file. The import was reverted so the gate stays green; it lands with 4.1's pins,
+      which cannot be left half-done.
 - [ ] 2.3 Prove the **three-spelling witness** — canonical, leading-zero, and
       leading-whitespace spellings of one number all reach the same image — and
       **mutation-test it** by removing one absorbed variation and confirming it fires. This
