@@ -95,9 +95,12 @@ Base64.decodeFullB64 "twfu"      → some (a DIFFERENT value)
 
 ## 8. Recorded, not in this change
 
-- **`basen-nat-iso`** (the numeric codec) is a separate change and its premise is
-  under review: `basen` is "base-N byte encodings", and a numeral is not one. Do not
-  start it from here.
+- **The numeric codec** is now `basen-radix` (2026-11-13), which **supersedes and
+  retires `basen-nat-iso`** — the base-10-only slice of the same layer. Do not start
+  `basen-nat-iso` from here: it no longer exists. `basen-radix` adds a radix-generic
+  `digitVal`/`toNat`/`ofNat` over `Nat` for bases 2/4/8/10/16/32/64.
 - **Whitespace trimming and leading-zero stripping** are the same normaliser pattern.
-  They belong with whatever numeric codec is eventually built, and should reuse
-  `upperNormalizer`'s shape rather than invent a second mechanism.
+  They belong with the numeric codec, and `basen-radix`'s `trimFor` (its task 2.1) is
+  where they land. **Check whether it reuses `upperNormalizer`'s shape before inventing a
+  second mechanism** — this note is the reason that check exists, and `basen-radix` was
+  authored without seeing it.

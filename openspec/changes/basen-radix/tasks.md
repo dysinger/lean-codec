@@ -65,6 +65,15 @@ Findings: `design.md` D2/D4.
 - [ ] 2.1 Define `trimFor (radix : Nat) : List UInt8 → List UInt8`, absorbing leading zeros
       and leading whitespace, and prove it total and idempotent. It SHALL NOT absorb
       trailing whitespace, a radix prefix, or anything that changes the value (D3's table).
+
+      **Before writing it, read `basen-uppercase-prepass`'s `upperNormalizer`.** That parked
+      change builds a `Normal`-based pre-pass with the same shape, and its §8 explicitly
+      says trimming "belongs with whatever numeric codec is eventually built, and should
+      reuse `upperNormalizer`'s shape rather than invent a second mechanism". This change
+      was authored without knowing that, and it is exactly the kind of pair
+      `AGENTS.md` warns about — two normalisers that must agree, and no arm comparing them.
+      Either reuse its shape, or record in `design.md` why a second mechanism is right.
+
 - [ ] 2.2 State `numeralIso : (b : Nat) → 2 ≤ b → Iso Nat (Normal (List UInt8) (trimFor b))`
       and discharge its `law` from 1.3's round-trip pair plus `fill_surj`. **The codomain is
       the quotient** — a version stated over raw `List UInt8` must be rejected in review,

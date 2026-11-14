@@ -4,19 +4,38 @@ Guidance for AI coding agents working in this repository.
 
 > ## START HERE: run `openspec list --json`, then read that change's `tasks.md` banner
 >
-> **No `codec` change is open.** `codec-drift-closure` and `codec-audit-round-nine` both
-> **landed and archived** (2026-11-12 and 2026-11-13), each at its full task count. **Do not
-> start either again.** Read their `tasks.md` under `openspec/changes/archive/` as history;
-> round nine's `reviews/round-ten.md` is the evidence base for the prose-vs-code defect
-> class, and `codec-drift-closure`'s `design.md` D0 is the measured table of six instances
-> of it.
+> **One change is open: `basen-radix`** — the next session's work. Read its `tasks.md`
+> banner before touching anything.
 >
-> The next `codec` work is an owner decision, not a resumed ledger — see
-> `openspec/` for what remains (the two PARKED `basen` changes below, and the library
-> division that gates them).
+> **What it is, in one sentence:** `basen` decodes text to `List UInt8` and **never to a
+> number**, so `"300"` gives three digit bytes and the number `300` never exists. This
+> change adds the one missing rung — a **radix-generic** `digitVal` / `toNat` / `ofNat`
+> over `Nat`, plus `numeralIso` per radix over the `Normal` quotient — for **base 2, 4, 8,
+> 10, 16, 32 and 64**.
 >
-> The two `basen` changes (`basen-uppercase-prepass`, `basen-nat-iso`) are **PARKED by the
-> owner** pending a library-division decision. Do not start them.
+> Its `design.md` has four decisions that are **settled, do not re-litigate**: D2 the
+> codomain is the **quotient** (over raw `List UInt8` the law is _false_, not unproved);
+> D4 zero is the **single zero digit**, not the empty sequence; D5 `numeralIso` does **not**
+> go through the `B32`/`B64` tail spine (a numeral has no padding); D6 the six block isos are
+> **kept and proved equal** to the generic fold, not deleted.
+>
+> **The first thing to do is task 3.2 as a spike.** The six block-iso equalities are the
+> risk sink: if a base's existing block iso does **not** agree with the generic fold, that is
+> a real bug in `basen` today, and it is better found at task 1 than at task 6.
+>
+> `codec-drift-closure` and `codec-audit-round-nine` both **landed and archived** (2026-11-12
+> and 2026-11-13). **Do not start either again.** Read their `tasks.md` under
+> `openspec/changes/archive/` as history; round nine's `reviews/round-ten.md` is the evidence
+> base for the prose-vs-code defect class, and `codec-drift-closure`'s `design.md` D0 is the
+> measured table of six instances of it.
+>
+> **`basen-nat-iso` was RETIRED into `basen-radix`** (2026-11-13) — it was the base-10-only
+> slice of the same layer, and landing both would have given one package two `Nat` codecs and
+> two zero conventions. Its analysis is carried forward; `basen-radix/tasks.md` §6.1
+> tabulates where each requirement went. Do not reopen it.
+>
+> `basen-uppercase-prepass` is **still PARKED by the owner** pending a library-division
+> decision. Do not start it.
 >
 > ### `codec-drift-closure` attacks the one class the gate arms cannot see
 >
@@ -201,17 +220,18 @@ previous defect_. A fix is a check, and a check is only as good as what enters i
 
 | Question                       | Authoritative file                                                               |
 | ------------------------------ | -------------------------------------------------------------------------------- |
-| **What is the task right now** | whatever `openspec list --json` reports; **`codec-drift-closure` today**         |
+| **What is the task right now** | whatever `openspec list --json` reports; **`basen-radix` today**                 |
 | Open changes + task counts     | `nix develop --command openspec list --json`                                     |
 | Are the spec deltas sound      | `nix develop --command openspec validate --all`                                  |
 | Archived history               | `openspec/changes/archive/<date>-<name>/tasks.md` (e.g. `2026-11-05-lean-basen`) |
 | Lessons (not direction)        | `openspec/lean-notes.md`                                                         |
 
-**`codec` has no open change.** `codec-drift-closure` (the closure of round nine's residue
-plus the one defect class the gate arms cannot see — a claim whose stated method is not its
-code's method) landed and archived 2026-11-12; `codec-audit-round-nine` landed and archived
-2026-11-13. Everything below is archived history, except the two **PARKED** `basen` changes,
-which remain deferred until the library division is decided.
+**`codec` has no open change; `basen-radix` is the one open change and the next session's
+work.** `codec-drift-closure` (the closure of round nine's residue plus the one defect class
+the gate arms cannot see — a claim whose stated method is not its code's method) landed and
+archived 2026-11-12; `codec-audit-round-nine` landed and archived 2026-11-13. Everything
+below is archived history, except `basen-radix` (open, 0/29) and `basen-uppercase-prepass`
+(parked on the owner's library-division decision).
 
 - `codec-drift-closure` — **archived** 2026-11-12 as
   `openspec/changes/archive/2026-11-12-codec-drift-closure/` (33/33). It closed round nine's
@@ -272,14 +292,23 @@ which remain deferred until the library division is decided.
   24-theorem case-folding tier with an `upperBytes` pre-pass through
   `Codec/Normal.lean`, corrects the RFC `MAY`-vs-`MUST` misquote that justified the
   tier, and **excludes base64** because its lowercase letters are data. Three ADDED
-  `basen` requirements; disjoint from `basen-nat-iso`'s, so neither can drop the
-  other's scenarios.
+  `basen` requirements. **Disjoint from `basen-radix`'s** — case folding concerns the
+  _alphabet_, `basen-radix` concerns _padding_ — so neither can drop the other's
+  scenarios. Its fate still depends on the owner's library-division decision.
 
-- `basen-nat-iso` — **in-progress, PARKED and BLOCKED**, 0/18. Its premise is under
-  review: `basen` is "base-N byte encodings" and a numeral is not one, so it may
-  belong in a new repo. Read its §0 before anything else. The analysis inside is sound
-  (a number is isomorphic to its canonical numeral, lax spellings are names not
-  images) and will be reused wherever it lands; what is unsettled is the home.
+- `basen-radix` — **in-progress, 0/29, THE NEXT SESSION'S WORK.** The one open change.
+  Adds the missing rung in `basen`: a radix-generic `digitVal`/`toNat`/`ofNat` over `Nat`
+  plus `numeralIso` per radix over the `Normal` quotient, for bases **2, 4, 8, 10, 16, 32,
+  64**. Read `design.md` D0 for the measurement that motivates it (`basen` decodes to
+  `List UInt8` and never to a number; `grep -rn 'radix|base : Nat|pow' BaseN/*.lean` →
+  nothing) and D2/D4/D5/D6 for the four settled decisions. Start with task 3.2 as a spike.
+
+- `basen-nat-iso` — **RETIRED 2026-11-13 into `basen-radix`**, deleted at 0/18. It was the
+  base-10-only slice of the same layer: same quotient argument, same "a number is its
+  canonical numeral", same leading-zero policy. Landing both would have put two `Nat`
+  codecs in one package with two quotient stories and two zero conventions.
+  `basen-radix/tasks.md` §6.1 tabulates where each of its three requirements went; nothing
+  in its analysis was lost. **Do not reopen it.**
 
 - `codec-audit-round-six` — **archived** 2026-11-07 as
   `openspec/changes/archive/2026-11-07-codec-audit-round-six/` (32/32 tasks, both
