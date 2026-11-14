@@ -301,7 +301,7 @@ Findings: `design.md` D2/D4.
       `AGENTS.md` warns about — two normalisers that must agree, and no arm comparing them.
       Either reuse its shape, or record in `design.md` why a second mechanism is right.
 
-- [ ] 2.2 State `numeralIso : (b : Nat) → 2 ≤ b → Iso Nat (Normal (List UInt8) (trimFor b))`
+- [ ] 2.2 State `numeralIso : (b : Nat) → 2 ≤ b → Iso Nat (Normal (List UInt8) (normF b))`
       and discharge its `law` from 1.3's round-trip pair plus `fill_surj`. **The codomain is
       the quotient** — a version stated over raw `List UInt8` must be rejected in review,
       and this task's own acceptance is that the law holds _unconditionally_ with no
@@ -314,7 +314,7 @@ Findings: `design.md` D2/D4.
       contain every canonical spelling — so D2's argument is untouched. And see 2.2b: the
       round-trip pair is **not** sufficient for the law.
 
-- [ ] 2.2b **Prove the value↔byte bridge**, the task 2.2's route needs and does not name.
+- [x] 2.2b **Prove the value↔byte bridge**, the task 2.2's route needs and does not name.
 
       Closing the `Iso` law's `←` reduces to `toNat b f.raw = some n → ofNat b n = f.raw`
       for a fixed point `f.raw`. With `natVal_inj_head` (landed) the remaining gap is that a
@@ -322,12 +322,36 @@ Findings: `design.md` D2/D4.
       their *bytes*. That needs `digitVal b c = some v → c = byteOfDigit b v` — the
       converse of `digitVal_byteOfDigit` — which is not in the tree.
 
-      **Two obstacles measured, so the next session does not rediscover them.** (a)
-      `digitVal`'s `if`-chain does not reduce under `split`/`simp` at a variable radix;
-      `digitVal_lt` stalled the same way. (b) `UInt8.ofNat c` appears throughout, so every
-      window fact needs `c % 256`. The promising route is a per-arm proof with
-      `UInt8.toNat.inj` at the end, radix by radix, rather than one generic `simp` —
-      `(0x30 : UInt8).toNat = 32` *is* `decide`-able, which is what `digitVal_blank` used.
+      **LANDED 2026-11-14** (`../lean-basen` `08d220f`): `digitVal_some_byteOfDigit` plus
+      `digitVal_lt_of_some` (the range fact), both `[propext, Quot.sound]`-only.
+
+      **The two obstacles the plan named are both real, and the route it guessed is the
+      route that closes** — with one correction to the recipe. Measured: (a) is exactly as
+      stated, the `if`-chain does not reduce at a variable radix; (b) `UInt8.ofNat` is not
+      the obstacle the plan thought, because `byteOfDigit_toNat_eq` (in-range, so **no**
+      `% 256`) already exists in `BaseN.Radix` and is what the final step uses. The recipe
+      that works, per arm: restate that arm's `if`-chain as one `hbody` equation
+      (`unfold digitVal; simp` at a **literal** radix — this is the step the plan did not
+      name and it is what makes `split` unnecessary), then `ite_eq_left`/`ite_eq_right` per
+      window, then `rw [byteOfDigit_toNat_eq …]` and close with `omega` against the window
+      bounds. Finish with `UInt8.toNat.inj` at the generic level.
+
+      **Two `Nat`-level snags worth recording.** `have := (inWin_eq_true hw).1` loses the
+      upper bound — `omega` then fails on every `55 + (c - 55)` shape; keep the pair
+      (`have hw := inWin_eq_true hw`). And `if_true`/`if_false` are deprecated in this
+      toolchain; `ite_true`/`ite_false` are the spellings.
+
+- [ ] 2.2b′ **The rest of 2.2's `←`, now reduced to one lemma per case.** `normF`,
+      `normF_idem` and `map_val_eq_ofNat` landed (`a1fee8b`). What remains is
+      `fixed_eq_ofNat : trimFor b ds = some ds → toNat b ds = some n → ds = ofNat b n`,
+      whose positive case is `map_val_eq_ofNat` and whose **zero case is still open**.
+      **Correction to the plan's framing, found by the compiler:**
+      `vs.head? ≠ some 0` does **not** rule out `vs = []` — `[]`'s head is `none`, so it
+      _satisfies_ that hypothesis. Every attempt to discharge the empty branch from `hne`
+      alone failed for that reason (`none ≠ some 0` is a _true_ statement and carries no
+      contradiction). `map_val_eq_ofNat` therefore takes `vs ≠ []` **as a separate
+      hypothesis**; the zero case must be reached through `trimFor`'s own accepting
+      condition (`strip b ds = [] ∧ isDigits b ds`) rather than through the head.
 
 - [ ] 2.2c **Wire `BaseN.RadixCodec` into `BaseN.lean` and pin its laws.** Measured
       2026-11-14: adding `import BaseN.RadixCodec` makes the coverage arm name **99**
