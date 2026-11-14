@@ -23,6 +23,34 @@ Guidance for AI coding agents working in this repository.
 > risk sink: if a base's existing block iso does **not** agree with the generic fold, that is
 > a real bug in `basen` today, and it is better found at task 1 than at task 6.
 >
+> ### `basen-radix` spans TWO repos, and the split is the first thing to get wrong
+>
+> Measured 2026-11-13, so no session has to rediscover it:
+>
+> |                                                               | where           |
+> | ------------------------------------------------------------- | --------------- |
+> | the **code** (`BaseN/*.lean`, `Axioms.lean`, `lakefile.lean`) | `../lean-basen` |
+> | the **spec** (`openspec/specs/basen/spec.md`) and this change | **this repo**   |
+>
+> **`../lean-basen` has no `openspec/` directory at all.** Every `openspec` command runs
+> here; every `lake` command runs there. It is a **separate git repo with a separate
+> history**, so "commit early" applies per repo — a commit here does not commit a `BaseN/`
+> edit.
+>
+> **`../lean-basen` builds green today**: clean tree, `master`, `lake build` →
+> `Build completed successfully (25 jobs)`, six gate lines self-consistent (`490 = 444 +
+46`). That is a regression baseline, not a repair job.
+>
+> **The `codec` pin is `14b54fa`, 68 commits behind this repo's HEAD — and no bump is
+> needed.** Measured by diffing `Codec/Normal.lean` at both revisions: `Normal`,
+> `Normalizer`, `fill`, `fill_surj`, `decodeNormal` and friends are present with **identical
+> signatures** at the pin and at HEAD. Both toolchains are `v4.35.0`. Do not bump the pin
+> "just in case": that moves 68 commits of unrelated `codec` work into the blast radius.
+>
+> **A new `BaseN/*.lean` must be imported by `BaseN.lean`** or `lake build` never compiles
+> it and its laws never reach the gate. An unimported module is indistinguishable from a
+> module with no laws — which is the repo's own recurring defect class wearing a new hat.
+>
 > `codec-drift-closure` and `codec-audit-round-nine` both **landed and archived** (2026-11-12
 > and 2026-11-13). **Do not start either again.** Read their `tasks.md` under
 > `openspec/changes/archive/` as history; round nine's `reviews/round-ten.md` is the evidence
@@ -436,6 +464,19 @@ file does not guess it. When one is chosen, author it as a new change under
 a template to resume.
 
 ### Traps that have actually cost sessions here
+
+- **`codec`'s spec lives here; `basen`'s spec lives here too, but `basen`'s code does not.**
+  `../lean-basen` has **no `openspec/` directory** — `ls openspec` there fails. So a `basen`
+  change's _planning artifacts and spec delta_ belong in **this** repo while its _edits_
+  belong in that one, and the two are **separate git repositories with separate histories**.
+  A session that commits one and not the other leaves a half-landed change, and a session
+  that runs `openspec` in `../lean-basen` gets "no project" rather than a useful error.
+  Measured 2026-11-13 while authoring `basen-radix`; the split is deliberate (one spec for
+  the ecosystem, one code repo per package), not an oversight.
+- **A new `BaseN/*.lean` that is not imported by `BaseN.lean` is never compiled**, so its
+  laws exist as source text and reach no gate. `lake build`'s job count is the tell: it must
+  **rise** when a module is added. This is the same "a check that reports nothing" shape as
+  the gate arms — an unbuilt module and a module with no theorems look identical.
 
 - **A name-based classifier is the gate's weakest step, and it fails _silently by
   construction_.** `isDerivedDefName` drops a `def` by its last name component; the name
