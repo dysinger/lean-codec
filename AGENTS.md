@@ -22,12 +22,78 @@ Guidance for AI coding agents working in this repository.
 > and compares, base 10 rejects `n > 255`, base 32 rejects a pad byte, and the `UInt8`-valued
 > bases truncate, so an equality is false.
 >
+> ### `basen-radix` is FOUR sessions. Read this table before starting any of them.
+>
 > **The first session is §1 (the fold), not §3.** An earlier banner said "do 3.2 first", which
 > is impossible — 3.2's statements mention `toNat`, so the fold must exist to state them. 3.2
 > is still the **risk sink**: build the fold, then probe one block iso against it before
-> committing to all seven. `tasks.md` carries a **four-session plan** with, for each session,
-> what green at the end means and what is _not_ yet true.
+> committing to all seven.
 >
+> | session | tasks                                            | green at the end means                                                                               | **not yet true**                       |
+> | ------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------- | -------------------------------------- |
+> | **1**   | 1.1–1.4 + a **throwaway** probe of one block iso | `toNat`/`ofNat` exist, round-trip proved, `BaseN.lean` imports `Radix.lean`, gate green, laws pinned | no `numeralIso`, no ties, no instances |
+> | **2**   | 3.1–3.5, 4.2, 4.2b, 4.3 (partial)                | all seven block isos tied by the implication pair; allowlist **10 → 3**; header constants re-derived | no quotient, no `Iso`                  |
+> | **3**   | 2.1–2.4 + 3.1's radix instances                  | `trimFor` total + idempotent; three-spelling witness mutation-tested; `numeralIso` at seven radices  | —                                      |
+> | **4**   | 4.1, 4.4, 4.5, 5.x, 6.x                          | everything pinned, `CHANGELOG`, all gates                                                            | —                                      |
+>
+> **Tasks that CANNOT be left half-done** — stopping mid-way leaves a RED gate, and this repo
+> requires a green build per commit:
+>
+> - **4.1** — a public `BaseN` theorem with no `#guard_msgs` block and no `gatedNames` entry
+>   fails the coverage arm.
+> - **4.2 together with 4.2b and 4.3** — trimming `definitionSurfaceAllowlist` without
+>   re-deriving the header constants trips `headerNumbers`. These three are one commit.
+> - **Any commit that adds a `BaseN` public theorem.** There is no partial state where a law
+>   exists but is not yet pinned.
+>
+> **Everything else stops at a task boundary cleanly.** If a session runs out of time, stop
+> _before_ one of the three above, not during it.
+>
+> **A cold-start reader needs exactly three things besides this table:** §0's measured facts
+> (the two-repo split, the `codec` pin, the `BaseN.lean` import requirement); the note that
+> **`basen` has no generator**, so pinning is by hand; and the rule below.
+>
+> ### Trust the measured rows of `basen-radix`; verify the derived ones
+>
+> Two adversarial review rounds ran on this plan (`openspec/changes/basen-radix/reviews/`).
+> The finding that matters is not any single defect — it is **which ones survived**:
+>
+> | kind of claim                                                                                                                                                                                                    | survived both rounds?                                |
+> | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+> | a fact obtained by running a command (`§0`'s two-repo split, the pin, the `BaseN.lean` import, the seven block-iso names)                                                                                        | **yes, untouched**                                   |
+> | a claim _derived from_ those facts by prose (`"seven entries"` from a list of ten, `"the same shape"` for two functions that are `48 + d` and one that is not, `"special cases"` for canonicity-filtered guards) | **no — 4 of round two's 5 MUSTs were of this shape** |
+>
+> **The instruction, stated plainly: for session 1, implement first and read the design
+> after.** Not the other way round. Written as a caveat by the agent that authored the plan,
+> and promoted here because it is the single most useful thing either review round produced:
+>
+> > _"That's a signal about the plan's prose, not just its content. For session 1 I'd suggest
+> > implementing first and reading the design after, rather than trusting the document's
+> > derived claims. The parts that survived both rounds untouched are the ones grounded in a
+> > command — and those are the parts you should trust."_
+>
+> Concretely, in order:
+>
+> 1. **Run `§1`'s commands first.** `grep` what exists, write `toNat`/`ofNat` against the tree,
+>    and let the compiler and the gate tell you what is true.
+> 2. **Then read `design.md` D1/D2 and compare** — not to learn what to do, but to see whether
+>    the prose agrees with what you built.
+> 3. **Where they disagree, the command wins**, and the sentence gets corrected in the same
+>    commit. That is not a special rule for this change; it is `AGENTS.md`'s standing one.
+>
+> **Why the prescription and not just the diagnosis:** "verify before relying" tells you to
+> distrust the prose and then still consult it. The measured conclusion is stronger — the
+> derived prose was wrong **four times in five**, so the default should be to build against the
+> commands and treat `design.md`'s derived claims as a review checklist, not a specification.
+> Round two found: an allowlist said to hold "seven entries" that holds **ten**; two inverse
+> maps said to be non-injective that are **`48 + d`**; a single `BlockVal` placeholder that
+> does not typecheck across `UInt8` and `List UInt8` codomains. Each was caught in one command.
+>
+> **And the meta-lesson, which is why this section exists:** four of those five were
+> introduced _by the fix for the previous round's finding_. When you land a fix to this plan,
+> re-read the sentence you wrote about it in the same commit — the repo's standing rule, now
+> with a measured hit rate on this change.
+
 > ### `basen-radix` spans TWO repos, and the split is the first thing to get wrong
 >
 > Measured 2026-11-13, so no session has to rediscover it:
