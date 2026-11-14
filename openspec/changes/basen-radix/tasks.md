@@ -16,6 +16,9 @@
 > D4), **`numeralIso` does not touch the padded bases' tail spine** (D5), **block isos are
 > kept and proved equal** (D6).
 >
+> **Progress: 6/39** (the six `[x]` are §0's five measured preconditions
+> plus §6.1's retirement; every implementation task is open).
+>
 > **The first task to do is 3.2 as a spike.** The six block-iso equalities are the risk
 > sink: if a base's existing block iso does **not** agree with the generic fold, that is a
 > real bug in `basen` today, and it is better found at task 1 than at task 6.
@@ -32,7 +35,8 @@
 > (`490 = 444 + 46`). That is a **regression baseline**, not a repair job — re-run it first,
 > expect green, and expect the job count to **rise** as you add `Radix.lean`.
 >
-> The `codec` pin is `14b54fa` (68 commits behind `lean-codec`'s HEAD) and **`Codec/Normal`
+> The `codec` pin is `14b54fa` (measured 70 commits behind `lean-codec`'s HEAD as of
+> `9a7231f`, and the count moves every commit — quote it with its HEAD or not at all) and **`Codec/Normal`
 > is identical at that pin and at HEAD**, `fill_surj` included. **No `codec` bump is
 > needed** — see §0.2 and §6b.3, and do not bump it "just in case".
 >
@@ -61,11 +65,18 @@ of the world, not as work to do; re-verify only if the tree has moved.
 
 - [x] 0.2 **The `Codec/Normal` layer is reachable, and is the same API as today's.** The
       pin is `codec @ 14b54fa` (`flake.lock` → `nodes.codec.locked.rev`), which is an
-      **ancestor** of `lean-codec`'s HEAD, **68 commits behind**. Measured by diffing the
-      file at both revisions: `Normal`, `Normalizer`, `fill`, `fill_raw`, `fill_fixed`,
-      **`fill_surj`**, `fill_inj`, `decodeNormal`, `decodeNormal_of_fixed`,
-      `decodeNormal_encode` exist at **both**, with identical signatures. So nothing in
-      this change needs a `codec` bump.
+      **ancestor** of `lean-codec`'s HEAD, and far behind it — the exact count moves on every
+      commit, so it is **not** quoted here (a previous draft said 68, which reproduced at no
+      stable revision: 67 at the authoring commit, 69 and 70 at the two after it). What is
+      load-bearing is the API, measured by diffing the **declaration lines** of
+      `Codec/Normal.lean` at both revisions:
+
+      `Normal`, `Normalizer`, `fill`, `fill_raw`, `fill_fixed`, **`fill_surj`**, `fill_inj`,
+      `decodeNormal`, `decodeNormal_of_fixed`, `decodeNormal_encode` — **identical names and
+      signatures at both**. The two files differ in **docstring prose only** (29 insertions / 9
+      deletions, from `codec-audit-round-nine` §4), which does not affect the pin. A previous
+      draft claimed the files were "identical", which is false and is the repo's own
+      stated-method defect; the declaration-line diff is the check that matters.
 
       **Toolchains agree**: `basen`'s `lean-toolchain` and `codec`'s are both
       `leanprover/lean4:v4.35.0` at the pin and at HEAD.
@@ -113,10 +124,16 @@ Findings: `design.md` D0/D1. The whole change rests on this section being right.
 - [ ] 1.1 Create `BaseN/Radix.lean` with `digitVal (radix : Nat) (b : UInt8) : Option Nat`.
       It SHALL accept the RFC 4648 alphabets for 16/32/64, the bit/quartet/octal digit
       alphabets for 2/4/8, and decimal digits for 10 — **one** function, not a dispatch on
-      hand-rolled copies. Prove it agrees with each base's existing alphabet function
+      hand-rolled copies. Prove it agrees with each base's existing **digit-value** function
       (`bitVal`, `quartetVal`, `octToVal`, `hexToNibble`, `b32ToVal`, `b64ToVal`, `digVal`)
-      at that radix, so `design.md` D1's "proved-equal specialisation" is a theorem and not
-      a claim.
+      at that radix: **7 equalities, decode direction only**.
+
+      **Do not attempt to unify the encode direction.** `valToBit b := if b = 0 then 48 else
+      49` (`BaseN/Base2.lean:49-50`) is deliberately non-injective — the module's own
+      docstring says the sentinels differ on purpose, are sound only because every use
+      supplies `b ≤ 1`, and "Do not 'fix' one sentinel to match the other".
+      `valToQuartet`/`valToOct` have the same shape. `ofNat` is this change's own encoder; it
+      is not claimed to be a copy of the three at 2/4/8.
 
       **Register the module in the same step** (§0.4): add `import BaseN.Radix` to
       `BaseN.lean`'s import list. A file not imported there is not compiled by `lake build`
@@ -188,25 +205,108 @@ Findings: `design.md` D5/D6.
 - [ ] 3.1 Instantiate `numeralIso` at radices 2, 4, 8, 10, 16, 32, 64. Each SHALL carry its
       `2 ≤ b` witness explicitly. Enumerate the seven from one source in the gate so a
       missing radix is a build failure rather than a shorter list.
-- [ ] 3.2 Prove, for each of the six power-of-two bases, that its block iso agrees with
-      `toNat` restricted to that block (`bitBlockIso`, `quartetBlockIso`, `octBlockIso`,
-      `hexBlockIso`, `b32BlockIso`, `b64BlockIso`). These are the "kept and proved equal"
-      theorems of D6.
-- [ ] 3.3 **Mutation-test every 3.2 equality** by perturbing that block iso's digit order
-      and confirming the theorem fails naming it. Six equalities, six mutations.
+- [ ] 3.2 Prove, for **each of the seven** bases, that its block iso is tied to `toNat` by
+      the **canonicity-filtered implication pair** of `design.md` D6 — _not_ an equality.
+
+      Seven, not six: `digBlockIso` (`BaseN/Base10.lean:250`, base 10) is the same shape and
+      the first draft silently dropped it, which is an unexplained 6-of-7 list.
+
+      The statement is NOT `blockIso = toNat` restricted, and attempting that will fail:
+      `b64BlockApply` re-encodes and compares (`Base64.lean:265-270`), `digBlockApply`
+      rejects `n > 255` (`Base10.lean:121-128`), and the `UInt8`-valued bases truncate via
+      `UInt8.ofNat`. Each needs `toNat cs = some n → blockApply cs = some (blockValOf n)` and
+      its converse, with the truncation's losslessness proved from the block's own guard.
+
+- [ ] 3.3 **Mutation-test every 3.2 theorem** by perturbing that block iso's digit order
+      and confirming it fails naming that base. Seven theorems, seven mutations.
 - [ ] 3.4 Record, in the module docstring, that `numeralIso` is **not** defined through the
-      padded bases' `B32`/`B64` tail spine (D5), and why — a numeral has no padding. State
-      it where a future implementer will reach for `b64BlockIso`.
+      padded bases' `B32`/`B64` tail spine (D5), and why — padding there encodes a _length
+      class_, which a minimal-width numeral does not have. State it where a future
+      implementer will reach for `b64BlockIso`.
+- [ ] 3.5 **Reconcile `BaseN.lean`'s design sentence.** `BaseN.lean:20-22` states: _"There is
+      **no** `Base` enum and **no** `encode (b : Base)` / `decode (b : Base)` facade: the
+      radix lives in the value the caller already holds, **never on a dispatch index**."_
+      `toNat : (radix : Nat) → …` puts the radix on exactly such an index.
 
-## 4. [M] The gate
+      The *spirit* survives — no `Codec`-level dispatch replaces `Codec.decode` — but the
+      *letter* does not, and leaving the sentence unreconciled is the "a claim whose stated
+      method is not its code's method" class this ecosystem has closed six times. Amend the
+      docstring in this change to say the radix-parameterised functions are a **numeral
+      helper layered above** the per-base `Codec` values, and that no `Codec`-level dispatch
+      was introduced.
 
-- [ ] 4.1 Pin every new law in `../lean-basen/Axioms.lean` and regenerate. The gate fails
-      the build on an unpinned law, which is the intended behaviour, not a regression.
-- [ ] 4.2 Every new law stays `[propext, Quot.sound]`-only: `#print axioms` per law family.
-      Watch for the two recorded leaks — a dependent `cases` carrying an equation, and
-      `decide_eq_true (by omega)` over a disjunction (`AGENTS.md`). Both are silent.
-- [ ] 4.3 Update the header counts the `headerNumbers` arm asserts, in the same commit as
-      the regeneration. The gate fires on a stale table, and that is the check working.
+## 4. [M] The gate — and `basen`'s gate is NOT `codec`'s
+
+Findings: review `gate-coverage` M-1/M-2/M-3. **Measured, because the first draft of this
+section described `codec`'s machinery and `basen` does not have it.**
+
+- [ ] 4.1 Pin every new law **by hand**. There is **no generator here**:
+
+      ```
+      ls ../lean-basen/scripts/            -> No such file or directory
+      grep -c 'BEGIN GENERATED' Axioms.lean -> 0
+      grep -n 'BEGIN PINNED' Axioms.lean    -> 2061   # a HAND-WRITTEN list, not generated
+      ```
+
+      `lean-codec` has `scripts/gen-axioms.lean` and a `checks.mirror` guard; `basen` has
+      neither. So "regenerate" — which this task said in its first draft — is a **`codec`
+      construct with no referent in the target repo**. The actual loop, per new theorem:
+
+      1. add a `#guard_msgs` / `#print axioms` block by hand, exactly as the existing 444 are;
+      2. add the name to `BaseNAxioms.gatedNames` (the `BEGIN PINNED` list, `Axioms.lean:2066`);
+      3. let the coverage arm tell you if you missed one — it fails the build naming every
+         public `BaseN` theorem that is in neither `gatedNames` nor `generatedAuxAllowlist`,
+         with the message `theorems not pinned by this gate`.
+
+      That coverage arm **is** the enforcement. Nothing regenerates; the list is maintained.
+
+- [ ] 4.2 **Drop the block isos from `definitionSurfaceAllowlist`.** This is the task the first
+      draft did not have, and without it 3.2 cannot land.
+
+      Measured: `Axioms.lean:1920-1931` allowlists the block isos with the reason *"the `law`
+      structure field is proved at the definition site, so the kernel checks it at
+      construction and **no theorem names it**"*. Task 3.2's theorems **name** all seven. The
+      def-coverage arm's `both` branch (`Axioms.lean:2860`) fails on exactly that:
+
+      ```
+      let both := defs.filter fun n => mentioned.contains n && allow.contains n
+      if !both.isEmpty then throwError m!"definitions that HAVE a gated law but are also allowlisted"
+      ```
+
+      So: remove the seven block-iso entries **in the same commit as 3.2's theorems**, and
+      record the reason where it moves — "no theorem names it" is now false, and it is
+      *supposed* to be false. This is the arm doing its job, not an obstacle.
+
+- [ ] 4.3 Update **every** asserted constant the gate checks — there are **11**, in **four**
+      arms, not "the header counts":
+
+      | arm | constants | line |
+      | --- | --- | --- |
+      | theorem table | `expectedPub`, `expectedGated`, `expectedAllow` | `Axioms.lean:2742-2744` |
+      | header prose | `statedPrintBlockCount`, `statedGatedNamesCount` | `:2784-2785` |
+      | footprint distribution | `statedDistPS`, `statedDistP`, `statedDistZ` | `:2817-2819` |
+      | def table | `expectedDefs`, `expectedMentioned`, `expectedDefAllow` | `:2866-2868` |
+
+      plus the header prose tables they mirror (`:1655-1700`). `stated := 12`
+      (`:2905`, the bench `native_decide` count) does **not** move.
+
+      **Worked example, because the arithmetic is easy to get wrong:** task 3.2 adds 7
+      theorem equalities and removes 7 allowlist entries, so `expectedPub` +7,
+      `expectedGated` +7, `expectedMentioned` +7, `expectedDefAllow` −7, and one bucket of the
+      footprint distribution +7. Re-derive from the build's own output; do not copy these
+      deltas forward — they are the shape, not the numbers.
+
+- [ ] 4.4 Every new law stays `[propext, Quot.sound]`-only: `#print axioms` per law family.
+      **All three** recorded leak shapes apply (`AGENTS.md`), not the two the first draft
+      named — the third, a `match`/`if` on a `Bool` in the goal, is exactly what 2.4's
+      rejection laws and 1.3's `ofNat` are shaped like.
+
+      Measured this session, so the expectation is evidence rather than hope:
+      `Nat.div_eq`/`Nat.div_add_mod`/`Nat.mod_lt`/`Nat.div_lt_self` are all
+      `[propext, Quot.sound]`, and `Codec.fill_surj`/`fill_inj`/`decodeNormal_encode` are
+      `[propext]`-only. Meanwhile `omega` closing a **disjunction** leaks `Classical.choice`
+      (measured live), and the explicit `Or.inl`/`Or.inr` form does not. Rejection laws are
+      `Option`-and-disjunction shaped — use the explicit form.
 
 ## 5. [S] Verification
 

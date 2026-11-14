@@ -41,11 +41,13 @@ Guidance for AI coding agents working in this repository.
 > `Build completed successfully (25 jobs)`, six gate lines self-consistent (`490 = 444 +
 46`). That is a regression baseline, not a repair job.
 >
-> **The `codec` pin is `14b54fa`, 68 commits behind this repo's HEAD — and no bump is
-> needed.** Measured by diffing `Codec/Normal.lean` at both revisions: `Normal`,
-> `Normalizer`, `fill`, `fill_surj`, `decodeNormal` and friends are present with **identical
-> signatures** at the pin and at HEAD. Both toolchains are `v4.35.0`. Do not bump the pin
-> "just in case": that moves 68 commits of unrelated `codec` work into the blast radius.
+> **The `codec` pin is `14b54fa` — and no bump is
+> needed.** Measured by diffing the **declaration lines** of `Codec/Normal.lean` at both revisions:
+> the 12 declarations this change needs (`Normal`, `Normalizer`, `fill`, `fill_surj`,
+> `decodeNormal`, …) have identical names and signatures. The files differ in docstring prose
+> only (29 insertions / 9 deletions), which does not affect the pin. Both toolchains are
+> `v4.35.0`. Do not bump the pin
+> "just in case": that moves ~70 commits of unrelated `codec` work into the blast radius.
 >
 > **A new `BaseN/*.lean` must be imported by `BaseN.lean`** or `lake build` never compiles
 > it and its laws never reach the gate. An unimported module is indistinguishable from a
@@ -258,7 +260,7 @@ previous defect_. A fix is a check, and a check is only as good as what enters i
 work.** `codec-drift-closure` (the closure of round nine's residue plus the one defect class
 the gate arms cannot see — a claim whose stated method is not its code's method) landed and
 archived 2026-11-12; `codec-audit-round-nine` landed and archived 2026-11-13. Everything
-below is archived history, except `basen-radix` (open, 0/29) and `basen-uppercase-prepass`
+below is archived history, except `basen-radix` (open, 6/39) and `basen-uppercase-prepass`
 (parked on the owner's library-division decision).
 
 - `codec-drift-closure` — **archived** 2026-11-12 as
@@ -324,7 +326,7 @@ below is archived history, except `basen-radix` (open, 0/29) and `basen-uppercas
   _alphabet_, `basen-radix` concerns _padding_ — so neither can drop the other's
   scenarios. Its fate still depends on the owner's library-division decision.
 
-- `basen-radix` — **in-progress, 0/29, THE NEXT SESSION'S WORK.** The one open change.
+- `basen-radix` — **in-progress, 6/39, THE NEXT SESSION'S WORK.** The one open change.
   Adds the missing rung in `basen`: a radix-generic `digitVal`/`toNat`/`ofNat` over `Nat`
   plus `numeralIso` per radix over the `Normal` quotient, for bases **2, 4, 8, 10, 16, 32,
   64**. Read `design.md` D0 for the measurement that motivates it (`basen` decodes to
