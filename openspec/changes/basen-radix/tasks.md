@@ -301,7 +301,7 @@ Findings: `design.md` D2/D4.
       `AGENTS.md` warns about — two normalisers that must agree, and no arm comparing them.
       Either reuse its shape, or record in `design.md` why a second mechanism is right.
 
-- [ ] 2.2 State `numeralIso : (b : Nat) → 2 ≤ b → Iso Nat (Normal (List UInt8) (normF b))`
+- [x] 2.2 State `numeralIso : (b : Nat) → 2 ≤ b → Iso Nat (Normal (List UInt8) (normF b))`
       and discharge its `law` from 1.3's round-trip pair plus `fill_surj`. **The codomain is
       the quotient** — a version stated over raw `List UInt8` must be rejected in review,
       and this task's own acceptance is that the law holds _unconditionally_ with no
@@ -309,7 +309,7 @@ Findings: `design.md` D2/D4.
 
       **Amended 2026-11-14: the codomain is `Normal (List UInt8) (normF b)`, not
       `(trimFor b)`.** `trimFor` is `Option`-valued and `Codec.Normal` requires a total
-      `norm : S → S`; `normF b ds := (trimFor b ds).getD ds` is that total endofunction,
+      `norm : S → S`; `normF b ds := (trimFor b ds).getD (ofNat b 0)` is that total endofunction,
       idempotent by `normF_idem`. The equivalence class is unchanged — `normF`'s fixed points
       contain every canonical spelling — so D2's argument is untouched. And see 2.2b: the
       round-trip pair is **not** sufficient for the law.
@@ -341,7 +341,7 @@ Findings: `design.md` D2/D4.
       (`have hw := inWin_eq_true hw`). And `if_true`/`if_false` are deprecated in this
       toolchain; `ite_true`/`ite_false` are the spellings.
 
-- [ ] 2.2b′ **The rest of 2.2's `←`, now reduced to one lemma per case.** `normF`,
+- [x] 2.2b′ **The rest of 2.2's `←`, now reduced to one lemma per case.** `normF`,
       `normF_idem` and `map_val_eq_ofNat` landed (`a1fee8b`). What remains is
       `fixed_eq_ofNat : trimFor b ds = some ds → toNat b ds = some n → ds = ofNat b n`,
       whose positive case is `map_val_eq_ofNat` and whose **zero case is still open**.
@@ -352,6 +352,19 @@ Findings: `design.md` D2/D4.
       contradiction). `map_val_eq_ofNat` therefore takes `vs ≠ []` **as a separate
       hypothesis**; the zero case must be reached through `trimFor`'s own accepting
       condition (`strip b ds = [] ∧ isDigits b ds`) rather than through the head.
+
+      **LANDED 2026-11-15** (`../lean-basen` `9a02f89`): `fixed_eq_ofNat`, `numeralIso`,
+      and the supporting lemmas (`toNat_map_val`, `toNat_none_of_not_digits`,
+      `isDigits_strip_false`, `natVal_eq_zero`, `eq_map_byteOfDigit`, `head_val_ne_zero`,
+      `strip_digits_value_ne_zero`, `fixed_is_numeral`). All `[propext, Quot.sound]`-only.
+
+      **A third correction, and this one is a design error, not a filing one: `normF`'s
+      fallback cannot be the input.** `(trimFor b ds).getD ds` is the natural total
+      endofunction and it is **wrong**: `[]` is then a fixed point of `normF`, while
+      `trimFor b [] = none` (naming no number) and `toNat b [] = some 0` — so the law's
+      `←` would demand `[] = ofNat b 0 = "0"`, which is false. The fallback is
+      `ofNat b 0`, which makes **every** fixed point a numeral (`fixed_is_numeral`) and is
+      what the law actually needs. D2's argument is untouched; its implementation was not.
 
 - [ ] 2.2c **Wire `BaseN.RadixCodec` into `BaseN.lean` and pin its laws.** Measured
       2026-11-14: adding `import BaseN.RadixCodec` makes the coverage arm name **99**
@@ -366,6 +379,54 @@ Findings: `design.md` D2/D4.
       **mutation-test it** by removing one absorbed variation and confirming it fires. This
       is the task `basen-nat-iso` §Risk named as "the first task, before any other proof",
       and it stays true here.
+
+      **IT FOUND A REAL DEFECT, AND THE DEFECT IS STILL OPEN.** Measured 2026-11-15 in
+      `../lean-basen` at `9a02f89`, by `#eval` on the shipped `trimFor`:
+
+      ```
+      #eval trimFor 10 [32,32,55]   -- "  7"  -> some [55]
+      #eval trimFor 10 [32,32,48]   -- "  0"  -> **none**    <-- must be some [48]
+      #eval trimFor 10 [48,48]      -- "00"   -> some [48]
+      #eval isDigits 10 [32,32,48]  -- false            <-- the cause
+      #eval trimFor 10 [32,32]      -- "  "          -> none  (correct)
+      #eval trimFor 10 [48,32]      -- "0 "          -> none  (correct)
+      ```
+
+      `trimFor`'s all-absorbed branch guards on `isDigits b ds` — on the **raw** input,
+      including the blanks `strip` just removed. Every byte of `"  0"` is either absorbed
+      or is the zero digit, but ASCII 32 is not a *digit*, so `isDigits 10 [32,32,48] =
+      false` and the branch **rejects a spelling of zero that D3's table and the spec's
+      "Three spellings are one value" scenario both require it to accept**. `"  7"` works
+      only because `7` is non-zero, so the zero class is the only one affected — which is
+      exactly why the three-spelling witness is the task that finds it.
+
+      **So 2.3 is not "prove the witness": it is fix `trimFor`, then prove the witness.**
+      A fix was attempted and **reverted** (nothing landed); the two designs tried, and why
+      each is harder than it looks, so the next session does not repeat them:
+
+      1. **`ds ≠ []` alone in the all-absorbed branch** — too weak. It accepts `"  "`
+         (blanks only, names nothing) and `"0 "` (a trailing blank, which D3 says must be
+         rejected). Measured: `trimFor 10 [32,32]` and `trimFor 10 [48,32]` both became
+         `some [48]`.
+      2. **A `isZeroSpelling b ds` predicate** (`every byte is a blank or the zero digit`)
+         — correct, and it is the design to finish. The hard lemma is the *converse* that
+         `trimFor_none_toNat_none` needs: a blanks-and-zero-digits list that is not a zero
+         spelling folds to `none`. The route that ran out of room was
+         `toNat_none_of_zeroish : (∀ c ∈ ds, isBlank c ∨ isZeroDigit b c) →
+         isZeroSpelling b ds = false → toNat b ds = none`, by induction on `ds`, whose
+         non-blank head case needs `isZeroDigit b d → digitVal b d = some 0` — which is
+         `digitVal_byteOfDigit hr 0` at an `IsRadix` (it is **not** true at a variable
+         radix, so the lemma must carry `hr`).
+
+      **Design note for the fix:** `isZeroSpelling` is the right predicate but it is also
+      true of `[]`, and `trimFor b []` must stay `none` (D4). Keep the `ds = []` test as a
+      **separate** conjunct rather than relying on the predicate to exclude it.
+
+      Six existing proofs read the three-arm `trimFor` body and must be re-shaped with the
+      fix: `trimFor_ofNat`, `trimFor_idem`, `fixed_eq_ofNat`, `trimFor_none_toNat_none`,
+      and two more via `ofNat_isDigits`. Grep `isDigits b ds` before starting — that string
+      is the defect.
+
 - [ ] 2.4 Prove the rejection direction: a trailing non-digit, an out-of-alphabet digit, and
       trailing data after a valid numeral all yield `none`. State these as their own laws
       rather than as prose.
