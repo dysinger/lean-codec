@@ -266,10 +266,12 @@ What the commands settled, and the three places the plan's prose was wrong:
    `trimFor : Nat → List UInt8 → Option (List UInt8)` rejects instead, and the total
    `normF` (identity on rejection) is what `Codec.Normal` is instantiated with — rejected
    spellings stay outside the `Iso`'s image because `apply` goes through `ofNat`.
-2. **Two guards is not idempotent; one pre-pass is.** Strip blanks _then_ zeros is not
-   idempotent when a blank follows a zero (` 0 7` → `7` vs ` 07`). The shipped `strip`
-   removes both in one interleaving, so its output either is empty or begins with a byte
-   that is neither, making `strip_idem` structural rather than a case analysis.
+2. **Two guards is not idempotent; one pre-pass is.** `digitTail (dropWhile isBlank s)` is
+   not idempotent: measured on `"0 7"`, the first pass yields `[32,55]` and the second
+   `[55]`, because the zero is stripped before the blank after it is seen. `strip` removes
+   both in one interleaving (`[55]` on the first pass), so its output either is empty or
+   begins with a byte that is neither, making `strip_idem` structural rather than a case
+   analysis over two guards.
 3. **`Base2.bitVal` accepts ASCII 48 _and_ 49** (`Base2.lean:36`), not 49/50 as an earlier
    draft of this session assumed from `valToBit`'s docstring. `digitVal 2 0x30 = some 0`, so
    no encoder/decoder alphabet split exists and that paragraph was deleted rather than
