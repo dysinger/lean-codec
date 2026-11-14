@@ -7,6 +7,28 @@ Guidance for AI coding agents working in this repository.
 > **One change is open: `basen-radix`** — the next session's work. Read its `tasks.md`
 > banner before touching anything.
 >
+> **Session 1 (the fold) LANDED 2026-11-14.** `../lean-basen` `c1cfe50` + `61e00eb`, this
+> repo `3baf655`. `BaseN/Radix.lean` and `BaseN/RadixAlphabets.lean` exist, the round trip
+> is proved, every law is `[propext, Quot.sound]`-only, and the gate moved
+> `490 = 444 + 46` / 25 jobs → **`533 = 484 + 49` / 27 jobs**. §4.1's pinning went in with
+> it (40 `#guard_msgs` blocks, 40 `gatedNames` entries, all 11 asserted constants
+> re-derived), because the coverage arm fails the build otherwise.
+>
+> **Read `tasks.md`'s "Session 1 landed" block before starting session 2.** It records two
+> things the compiler corrected in this plan, both of which cost time when learned the
+> hard way:
+>
+> 1. **`ofNat`'s "take the tail of `n + 1`'s digits" formulation is wrong** — it gives the
+>    number 1 for `n = 300` (`301`'s digits are `[3,0,1]`, tail `[0,1]`). The shipped
+>    `ofNat` has an explicit zero case plus `natDigits radix n`.
+> 2. **`omega` leaks `Classical.choice` on a _conjunction_, not only a disjunction.**
+>    `inWin_iff.2 (by omega)` for `lo ≤ c ∧ c ≤ hi` leaks; `inWin_iff.2 ⟨by omega, by
+omega⟩` does not. Five laws leaked this way. The `#guard_msgs` pins are what keeps it
+>    fixed.
+>
+> **What is NOT done:** `numeralIso` (§2), the seven ties (§3.2), §4.2/4.2b's allowlist
+> trim, and §5/§6.
+>
 > **What it is, in one sentence:** `basen` decodes text to `List UInt8` and **never to a
 > number**, so `"300"` gives three digit bytes and the number `300` never exists. This
 > change adds the one missing rung — a **radix-generic** `digitVal` / `toNat` / `ofNat`
@@ -26,15 +48,26 @@ Guidance for AI coding agents working in this repository.
 >
 > **The first session is §1 (the fold), not §3.** An earlier banner said "do 3.2 first", which
 > is impossible — 3.2's statements mention `toNat`, so the fold must exist to state them. 3.2
-> is still the **risk sink**: build the fold, then probe one block iso against it before
-> committing to all seven.
+> was the **risk sink**, and the probe ran in session 1: base 10's block iso agrees with
+> `toNat` on `"255"` and returns `none` on `"999"` where `toNat` yields `999`, so an
+> equality is **false** and D6's implication-pair shape is confirmed. The seven ties
+> themselves are still unwritten.
 >
-> | session | tasks                                            | green at the end means                                                                               | **not yet true**                       |
-> | ------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------- | -------------------------------------- |
-> | **1**   | 1.1–1.4 + a **throwaway** probe of one block iso | `toNat`/`ofNat` exist, round-trip proved, `BaseN.lean` imports `Radix.lean`, gate green, laws pinned | no `numeralIso`, no ties, no instances |
-> | **2**   | 3.1–3.5, 4.2, 4.2b, 4.3 (partial)                | all seven block isos tied by the implication pair; allowlist **10 → 3**; header constants re-derived | no quotient, no `Iso`                  |
-> | **3**   | 2.1–2.4 + 3.1's radix instances                  | `trimFor` total + idempotent; three-spelling witness mutation-tested; `numeralIso` at seven radices  | —                                      |
-> | **4**   | 4.1, 4.4, 4.5, 5.x, 6.x                          | everything pinned, `CHANGELOG`, all gates                                                            | —                                      |
+> | session          | tasks                                                              | green at the end means                                                                                                                         | **not yet true**                       |
+> | ---------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+> | **1** ✅ landed  | 1.1–1.4, **4.1**, 4.3's constants, + the throwaway block-iso probe | `toNat`/`ofNat` exist, round-trip proved, `RadixAlphabets` agrees at all seven radices, gate green with the new laws pinned (`533 = 484 + 49`) | no `numeralIso`, no ties, no instances |
+> | **2** ← **NEXT** | 2.1–2.4, 3.1's radix instances                                     | `trimFor` total + idempotent; three-spelling witness mutation-tested; `numeralIso` at seven radices                                            | no ties, no allowlist trim             |
+> | **3**            | 3.2–3.5, 4.2, 4.2b, 4.3 (remainder)                                | all seven block isos tied by the implication pair; allowlist **10 → 3**; header constants re-derived                                           | —                                      |
+> | **4**            | 4.4, 4.5, 5.x, 6.x                                                 | posture greps run, `CHANGELOG`, all gates                                                                                                      | —                                      |
+>
+> **Why session 2 moved from §3 to §2, and session 3 is now the ties.** §4.1 plus the
+> asserted constants had to land with §1 (a `BaseN` theorem with no `#guard_msgs` block is
+> a RED gate, so there is no partial state). §2's `numeralIso` is stated over
+> `Normal (List UInt8) (trimFor b)`, so it needs `trimFor` and is **independent of the
+> ties**; §3.2's seven implications are the larger and riskier piece and deserve their own
+> session. Doing §2 first also leaves the allowlist untouched until session 3, where
+> §4.2's trim and §4.3's constants land together — which is what the "cannot be left
+> half-done" rule below requires.
 >
 > **Tasks that CANNOT be left half-done** — stopping mid-way leaves a RED gate, and this repo
 > requires a green build per commit:
@@ -63,9 +96,12 @@ Guidance for AI coding agents working in this repository.
 > | a fact obtained by running a command (`§0`'s two-repo split, the pin, the `BaseN.lean` import, the seven block-iso names)                                                                                        | **yes, untouched**                                   |
 > | a claim _derived from_ those facts by prose (`"seven entries"` from a list of ten, `"the same shape"` for two functions that are `48 + d` and one that is not, `"special cases"` for canonicity-filtered guards) | **no — 4 of round two's 5 MUSTs were of this shape** |
 >
-> **The instruction, stated plainly: for session 1, implement first and read the design
-> after.** Not the other way round. Written as a caveat by the agent that authored the plan,
-> and promoted here because it is the single most useful thing either review round produced:
+> **The instruction, stated plainly: implement first and read the design after.** Not the
+> other way round. It was written for session 1 and **it earned its keep there** — two of
+> the plan's derived claims were wrong and the compiler found both (the `ofNat`
+> `n+1`-tail formulation, and `Classical.choice` leaking from `omega` on a conjunction).
+> **It applies to session 2 unchanged.** Promoted here because it is the single most useful
+> thing either review round produced:
 >
 > > _"That's a signal about the plan's prose, not just its content. For session 1 I'd suggest
 > > implementing first and reading the design after, rather than trusting the document's
@@ -331,7 +367,7 @@ previous defect_. A fix is a check, and a check is only as good as what enters i
 work.** `codec-drift-closure` (the closure of round nine's residue plus the one defect class
 the gate arms cannot see — a claim whose stated method is not its code's method) landed and
 archived 2026-11-12; `codec-audit-round-nine` landed and archived 2026-11-13. Everything
-below is archived history, except `basen-radix` (open, 6/41) and `basen-uppercase-prepass`
+below is archived history, except `basen-radix` (open, 12/41, session 2 next) and `basen-uppercase-prepass`
 (parked on the owner's library-division decision).
 
 - `codec-drift-closure` — **archived** 2026-11-12 as
@@ -397,12 +433,21 @@ below is archived history, except `basen-radix` (open, 6/41) and `basen-uppercas
   _alphabet_, `basen-radix` concerns _padding_ — so neither can drop the other's
   scenarios. Its fate still depends on the owner's library-division decision.
 
-- `basen-radix` — **in-progress, 6/41, THE NEXT SESSION'S WORK.** (4 sessions; see `tasks.md`'s plan table) The one open change.
+- `basen-radix` — **in-progress, 12/41, THE NEXT SESSION'S WORK.** (4 sessions; see
+  `tasks.md`'s plan table and its "Session 1 landed" block) The one open change.
   Adds the missing rung in `basen`: a radix-generic `digitVal`/`toNat`/`ofNat` over `Nat`
   plus `numeralIso` per radix over the `Normal` quotient, for bases **2, 4, 8, 10, 16, 32,
   64**. Read `design.md` D0 for the measurement that motivates it (`basen` decodes to
-  `List UInt8` and never to a number; `grep -rn 'radix|base : Nat|pow' BaseN/*.lean` →
-  nothing) and D2/D4/D5/D6 for the four settled decisions. Start with task 3.2 as a spike.
+  `List UInt8` and never to a number) and D2/D4/D5/D6 for the four settled decisions.
+
+  **Session 1 landed 2026-11-14** — `BaseN/Radix.lean` + `BaseN/RadixAlphabets.lean`,
+  gate `533 = 484 + 49` at 27 jobs, all laws `[propext, Quot.sound]`-only with **zero**
+  `Classical.choice`. **The next session is §2 (`trimFor`, `numeralIso`, the
+  three-spelling witness) plus §3.1's radix instances — not §3.2.** The ties are session 3,
+  and §4.2/4.2b can only land with §4.3's constants, so they are session 3 too. Two
+  corrections the compiler made to the plan are in the banner above; read them before
+  writing `ofNat`-shaped or `omega`-shaped proofs. The old advice "start with task 3.2 as
+  a spike" is **struck** — the spike ran in session 1 and confirmed D6.
 
 - `basen-nat-iso` — **RETIRED 2026-11-13 into `basen-radix`**, deleted at 0/18. It was the
   base-10-only slice of the same layer: same quotient argument, same "a number is its
