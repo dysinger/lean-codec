@@ -65,18 +65,19 @@ encoding as a number is a **separate** composition, and this change does not cla
 | digit byte → digit value   | `digitVal : Nat → UInt8 → Option Nat` | **this change**          |
 | digit list → the number    | `toNat` / `ofNat`                     | **this change**          |
 | number ↔ canonical numeral | `numeralIso` over `Normal`            | **this change**          |
-| digits ↔ bytes (blocks)    | the six block `Iso`s                  | **exists and is proved** |
+| digits ↔ bytes (blocks)    | the seven block `Iso`s                | **exists and is proved** |
 | padded value type          | `B32` / `B64` spines                  | **exists; untouched**    |
 
-### The block `Iso`s are re-derived, not deleted
+### The block `Iso`s are tied to the fold, not replaced
 
-The six power-of-two block isos (`bitBlockIso`, `quartetBlockIso`, `octBlockIso`,
-`hexBlockIso`, `b32BlockIso`, `b64BlockIso`) are **special cases** of the generic fold: a
-block of `k` radix-`b` digits _is_ `toNat b` on that block, transported to the block's own
-value type. This change proves that equality and keeps the block isos as **fast paths** —
-same discipline as `Codec.decodeWhole_eq`, which proves the fast surface equal to the
-specification rather than replacing it. Nothing downstream breaks, and the duplication
-stops being independent code.
+There are **seven** block isos, not six — base 10's `digBlockIso` was silently dropped in an
+earlier draft, which is the "unexplained 6-of-7 list" shape. They are **canonicity-filtered
+restrictions** of the generic fold, **not special cases of it**: base 64 re-encodes and
+compares (`Base64.lean:265-270`), base 10 rejects `n > 255` (`Base10.lean:121-128`), base 32
+rejects a pad byte (`Base32.lean:368`), and the `UInt8`-valued bases truncate through
+`UInt8.ofNat`. So the theorem is an **implication pair**, in two schemas by codomain — see
+`design.md` D6. The block isos are kept as **fast paths** and each gains a constraining
+theorem, which is the point; **no existing declaration's statement changes**.
 
 ## Capabilities
 
@@ -90,8 +91,8 @@ None.
   `digitVal`/`toNat`/`ofNat` triple, one definition for all seven radices); that a number
   is its canonical numeral modulo information-free variation (the `numeralIso` over the
   `Normal` quotient, with leading zeros and leading whitespace as _names_, not errors);
-  and that the block isos are proved equal to the generic fold rather than independent
-  proofs.
+  and that the block isos are tied to the generic fold by a canonicity-filtered implication
+  (they are guards over the fold, not equal to it — see `design.md` D6).
 
 ## Impact
 
@@ -123,7 +124,7 @@ None.
   type; folding a padded string to a `Nat` is a composition this change does not claim.
 - **Changing any existing base's byte-level law.** `roundtrip`, `decodeFull_canonical`,
   `encode_injective` and the rejection laws stay as they are.
-- **Replacing the block isos.** They are kept and proved equal.
+- **Replacing the block isos.** They are kept and tied to the fold by a theorem.
 
 ## Risk
 

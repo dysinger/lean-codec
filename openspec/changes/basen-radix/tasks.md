@@ -14,14 +14,35 @@
 > Scope decisions already made, so they are not re-litigated mid-implementation:
 > **`Nat` only** (no `Int`), **zero is the single zero digit** (not the empty sequence,
 > D4), **`numeralIso` does not touch the padded bases' tail spine** (D5), **block isos are
-> kept and proved equal** (D6).
+> tied to the fold by a canonicity-filtered implication** (D6).
 >
 > **Progress: 6/39** (the six `[x]` are §0's five measured preconditions
 > plus §6.1's retirement; every implementation task is open).
 >
-> **The first task to do is 3.2 as a spike.** The six block-iso equalities are the risk
-> sink: if a base's existing block iso does **not** agree with the generic fold, that is a
-> real bug in `basen` today, and it is better found at task 1 than at task 6.
+> **The first session is §1, not §3 — and that is a correction.** An earlier banner said "do 3.2
+> first as a spike", which is impossible: 3.2's statements mention `toNat`, so the fold must
+> exist before the ties can be stated. What the advice was _trying_ to say is that **3.2 is the
+> risk sink** — if a base's block iso genuinely contradicts the fold, that is a real bug in
+> `basen` today. So session 1 builds the fold and **probes** one block iso against it; the
+> seven ties land in session 2.
+>
+> ### Session plan — this is several sessions, and each one ends green
+>
+> | session             | tasks                                                            | green at the end means                                                                                                 | **not yet true**                             |
+> | ------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+> | **1. The fold**     | 1.1–1.4, plus a throwaway probe of one block iso (not committed) | `toNat`/`ofNat` exist, round-trip proved, `BaseN.lean` imports `Radix.lean`, gate green with the new def + laws pinned | no `numeralIso`, no ties, no radix instances |
+> | **2. The ties**     | 3.1–3.5, 4.2, 4.2b, 4.3 (partial)                                | all seven block isos tied by implication pair; allowlist trimmed 10→3; header constants re-derived                     | no quotient, no `Iso`                        |
+> | **3. The quotient** | 2.1–2.4, 3.1's radix instances                                   | `trimFor` total+idempotent; three-spelling witness mutation-tested; `numeralIso` at seven radices                      | —                                            |
+> | **4. Gate + docs**  | 4.1, 4.4, 4.5, 5.x, 6.x                                          | everything pinned, CHANGELOG, all gates                                                                                | —                                            |
+>
+> **Tasks that cannot be left half-done** (stopping mid-way leaves a red gate): **4.1** (an
+> unpinned law fails the build), **4.2 with 4.2b and 4.3** (trimming the allowlist without
+> re-deriving the constants trips `headerNumbers`), and **any commit that adds a `BaseN` public
+> theorem** without its `#guard_msgs` block. Everything else can stop at a task boundary.
+>
+> **A cold-start reader needs:** this table, §0's measured facts (the two-repo split, the pin,
+> the `BaseN.lean` import requirement), and the note that **`basen` has no generator** — pinning
+> is by hand (4.1).
 >
 > ### Where things are — measured 2026-11-13, read before the first command
 >
@@ -198,7 +219,7 @@ Findings: `design.md` D2/D4.
       trailing data after a valid numeral all yield `none`. State these as their own laws
       rather than as prose.
 
-## 3. [M] The seven radices, and the block isos proved equal
+## 3. [M] The seven radices, and the block isos tied to the fold
 
 Findings: `design.md` D5/D6.
 
@@ -214,8 +235,15 @@ Findings: `design.md` D5/D6.
       The statement is NOT `blockIso = toNat` restricted, and attempting that will fail:
       `b64BlockApply` re-encodes and compares (`Base64.lean:265-270`), `digBlockApply`
       rejects `n > 255` (`Base10.lean:121-128`), and the `UInt8`-valued bases truncate via
-      `UInt8.ofNat`. Each needs `toNat cs = some n → blockApply cs = some (blockValOf n)` and
-      its converse, with the truncation's losslessness proved from the block's own guard.
+      `UInt8.ofNat`.
+
+      **Two schemas, not one — a single `BlockVal` placeholder does not typecheck.** The seven
+      split by codomain: `bitBlockIso`/`quartetBlockIso`/`octBlockIso`/`digBlockIso`/
+      `hexBlockIso` are `Iso (List UInt8) UInt8` (schema `_8`, consequent
+      `some (UInt8.ofNat n)`, losslessness from the block's `n < 256` guard);
+      `b32BlockIso`/`b64BlockIso` are `Iso (List UInt8) (List UInt8)` (schema `_L`, consequent
+      `some (bytesOfNat n)`, `→` held by base 64's re-encode guard rather than a range bound).
+      See `design.md` D6 for both statements.
 
 - [ ] 3.3 **Mutation-test every 3.2 theorem** by perturbing that block iso's digit order
       and confirming it fails naming that base. Seven theorems, seven mutations.
@@ -260,22 +288,45 @@ section described `codec`'s machinery and `basen` does not have it.**
 
       That coverage arm **is** the enforcement. Nothing regenerates; the list is maintained.
 
-- [ ] 4.2 **Drop the block isos from `definitionSurfaceAllowlist`.** This is the task the first
-      draft did not have, and without it 3.2 cannot land.
+- [ ] 4.2 **Drop the seven block isos from `definitionSurfaceAllowlist`** — and **keep three**.
+      This is the task the first draft did not have; the second draft's version of it was
+      ambiguous, which is why it is now an explicit name list.
 
-      Measured: `Axioms.lean:1920-1931` allowlists the block isos with the reason *"the `law`
-      structure field is proved at the definition site, so the kernel checks it at
-      construction and **no theorem names it**"*. Task 3.2's theorems **name** all seven. The
-      def-coverage arm's `both` branch (`Axioms.lean:2860`) fails on exactly that:
+      The allowlist region is `Axioms.lean:1922-1946` (the `def` at 1922, not 1920). It holds
+      **ten** `Iso`-law-as-field entries, not seven. **Remove exactly these seven:**
 
       ```
-      let both := defs.filter fun n => mentioned.contains n && allow.contains n
-      if !both.isEmpty then throwError m!"definitions that HAVE a gated law but are also allowlisted"
+      `BaseN.Base2.bitBlockIso        (:1925)
+      `BaseN.Base4.quartetBlockIso    (:1926)
+      `BaseN.Base8.octBlockIso        (:1927)
+      `BaseN.Base10.digBlockIso       (:1928)
+      `BaseN.Base16.hexBlockIso       (:1929)
+      `BaseN.Base32.b32BlockIso       (:1931)
+      `BaseN.Base64.b64BlockIso       (:1933)
       ```
 
-      So: remove the seven block-iso entries **in the same commit as 3.2's theorems**, and
-      record the reason where it moves — "no theorem names it" is now false, and it is
-      *supposed* to be false. This is the arm doing its job, not an obstacle.
+      **Keep exactly these three, each with its current reason:**
+
+      ```
+      `BaseN.Base16.hexBlockIsoF      (:1930)  -- Iso UInt8 (Normal ...), not a block
+      `BaseN.Base32.b32TailIso        (:1932)  -- a tail; D5 puts tails out of scope
+      `BaseN.Base64.b64TailIso        (:1934)  -- likewise
+      ```
+
+      §3.2 generates no theorem for those three, so their reason ("no theorem names it")
+      **stays true** and they pass both the `both` arm (`:2860`) and the `stale` arm
+      (`:2849`). Removing them would make the `silent` arm fire naming them — the arm working,
+      but a wasted build caused by this task's own wording.
+
+      **Why it is safe to leave them:** a def that is allowlisted and *unmentioned* is in
+      neither `both` nor `silent`; only a def that is **mentioned and allowlisted** trips
+      `both`. That is the state the seven move *into*, and the three must stay out of.
+
+- [ ] 4.2b **Record the reason where it moves.** `Axioms.lean:1699`'s prose says "the 15
+      allowlisted are 10 `Iso`-law-as-field values"; after 4.2 that is "15 − 7 = 8 allowlisted,
+      of which 3 are `Iso`-law-as-field" — re-derive from the list, do not paste. The
+      "no theorem names it" justification is now false of the seven **by design**, so the
+      header prose must say the seven have a constraining theorem instead.
 
 - [ ] 4.3 Update **every** asserted constant the gate checks — there are **11**, in **four**
       arms, not "the header counts":
@@ -290,13 +341,44 @@ section described `codec`'s machinery and `basen` does not have it.**
       plus the header prose tables they mirror (`:1655-1700`). `stated := 12`
       (`:2905`, the bench `native_decide` count) does **not** move.
 
-      **Worked example, because the arithmetic is easy to get wrong:** task 3.2 adds 7
-      theorem equalities and removes 7 allowlist entries, so `expectedPub` +7,
-      `expectedGated` +7, `expectedMentioned` +7, `expectedDefAllow` −7, and one bucket of the
-      footprint distribution +7. Re-derive from the build's own output; do not copy these
-      deltas forward — they are the shape, not the numbers.
+      **Worked example — and the first version of it was wrong in three ways**, so read the
+      caveats as the content:
 
-- [ ] 4.4 Every new law stays `[propext, Quot.sound]`-only: `#print axioms` per law family.
+      - **"+7" counts NEW theorems, not the existing `*_law`s.** Each base already has a
+        `bitBlockIso_law`-style theorem; §3.2's pair is *additional*. And the pair is an
+        **implication pair**, so a base may contribute **2** new theorems, making the delta
+        `+14` rather than `+7`. Count against the build; this example is the shape, not the
+        number.
+      - **`expectedMentioned +n` / `expectedDefAllow −n` are arithmetically automatic** — the
+        arm computes `mentionedCount := defs.size - allow.size` (`:2858`) — **but semantically
+        conditional**: they only move if each new theorem's *statement names the iso value*.
+        If a theorem names `bitBlockApply` instead of `bitBlockIso`, the seven stay unmentioned
+        and the `silent` arm (`:2852`) fires naming them. That is exactly what the `both` arm
+        exists to verify, so it belongs here as a caveat rather than a footnote.
+      - **It is `statedDistPS`, and three constants move with it** — not "one bucket". The
+        distribution is `distPS + distP + distZ == baseNPins` (`:2830`), so a new
+        `[propext, Quot.sound]` law moves `statedDistPS` **and** `statedPrintBlockCount`
+        **and** `statedGatedNamesCount`.
+
+      So: `expectedPub`, `expectedGated`, `statedGatedNamesCount`, `statedPrintBlockCount` and
+      `statedDistPS` all move by the number of new pinned theorems; `expectedDefAllow` moves by
+      minus the number of *named* isos. Re-derive from `lake build`.
+
+- [ ] 4.4 **State the two posture greps and run them** before pinning. Measured baseline
+      today, which the new module must not break:
+
+      ```
+      grep -rn 'native_decide' --include=*.lean ../lean-basen/BaseN/
+        -> 0 in BaseN/. The 12 sanctioned uses are in Bench.lean and are asserted by the
+           gate at Axioms.lean:2905; do not add a 13th.
+
+      grep -rn '\bsorry\b' --include=*.lean ../lean-basen/BaseN/ ../lean-basen/Axioms.lean
+        -> 3 hits, ALL docstring prose (the phrase "zero `sorry`" at Base64.lean:15,
+           Base32.lean:13 and :3655). The task is "no `sorry` TERM", not "no match" —
+           a literal zero-grep would fail forever on the prose that documents the rule.
+      ```
+
+- [ ] 4.5 Every new law stays `[propext, Quot.sound]`-only: `#print axioms` per law family.
       **All three** recorded leak shapes apply (`AGENTS.md`), not the two the first draft
       named — the third, a `match`/`if` on a `Bool` in the goal, is exactly what 2.4's
       rejection laws and 1.3's `ofNat` are shaped like.

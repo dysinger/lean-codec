@@ -15,9 +15,11 @@ numeral: `toNat b ds` is `Σ dᵢ · bⁱ` over the digits in most-significant-f
 because `b = 1` is not a positional radix and `ofNat 1` has no canonical finite numeral.
 
 The seven per-base digit-value functions SHALL be proved equal to the single digit-value
-function at their radix. **The encode direction is not unified**: at radices 2, 4 and 8 the
-existing inverse maps carry deliberately non-injective fallbacks and SHALL NOT be
-rewritten.
+function at their radix — the **decode** direction. **The encode direction is not unified**:
+radix 2's inverse map (`valToBit`) carries a deliberately non-injective fallback and SHALL NOT
+be rewritten. At radices 4 and 8 the inverse maps are `48 + d` and **injective**, so an
+agreement law is provable there and is a bonus rather than an obligation. (An earlier draft
+said "radices 2, 4 and 8", which is false of 4 and 8.)
 
 A digit byte that is not in the radix's alphabet SHALL yield `none`, and a sequence
 containing one SHALL NOT be convertible. The empty sequence SHALL NOT be the canonical

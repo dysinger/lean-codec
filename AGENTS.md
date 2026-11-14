@@ -16,12 +16,17 @@ Guidance for AI coding agents working in this repository.
 > Its `design.md` has four decisions that are **settled, do not re-litigate**: D2 the
 > codomain is the **quotient** (over raw `List UInt8` the law is _false_, not unproved);
 > D4 zero is the **single zero digit**, not the empty sequence; D5 `numeralIso` does **not**
-> go through the `B32`/`B64` tail spine (a numeral has no padding); D6 the six block isos are
-> **kept and proved equal** to the generic fold, not deleted.
+> go through the `B32`/`B64` tail spine (padding there encodes a length class, which a
+> minimal-width numeral has not); D6 the **seven** block isos are **kept and tied to the fold by
+> a canonicity-filtered implication**, not deleted and not "proved equal" — base 64 re-encodes
+> and compares, base 10 rejects `n > 255`, base 32 rejects a pad byte, and the `UInt8`-valued
+> bases truncate, so an equality is false.
 >
-> **The first thing to do is task 3.2 as a spike.** The six block-iso equalities are the
-> risk sink: if a base's existing block iso does **not** agree with the generic fold, that is
-> a real bug in `basen` today, and it is better found at task 1 than at task 6.
+> **The first session is §1 (the fold), not §3.** An earlier banner said "do 3.2 first", which
+> is impossible — 3.2's statements mention `toNat`, so the fold must exist to state them. 3.2
+> is still the **risk sink**: build the fold, then probe one block iso against it before
+> committing to all seven. `tasks.md` carries a **four-session plan** with, for each session,
+> what green at the end means and what is _not_ yet true.
 >
 > ### `basen-radix` spans TWO repos, and the split is the first thing to get wrong
 >
@@ -260,7 +265,7 @@ previous defect_. A fix is a check, and a check is only as good as what enters i
 work.** `codec-drift-closure` (the closure of round nine's residue plus the one defect class
 the gate arms cannot see — a claim whose stated method is not its code's method) landed and
 archived 2026-11-12; `codec-audit-round-nine` landed and archived 2026-11-13. Everything
-below is archived history, except `basen-radix` (open, 6/39) and `basen-uppercase-prepass`
+below is archived history, except `basen-radix` (open, 6/41) and `basen-uppercase-prepass`
 (parked on the owner's library-division decision).
 
 - `codec-drift-closure` — **archived** 2026-11-12 as
@@ -326,7 +331,7 @@ below is archived history, except `basen-radix` (open, 6/39) and `basen-uppercas
   _alphabet_, `basen-radix` concerns _padding_ — so neither can drop the other's
   scenarios. Its fate still depends on the owner's library-division decision.
 
-- `basen-radix` — **in-progress, 6/39, THE NEXT SESSION'S WORK.** The one open change.
+- `basen-radix` — **in-progress, 6/41, THE NEXT SESSION'S WORK.** (4 sessions; see `tasks.md`'s plan table) The one open change.
   Adds the missing rung in `basen`: a radix-generic `digitVal`/`toNat`/`ofNat` over `Nat`
   plus `numeralIso` per radix over the `Normal` quotient, for bases **2, 4, 8, 10, 16, 32,
   64**. Read `design.md` D0 for the measurement that motivates it (`basen` decodes to
