@@ -1209,6 +1209,26 @@ closed more times than any other: **a claim whose stated method is not its code'
       cause: the check at `:3838` compares a **literal 673** against a computed value and never
       reads the prose at all. Fix the paragraph **and** bind it (or delete the claim).
 
+      **LANDED 2026-11-15** (`../lean-basen` `ee97d6e`). The paragraph is rewritten to the
+      numbers the gate then printed, and the sentence is replaced by one that says what the
+      check *does* rather than what it cannot fail to do. The binding is structural: the
+      `run_cmd` splits the source at the docstring delimiters, pulls `carries **N` and
+      `universe is **N` **out of the prose**, and compares each with the environment as a
+      separate claim.
+
+      **Mutation-tested three ways, and the third is the one that would have hidden a broken
+      binding** — a check that scans prose can silently match nothing:
+
+      ```
+      668 -> 667 (pins)      -> the header paragraph says 667 pins; the environment has 668
+      717 -> 716 (universe)  -> the header paragraph says the universe is 716; the environment has 717
+      sentence reworded      -> no longer states `carries **N pins`, so §8.5's binding cannot read it
+      ```
+
+      The first two attempts at this binding failed on their own machinery and were measured
+      rather than assumed: `String.getD` does not exist on a `String`, and the paragraph is
+      segment **1** of a `splitOn "/-!"`, because segment 0 is the copyright header.
+
 - [ ] 8.6 **[MUST] [NB-M2] `tasks.md` 4.3's distribution triple is spliced and does not sum.**
       I recorded `546 + 82 + 41 = 669` (before) and `553/82/41` (after). From git:
 
