@@ -17,6 +17,44 @@ Guidance for AI coding agents working in this repository.
 > (minimal-digit numerals are unique). Every law is `[propext, Quot.sound]`-only, **zero**
 > `Classical.choice` (measured).
 >
+> **Session 2c LANDED 2026-11-15** — `../lean-basen` `8aec2a8` → `909babe`. **The zero-spelling
+> bug is FIXED and its witness landed.** `trimFor`'s all-absorbed branch now tests
+> `isZeroSpelling` instead of `isDigits`, so `"  0"` reaches `some [48]` at every radix.
+> Measured against a model written straight from `spec.md` + D3/D4 over **20 witness rows**:
+> 4 disagreed before, **0 after**. All ten laws `[propext, Quot.sound]`-only, zero
+> `Classical.choice`. Gate still **`533 = 484 + 49` / 27 jobs** (`RadixCodec` still
+> unimported, so 2.2c remains the gate's blind spot).
+>
+> **The plan's prescribed fix was wrong, and the plan text is corrected.** `tasks.md` 2.3 had
+> called the `isZeroSpelling` predicate (every byte a blank or the zero digit) "correct, and
+> it is the design to finish". It is not — it reproduces **both** regressions of the design it
+> replaced (`"  "` and `"0 "` both become `some [48]`). The cause, which neither earlier
+> design named: **`strip` absorbs `"0 "` and `"  0"` identically**, so no predicate defined
+> against `strip`'s output can separate leading blanks from trailing ones. The predicate that
+> works has **three** conditions and separates blanks from zero digits _in its own recursion_:
+> leading blanks only; at least one zero digit; every other byte a zero digit.
+>
+> **Two consequences the plan did not predict, both measured:**
+>
+> 1. **`trimFor_idem` LOSES its `IsRadix` hypothesis.** Both branches now settle on `strip`'s
+>    own equations, so idempotence is about the normaliser's _shape_. The unused argument
+>    fails `warningAsError` — the compiler making the same point. Dropped, not kept.
+> 2. **`trimFor_none_toNat_none`'s zero branch must NOT go through the spelling predicate.**
+>    A `strip`-empty list that is not a zero spelling contains a **blank**, and a blank
+>    anywhere makes the fold reject (`toNat_none_of_mem_blank`). The route the plan described
+>    needs `hr` on a digit-level lemma and is strictly harder.
+>
+> **`Classical.choice` warned here in a new place:** `Classical.byContradiction` closes
+> `exists_blank_of_strip_nil_not_spelling` in one line and **leaks it** — measured on that
+> very lemma before the constructive route was written. The constructive proof goes through a
+> `Bool`-directed `any isBlank` search. Re-measure `#print axioms` on any lemma whose shape is
+> "not-but-then-exists".
+>
+> **Still open: 2.4** (the rejection laws as their own theorems), **2.2c** (the import + 4.1's
+> pins, which cannot be left half-done), then session 3. A general form of 2.4 needs
+> `isBlank c → (digitVal b c).isSome = false`, which is `digitVal_eq_none_of_blank hr` — the
+> piece whose absence cost most of 2c's 2.4 attempt.
+>
 > **Session 2b LANDED 2026-11-15** — `../lean-basen` `08d220f` → `a1fee8b` → `9a02f89`.
 > **`numeralIso` is a full `Iso`**, both law directions unconditional on the quotient:
 > the value↔byte bridge (`digitVal_some_byteOfDigit`, task 2.2b), `normF` + `normF_idem`,
@@ -24,9 +62,9 @@ Guidance for AI coding agents working in this repository.
 Quot.sound]`-only, zero `Classical.choice`. Gate still **`533 = 484 + 49` / 27 jobs** —
 > `RadixCodec` is **still unimported**, so the gate cannot see it (2.2c).
 >
-> **⚠ THE NEXT SESSION'S FIRST JOB IS A BUG FIX, NOT A PROOF.** Task **2.3** (the
-> three-spelling witness) found a real defect in the **shipped** `trimFor`, measured
-> 2026-11-15 at `9a02f89`:
+> **The `trimFor` zero-spelling bug that task 2.3 found is now CLOSED** (session 2c, above).
+> The block below is kept as history because it is the measurement that started the fix; its
+> claim that the `isZeroSpelling` predicate is "correct" is **disproved** in `tasks.md` 2.3.
 >
 > ```
 > trimFor 10 "  7"  -> some [55]
