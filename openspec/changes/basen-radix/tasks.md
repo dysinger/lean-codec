@@ -1263,10 +1263,28 @@ closed more times than any other: **a claim whose stated method is not its code'
       paragraph is a *historical record of what landed then*, so it keeps its figures and says
       so; the current gate is read from `lake build`, never from a task ledger.
 
-- [ ] 8.7 **[MUST] [NB-M3, PA-N5] `CHANGELOG.md` overstates the footprint.** "Every law is
+- [x] 8.7 **[MUST] [NB-M3, PA-N5] `CHANGELOG.md` overstates the footprint.** "Every law is
       `[propext, Quot.sound]`-only" is false for 64 of the 229 new laws (35 are `[propext]`,
       29 axiom-free). And "each is … mutation-tested" is a universal over ~229 laws supported
       by **seven** mutations. Fix both sentences to state what was measured.
+
+      **LANDED 2026-11-15** (`../lean-basen` `4a90529`). Both sentences are gone, replaced by a
+      table and an explicit statement of what the mutation sweep does *not* cover.
+
+      **The reviewer's `229 / 64` pair did not reproduce, and the entry says which base it
+      uses instead.** `229` is not a count of pins in any commit I could find; the base that
+      reproduces the *shape* of the finding is the commit before the numeral work,
+      `c18b6a3~1` → `HEAD`. Re-derived from the gate's own footprint blocks:
+
+      ```
+      new pins 182 = 127 [propext, Quot.sound] + 33 [propext] + 22 axiom-free
+      ```
+
+      So "64 of 229" and "55 of 182" agree that roughly a third are not
+      `[propext, Quot.sound]`-only, and disagree on the denominator because neither the review
+      nor the original sentence named a base. **That is the actual defect**: a count whose
+      derivation is not written down cannot be checked, which is why the new table names
+      `c18b6a3~1` in the sentence beside it.
 
 - [ ] 8.8 **[MUST] [NB-M4] `basen`'s lakefile says `-DwarningAsError` reaches `bench`; it does
       not.** `lean_exe bench` sets no `moreLeanArgs`, so a `sorry` in `Bench.lean`'s own
