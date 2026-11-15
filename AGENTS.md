@@ -15,7 +15,33 @@ Guidance for AI coding agents working in this repository.
 > `BaseN/RadixCodec.lean` exists and builds: `strip`/`trimFor` (the normaliser),
 > `trimFor_ofNat` + `trimFor_idem` (the fixed-point laws), and **`natVal_inj_head`**
 > (minimal-digit numerals are unique). Every law is `[propext, Quot.sound]`-only, **zero**
-> `Classical.choice` (measured). **`numeralIso` itself is NOT finished.**
+> `Classical.choice` (measured).
+>
+> **Session 2b LANDED 2026-11-15** — `../lean-basen` `08d220f` → `a1fee8b` → `9a02f89`.
+> **`numeralIso` is a full `Iso`**, both law directions unconditional on the quotient:
+> the value↔byte bridge (`digitVal_some_byteOfDigit`, task 2.2b), `normF` + `normF_idem`,
+> `map_val_eq_ofNat`, and `fixed_eq_ofNat` (task 2.2 + 2.2b′). All `[propext,
+Quot.sound]`-only, zero `Classical.choice`. Gate still **`533 = 484 + 49` / 27 jobs** —
+> `RadixCodec` is **still unimported**, so the gate cannot see it (2.2c).
+>
+> **⚠ THE NEXT SESSION'S FIRST JOB IS A BUG FIX, NOT A PROOF.** Task **2.3** (the
+> three-spelling witness) found a real defect in the **shipped** `trimFor`, measured
+> 2026-11-15 at `9a02f89`:
+>
+> ```
+> trimFor 10 "  7"  -> some [55]
+> trimFor 10 "  0"  -> none          <-- must be some [48]
+> isDigits 10 [32,32,48] -> false    <-- the cause
+> ```
+>
+> The all-absorbed branch guards on `isDigits b ds` — the **raw** input, blanks included —
+> so it rejects a spelling of zero that D3's table and the spec's "Three spellings are one
+> value" scenario both require it to accept. Only the zero class is affected, which is
+> exactly why the three-spelling witness is the task that finds it. `tasks.md` 2.3 records
+> **both fix designs tried and reverted** (`ds ≠ []` alone is too weak — it admits `"  "`
+> and `"0 "`; the `isZeroSpelling` predicate is correct and is the design to finish), the
+> one hard lemma and why it needs `hr : IsRadix`, and the **six** proofs that must be
+> re-shaped with the fix. **Read it before touching `trimFor`.**
 >
 > **Read `tasks.md`'s "Session 2 landed, part 1" block before starting the next session.**
 > It records the four places this plan's prose was wrong, each found by the compiler:
@@ -40,9 +66,25 @@ Guidance for AI coding agents working in this repository.
 > makes the coverage arm name **99 unpinned theorems** + one uncovered `def` (`isNumeral`).
 > Task **2.2c** lands that import with 4.1's pins, and it **cannot be left half-done**.
 >
-> **What is NOT done:** `numeralIso` (§2.2 + 2.2b + 2.2c), the three-spelling witness (2.3),
-> the rejection laws (2.4), 3.1's radix instances, the seven ties (§3.2), §4.2/4.2b's
-> allowlist trim, and §5/§6.
+> **What is NOT done:** the **`trimFor` zero-spelling fix** and then the three-spelling
+> witness (2.3), the rejection laws (2.4), **2.2c** (import + pins), 3.1's radix instances,
+> the seven ties (§3.2), §4.2/4.2b's allowlist trim, and §5/§6.
+>
+> **Three corrections this session's compiler found, on top of session 2a's four** (all in
+> `tasks.md` 2.2 / 2.2b / 2.2b′, each with its measurement):
+>
+> 1. **`normF`'s fallback cannot be the input.** `(trimFor b ds).getD ds` is the natural
+>    total endofunction and it is **wrong**: `[]` is then a fixed point, while
+>    `trimFor b [] = none` and `toNat b [] = some 0`, so the law's `←` would demand
+>    `[] = ofNat b 0 = "0"`. The fallback is `ofNat b 0`, which makes every fixed point a
+>    numeral (`fixed_is_numeral`). D2's _argument_ survives; its implementation did not.
+> 2. **`vs.head? ≠ some 0` does not rule out `vs = []`** — the empty list's head is
+>    `none`, which _satisfies_ it. `map_val_eq_ofNat` needs `vs ≠ []` as a separate
+>    hypothesis.
+> 3. **2.2b's recipe closes, with one step the plan did not name:** restate each arm's
+>    `if`-chain as one equation at a **literal** radix (`unfold digitVal; simp`). That is
+>    what removes the need for `split`, and `byteOfDigit_toNat_eq` (in-range, so no `% 256`)
+>    is the final step — so obstacle (b) the plan feared is not an obstacle at all.
 >
 > **What it is, in one sentence:** `basen` decodes text to `List UInt8` and **never to a
 > number**, so `"300"` gives three digit bytes and the number `300` never exists. This
@@ -59,7 +101,11 @@ Guidance for AI coding agents working in this repository.
 > and compares, base 10 rejects `n > 255`, base 32 rejects a pad byte, and the `UInt8`-valued
 > bases truncate, so an equality is false.
 >
-> ### `basen-radix` is FOUR sessions. Read this table before starting any of them.
+> ### `basen-radix` is SIX session-halves. Read this table before starting any of them.
+>
+> (The heading said "FOUR sessions" through three landings; the table had grown to six rows
+> and the heading had not. Believe the table — and the `<count>` in this sentence is the one
+> that goes stale, so it is stated once here and nowhere else.)
 >
 > **The first session is §1 (the fold), not §3.** An earlier banner said "do 3.2 first", which
 > is impossible — 3.2's statements mention `toNat`, so the fold must exist to state them. 3.2
@@ -68,13 +114,14 @@ Guidance for AI coding agents working in this repository.
 > equality is **false** and D6's implication-pair shape is confirmed. The seven ties
 > themselves are still unwritten.
 >
-> | session           | tasks                                                              | green at the end means                                                                                                                         | **not yet true**                       |
-> | ----------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-> | **1** ✅ landed   | 1.1–1.4, **4.1**, 4.3's constants, + the throwaway block-iso probe | `toNat`/`ofNat` exist, round-trip proved, `RadixAlphabets` agrees at all seven radices, gate green with the new laws pinned (`533 = 484 + 49`) | no `numeralIso`, no ties, no instances |
-> | **2a** ✅ landed  | 2.1 (+ the uniqueness lemma 2.2's `←` needs)                       | `strip`/`trimFor` total + idempotent; `trimFor_ofNat`; `natVal_inj_head`; all `[propext, Quot.sound]`-only                                     | `numeralIso` itself, no ties           |
-> | **2b** ← **NEXT** | **2.2b**, 2.2, 2.3, 2.4, **2.2c + 4.1**                            | the value↔byte bridge; `numeralIso` a full `Iso`; three-spelling witness mutation-tested; rejection laws; module imported and its laws pinned  | no ties, no radix instances            |
-> | **3**             | 3.1's radix instances, 3.2–3.5, 4.2, 4.2b, 4.3 (remainder)         | all seven block isos tied by the implication pair; allowlist **10 → 3**; header constants re-derived                                           | —                                      |
-> | **4**             | 4.4, 4.5, 5.x, 6.x                                                 | posture greps run, `CHANGELOG`, all gates                                                                                                      | —                                      |
+> | session           | tasks                                                              | green at the end means                                                                                                                         | **not yet true**                                      |
+> | ----------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+> | **1** ✅ landed   | 1.1–1.4, **4.1**, 4.3's constants, + the throwaway block-iso probe | `toNat`/`ofNat` exist, round-trip proved, `RadixAlphabets` agrees at all seven radices, gate green with the new laws pinned (`533 = 484 + 49`) | no `numeralIso`, no ties, no instances                |
+> | **2a** ✅ landed  | 2.1 (+ the uniqueness lemma 2.2's `←` needs)                       | `strip`/`trimFor` total + idempotent; `trimFor_ofNat`; `natVal_inj_head`; all `[propext, Quot.sound]`-only                                     | `numeralIso` itself, no ties                          |
+> | **2b** ✅ landed  | 2.2b, 2.2, 2.2b′                                                   | the value↔byte bridge; `numeralIso` a full `Iso`, law unconditional on the quotient                                                            | `trimFor`'s zero-spelling bug; the witness; 2.2c pins |
+> | **2c** ← **NEXT** | **fix `trimFor`, then** 2.3, 2.4, **2.2c + 4.1**                   | zero spellings accepted; three-spelling witness mutation-tested; rejection laws; module imported and its laws pinned                           | no ties, no radix instances                           |
+> | **3**             | 3.1's radix instances, 3.2–3.5, 4.2, 4.2b, 4.3 (remainder)         | all seven block isos tied by the implication pair; allowlist **10 → 3**; header constants re-derived                                           | —                                                     |
+> | **4**             | 4.4, 4.5, 5.x, 6.x                                                 | posture greps run, `CHANGELOG`, all gates                                                                                                      | —                                                     |
 >
 > **Why session 2 moved from §3 to §2, and session 3 is now the ties.** §4.1 plus the
 > asserted constants had to land with §1 (a `BaseN` theorem with no `#guard_msgs` block is
@@ -385,7 +432,7 @@ previous defect_. A fix is a check, and a check is only as good as what enters i
 work.** `codec-drift-closure` (the closure of round nine's residue plus the one defect class
 the gate arms cannot see — a claim whose stated method is not its code's method) landed and
 archived 2026-11-12; `codec-audit-round-nine` landed and archived 2026-11-13. Everything
-below is archived history, except `basen-radix` (open, 13/43, session 2b next) and `basen-uppercase-prepass`
+below is archived history, except `basen-radix` (open, 16/44, session 2c next) and `basen-uppercase-prepass`
 (parked on the owner's library-division decision).
 
 - `codec-drift-closure` — **archived** 2026-11-12 as
@@ -451,7 +498,7 @@ below is archived history, except `basen-radix` (open, 13/43, session 2b next) a
   _alphabet_, `basen-radix` concerns _padding_ — so neither can drop the other's
   scenarios. Its fate still depends on the owner's library-division decision.
 
-- `basen-radix` — **in-progress, 13/43, THE NEXT SESSION'S WORK.** (5 session-halves; see
+- `basen-radix` — **in-progress, 16/44, THE NEXT SESSION'S WORK.** (6 session-halves; see
   `tasks.md`'s plan table and its "Session 2 landed, part 1" block) The one open change.
   Adds the missing rung in `basen`: a radix-generic `digitVal`/`toNat`/`ofNat` over `Nat`
   plus `numeralIso` per radix over the `Normal` quotient, for bases **2, 4, 8, 10, 16, 32,
@@ -465,14 +512,18 @@ below is archived history, except `basen-radix` (open, 13/43, session 2b next) a
   `strip`/`trimFor`, `trimFor_ofNat`, `trimFor_idem`, and `natVal_inj_head`. All laws
   `[propext, Quot.sound]`-only, **zero** `Classical.choice`.
 
-  **The next session is 2.2b → 2.2 → 2.3 → 2.4, then 2.2c + 4.1 as one commit — not §3.2.**
-  The ties are session 3 (with 3.1's radix instances), and §4.2/4.2b can only land with
-  §4.3's constants, so they are session 3 too. **2.2b is the task the plan was missing**:
-  the `Iso` law's `←` needs the value↔byte bridge
-  `digitVal b c = some v → c = byteOfDigit b v`, which round-trip + `fill_surj` does not
-  give. Four corrections the compiler made to the plan are in the banner above; read them
-  before writing `trimFor`-shaped or `digitVal`-shaped proofs. The old advice "start with
-  task 3.2 as a spike" is **struck** — the spike ran in session 1 and confirmed D6.
+  **Session 2b landed 2026-11-15** — `08d220f` → `a1fee8b` → `9a02f89`: the value↔byte
+  bridge, `normF`/`normF_idem`, `map_val_eq_ofNat`, `fixed_eq_ofNat`, and
+  **`numeralIso` as a full `Iso`**. Zero `Classical.choice` throughout.
+
+  **The next session starts with a BUG FIX, then 2.3 → 2.4 → 2.2c + 4.1.** Task 2.3's
+  witness found that the **shipped** `trimFor` rejects `"  0"` (`none`, where it must be
+  `some "0"`) because its all-absorbed branch guards on `isDigits` over the raw input,
+  blanks included. `tasks.md` 2.3 has the measurement, both reverted fix designs, the one
+  hard lemma, and the six proofs to re-shape. **Read it before touching `trimFor`.**
+  Then the ties are session 3 (with 3.1's radix instances), and §4.2/4.2b can only land
+  with §4.3's constants, so they are session 3 too. The old advice "start with task 3.2 as
+  a spike" is **struck** — the spike ran in session 1 and confirmed D6.
 
 - `basen-nat-iso` — **RETIRED 2026-11-13 into `basen-radix`**, deleted at 0/18. It was the
   base-10-only slice of the same layer: same quotient argument, same "a number is its
@@ -607,6 +658,36 @@ file does not guess it. When one is chosen, author it as a new change under
 a template to resume.
 
 ### Traps that have actually cost sessions here
+
+- **A "total fallback = the input" is the natural total endofunction and it can be
+  semantically wrong.** `normF b ds := (trimFor b ds).getD ds` reads as the obvious way to
+  totalise an `Option`-returning normaliser, and it makes **`[]` a fixed point** while
+  `trimFor b [] = none` (the empty input names no number, D4) and `toNat b [] = some 0` (a
+  by-product of the fold's base case). The `Iso` law's backward direction then demands
+  `[] = ofNat b 0 = "0"`, which is false. Measured 2026-11-15 in `basen-radix`: **the fix
+  is to make the fallback a canonical value the codomain actually contains**
+  (`ofNat b 0`), which is what makes every fixed point a numeral
+  (`fixed_is_numeral`). The general question: _if a fixed point of `norm` were the raw
+  fallback, would it still be in the image of `apply`?_ If not, the fallback is wrong.
+
+- **"`x.head? ≠ some 0`" does not exclude `x = []`** — `[]`'s head is `none`, which
+  _satisfies_ it. A lemma whose empty case needs to be ruled out by a non-zero-head
+  hypothesis must carry `x ≠ []` **separately**. Cost a session-half of failed attempts in
+  `basen-radix` 2.2b′ because every route to closing the empty branch from `hne` alone is
+  doomed: `none ≠ some 0` is a **true** statement and carries no contradiction.
+
+- **`if_true`/`if_false` are deprecated in Lean 4.35.0** — the spellings are
+  `ite_true`/`ite_false`. And `have := (inWin_eq_true hw).1` **loses the upper bound**, so
+  every `omega` goal shaped `N + (c - N)` fails on it; keep the pair
+  (`have hw := inWin_eq_true hw`). Both cost compile cycles in `basen-radix` 2.2b.
+
+- **A digit-window proof closes per arm at a LITERAL radix, not generically.**
+  `digitVal`'s `if`-chain does not reduce under `split`/`simp` at a variable radix — but a
+  **literal** radix makes `unfold digitVal; simp` collapse it to one `inWin` test, after
+  which `ite_eq_left`/`ite_eq_right` + the two window bounds + `omega` close the arm. The
+  final step is `UInt8.toNat.inj` with `byteOfDigit_toNat_eq` (in range, so **no** `% 256`).
+  Restating each arm as one `hbody` equation is what removes the need for `split` entirely;
+  an earlier plan expected `split` to work and it does not.
 
 - **`codec`'s spec lives here; `basen`'s spec lives here too, but `basen`'s code does not.**
   `../lean-basen` has **no `openspec/` directory** — `ls openspec` there fails. So a `basen`
@@ -1129,18 +1210,27 @@ nix develop --command lake env lean /tmp/c.lean    # expect [propext, Quot.sound
 ```
 
 **Since §1.0 it also has a _mechanism_, not just blocks.** `lake build` now prints
-**six** lines and fails if any disagrees with the environment (the fifth, the
+**eight** lines and fails if any disagrees with the environment (the fifth, the
 `native_decide` count, was added by `codec-audit-round-five` §4.3; the sixth, stated
-footprints, by `codec-audit-round-six` §6.6):
+footprints, by `codec-audit-round-six` §6.6; the first two, the def classifier's removals
+and its pattern list, by `codec-audit-round-five` §1). This block was **`six` lines and
+`490 = 444 + 46` for three changes** while the gate printed eight — a quotation of an
+asserted output is a number, and it drifts exactly like a hand-written one:
 
 ```
-info: basen axiom gate: 444 pinned + 46 allowlisted = 490 of 490 public theorems (0 explicit exclusion(s))
-info: basen axiom gate: 490 public theorems partitioned, 444 pinned and 46 allowlisted
-info: basen axiom gate: header numbers verified (490 = 444 + 46); prose paragraph says 447 pins = 444 BaseN + 3 Codec
-info: basen axiom gate: 137 public definitions covered, 122 mentioned and 15 allowlisted (mention proxy)
+info: basen axiom gate: 0 definitions dropped by the name classifier, all reason-recorded (44 listed)
+info: basen axiom gate: 10 def-name patterns, each matching a recorded declaration
+info: basen axiom gate: 484 pinned + 49 allowlisted = 533 of 533 public theorems (0 explicit exclusion(s))
+info: basen axiom gate: 533 public theorems partitioned, 484 pinned and 49 allowlisted
+info: basen axiom gate: header numbers verified (533 = 484 + 49); prose paragraph says 487 pins = 484 BaseN + 3 Codec
+info: basen axiom gate: 145 public definitions covered, 130 mentioned and 15 allowlisted (mention proxy)
 info: basen axiom gate: native_decide stated count verified (12 uses in Bench.lean, all bench-lane, none in the gate)
 info: basen axiom gate: stated footprints verified against the environment (46 claim site(s))
 ```
+
+**Quote the gate, never this block** — it is pasted from a green model at `9a02f89` and
+`basen` has no `checks.gate-lines` equivalent to regenerate it (that guard exists in
+`lean-codec` only).
 
 So a new `BaseN` law fails the build until it is pinned, and a stale pin fails too.
 Two traps, both hit in §1.0: a probe theorem must be **inside** `namespace BaseN.*`

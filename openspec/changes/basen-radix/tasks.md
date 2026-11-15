@@ -16,24 +16,28 @@
 > D4), **`numeralIso` does not touch the padded bases' tail spine** (D5), **block isos are
 > tied to the fold by a canonicity-filtered implication** (D6).
 >
-> **Progress: 6/39** (the six `[x]` are §0's five measured preconditions
-> plus §6.1's retirement; every implementation task is open).
+> **Progress: 16/44** — computed, not remembered: run `openspec list --json`. (§0's five
+> measured preconditions, §6.1's retirement, §1's four tasks, §2.1, §2.2b, §2.2, §2.2b′.
+> `AGENTS.md` used to carry a hand-written progress line here and it went stale twice.)
 >
 > **The first session is §1, not §3 — and that is a correction.** An earlier banner said "do 3.2
 > first as a spike", which is impossible: 3.2's statements mention `toNat`, so the fold must
 > exist before the ties can be stated. What the advice was _trying_ to say is that **3.2 is the
 > risk sink** — if a base's block iso genuinely contradicts the fold, that is a real bug in
-> `basen` today. So session 1 builds the fold and **probes** one block iso against it; the
-> seven ties land in session 2.
+> `basen` today. So session 1 builds the fold and **probes** one block iso against it.
 >
 > ### Session plan — this is several sessions, and each one ends green
 >
-> | session             | tasks                                                            | green at the end means                                                                                                 | **not yet true**                             |
-> | ------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-> | **1. The fold**     | 1.1–1.4, plus a throwaway probe of one block iso (not committed) | `toNat`/`ofNat` exist, round-trip proved, `BaseN.lean` imports `Radix.lean`, gate green with the new def + laws pinned | no `numeralIso`, no ties, no radix instances |
-> | **2. The ties**     | 3.1–3.5, 4.2, 4.2b, 4.3 (partial)                                | all seven block isos tied by implication pair; allowlist trimmed 10→3; header constants re-derived                     | no quotient, no `Iso`                        |
-> | **3. The quotient** | 2.1–2.4, 3.1's radix instances                                   | `trimFor` total+idempotent; three-spelling witness mutation-tested; `numeralIso` at seven radices                      | —                                            |
-> | **4. Gate + docs**  | 4.1, 4.4, 4.5, 5.x, 6.x                                          | everything pinned, CHANGELOG, all gates                                                                                | —                                            |
+> **This table is the live one; `AGENTS.md` carries a copy that must agree.**
+>
+> | session                 | tasks                                                            | green at the end means                                                                                                 | **not yet true**                                     |
+> | ----------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+> | **1. The fold** ✅      | 1.1–1.4, plus a throwaway probe of one block iso (not committed) | `toNat`/`ofNat` exist, round-trip proved, `BaseN.lean` imports `Radix.lean`, gate green with the new def + laws pinned | no `numeralIso`, no ties, no radix instances         |
+> | **2a. The quotient** ✅ | 2.1 (+ the uniqueness lemma 2.2's `←` needs)                     | `strip`/`trimFor` total + idempotent; `trimFor_ofNat`; `natVal_inj_head`; all `[propext, Quot.sound]`-only             | `numeralIso` itself, no ties                         |
+> | **2b. The `Iso`** ✅    | 2.2b, 2.2, 2.2b′                                                 | the value↔byte bridge; `numeralIso` a full `Iso`, law unconditional on the quotient                                    | `trimFor`'s zero-spelling bug; the witness; the pins |
+> | **2c. ← NEXT**          | **fix `trimFor`, then** 2.3, 2.4, **2.2c + 4.1**                 | zero spellings accepted; three-spelling witness mutation-tested; rejection laws; module imported and its laws pinned   | no ties, no radix instances                          |
+> | **3. The ties**         | 3.1's radix instances, 3.2–3.5, 4.2, 4.2b, 4.3 (remainder)       | all seven block isos tied by implication pair; allowlist trimmed **10→3**; header constants re-derived                 | —                                                    |
+> | **4. Gate + docs**      | 4.4, 4.5, 5.x, 6.x                                               | posture greps run, CHANGELOG, all gates                                                                                | —                                                    |
 >
 > **Tasks that cannot be left half-done** (stopping mid-way leaves a red gate): **4.1** (an
 > unpinned law fails the build), **4.2 with 4.2b and 4.3** (trimming the allowlist without
@@ -52,9 +56,10 @@
 > | the **spec** and this change                                  | `lean-codec` (this repo) — `../lean-basen` has **no `openspec/`** |
 >
 > **`../lean-basen` builds green today**: clean tree on `master`, `lake build` →
-> `Build completed successfully (25 jobs)`, all six gate lines self-consistent
-> (`490 = 444 + 46`). That is a **regression baseline**, not a repair job — re-run it first,
-> expect green, and expect the job count to **rise** as you add `Radix.lean`.
+> `Build completed successfully (27 jobs)`, all six gate lines self-consistent
+> (`533 = 484 + 49`). That is a **regression baseline**, not a repair job — re-run it first,
+> expect green, and expect the job count to **rise** as you add modules. (The numbers here
+> were `25` / `490 = 444 + 46` when §0 was written; **quote the gate output, not this cell**.)
 >
 > The `codec` pin is `14b54fa` (measured 70 commits behind `lean-codec`'s HEAD as of
 > `9a7231f`, and the count moves every commit — quote it with its HEAD or not at all) and **`Codec/Normal`
