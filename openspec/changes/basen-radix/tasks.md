@@ -518,9 +518,34 @@ Findings: `design.md` D2/D4.
         The `isZeroZeros ⇒ toNat = some 0` and `isBlank ⇒ digitVal = none` lemmas are the
         only alphabet facts required, and both are one `IsRadix` case split.
 
-- [ ] 2.4 Prove the rejection direction: a trailing non-digit, an out-of-alphabet digit, and
+- [x] 2.4 Prove the rejection direction: a trailing non-digit, an out-of-alphabet digit, and
       trailing data after a valid numeral all yield `none`. State these as their own laws
       rather than as prose.
+
+      **LANDED 2026-11-15** (`../lean-basen` `ca552c7`): `trailing_blank_rejected`,
+      `out_of_alphabet_rejected`, `trailing_data_rejected`, plus the six support lemmas they
+      rest on (`strip_singleton`, `strip_append_blank`, `strip_append_keep`,
+      `not_zeroSpelling_append_blank`, `isDigits_false_of_mem_blank`,
+      `isZeroDigit_zero_val`, `bool_eq_false_of_ne_true`). All
+      `[propext, Quot.sound]`-only.
+
+      **One correction to the plan, found by typechecking: the trailing-data law needs
+      `isBlank c = false` as an explicit hypothesis.** This task's own wording ("a trailing
+      non-digit… all yield `none`") reads as though `digitVal b c = none` alone suffices, and
+      it does not: **a blank byte reads as `digitVal b c = none`**, so the off-alphabet
+      predicate is *true* of a trailing blank. A blank and a non-digit are two different
+      rejections with two different proofs — `strip` absorbs the first and `isDigits` rejects
+      the second — and the overlap is genuine, not redundancy.
+
+      **Mutation-tested three ways**, each failing the build naming the mutated theorem:
+      weakening the hypothesis to `isBlank c = true ∨ True`, strengthening the conclusion to a
+      disjunction, and flipping a law's own statement. A fourth mutation — making `trimFor`
+      accept a trailing blank again — fails earlier still, inside the proofs that read the
+      three-arm body.
+
+      **Behaviour checked at the spec's own literals**, not only at the theorem level:
+      `trimFor 10 "7 "`, `trimFor 8 "9"` and `trimFor 10 "7x"` all `none`, while
+      `trimFor 10 "7"` and `trimFor 10 "  0"` stay accepted.
 
 ## 3. [M] The seven radices, and the block isos tied to the fold
 
