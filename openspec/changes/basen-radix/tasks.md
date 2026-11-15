@@ -1286,11 +1286,17 @@ closed more times than any other: **a claim whose stated method is not its code'
       derivation is not written down cannot be checked, which is why the new table names
       `c18b6a3~1` in the sentence beside it.
 
-- [ ] 8.8 **[MUST] [NB-M4] `basen`'s lakefile says `-DwarningAsError` reaches `bench`; it does
+- [x] 8.8 **[MUST] [NB-M4] `basen`'s lakefile says `-DwarningAsError` reaches `bench`; it does
       not.** `lean_exe bench` sets no `moreLeanArgs`, so a `sorry` in `Bench.lean`'s own
       theorems would warn and pass. `lean-codec` fixed exactly this in
       `codec-audit-round-nine` §1.8; the port to `basen` never happened. So 5.1b's "zero
       warnings" is _observed_, not _enforced_. Fix: set the flag on the exe.
+
+      **LANDED 2026-11-15** (`../lean-basen` `479d612`), and verified load-bearing rather than
+      just applied: stubbing one of `Bench.lean`'s own `example`s to `sorry` now fails with
+      `error: Bench.lean:54:0: declaration uses 'sorry'`. `lake build bench` green at **53**
+      jobs afterwards (it was 49 before this session added the numeral-layer modules), and
+      `lake build` still green at 29.
 
 - [x] 8.9 **[MUST] [PA-M4] design.md refuses a `[Dn]` on an over-read of PAPER.md, and
       contradicts README's own reading of the same sentence.** `codec` reads
