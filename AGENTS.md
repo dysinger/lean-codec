@@ -88,7 +88,11 @@ Guidance for AI coding agents working in this repository.
 >    see step 6.)
 > 2. **8.8** — the `lean-basen` lakefile one-liner; re-run `lake build bench` afterwards.
 > 3. **8.4** — revert the allowlist drop (−7 theorems, `expectedDefAllow` 11→18), re-derive.
-> 4. **8.3** — the `_L` split; **after** 8.4, not before.
+> 4. **8.3** — the `_L` split; **after** 8.4, not before. This one is **spec-mandated, not
+>    preferred**: the spec requires an implication pair and five of the seven bases already
+>    state one, so 32/64's `∧` is a spec violation. Restating it is a _conformance_ fix, and
+>    it is inside the paper's law shape (`apply`/`unapply` as functions), so no `[Dn]`/`[S]`
+>    filing is involved.
 > 5. **8.10** — the two iff theorems (+2).
 > 6. **8.5 LAST** — rewrite the header paragraph to the numbers the gate then prints, and
 >    **bind it** so the next drift fails the build. It is the only item that reads every

@@ -1090,20 +1090,64 @@ closed more times than any other: **a claim whose stated method is not its code'
       it and state the pad-free restriction as the limitation it is.
 
 - [ ] 8.3 **[MUST] [GC-M2] The `_L` "tie" is a conjunction whose second arm never mentions
-      `toNat`.** `b32BlockApply_of_toNat` / `b64BlockApply_of_toNat` conclude
-      `A ∧ B` where `B` is `blockApply … = some bs` — and `A` is `toNat_b*_unapply_*`, already
-      an existing lemma. So the "tie" is `⟨existing, rfl⟩`. A `∧` is not the implication pair
-      the schema describes. Fix: ship the two arms as separate named theorems, or state a real
-      `↔`.
+      `toNat`, and that is a _spec violation_, not a style preference.**
+      `b32BlockApply_of_toNat` / `b64BlockApply_of_toNat` conclude `A ∧ B` where `B` is
+      `blockApply … = some bs` and `A` is `toNat_b*_unapply_*` — an existing lemma. So the
+      "tie" is `⟨existing, rfl⟩`: a closed conjunction with no hypothesis, whose second
+      conjunct says nothing about the fold.
+
+      **Why the spec settles it.** The requirement says the statement "SHALL be the
+      implication pair — a fold that yields `n` on an accepted input agrees with the block's
+      value, and a block result agrees with the fold". The five `_8` bases do exactly that:
+
+      ```
+      hexBlockApply_of_toNat  : toNat 16 [d0,d1] = some n → hexBlockApply [d0,d1] = some (UInt8.ofNat n)
+      toNat_of_hexBlockApply  : hexBlockApply [d0,d1] = some v → toNat 16 [d0,d1] = some v.toNat
+      ```
+
+      Bases 32/64 state a `∧` with no hypothesis on the `→` side at all. That is a
+      *different shape*, and the spec's own reason for rejecting a disjunction applies
+      verbatim: **`PAPER.md` defines the law over `apply`/`unapply` as functions whose
+      implications run `Just b → g b = Just a`** (`PAPER.md:262-266`), so a three-way
+      conjunction is a statement about a *result tuple*, not about that pair.
+
+      **Fix (and the paper decides which):** restate as the implication pair, matching the
+      five `_8` bases —
+      `(h : toNat 64 cs = some (beVal bs)) → b64BlockApply cs = some bs`, and separately
+      `(h : b64BlockApply cs = some bs) → toNat 64 cs = some (beVal bs)` at the pad-free
+      arity. **Net +2 theorems** (2 = 2+2−2), and 8.4's revert is then a pure deletion.
+
+      **`README.md` consistency: no `[Dn]`/`[S]` filing needed.** This restores the paper's
+      law shape rather than departing from it; the pad-free restriction is the partiality the
+      `Maybe` arrow already models, which is the same argument `[S1]` and D6's correction 3
+      make. It is an implementation-vs-spec fix.
 
 - [ ] 8.4 **[MUST] [GC-M4, GC-S3] The seven `*BlockIso_apply` laws are gate-satisfiers, not
       laws.** Each is `:= rfl` on a structure projection (`bitBlockIso` is literally
       `{ apply := bitBlockApply, … }`), so it cannot fail for any edit to `bitBlockApply`. They
       were introduced _because the def arm refused the allowlist drop_ — my own commit message
       says so. `Axioms.lean:1963-1965` names this exact shape: _"a theorem restating a proved
-      field would be the `propProjections` defect"_. Fix (preferred): restore the seven to
-      `definitionSurfaceAllowlist` with the true reason, delete the seven theorems; 4.2's drop
-      becomes a correction to record rather than a win to keep.
+      field would be the `propProjections` defect"_.
+
+      **`README.md` consistency: reverting is the *conforming* action, and dropping was the
+      drift.** The mention proxy is a `codec`/`basen` **gate statistic** — `README.md:1404`
+      prints it as `140 public definitions covered, 115 mentioned and 25 allowlisted (mention
+      proxy)` — and the README nowhere treats "is mentioned by a gated theorem" as a law
+      obligation. Its stated job is narrower and is quoted at `Axioms.lean`: *"no public
+      definition is covered by silence"*. Seven `:= rfl` theorems do not make the model iso's
+      law verified — the `law` field already is, at the definition site — so they satisfy the
+      statistic while saying nothing, which is what the allowlist reason ("`Iso`-law-as-field,
+      no theorem names it") exists to record *truthfully*.
+
+      **Nor does this touch any `[Dn]`/`[S]` anchor.** The anchors describe the paper's
+      semantics; an allowlist entry is internal bookkeeping about which of `codec`'s own
+      shapes have a characterising law. Deleting them changes no observable behaviour and no
+      theorem's statement, so no anchor moves.
+
+      **Fix:** restore the seven to `definitionSurfaceAllowlist` with their original reason,
+      delete the seven `*BlockIso_apply` theorems, and record 4.2's drop as a correction
+      rather than a win. 4.2b's "18 → 11" prose reverses to "back to 18". Direction:
+      **−7 theorems** (`expectedPub` 722 → 715 before 8.3's +2).
 
 - [ ] 8.5 **[MUST] [NB-M1] `Axioms.lean`'s header paragraph is stale by 189 theorems — in a
       paragraph that claims it cannot be stale.** Measured, side by side:
@@ -1231,13 +1275,13 @@ directions.** A session that does them in the listed order lands on a _wrong_ in
 gate and will spend a build cycle thinking it introduced a defect. Measured from git and from
 the current constants:
 
-| item                           | what it does to `expectedPub` / `expectedGated`                                                                                                                                                   | depends on                                     |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| 8.3 split the `_L` conjunction | **+2 then +0** — one theorem becomes two; both arms already exist, so it is a _restructure_, net **+2** if the arms are named separately, **0** if the conjunction is kept and only re-documented | —                                              |
-| 8.4 revert the allowlist drop  | **−7** (delete the seven `*BlockIso_apply`), and `expectedDefAllow` **11 → 18**, `expectedMentioned` **150 → 143**                                                                                | must land **after** 8.3, or 8.3 is split twice |
-| 8.10 prove the domain iff      | **+2** (`octBlockApply_domain_iff`, `digBlockApply_domain_iff`), both `[propext]`-only → `statedDistP` **+2**                                                                                     | independent                                    |
-| 8.2 fix the b64 docstring      | 0 (docstring)                                                                                                                                                                                     | —                                              |
-| 8.5 / 8.6 / 8.7                | 0 theorems; 8.5 is the only one that touches asserted constants (it _reads_ them)                                                                                                                 | must be **last**, after all deltas             |
+| item                           | what it does to `expectedPub` / `expectedGated`                                                                                                                                                   | depends on                                                                                                    |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| 8.3 split the `_L` conjunction | **+2 then +0** — one theorem becomes two; both arms already exist, so it is a _restructure_, net **+2** if the arms are named separately, **0** if the conjunction is kept and only re-documented | —                                                                                                             |
+| 8.4 revert the allowlist drop  | **−7** (delete the seven `*BlockIso_apply`), and `expectedDefAllow` **11 → 18**, `expectedMentioned` **150 → 143**                                                                                | must land **after** 8.3. **8.3 + 8.4 net −5 → `expectedPub` 717**, not 715: the `715` below predates 8.3's +2 |
+| 8.10 prove the domain iff      | **+2** (`octBlockApply_domain_iff`, `digBlockApply_domain_iff`), both `[propext]`-only → `statedDistP` **+2**                                                                                     | independent                                                                                                   |
+| 8.2 fix the b64 docstring      | 0 (docstring)                                                                                                                                                                                     | —                                                                                                             |
+| 8.5 / 8.6 / 8.7                | 0 theorems; 8.5 is the only one that touches asserted constants (it _reads_ them)                                                                                                                 | must be **last**, after all deltas                                                                            |
 
 **The exact revert target for 8.4, so nobody re-derives it.** `git show 5044f95~1:Axioms.lean`
 is the commit before the drop; its constants were:
@@ -1248,7 +1292,8 @@ statedDistPS 539  statedDistP  83     statedDistZ 41
 expectedMentioned 143                expectedDefAllow 18
 ```
 
-**Do not paste those.** They are the values _before_ 8.3's `+2` and 8.10's `+2`, and 8.9's
+**Do not paste those.** They are the values _before_ 8.3's `+2` (so the figure after 8.4 is
+`717`, not `715`) and before 8.10's `+2`, and 8.9's
 `[S7]` commit added nothing. The only safe procedure is: land all code changes, then read
 `lake build`'s own `theorems not pinned` / `table is stale` output and set the constants from
 it. The table above is for _predicting_ the direction, never for filling in the number.
