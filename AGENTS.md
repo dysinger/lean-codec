@@ -36,17 +36,49 @@ Guidance for AI coding agents working in this repository.
 > characterisation is stronger than the statement you are allowed to make, put it on the
 > record as its own theorem rather than folding it into the law.
 >
-> **Landed so far** — `../lean-basen` `cd1a371`: `BaseN.RadixTie` with the reusable fold
-> machinery and **base 2's pair**; gate `669 = 617 + 52` at 29 jobs. Bases 4, 8 and 16's
-> digit bridges are proved clean in scratch but not yet in the module.
+> **Landed so far** — `../lean-basen` `cd1a371`, `4e85200`: `BaseN.RadixTie` with the reusable
+> fold machinery, the digit bridges, and the ties for **bases 2, 4 and 8** (both directions),
+> plus base 8's **overflow law**. Gate `684 = 632 + 52` at 29 jobs; distribution
+> `519 + 76 + 37 = 632`, matching the per-law counts exactly.
 >
 > **`Classical.choice` leaked three times here, in shapes `AGENTS.md` did not have.** All
 > silent; only `#print axioms` shows them: `omega` with a **disjunction in the context**;
 > `split` on a two-arm `if` (use `by_cases` + `ite_eq_left`); and
-> `have h : a ≤ x ∧ x ≤ b := by omega` (use `⟨by omega, by omega⟩`). Every new tie SHALL be
-> measured before it is believed.
+> `have h : a ≤ x ∧ x ≤ b := by omega` (use `⟨by omega, by omega⟩`). Both new rows are now in
+> the global `lean` skill's §2b catalogue. **Every new tie SHALL be measured before it is
+> believed.**
 >
-> ### The rest of §3, and what follows (unchanged)
+> ### NEXT SESSION: finish §3 — bases 16, 10, then 32 and 64
+>
+> Four ties left. **16 is the cheap one; 32/64 are the hard ones; 10 is the mechanical repeat
+> of 8.** Do them in that order, and commit per base (a base adds 2 laws, or 3 with an
+> overflow law, so each is a clean boundary).
+>
+> 1. **Base 16** — two windows instead of one. Its per-digit bridge is **already proved and
+>    measured `[propext, Quot.sound]`-only** (`design.md` D6's correction block has the
+>    `bounds`/`of_valid`/`to_valid` shape: `hexToNibble` has a digit window `48–57` and a
+>    letter window `65–70`, and `Base16.hexToNibble_digit` / `_upper` already exist in the
+>    tree). **No overflow law**: two nibbles reach exactly `255`. So it is base 2's pair with
+>    a two-arm shape.
+> 2. **Base 10** — the mechanical repeat of base 8: three decimal digits, `"999"` → `999`,
+>    so it needs `n ≤ 255` as a hypothesis **and** a `digBlockApply_overflow` law. Nothing
+>    new to design; copy base 8's structure and change the alphabet predicates.
+> 3. **Bases 32 and 64** — schema `_L`, codomain `List UInt8`. **`design.md` D6's `_L` schema
+>    names `bytesOfNat` and `natOfBytes`, which do not exist in the tree** — do not go looking
+>    for them. Both blocks are `(lenient decode).bind (fun bs => if unapply bs = some cs then
+some bs else none)`, i.e. a **re-encode-and-compare** guard, so the tie is stated against
+>    `b32BlockDecodeLenient` / `b32BlockUnapply` (and the `b64` pair) and the `→` direction is
+>    held by that guard rather than by a range bound. Expect this to be the session's real
+>    work: decide the statement shape against the code **before** writing any proof, and
+>    record it in D6 the way the `_8` correction is recorded.
+>
+> **Then the rest of §3**: 3.3's seven mutations (perturb each block iso's digit order and
+> confirm the tie fails), 3.4's docstring (why `numeralIso` does not touch the `B32`/`B64`
+> tail spine), 3.5 (`BaseN.lean:20-22`'s "no dispatch index" sentence), and 3.1's seven
+> `numeralIso` instantiations — which nothing has done yet and which the session table still
+> lists as session 3's work.
+>
+> ### §3's predecessors: what landed before it
 >
 > **2.2c + 4.1 LANDED 2026-11-15** — `../lean-basen` `9d547dd`, this repo `49238a3`.
 > `BaseN.RadixCodec` is imported and its **117** laws are pinned by hand, and 4.3's
@@ -240,14 +272,14 @@ Quot.sound]`-only, zero `Classical.choice`. At that landing the gate still read 
 > equality is **false** and D6's implication-pair shape is confirmed. The seven ties
 > themselves are still unwritten.
 >
-> | session          | tasks                                                                    | green at the end means                                                                                                                         | **not yet true**                                      |
-> | ---------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-> | **1** ✅ landed  | 1.1–1.4, **4.1**, 4.3's constants, + the throwaway block-iso probe       | `toNat`/`ofNat` exist, round-trip proved, `RadixAlphabets` agrees at all seven radices, gate green with the new laws pinned (`533 = 484 + 49`) | no `numeralIso`, no ties, no instances                |
-> | **2a** ✅ landed | 2.1 (+ the uniqueness lemma 2.2's `←` needs)                             | `strip`/`trimFor` total + idempotent; `trimFor_ofNat`; `natVal_inj_head`; all `[propext, Quot.sound]`-only                                     | `numeralIso` itself, no ties                          |
-> | **2b** ✅ landed | 2.2b, 2.2, 2.2b′                                                         | the value↔byte bridge; `numeralIso` a full `Iso`, law unconditional on the quotient                                                            | `trimFor`'s zero-spelling bug; the witness; 2.2c pins |
-> | **2c** ✅ landed | **fix `trimFor`, then** 2.3, 2.4, **2.2c + 4.1**, 4.4, 4.5, 5.1/5.1b/5.2 | zero spellings accepted; witness mutation-tested; rejection laws; 117 laws imported and pinned by hand; gate `653 = 601 + 52` / 28 jobs        | no ties, no radix instances                           |
-> | **3** ← **NEXT** | 3.1's radix instances, 3.2–3.5, 4.2, 4.2b, 4.3 (again)                   | all seven block isos tied by the implication pair; allowlist **10 → 3**; header constants re-derived                                           | —                                                     |
-> | **4**            | 5.3, 5.4, 6.2, 6b.x, 7.x                                                 | value-check inventory, `CHANGELOG`, two-repo commits recorded, non-goals stated                                                                | —                                                     |
+> | session          | tasks                                                                                   | green at the end means                                                                                                                         | **not yet true**                                      |
+> | ---------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+> | **1** ✅ landed  | 1.1–1.4, **4.1**, 4.3's constants, + the throwaway block-iso probe                      | `toNat`/`ofNat` exist, round-trip proved, `RadixAlphabets` agrees at all seven radices, gate green with the new laws pinned (`533 = 484 + 49`) | no `numeralIso`, no ties, no instances                |
+> | **2a** ✅ landed | 2.1 (+ the uniqueness lemma 2.2's `←` needs)                                            | `strip`/`trimFor` total + idempotent; `trimFor_ofNat`; `natVal_inj_head`; all `[propext, Quot.sound]`-only                                     | `numeralIso` itself, no ties                          |
+> | **2b** ✅ landed | 2.2b, 2.2, 2.2b′                                                                        | the value↔byte bridge; `numeralIso` a full `Iso`, law unconditional on the quotient                                                            | `trimFor`'s zero-spelling bug; the witness; 2.2c pins |
+> | **2c** ✅ landed | **fix `trimFor`, then** 2.3, 2.4, **2.2c + 4.1**, 4.4, 4.5, 5.1/5.1b/5.2                | zero spellings accepted; witness mutation-tested; rejection laws; 117 laws imported and pinned by hand; gate `653 = 601 + 52` / 28 jobs        | no ties, no radix instances                           |
+> | **3** ← **NEXT** | 3.1's radix instances, 3.2 (bases 16, 10, 32, 64 left), 3.3–3.5, 4.2, 4.2b, 4.3 (again) | all seven block isos tied by the implication pair; allowlist **10 → 3**; header constants re-derived                                           | bases 16/10/32/64 untied; 3.3's mutations unwritten   |
+> | **4**            | 5.3, 5.4, 6.2, 6b.x, 7.x                                                                | value-check inventory, `CHANGELOG`, two-repo commits recorded, non-goals stated                                                                | —                                                     |
 >
 > **Why session 2 moved from §3 to §2, and session 3 is now the ties.** §4.1 plus the
 > asserted constants had to land with §1 (a `BaseN` theorem with no `#guard_msgs` block is
