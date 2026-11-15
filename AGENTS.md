@@ -50,10 +50,26 @@ Guidance for AI coding agents working in this repository.
 > `Bool`-directed `any isBlank` search. Re-measure `#print axioms` on any lemma whose shape is
 > "not-but-then-exists".
 >
-> **Still open: 2.4** (the rejection laws as their own theorems), **2.2c** (the import + 4.1's
-> pins, which cannot be left half-done), then session 3. A general form of 2.4 needs
-> `isBlank c → (digitVal b c).isSome = false`, which is `digitVal_eq_none_of_blank hr` — the
-> piece whose absence cost most of 2c's 2.4 attempt.
+> **2.4 also LANDED 2026-11-15** — `../lean-basen` `ca552c7`: `trailing_blank_rejected`,
+> `out_of_alphabet_rejected`, `trailing_data_rejected`, plus six support lemmas. **Section 2
+> is now closed: 2.1–2.4 all done.**
+>
+> **The plan's wording for 2.4 was wrong in a way worth carrying forward.** This file and
+> `tasks.md` both said a trailing non-digit and trailing data "all yield `none`", which reads
+> as though `digitVal b c = none` alone suffices. It does not: **a blank byte reads as
+> `digitVal b c = none`**, so the off-alphabet predicate is _true_ of a trailing blank. The
+> trailing-data law therefore needs `isBlank c = false` as an explicit hypothesis, and the two
+> rejections have different proofs — `strip` absorbs a blank, `isDigits` rejects a non-digit.
+> A hypothesis the plan did not think of is not a convenience; it is a fact about the alphabet.
+>
+> **NEXT: 2.2c + 4.1, which are one commit and cannot be left half-done.** Adding
+> `import BaseN.RadixCodec` to `BaseN.lean` makes the coverage arm name **~99 unpinned
+> theorems plus one uncovered `def`** (`isNumeral`). `basen` has **no generator** —
+> `ls ../lean-basen/scripts/` fails and `grep -c 'BEGIN GENERATED' Axioms.lean` is `0` — so
+> pinning is **by hand**: a `#guard_msgs` block per theorem plus a name in
+> `BaseNAxioms.gatedNames` (`Axioms.lean:2066`). The coverage arm is the enforcement: it fails
+> the build naming every public `BaseN` theorem in neither `gatedNames` nor
+> `generatedAuxAllowlist`. Budget a session for it.
 >
 > **Session 2b LANDED 2026-11-15** — `../lean-basen` `08d220f` → `a1fee8b` → `9a02f89`.
 > **`numeralIso` is a full `Iso`**, both law directions unconditional on the quotient:
