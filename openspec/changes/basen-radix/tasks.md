@@ -845,10 +845,21 @@ section described `codec`'s machinery and `basen` does not have it.**
       arms, not "the header counts".
 
       **LANDED 2026-11-15, in the same commits as the counts it moved.** The gate's own log
-      line verifies all four groups together (`header numbers verified (722 = 670 + 52);
-      prose paragraph says 673 pins = 670 BaseN + 3 Codec`), plus the distribution
-      (`546 + 82 + 41 = 669` before the isos' `apply` laws, `553/82/41` after) and the def
-      table (`161 = 150 + 11`). The task's "worked example" was right to warn that the delta
+      line verified all four groups together: `header numbers verified (722 = 670 + 52);
+      prose paragraph says 673 pins = 670 BaseN + 3 Codec`, plus the distribution
+      **`539 + 82 + 39 = 660` before** the isos' `apply` laws and **`546 + 83 + 41 = 670`**
+      after, and the def table `161 = 150 + 11`.
+
+      **The distribution triple in the sentence above was wrong when it was written, and it is
+      §8.6's finding.** It said `546 + 82 + 41 = 669` before and `553/82/41` after — neither
+      is a state any build produced, and `553 + 82 + 41` sums to `676` against a total of
+      `670`. The defect is AGENTS.md's "padded range" in its table form: a total was wanted, so
+      the parts were chosen to reach it. The two triples now quoted are from `b29c38c` and
+      `5044f95`, and each sums to its own total. **Every figure in this paragraph is a
+      historical record of that session**; the live gate has since moved to `717 = 665 + 52`
+      under §8, so read `lake build` for the current one.
+
+      The task's "worked example" was right to warn that the delta
       is not `+7`: this session's real deltas were `+7` (base 16), `+8` (base 10),
       `+13` (bases 32/64), `+3` (radix instances), `+7` (`*BlockIso_apply`) — **not**
       uniform, and **not** the `+14` the example guessed either.
@@ -1229,7 +1240,7 @@ closed more times than any other: **a claim whose stated method is not its code'
       rather than assumed: `String.getD` does not exist on a `String`, and the paragraph is
       segment **1** of a `splitOn "/-!"`, because segment 0 is the copyright header.
 
-- [ ] 8.6 **[MUST] [NB-M2] `tasks.md` 4.3's distribution triple is spliced and does not sum.**
+- [x] 8.6 **[MUST] [NB-M2] `tasks.md` 4.3's distribution triple is spliced and does not sum.**
       I recorded `546 + 82 + 41 = 669` (before) and `553/82/41` (after). From git:
 
       ```
@@ -1239,6 +1250,18 @@ closed more times than any other: **a claim whose stated method is not its code'
 
       Neither of my triples is a real state; "553+82+41" sums to 676 against a total of 670.
       This is the padded-range defect AGENTS.md tabulates four times, committed while fixing it.
+
+      **LANDED 2026-11-15.** 4.3's paragraph is corrected in place: it now quotes the two real
+      states (`539 + 82 + 39 = 660` before, `546 + 83 + 41 = 670` after) and says plainly that
+      the figure the sentence originally carried was assembled to reach a total rather than
+      read off a build. The `*BlockIso_apply` bullet in that paragraph is also corrected — it
+      describes work §8.4 has since reverted, and a task ledger that keeps a reverted item in
+      its "landed" list is the same defect one layer up.
+
+      **The numbers in 4.3's own paragraph are now stale, and that is the honest state.** 4.3
+      recorded the gate at `722 = 670 + 52`; §8 has since moved it to `717 = 665 + 52`. The
+      paragraph is a *historical record of what landed then*, so it keeps its figures and says
+      so; the current gate is read from `lake build`, never from a task ledger.
 
 - [ ] 8.7 **[MUST] [NB-M3, PA-N5] `CHANGELOG.md` overstates the footprint.** "Every law is
       `[propext, Quot.sound]`-only" is false for 64 of the 229 new laws (35 are `[propext]`,
