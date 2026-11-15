@@ -371,7 +371,7 @@ Findings: `design.md` D2/D4.
       `ofNat b 0`, which makes **every** fixed point a numeral (`fixed_is_numeral`) and is
       what the law actually needs. D2's argument is untouched; its implementation was not.
 
-- [ ] 2.2c **Wire `BaseN.RadixCodec` into `BaseN.lean` and pin its laws.** Measured
+- [x] 2.2c **Wire `BaseN.RadixCodec` into `BaseN.lean` and pin its laws.** Measured
       2026-11-14: adding `import BaseN.RadixCodec` makes the coverage arm name **99**
       unpinned theorems plus one uncovered `def` (`isNumeral`), because the module was
       written and built _without_ being imported — exactly §0.4's "an unimported module is
@@ -379,6 +379,18 @@ Findings: `design.md` D2/D4.
       direction: the gate stayed green through the whole session because it could not see
       the file. The import was reverted so the gate stays green; it lands with 4.1's pins,
       which cannot be left half-done.
+
+      **LANDED 2026-11-15** (`../lean-basen` `9d547dd`), together with 4.1 and 4.3's
+      constants — one commit, as this task required. The gate prints `653 = 601 + 52` at
+      **28 jobs** (was 27): the job count rising is §0.4's evidence that the module is
+      really compiled.
+
+      **The `99` was 117 by the time the import landed**, and that is the measurement to
+      trust — the `99` was taken 2026-11-14 and sessions 2.3/2.4 then added the
+      zero-spelling fix, the three-spelling witness and the three rejection laws with their
+      support lemmas. The uncovered-`def` count was **two**, not the one predicted here
+      (`numeralIso` as well as `isNumeral`).
+
 - [x] 2.3 Prove the **three-spelling witness** — canonical, leading-zero, and
       leading-whitespace spellings of one number all reach the same image — and
       **mutation-test it** by removing one absorbed variation and confirming it fires. This
@@ -596,7 +608,7 @@ Findings: `design.md` D5/D6.
 Findings: review `gate-coverage` M-1/M-2/M-3. **Measured, because the first draft of this
 section described `codec`'s machinery and `basen` does not have it.**
 
-- [ ] 4.1 Pin every new law **by hand**. There is **no generator here**:
+- [x] 4.1 Pin every new law **by hand**. There is **no generator here**:
 
       ```
       ls ../lean-basen/scripts/            -> No such file or directory
@@ -615,6 +627,53 @@ section described `codec`'s machinery and `basen` does not have it.**
          with the message `theorems not pinned by this gate`.
 
       That coverage arm **is** the enforcement. Nothing regenerates; the list is maintained.
+
+      **LANDED 2026-11-15** (`../lean-basen` `9d547dd`): **117** `#guard_msgs` blocks and
+      **117** `gatedNames` entries, one per theorem the arm named. Footprints taken from the
+      `#print axioms` output rather than transcribed (**84** `[propext, Quot.sound]`, **21**
+      `[propext]`, **12** axiom-free), with **zero** `Classical.choice` / `sorryAx` across all
+      117 — and equally across all 601 pinned names, which is task 4.5's measurement.
+
+      **Registering them took three corrections the build found, none of which this task's
+      prose anticipated.** They are recorded in `Axioms.lean` in place, at the entries they
+      concern:
+
+      1. **Three compiler-emitted `eq_def` theorems cannot be pinned the way a law is.**
+         `digitTail.eq_def`, `isDigits.eq_def` and `strip.eq_def` are in the environment, and
+         they are exactly the recursion equations `AGENTS.md` says to reach for when `unfold`
+         will not reduce a `match`-def at a variable argument — but they are **not** in
+         `publicTheorems`, so no `#guard_msgs`/`gatedNames` pair can cover them. They need a
+         **block** for the footprint *and* an entry in `generatedAuxAllowlist` for the
+         partition: two registries, two jobs. A first revision of the comment beside them said
+         "pinned rather than allowlisted" and the `partition` arm refuted it by firing on all
+         three — the fix introducing the next defect, which is this repo's standing pattern.
+         `eq_def` is not in `isGeneratedAux`'s suffix list, so only an explicit entry quiets
+         the arm.
+      2. **The block count and the `gatedNames` count legitimately differ, and both are
+         asserted.** `grep -c '^#print axioms'` gives **607**; `gatedNames` holds **601**. The
+         difference is exactly those three `eq_def` blocks. `headerNumbers` asserts the two
+         figures separately, so re-deriving "the same number" twice would have been wrong.
+      3. **Two `def`s, not one.** `numeralIso` is a `def` whose `law` is a proved structure
+         field, so it joins the existing `Iso`-law-as-field group; `isNumeral` is
+         `(trimFor b ds).isSome`, so every fact about it *is* a fact about `trimFor`, which is
+         gated by name (`trimFor_ofNat`, `trimFor_idem`, `trimFor_none_toNat_none`,
+         `trimFor_ofNat_self_zero`) — the mention proxy cannot see it because those statements
+         spell `trimFor` out. Both got entries **with those reasons**, not bare names.
+
+      **Mutation-tested four ways**, each failing the build naming the defect:
+
+      | mutation                                       | arm that fires                                                  |
+      | ---------------------------------------------- | --------------------------------------------------------------- |
+      | delete one `gatedNames` entry                  | `coverage` **and** `partition`, both naming it                   |
+      | add a name that is no theorem                  | `pinned names with no matching theorem`                          |
+      | weaken one pinned footprint to axiom-free      | the `#guard_msgs` mismatch, printing the expected and the actual |
+      | drop `isNumeral` from the def allowlist        | the def arm, naming it                                           |
+
+      The first of those is worth recording in full: deleting a `#guard_msgs` **block** trips
+      `statedPrintBlockCount` *before* the coverage arm runs, so the block half is guarded by
+      the header check while the name half is guarded by both coverage arms. That split is by
+      design — but it means "delete a block and watch the coverage arm fire" does not
+      reproduce, and the mutation that does is the `gatedNames` one.
 
 - [ ] 4.2 **Drop the seven block isos from `definitionSurfaceAllowlist`** — and **keep three**.
       This is the task the first draft did not have; the second draft's version of it was
@@ -692,7 +751,7 @@ section described `codec`'s machinery and `basen` does not have it.**
       `statedDistPS` all move by the number of new pinned theorems; `expectedDefAllow` moves by
       minus the number of *named* isos. Re-derive from `lake build`.
 
-- [ ] 4.4 **State the two posture greps and run them** before pinning. Measured baseline
+- [x] 4.4 **State the two posture greps and run them** before pinning. Measured baseline
       today, which the new module must not break:
 
       ```
@@ -706,7 +765,13 @@ section described `codec`'s machinery and `basen` does not have it.**
            a literal zero-grep would fail forever on the prose that documents the rule.
       ```
 
-- [ ] 4.5 Every new law stays `[propext, Quot.sound]`-only: `#print axioms` per law family.
+      **RUN 2026-11-15 after the import — both greps reproduce that baseline unchanged.**
+      `grep -rn 'native_decide' --include=*.lean BaseN/` → **0** (the 12 sanctioned uses are
+      still `Bench.lean`-only, and the gate's own `native_decide` arm re-verified them).
+      `grep -rn '\bsorry\b' --include=*.lean BaseN/ Axioms.lean` → the **same 3 hits**, all
+      docstring prose; no `sorry` term. So `BaseN/RadixCodec.lean` added neither.
+
+- [x] 4.5 Every new law stays `[propext, Quot.sound]`-only: `#print axioms` per law family.
       **All three** recorded leak shapes apply (`AGENTS.md`), not the two the first draft
       named — the third, a `match`/`if` on a `Bool` in the goal, is exactly what 2.4's
       rejection laws and 1.3's `ofNat` are shaped like.
@@ -718,18 +783,45 @@ section described `codec`'s machinery and `basen` does not have it.**
       (measured live), and the explicit `Or.inl`/`Or.inr` form does not. Rejection laws are
       `Option`-and-disjunction shaped — use the explicit form.
 
+      **MEASURED 2026-11-15, and this is now a build-time guarantee rather than a review step.**
+      All **117** `RadixCodec` laws report a footprint inside the discipline — **84**
+      `[propext, Quot.sound]`, **21** `[propext]`, **12** axiom-free — and a scan of those 117
+      footprint lines for `Classical.choice`/`sorryAx` is **0**, as it is for all **601** pinned
+      names. The gate now *enforces* it: each law's footprint is written into a `#guard_msgs`
+      block (task 4.1), so a regression is a build failure at the law that regressed, not
+      something a later audit has to find. Mutation 3 above is that arm firing.
+
 ## 5. [S] Verification
 
-- [ ] 5.1 `nix develop --command lake build` in `../lean-basen` — zero `sorry`, zero
+- [x] 5.1 `nix develop --command lake build` in `../lean-basen` — zero `sorry`, zero
       warnings, all gate lines green. **Baseline for the job count is 25** (§0.1); it must
       have risen by the new module, and the header counts must have been re-asserted (§4.3).
-- [ ] 5.1b `nix develop --command lake build bench` in `../lean-basen` — the bench lane must
+
+      **RUN 2026-11-15:** `Build completed successfully (28 jobs)`, all eight gate lines
+      printed and self-consistent at **`653 = 601 + 52`**, zero `sorry`, zero warnings. The
+      count rose 27 → 28 by `RadixCodec`, which §0.4 says is the only evidence the module is
+      compiled at all. (The `25` above was §0.1's baseline before §1; quote the build.)
+
+- [x] 5.1b `nix develop --command lake build bench` in `../lean-basen` — the bench lane must
       still link and run. This change adds no bench row, so this is a regression check; a
       break here means `Radix.lean` perturbed something the bench depends on.
+
+      **RUN 2026-11-15:** `Build completed successfully (51 jobs)`, zero warnings. Noted while
+      running it: `Bench.lean`'s `main` is `pure ()` and its value checks are all build-time
+      `native_decide` **`example`s** (the last line of the file says so), so `lake build bench`
+      — which type-checks them — **is** the runtime lane here; the binary printed nothing and
+      exited 0, which is correct rather than a silent skip. The gate's own `native_decide` arm
+      re-verified the count (12, all bench-lane), so nothing was added or dropped.
+
 - [ ] 5.1c `nix build '.#bench'` in `../lean-basen` — the **sandboxed** lane, which is the
       only one that proves the Nix build still works after a module was added. It is a long
       build: `nohup … &`, then poll. Never foreground it.
-- [ ] 5.2 `nix develop --command openspec validate --all` in **this** repo.
+- [x] 5.2 `nix develop --command openspec validate --all` in **this** repo.
+
+      **RUN 2026-11-15:** `Totals: 13 passed, 0 failed (13 items)`. The `requirements[…]`
+      `>500 characters` warnings are pre-existing across every spec in the repo, not introduced
+      here.
+
 - [ ] 5.3 Every value-checked claim in this change is a _theorem_, not an `example`; if any
       run-time check is added, it goes in the bench and `checks.bench` must reach it.
 - [ ] 5.4 `CHANGELOG.md` entry in the register of an **addition**, naming the three new
