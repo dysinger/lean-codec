@@ -42,8 +42,16 @@ element for them.
 #### Scenario: One digit-value function serves every radix
 
 - **WHEN** any base's own digit-value function is inspected
-- **THEN** it is proved equal to the generic function at that radix, so no base carries an
-  independent alphabet definition that could disagree with the generic one.
+- **THEN** it is proved equal to the generic function at that radix, so no base's
+  digit-value function can disagree with the generic one.
+
+  **Scope of that claim, because an earlier draft overstated it.** It is about the seven
+  _digit-value functions_ (`bitVal`, `quartetVal`, `octToVal`, `hexToNibble`, `b32ToVal`,
+  `b64ToVal`, `digVal`) and nothing else. Base 16 additionally carries a **case-folding**
+  decoder (`decodeHexFold`) which accepts `"6f"` where `digitVal 16 'f'` is `none` — measured,
+  and it is the opposite of an independent alphabet: it is a _superset_ of the generic one,
+  applied after it. That predates this change and is `basen-uppercase-prepass`'s subject;
+  this requirement neither covers nor forbids it.
 
 #### Scenario: An out-of-alphabet digit is rejected
 
@@ -147,6 +155,14 @@ which makes the rejection law an iff about the block's domain rather than one ha
 **All seven** block isomorphisms SHALL be covered, base 10's included; excluding it from the
 power-of-two grouping is a classification, not an omission.
 
+**For bases 32 and 64 the tie SHALL be stated over the block's pad-free form, and the
+restriction SHALL be described as a canonicity divergence rather than an arity formality.**
+The pad byte `=` is outside the fold's alphabet, so a short-tail block is accepted by the
+block isomorphism and unreadable by the fold — measured, `b64BlockApply [90,103,61,61]`
+(`"Zg=="`) is `some [102]` while `toNat 64` on the same bytes is `none`. The tie therefore
+holds on the block's **image**, not on every input it accepts, and both directions SHALL say
+so rather than implying the functions agree everywhere.
+
 The generic fold SHALL NOT be applied across the padded bases' terminal-tail layer: base 32
 and base 64 encode a length class there, and a minimal-width numeral has none. The theorems
 covered by this requirement are over the block layer only.
@@ -188,3 +204,10 @@ covered by this requirement are over the block layer only.
 - **WHEN** a padded base-32 or base-64 encoding is converted to a number
 - **THEN** that composition is out of scope for this requirement; the block-only theorem does
   not license folding a terminal-tail spine, and no theorem claims it does.
+
+#### Scenario: A padded short-tail block is outside the tie
+
+- **WHEN** the block isomorphism is applied to a short-tail block such as base-64 `"Zg=="`
+- **THEN** the block accepts it and the fold does not, and the tie's statement is over the
+  block's image so it claims nothing about that input — the divergence being the pad byte,
+  which is outside the fold's alphabet, not a difference in arity

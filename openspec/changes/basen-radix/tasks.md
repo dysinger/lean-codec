@@ -16,9 +16,10 @@
 > D4), **`numeralIso` does not touch the padded bases' tail spine** (D5), **block isos are
 > tied to the fold by a canonicity-filtered implication** (D6).
 >
-> **Progress: 16/44** — computed, not remembered: run `openspec list --json`. (§0's five
-> measured preconditions, §6.1's retirement, §1's four tasks, §2.1, §2.2b, §2.2, §2.2b′.
-> `AGENTS.md` used to carry a hand-written progress line here and it went stale twice.)
+> **Progress: read it, do not remember it.** Run `openspec list --json`. This banner used to
+> carry a hand-written `Progress: N/M` line; it went stale twice, was then "fixed" with a
+> `<count and tasks>` prose summary that went stale as well, and is now **deleted** — the same
+> rule this repo applies to gate numbers, applied to its own ledger. (§8.14.)
 >
 > **The first session is §1, not §3 — and that is a correction.** An earlier banner said "do 3.2
 > first as a spike", which is impossible: 3.2's statements mention `toNat`, so the fold must
@@ -36,7 +37,7 @@
 > | **2a. The quotient** ✅ | 2.1 (+ the uniqueness lemma 2.2's `←` needs)                     | `strip`/`trimFor` total + idempotent; `trimFor_ofNat`; `natVal_inj_head`; all `[propext, Quot.sound]`-only             | `numeralIso` itself, no ties                         |
 > | **2b. The `Iso`** ✅    | 2.2b, 2.2, 2.2b′                                                 | the value↔byte bridge; `numeralIso` a full `Iso`, law unconditional on the quotient                                    | `trimFor`'s zero-spelling bug; the witness; the pins |
 > | **2c. The pins** ✅     | **fix `trimFor`, then** 2.3, 2.4, **2.2c + 4.1**                 | zero spellings accepted; three-spelling witness mutation-tested; rejection laws; module imported and its laws pinned   | no ties, no radix instances                          |
-> | **3. ← NEXT**           | 3.1's radix instances, 3.2–3.5, 4.2, 4.2b                        | all seven block isos tied by implication pair; allowlist trimmed **10→3**; header constants re-derived                 | —                                                    |
+> | **3. ← NEXT**           | 3.1's radix instances, 3.2–3.5, 4.2, 4.2b                        | all seven block isos tied by implication pair; allowlist trimmed **18 → 11**; header constants re-derived              | —                                                    |
 > | **4. Gate + docs**      | 5.3, 5.4, 6.2, 6b.x, 7.x                                         | value-check inventory, CHANGELOG, two-repo commits, non-goals recorded                                                 | —                                                    |
 >
 > **2c and the whole of §4/§5/§6 that was measurable in its session LANDED 2026-11-15**
@@ -864,15 +865,21 @@ section described `codec`'s machinery and `basen` does not have it.**
       `+13` (bases 32/64), `+3` (radix instances), `+7` (`*BlockIso_apply`) — **not**
       uniform, and **not** the `+14` the example guessed either.
 
-      | arm | constants | line |
-      | --- | --- | --- |
-      | theorem table | `expectedPub`, `expectedGated`, `expectedAllow` | `Axioms.lean:2742-2744` |
-      | header prose | `statedPrintBlockCount`, `statedGatedNamesCount` | `:2784-2785` |
-      | footprint distribution | `statedDistPS`, `statedDistP`, `statedDistZ` | `:2817-2819` |
-      | def table | `expectedDefs`, `expectedMentioned`, `expectedDefAllow` | `:2866-2868` |
+      | arm | constants |
+      | --- | --- |
+      | theorem table | `expectedPub`, `expectedGated`, `expectedAllow` |
+      | header prose | `statedPrintBlockCount`, `statedGatedNamesCount` |
+      | footprint distribution | `statedDistPS`, `statedDistP`, `statedDistZ` |
+      | def table | `expectedDefs`, `expectedMentioned`, `expectedDefAllow` |
 
-      plus the header prose tables they mirror (`:1655-1700`). `stated := 12`
-      (`:2905`, the bench `native_decide` count) does **not** move.
+      plus the header prose tables they mirror. `stated` (the bench `native_decide` count)
+      does **not** move.
+
+      **The `line` column is gone (8.12), and it is gone rather than corrected.** Every one of
+      those four references was already wrong by ~1000 lines when it was written, and §8 moved
+      them again. A line number in a task ledger is a number nobody re-derives, so it is
+      replaced by one command: `grep -n 'let expected' ../lean-basen/Axioms.lean`. "arm" and
+      the constant names are the durable half — they are what a `throwError` message prints.
 
       **Worked example — and the first version of it was wrong in three ways**, so read the
       caveats as the content:
@@ -1392,28 +1399,87 @@ closed more times than any other: **a claim whose stated method is not its code'
       the sentence went with it — this session's third instance of the item's own finding,
       produced by the fix for the item.
 
-- [ ] 8.12 **[SHOULD] [NB-S1, NB-N2, NB-N3] `tasks.md`'s own line references and quoted counts
+- [x] 8.12 **[SHOULD] [NB-S1, NB-N2, NB-N3] `tasks.md`'s own line references and quoted counts
       are stale** — every constant group's line number is off by ~1000, and §5.1 quotes
       `653 = 601 + 52` (the 2.2c gate) as the session's verification while §4.3 quotes
       `722 = 670 + 52`. Re-derive from the gate; do not restamp.
 
-- [ ] 8.13 **[SHOULD] [PA-S1..S7, GC-S1..S5] The spec's scope sentences understate what the
+      **LANDED 2026-11-15, by deleting the numbers rather than restamping them.** The line
+      table in 4.3 is gone: every one of those references was already wrong by ~1000 lines
+      and would have been wrong again after §8, because a line number in a task ledger is a
+      number nobody re-derives. It is replaced by **one rule and one command** — read the
+      gate — which is `AGENTS.md`'s own instruction.
+
+      The `653` in §2.2c and §5.1 is a *historical* figure ("the gate printed, then"); both
+      now say so, and neither is presented as this session's verification. The live gate is
+      `716 = 664 + 52` at 29 jobs, defs `159 = 142 + 17`, measured after every §8 item landed
+      — but **read `lake build`; this sentence is the thing that goes stale.**
+
+- [x] 8.13 **[SHOULD] [PA-S1..S7, GC-S1..S5] The spec's scope sentences understate what the
       ties cover.** The `_L` pad-free restriction appears in `tasks.md` and `CHANGELOG.md` but
       **not in the spec**, which is the artifact that survives. Also: the spec's "no base
       carries an independent alphabet definition" is false of Base16's case-folding pass
       (`decodeHexFold` accepts `"6f"`, `digitVal 16 'f'` is `none`) — that predates this change
       and belongs to the parked `basen-uppercase-prepass`.
 
-- [ ] 8.14 **[SHOULD] [PA-S2, PA-N3] `tasks.md`'s session-table row 3 says "allowlist 10 → 3";
+      **LANDED 2026-11-15, both halves, and one of the two measurements did not reproduce.**
+      The `_L` restriction is now in the requirement and in a new scenario, described as a
+      canonicity divergence with the `"Zg=="` witness beside it — the spec is the artifact
+      that survives, so a limitation recorded only in a `CHANGELOG` is a limitation that
+      eventually reads as an absence.
+
+      **The Base16 half was re-measured and is mis-stated in the finding.** Measured:
+
+      ```
+      BaseN.Base16.hexBlockApply [0x36, 0x66]  ->  none        -- "6f", lowercase
+      BaseN.Base16.hexBlockApply [0x36, 0x46]  ->  some 111    -- "6F", uppercase
+      BaseN.Radix.digitVal 16 0x66             ->  none        -- lowercase 'f'
+      ```
+
+      So `hexBlockApply` does **not** accept `"6f"`; the case-folding path is
+      `decodeHexFold`, a separate decoder applied after the generic one. That makes the claim
+      weaker than the finding states but the *scoping* point correct: the requirement is about
+      the seven digit-value functions, and Base16 carries a superset decoder that they do not
+      cover. The spec now says which claim it is making rather than leaving the reader to
+      infer it from a universal.
+
+- [x] 8.14 **[SHOULD] [PA-S2, PA-N3] `tasks.md`'s session-table row 3 says "allowlist 10 → 3";
       the landed figure is 18 → 11.** `10 → 3` is the `Iso` sub-list's delta mis-stated as the
       whole list's. And the banner still says "Progress: 16/44" beside a 44/44 status line, in
       a banner that instructs the reader to compute it.
 
-- [ ] 8.15 **[NITPICK] [PA-N2, GC-N1..N4] Small wording.** `design.md:75-77` states the
+      **LANDED 2026-11-15.** Session-table row 3 now reads `18 → 11` — the whole list's delta,
+      which is what the row is about — and the `Iso` sub-list figure is not restated. The
+      `Progress: 16/44` line is **deleted, not corrected**: the banner's own instruction is
+      "read it, do not remember it", and a status count inside the box it tells you not to
+      believe is that defect in its purest form. (§8.4 then moved the allowlist back to 18, so
+      `18 → 11` is itself history — which is precisely the argument for the deletion.)
+
+- [x] 8.15 **[NITPICK] [PA-N2, GC-N1..N4] Small wording.** `design.md:75-77` states the
       precondition as `2 ≤ b` where the tree uses `IsRadix b` (strictly stronger);
       `proposal.md:47,93,126` still show the retracted signature and the retracted word
       "proved equal"; `radixInstances_radices` is `rfl` on a literal (harmless, but it is a
       restatement, not a constraint).
+
+      **LANDED 2026-11-15, and the third item is partly refuted.** `design.md` and
+      `proposal.md` now state `IsRadix b` and carry the *implication pair* wording, with the
+      retraction recorded rather than silently swapped.
+
+      **`radixInstances_radices` is not merely a restatement — measured.** §8.15 called it one;
+      the two mutations that matter both fail, and at *this* theorem:
+
+      ```
+      [2,4,8,10,16,32,64] -> [2,4,8,10,16,32,128]   (substitution, same length)
+          Not a definitional equality at :1154, plus :1149 and :1169
+      [2,4,8,10,16,32,64] -> [2,4,8,10,16,32,32]    (duplicate)
+          the same three; :1149 is the `forall IsRadix` law naming it
+      ```
+
+      `radixInstances_length` alone misses the substitution (length unchanged) and the `∀
+      IsRadix` law alone misses the duplicate (every member is valid). So it is `rfl` and it
+      pins the enumeration's **identity**, which no other law does. The docstring now says
+      exactly that — including that it constrains no proof — instead of the theorem being
+      deleted or the finding being accepted unexamined.
 
 ### The ordering constraints, and why they are not obvious
 

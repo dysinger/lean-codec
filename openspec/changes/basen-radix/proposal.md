@@ -44,7 +44,7 @@ ofNat    : (radix : Nat) → Nat → List UInt8     -- canonical digits, minimal
 and one `Iso` per radix, over the quotient of the information-free variation:
 
 ```lean
-numeralIso : (b : Nat) → 2 ≤ b → Iso Nat (Normal (List UInt8) (trimFor b))
+numeralIso : (b : Nat) → IsRadix b → Iso Nat (Normal (List UInt8) (normF b))
 ```
 
 A numeral is a _spelling_; the number is the image. `"007"`, `"  7"` and `"7"` are three
@@ -96,10 +96,20 @@ None.
 
 ## Impact
 
-- **`../lean-basen/BaseN/`** — a new `Radix.lean` carrying the three functions and the
-  `numeralIso`; each `BaseN/BaseN.lean` gains a proved-equality theorem tying its block
-  iso to the generic fold. **No existing declaration's statement changes**; the per-base
-  alphabets (`bitVal` etc.) become proved-equal specialisations of `digitVal`.
+- **`../lean-basen/BaseN/`** — new `Radix.lean` / `RadixCodec.lean` / `RadixAlphabets.lean`
+  / `RadixTie.lean` carrying the three functions, the `numeralIso`, the seven alphabet
+  equalities and the seven ties; each base module's block iso gains an implication **pair**
+  tying it to the generic fold. **No existing declaration's statement changes**; the per-base
+  digit-value functions (`bitVal` etc.) become proved-equal specialisations of `digitVal`.
+
+  **Two words in the paragraph above were retracted before landing (§8.15).** A
+  "proved-equality theorem" became an _implication pair_, because `design.md` D6 measured that
+  an equality is **false** — the block rejects inputs the fold accepts (wrong arity, an
+  out-of-alphabet digit) and, for bases 8 and 10, cannot carry a value above `255`. "Proved
+  equal" as a blanket description of the alphabet specialisations is true only of the
+  **decode** direction: radix 2's inverse map is deliberately non-injective, so the encoders
+  are _not_ copies of `ofNat` (D1).
+
 - **`../lean-basen/Axioms.lean`** — the new laws must be pinned; the gate fails the build
   until they are, which is its job.
 - **`openspec/specs/basen/spec.md`** — three requirements added via this change's delta.
@@ -135,5 +145,6 @@ The first task is therefore to settle the codomain and prove the three-spelling 
 **before** any other proof, and to mutate that witness to confirm it fires.
 
 **The second way:** letting the generic fold silently disagree with a base's existing block
-iso. The proved-equality theorems are what prevent it, and they must be mutation-tested by
-perturbing each block iso's digit order.
+iso. The **implication pairs** are what prevent it, and they must be mutation-tested by
+perturbing each block iso's digit order — seven perturbations, one per base, which is what
+`CHANGELOG.md` records them as (§8.7) and not "each law".

@@ -72,8 +72,15 @@ functions become proved-equal specialisations. The alternative (seven independen
 `Nat` layers) is seven times the proofs and seven chances to disagree.
 
 The generic `digitVal` must be total in its radix argument in the sense that an
-out-of-range radix is a _caller_ error, not a silent misbehaviour; `2 ≤ b` is a hypothesis
-on everything that uses it, and `numeralIso` carries it explicitly rather than assuming.
+out-of-range radix is a _caller_ error, not a silent misbehaviour.
+
+**The hypothesis that ships is `IsRadix b`, not `2 ≤ b`, and it is strictly stronger.** An
+earlier version of this paragraph stated `2 ≤ b`; the tree defines `inductive IsRadix : Nat →
+Prop` with exactly seven constructors (`BaseN/Radix.lean`), so the eight radices this layer
+does not serve — 3, 5, … — are excluded by the type rather than merely allowed. `numeralIso`
+carries the witness explicitly (`numeralIso (b : Nat) (hr : IsRadix b)`), and
+`radixInstances_areRadix` supplies it for the enumerated seven, so a caller cannot name a
+radix the layer has no alphabet round-trip for.
 
 ## D2 — The codomain is the quotient, and that is the whole point
 
