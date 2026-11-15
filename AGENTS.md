@@ -7,46 +7,50 @@ Guidance for AI coding agents working in this repository.
 > **One change is open: `basen-radix`** — the next session's work. Read its `tasks.md`
 > banner before touching anything.
 >
-> ### NEXT SESSION STARTS AT **2.2c + 4.1** — one commit, cannot be left half-done
+> ### NEXT SESSION IS **§3: the ties** (3.1–3.5, then 4.2 + 4.2b with 4.3's constants)
 >
-> Section 2 is **closed** (2.1–2.4 all landed). The next task is the one the gate has been
-> blind to all along:
+> **2.2c + 4.1 LANDED 2026-11-15** — `../lean-basen` `9d547dd`, this repo `49238a3`.
+> `BaseN.RadixCodec` is imported and its **117** laws are pinned by hand, and 4.3's
+> constants moved with them because they had to. The gate now prints **`653 = 601 + 52`
+> at 28 jobs** (it was `533 = 484 + 49` at 27). **Quote the gate, not this line.**
 >
-> 1. **Add `import BaseN.RadixCodec` to `BaseN.lean`** (`../lean-basen`). Measured
->    2026-11-14: this makes the coverage arm name **~99 unpinned theorems plus one uncovered
->    `def`** (`isNumeral`). The import is _not_ optional and _not_ safe to land alone — a
->    module built but not imported is indistinguishable from a module with no laws, and the
->    gate stayed green through three sessions for exactly that reason.
-> 2. **Pin every new law by hand.** `basen` has **no generator**:
->    `ls ../lean-basen/scripts/` fails, `grep -c 'BEGIN GENERATED' Axioms.lean` is `0`.
->    Per new theorem: a `#guard_msgs` / `#print axioms` block (exactly as the existing 484
->    are written) **and** the name added to `BaseNAxioms.gatedNames` — find it with
->    `grep -n 'BEGIN PINNED' ../lean-basen/Axioms.lean`, **never a line number written here**:
->    it was `2066` when this paragraph was first drafted and is `2242` at `ca552c7`.
-> 3. **`isNumeral` needs a `definitionSurfaceAllowlist` entry** or a mention by some gated
->    theorem's type — the def-coverage arm is a _mention proxy_ and cannot be satisfied by
->    silence.
-> 4. **Re-derive the header constants.** Pinning moves the pinned count, so
->    `headerNumbers` fires and `Axioms.lean`'s header table + `expected*` constants must move
->    together. A stale header is a **build failure**, which is the check working.
+> **The paragraph that used to sit here was wrong twice, and both are worth carrying.**
+> It predicted "~99 unpinned theorems plus one uncovered `def`". The arm named **117**
+> theorems and **two** defs on the import — the `99` was a 2026-11-14 measurement that
+> three sessions of new laws had invalidated, and `numeralIso` is a `def` the predictor
+> never considered. Read the arm's output; never a count in a file.
 >
-> The coverage arm is the enforcement, not this paragraph: it fails the build naming every
-> public `BaseN` theorem that is in neither `gatedNames` nor `generatedAuxAllowlist`, with
-> the message `theorems not pinned by this gate`. Read its output, not any count written in a
-> file — including the `~99` above, which is a 2026-11-14 measurement and has certainly moved
-> as 2.3/2.4 added ten theorems.
+> **What §3 needs before it starts:**
 >
-> **Budget a full session.** This is mechanical but error-prone, and stopping mid-way leaves a
-> RED gate — which this repo forbids per commit. If time runs short, stop **before** the
-> import, not after.
+> 1. **§3.1's seven radix instances**, each carrying its `2 ≤ b` witness, enumerated from
+>    **one source** so a missing radix is a build failure rather than a shorter list.
+> 2. **§3.2's seven ties** by the canonicity-filtered implication pair of `design.md` D6 —
+>    **two schemas**, `_8` (`Iso (List UInt8) UInt8`, consequent `some (UInt8.ofNat n)`) and
+>    `_L` (`Iso (List UInt8) (List UInt8)`, consequent `some (bytesOfNat n)`). A single
+>    `BlockVal` placeholder does not typecheck across the two codomains.
+> 3. **§4.2 + 4.2b together, with 4.3's constants re-derived again.** Trimming
+>    `definitionSurfaceAllowlist` moves `expectedDefs`/`expectedMentioned`/`expectedDefAllow`
+>    and the def table; the seven new-tied isos _leave_ the allowlist while three
+>    (`hexBlockIsoF`, `b32TailIso`, `b64TailIso`) **stay**, so read §4.2's explicit name list
+>    rather than counting.
 >
-> ### Where the work goes after 2.2c: session 3 (the ties)
+> **A new law still needs its `#guard_msgs` block and its `gatedNames` entry in the same
+> commit** — that rule has not changed, and §3.2's pairs mean a base may contribute **two**
+> theorems, so expect the deltas to be even.
 >
-> §3.1's seven radix instances, then 3.2–3.5 (the seven block-iso ties by the
-> canonicity-filtered implication pair of `design.md` D6), then §4.2/4.2b (**which can only
-> land with 4.3** — trimming `definitionSurfaceAllowlist` without re-deriving the header
-> constants trips `headerNumbers`, so those three are one commit).
-
+> ### The one thing §2.2c taught that the plan did not have
+>
+> **A `#guard_msgs` block and a `gatedNames` entry are two registries with different
+> jobs, and neither substitutes for the other.** Three compiler-emitted `eq_def`
+> theorems (`digitTail`, `isDigits`, `strip`) are in the environment but **not** in
+> `publicTheorems`, so no block/name pair can cover them: they need a block for the
+> _footprint_ **and** a `generatedAuxAllowlist` entry for the _partition_. That is why
+> `grep -c '^#print axioms'` gives **607** against `gatedNames`' **601** — and
+> `headerNumbers` asserts both figures separately, so "they are the same number" is a
+> false assumption that fails the build. A comment claiming the opposite was written and
+> refuted by the `partition` arm in the same commit; that is the fix-introduces-the-next-
+> defect pattern, and it is recorded at the entries themselves.
+>
 > **Session 2c LANDED 2026-11-15** — `../lean-basen` `8aec2a8` → `909babe`. **The zero-spelling
 > bug is FIXED and its witness landed.** `trimFor`'s all-absorbed branch now tests
 > `isZeroSpelling` instead of `isDigits`, so `"  0"` reaches `some [48]` at every radix.
@@ -92,21 +96,20 @@ Guidance for AI coding agents working in this repository.
 > rejections have different proofs — `strip` absorbs a blank, `isDigits` rejects a non-digit.
 > A hypothesis the plan did not think of is not a convenience; it is a fact about the alphabet.
 >
-> **NEXT: 2.2c + 4.1, which are one commit and cannot be left half-done.** Adding
-> `import BaseN.RadixCodec` to `BaseN.lean` makes the coverage arm name **~99 unpinned
-> theorems plus one uncovered `def`** (`isNumeral`). `basen` has **no generator** —
-> `ls ../lean-basen/scripts/` fails and `grep -c 'BEGIN GENERATED' Axioms.lean` is `0` — so
-> pinning is **by hand**: a `#guard_msgs` block per theorem plus a name in
-> `BaseNAxioms.gatedNames` (`Axioms.lean:2066`). The coverage arm is the enforcement: it fails
-> the build naming every public `BaseN` theorem in neither `gatedNames` nor
-> `generatedAuxAllowlist`. Budget a session for it.
+> **2.2c + 4.1 LANDED 2026-11-15** — `../lean-basen` `9d547dd`. The import and the pins, in
+> one commit, and the coverage arm named **117** theorems and **two** `def`s when it fired —
+> not the `~99` and the one predicted in the banner that used to sit here. `basen` still has
+> **no generator** (`ls ../lean-basen/scripts/` fails, `grep -c 'BEGIN GENERATED' Axioms.lean`
+> is `0`), so the 117 were pinned **by hand**. The arm remains the enforcement. Its two
+> registries are _not_ interchangeable — see the START HERE block above.
 >
 > **Session 2b LANDED 2026-11-15** — `../lean-basen` `08d220f` → `a1fee8b` → `9a02f89`.
 > **`numeralIso` is a full `Iso`**, both law directions unconditional on the quotient:
 > the value↔byte bridge (`digitVal_some_byteOfDigit`, task 2.2b), `normF` + `normF_idem`,
 > `map_val_eq_ofNat`, and `fixed_eq_ofNat` (task 2.2 + 2.2b′). All `[propext,
-Quot.sound]`-only, zero `Classical.choice`. Gate still **`533 = 484 + 49` / 27 jobs** —
-> `RadixCodec` is **still unimported**, so the gate cannot see it (2.2c).
+Quot.sound]`-only, zero `Classical.choice`. At that landing the gate still read **`533 = 484 +
+49` / 27 jobs** with `RadixCodec` unimported — **since superseded: `653 = 601 + 52` at 28
+> jobs**, because 2.2c landed. The `533` in this paragraph is history, not the current gate.
 >
 > **The `trimFor` zero-spelling bug that task 2.3 found is now CLOSED** (session 2c, above).
 > The block below is kept as history because it is the measurement that started the fix; its
@@ -198,14 +201,14 @@ Quot.sound]`-only, zero `Classical.choice`. Gate still **`533 = 484 + 49` / 27 j
 > equality is **false** and D6's implication-pair shape is confirmed. The seven ties
 > themselves are still unwritten.
 >
-> | session           | tasks                                                              | green at the end means                                                                                                                         | **not yet true**                                      |
-> | ----------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-> | **1** ✅ landed   | 1.1–1.4, **4.1**, 4.3's constants, + the throwaway block-iso probe | `toNat`/`ofNat` exist, round-trip proved, `RadixAlphabets` agrees at all seven radices, gate green with the new laws pinned (`533 = 484 + 49`) | no `numeralIso`, no ties, no instances                |
-> | **2a** ✅ landed  | 2.1 (+ the uniqueness lemma 2.2's `←` needs)                       | `strip`/`trimFor` total + idempotent; `trimFor_ofNat`; `natVal_inj_head`; all `[propext, Quot.sound]`-only                                     | `numeralIso` itself, no ties                          |
-> | **2b** ✅ landed  | 2.2b, 2.2, 2.2b′                                                   | the value↔byte bridge; `numeralIso` a full `Iso`, law unconditional on the quotient                                                            | `trimFor`'s zero-spelling bug; the witness; 2.2c pins |
-> | **2c** ← **NEXT** | **fix `trimFor`, then** 2.3, 2.4, **2.2c + 4.1**                   | zero spellings accepted; three-spelling witness mutation-tested; rejection laws; module imported and its laws pinned                           | no ties, no radix instances                           |
-> | **3**             | 3.1's radix instances, 3.2–3.5, 4.2, 4.2b, 4.3 (remainder)         | all seven block isos tied by the implication pair; allowlist **10 → 3**; header constants re-derived                                           | —                                                     |
-> | **4**             | 4.4, 4.5, 5.x, 6.x                                                 | posture greps run, `CHANGELOG`, all gates                                                                                                      | —                                                     |
+> | session          | tasks                                                                    | green at the end means                                                                                                                         | **not yet true**                                      |
+> | ---------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+> | **1** ✅ landed  | 1.1–1.4, **4.1**, 4.3's constants, + the throwaway block-iso probe       | `toNat`/`ofNat` exist, round-trip proved, `RadixAlphabets` agrees at all seven radices, gate green with the new laws pinned (`533 = 484 + 49`) | no `numeralIso`, no ties, no instances                |
+> | **2a** ✅ landed | 2.1 (+ the uniqueness lemma 2.2's `←` needs)                             | `strip`/`trimFor` total + idempotent; `trimFor_ofNat`; `natVal_inj_head`; all `[propext, Quot.sound]`-only                                     | `numeralIso` itself, no ties                          |
+> | **2b** ✅ landed | 2.2b, 2.2, 2.2b′                                                         | the value↔byte bridge; `numeralIso` a full `Iso`, law unconditional on the quotient                                                            | `trimFor`'s zero-spelling bug; the witness; 2.2c pins |
+> | **2c** ✅ landed | **fix `trimFor`, then** 2.3, 2.4, **2.2c + 4.1**, 4.4, 4.5, 5.1/5.1b/5.2 | zero spellings accepted; witness mutation-tested; rejection laws; 117 laws imported and pinned by hand; gate `653 = 601 + 52` / 28 jobs        | no ties, no radix instances                           |
+> | **3** ← **NEXT** | 3.1's radix instances, 3.2–3.5, 4.2, 4.2b, 4.3 (again)                   | all seven block isos tied by the implication pair; allowlist **10 → 3**; header constants re-derived                                           | —                                                     |
+> | **4**            | 5.3, 5.4, 6.2, 6b.x, 7.x                                                 | value-check inventory, `CHANGELOG`, two-repo commits recorded, non-goals stated                                                                | —                                                     |
 >
 > **Why session 2 moved from §3 to §2, and session 3 is now the ties.** §4.1 plus the
 > asserted constants had to land with §1 (a `BaseN` theorem with no `#guard_msgs` block is

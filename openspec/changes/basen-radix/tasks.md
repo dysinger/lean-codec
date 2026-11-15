@@ -35,14 +35,21 @@
 > | **1. The fold** ✅      | 1.1–1.4, plus a throwaway probe of one block iso (not committed) | `toNat`/`ofNat` exist, round-trip proved, `BaseN.lean` imports `Radix.lean`, gate green with the new def + laws pinned | no `numeralIso`, no ties, no radix instances         |
 > | **2a. The quotient** ✅ | 2.1 (+ the uniqueness lemma 2.2's `←` needs)                     | `strip`/`trimFor` total + idempotent; `trimFor_ofNat`; `natVal_inj_head`; all `[propext, Quot.sound]`-only             | `numeralIso` itself, no ties                         |
 > | **2b. The `Iso`** ✅    | 2.2b, 2.2, 2.2b′                                                 | the value↔byte bridge; `numeralIso` a full `Iso`, law unconditional on the quotient                                    | `trimFor`'s zero-spelling bug; the witness; the pins |
-> | **2c. ← NEXT**          | **fix `trimFor`, then** 2.3, 2.4, **2.2c + 4.1**                 | zero spellings accepted; three-spelling witness mutation-tested; rejection laws; module imported and its laws pinned   | no ties, no radix instances                          |
-> | **3. The ties**         | 3.1's radix instances, 3.2–3.5, 4.2, 4.2b, 4.3 (remainder)       | all seven block isos tied by implication pair; allowlist trimmed **10→3**; header constants re-derived                 | —                                                    |
-> | **4. Gate + docs**      | 4.4, 4.5, 5.x, 6.x                                               | posture greps run, CHANGELOG, all gates                                                                                | —                                                    |
+> | **2c. The pins** ✅     | **fix `trimFor`, then** 2.3, 2.4, **2.2c + 4.1**                 | zero spellings accepted; three-spelling witness mutation-tested; rejection laws; module imported and its laws pinned   | no ties, no radix instances                          |
+> | **3. ← NEXT**           | 3.1's radix instances, 3.2–3.5, 4.2, 4.2b                        | all seven block isos tied by implication pair; allowlist trimmed **10→3**; header constants re-derived                 | —                                                    |
+> | **4. Gate + docs**      | 5.3, 5.4, 6.2, 6b.x, 7.x                                         | value-check inventory, CHANGELOG, two-repo commits, non-goals recorded                                                 | —                                                    |
+>
+> **2c and the whole of §4/§5/§6 that was measurable in its session LANDED 2026-11-15**
+> (`../lean-basen` `9d547dd`, this repo `49238a3`). **4.3's constants moved with 4.1, as they
+> had to** — the import cannot land without pinning, and pinning moves every asserted count. So
+> the "4.2 with 4.2b and 4.3" group in the sentence below is now **4.2 with 4.2b only**: the
+> constants have already been re-derived once, and trimming the allowlist in §3 moves them
+> again. Read the gate's own numbers at that point rather than this cell.
 >
 > **Tasks that cannot be left half-done** (stopping mid-way leaves a red gate): **4.1** (an
-> unpinned law fails the build), **4.2 with 4.2b and 4.3** (trimming the allowlist without
-> re-deriving the constants trips `headerNumbers`), and **any commit that adds a `BaseN` public
-> theorem** without its `#guard_msgs` block. Everything else can stop at a task boundary.
+> unpinned law fails the build), **4.2 with 4.2b** (trimming the allowlist without re-deriving
+> the constants trips `headerNumbers`), and **any commit that adds a `BaseN` public theorem**
+> without its `#guard_msgs` block. Everything else can stop at a task boundary.
 >
 > **A cold-start reader needs:** this table, §0's measured facts (the two-repo split, the pin,
 > the `BaseN.lean` import requirement), and the note that **`basen` has no generator** — pinning
