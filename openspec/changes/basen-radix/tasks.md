@@ -1091,7 +1091,7 @@ closed more times than any other: **a claim whose stated method is not its code'
       Note the last two: the fold admits **two** spellings of zero, which is exactly why the
       quotient has one element for them and why the by-product reading is the honest one.
 
-- [ ] 8.2 **[MUST] [GC-M3, PA-M3] The base-64 docstring is false.**
+- [x] 8.2 **[MUST] [GC-M3, PA-M3] The base-64 docstring is false.**
       `RadixTie.lean:949-952` claims the two functions "agree on every input the block accepts
       _canonically_ — which … is every input it accepts at all". Measured:
 
@@ -1102,6 +1102,18 @@ closed more times than any other: **a claim whose stated method is not its code'
 
       `"Zg=="` is accepted by the block and unreadable by the fold. The claim is false; strike
       it and state the pad-free restriction as the limitation it is.
+
+      **LANDED 2026-11-15, in three places, and the second and third were not in the finding.**
+      The b64 `→` docstring's "every input it accepts at all" is gone, replaced by the measured
+      counterexample. The same `arity fact, not a canonicity guard` sentence sat on
+      `toNat_of_b64BlockApply_three` **and** on `toNat_of_b32BlockApply_five`; both now say
+      canonicity divergence and carry their own measurement. All four `#eval`s re-run in the
+      session (`scratch/witness2.lean`):
+
+      ```
+      b64BlockApply [90,103,61,61]  ->  some [102]      toNat 64 [90,103,61,61]  ->  none
+      b32BlockApply [77,89,61,61,…] ->  some [102]      toNat 32 [77,89,61,61,…] ->  none
+      ```
 
 - [ ] 8.3 **[MUST] [GC-M2] The `_L` "tie" is a conjunction whose second arm never mentions
       `toNat`, and that is a _spec violation_, not a style preference.**
@@ -1163,7 +1175,7 @@ closed more times than any other: **a claim whose stated method is not its code'
       rather than a win. 4.2b's "18 → 11" prose reverses to "back to 18". Direction:
       **−7 theorems** (`expectedPub` 722 → 715 before 8.3's +2).
 
-- [ ] 8.5 **[MUST] [NB-M1] `Axioms.lean`'s header paragraph is stale by 189 theorems — in a
+- [x] 8.5 **[MUST] [NB-M1] `Axioms.lean`'s header paragraph is stale by 189 theorems — in a
       paragraph that claims it cannot be stale.** Measured, side by side:
 
       ```
