@@ -1368,11 +1368,29 @@ closed more times than any other: **a claim whose stated method is not its code'
       is constrained downstream, not evidence for this theorem, and it is recorded that way
       rather than as a pass.
 
-- [ ] 8.11 **[SHOULD] [GC-S4, GC-N5] Four orphan theorems and one orphan `def`.** Measured by
+- [x] 8.11 **[SHOULD] [GC-S4, GC-N5] Four orphan theorems and one orphan `def`.** Measured by
       grep: `toNat_eq_natVal_map`, `valAt`, `beVal_eq_natVal`, `beVal_two` and `numeralIsoAt`
       have **zero consumers**. `toNat_eq_natVal_map`'s docstring advertises it as "the reusable
       core of every `_8` tie" — the ties use `toNat_two`/`_three`/`_four`/`_eight` instead.
       Route the proofs through it or delete it; the docstring is false of the code as shipped.
+
+      **LANDED 2026-11-15 — deleted, not routed** (`../lean-basen` `5ee976c`), and routing is
+      not possible without making every tie worse. A tie's proof needs the digits' **width**
+      to drive `omega`; the general form quantifies it away into `∃ vs, vs.length = ds.length
+      ∧ …`, which is strictly less usable for the job. So the choice was "keep a public
+      `def`, a public theorem and a false docstring, serving no proof" or "delete": deleted.
+      `beVal_two` and `beVal_eq_natVal` went the same way (zero consumers), and so did
+      `numeralIsoAt` — a one-line wrapper whose allowlist reason ("no new law appears here")
+      was true, and was the argument *against* keeping it. All five are **deleted rather than
+      allowlisted**, per this repo's rule that nothing goes on the allowlist while dead:
+      `716 = 664 + 52`, defs `159 = 142 + 17`.
+
+      **And the probe found a second false justification — mine, written while doing this
+      item.** The first version of the deletion kept `beVal_eq_natVal` with a docstring
+      claiming `beVal_three`/`beVal_five` were "proved from it, not from a bare `simp`". Both
+      are `simp [beVal]; omega`. Measured, the lemma had zero consumers, so it was deleted and
+      the sentence went with it — this session's third instance of the item's own finding,
+      produced by the fix for the item.
 
 - [ ] 8.12 **[SHOULD] [NB-S1, NB-N2, NB-N3] `tasks.md`'s own line references and quoted counts
       are stale** — every constant group's line number is off by ~1000, and §5.1 quotes
