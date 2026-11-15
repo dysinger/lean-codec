@@ -1056,6 +1056,7 @@ Three adversarial reviewers audited the **landed** change (not the plan) against
 `README.md`, `PAPER.md`, the spec delta and the tree. Reports are committed at
 `reviews/post-impl-{paper-adherence,gate-coverage,numbers-build}.md`. **13 MUST / 17 SHOULD /
 14 NITPICK = 44** (4+5+5 gate-coverage, 5+7+5 paper-adherence, 4+5+4 numbers-and-build).
+**One is already closed: 8.9, resolved as a `[S7]` strengthening.**
 
 **This section is the reason the change is NOT archived.** Every MUST below was re-verified
 by command before being recorded — a reviewer's arithmetic has been wrong here before, so
@@ -1138,14 +1139,56 @@ closed more times than any other: **a claim whose stated method is not its code'
       `codec-audit-round-nine` §1.8; the port to `basen` never happened. So 5.1b's "zero
       warnings" is _observed_, not _enforced_. Fix: set the flag on the exe.
 
-- [ ] 8.9 **[MUST] [PA-M4] design.md refuses a `[Dn]` on an over-read of PAPER.md, and
+- [x] 8.9 **[MUST] [PA-M4] design.md refuses a `[Dn]` on an over-read of PAPER.md, and
       contradicts README's own reading of the same sentence.** `codec` reads
       "…modulo equivalence classes" as a **departure** (`[D4]`); this change reads it as an
       **allowance** and files nothing. Two live, contradictory readings of one sentence — and
-      `PAPER.md:779`'s `element :: Eq α ⇒ …` parameterises the quotient over a typeclass
+      `PAPER.md:789`'s `element :: Eq α ⇒ …` parameterises the quotient over a typeclass
       `codec`'s `Iso` does not have, so `Normal` is a _cousin_, not the paper's own device.
-      Also the ADDED requirements are not yet in `openspec/specs/basen/spec.md` at all. Owner
-      decision needed: file `[D9]`, or record why not.
+
+      **RESOLVED 2026-11-15 as a `[S7]` STRENGTHENING, on the owner's decision — not as a
+      `[D9]` departure.** The reviewer's finding was right and the original wording was an
+      over-read; the resolution is not "file a departure" because the change does not depart.
+
+      **The argument, in the paper's own terms, and it has three parts:**
+
+      1. **The paper softens the *law*.** §3.1 (`PAPER.md:266`): "We will generally not be
+         very strict with the invariant stated above… we will sometimes interpret this
+         condition modulo equivalence classes." Its worked example is the blank-string case —
+         which is this change's numeral case, one domain over.
+      2. **The paper's *device* is an `Eq` parameter, so the quotient is an argument, not a
+         weakening.** `element :: Eq α ⇒ α → Iso () α` (`PAPER.md:789`), with `≡` deciding
+         the class (`PAPER.md:786`: "only up to the equivalence class defined by the Eq
+         instance, as discussed in Sec. 3.1"). §5.1, not §6.2 — the first draft of this
+         entry cited §6.2 and that was checked and corrected.
+      3. **`codec`'s `Iso` has no `Eq` slot**, so the paper's device is *unavailable* here
+         rather than unchosen (`Codec/Iso.lean:27-33`; that absence is `[D4]`'s sharp form,
+         where a constant `apply` cannot satisfy the `↔` twice). `Normal` therefore reifies a
+         **canonical representative** — the fixed points of the normaliser, with a `fixed`
+         witness — so the equivalence lives in the codomain *type* and the law holds
+         **unconditionally on the quotient**.
+
+      **Why strengthening and not departure.** A departure is an *observable-semantics
+      change*. Here the observable semantics is *stricter than the paper's*, not different:
+      `basen` rejects `"7 "`, `"7x"` and an out-of-alphabet digit rather than normalising
+      them, because absorbing those would be `[D4]`'s lossy capture, not an equivalence
+      class. So the change is inside the paper's allowance for the *law*, and its mechanism
+      is a substitution that makes the law stronger — which is the definition this file's
+      own `README.md` gives for `[S]`.
+
+      **Landed in four places, so the citation resolves from wherever a porter arrives:**
+
+      | where | what |
+      | --- | --- |
+      | `README.md` | new `[S7]`, and the header's stable-id range `[S1]`–`[S6]` → `[S1]`–`[S7]` |
+      | `design.md` D6 | the over-read paragraph replaced with the three-part argument |
+      | `specs/basen/spec.md` | the requirement cites `[S7]` and states the same-value scope |
+      | `BaseN/RadixCodec.lean` | `numeralIso`'s docstring states the strengthening and the `[D4]` boundary |
+
+      **Every line reference in `[S7]` was re-measured before commit, and two were wrong on
+      the first pass** — `Normal` is at `Codec/Normal.lean:133` (not 126) and `element` is at
+      `PAPER.md:789` (not 787), and the section is §5.1 (not §6.2). Recorded because a wrong
+      citation in a normative anchor is the padded-range defect in miniature.
 
 - [ ] 8.10 **[SHOULD] [GC-M1] The spec's mandated "iff about the block's domain" is not proved
       anywhere.** `octBlockApply_overflow`/`digBlockApply_overflow` are one-directional; the

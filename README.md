@@ -57,7 +57,7 @@ This is the canonical, complete record of every place `codec` departs from the
 paper (a _departure_ — an observable-semantics change) or completes it (a
 _strengthening_ — no observable-semantics change). Each entry cites the paper's
 § and the Lean symbol that implements it, so a porter can read this one list and
-know exactly what to reproduce. Anchors `[D1]`–`[D8]` and `[S1]`–`[S6]` are stable
+know exactly what to reproduce. Anchors `[D1]`–`[D8]` and `[S1]`–`[S7]` are stable
 cross-reference targets, shared with the code and the design docs.
 
 Section numbers below refer to the paper's own sectioning as reproduced in
@@ -464,6 +464,11 @@ said "grep `recorded at each law` for the sentence"; that grep matches only this
 README, so it sent the reader back to the sentence that sent them — a pointer whose
 method does not reach its target. `codec-drift-closure` §3.4.)
 
+**The list is `codec`'s own, and it is not the ecosystem's whole population.**
+`basen`'s `numeralIso` is a fourteenth unconditional `Iso` built on the same `Normal`
+mechanism, in a different package and therefore outside this list — see **[S7]**, which is
+the anchor for it and the reason the list stops at core.
+
 `Iso.foldl` and `Iso.foldr` are **deliberately excluded** from that list, and the
 list is called "full" only of the _unconditional_ structural isos. **How the count
 is obtained matters, and an earlier revision got both the number and the method
@@ -854,6 +859,95 @@ list), with no derived triple. None of these exist as bare `Codec`-building symb
 This is the
 same semantic content for `many`/`chainl1`, but it is a _representation_ difference
 (typeclass embedding vs. inductive value), not merely a cosmetic naming change.
+
+**[S7] The paper's equivalence-class quotient is realised as a _canonical
+representative_, not as an `Eq` parameter — so the inverse law is stricter than the
+paper's own softened reading.**
+
+The paper states the inverse invariant, then immediately relaxes it (§3.1, `PAPER.md:266`):
+
+> "We will generally not be very strict with the invariant stated above… In particular
+> we will sometimes interpret this condition **modulo equivalence classes**. A typical
+> example from our domain is that a partial isomorphism maps strings of blanks of
+> arbitrary length to a unit value but maps the unit value back to a string of blanks
+> of length one — that is, all strings of blanks of arbitrary length are in the same
+> equivalence class."
+
+**How the paper actually implements that**, and it is not by weakening the law: it
+parameterises the _constructor_ over an `Eq` instance and uses `≡` to decide the class
+(§5.1, `PAPER.md:783-791`; the declaration is at `:789`):
+
+```haskell
+element :: Eq α ⇒ α → Iso () α
+element x = Iso
+  (λ a → Just x)
+  (λ b → if x ≡ b then Just () else Nothing)
+```
+
+> "Note that this is an isomorphism only up to the equivalence class defined by the Eq
+> instance, as discussed in Sec. 3.1."
+
+So the paper's device is a **typeclass-supplied equivalence**, threaded as an argument.
+The law is unchanged; what changes is that "equal" now means the instance's `≡`.
+
+**`codec`'s `Iso` has no `Eq` parameter to thread** (`Codec/Iso.lean:27-33`): `law` is a
+plain field, `∀ a b, apply a = some b ↔ unapply b = some a`, quantified over _every_ `a`.
+That is the point of `[S1]`, and it is why the paper's device is _not available_ here
+rather than merely unchosen — `[D4]` establishes the sharp version of this for `ignore`,
+whose constant `apply` cannot satisfy the `↔` twice, and the same argument rules out
+smuggling a lossy relation in as an `Eq` argument.
+
+**The strengthening.** Where the paper softens the law and hands the class out as a
+typeclass, `codec` instead **reifies a canonical representative** — `Normal S norm`
+(`Codec/Normal.lean:133`) is the _subtype_ of a normaliser's fixed points, carrying a
+`fixed : norm raw = raw` witness:
+
+```lean
+structure Normal (S : Type) (norm : S → S) where
+  raw   : S
+  fixed : norm raw = raw
+```
+
+Because the equivalence lives in the **codomain type**, the inverse law holds
+_unconditionally on the quotient_ — no hypothesis, no `Eq` argument, no weakened `↔`.
+This is the same mechanism `[S1]` names as a required field; `[S7]` is the case where it
+lets a law the paper could only state softly be stated strictly.
+
+**The load-bearing instance is `basen`'s numeral layer** (spec delta
+`basen-radix`, three ADDED requirements; `README.md`'s Scope lists `lean-basen`).
+A numeral denotes a number modulo the information-free variation of leading zeros and
+leading blanks — precisely the paper's blank-string example, one domain over. Measured:
+
+```
+trimFor 10 "7"   -> some [55]
+trimFor 10 "007" -> some [55]        all three collapse to ONE quotient element
+trimFor 10 "  7" -> some [55]
+```
+
+and the iso is a strict `Iso` with no `Eq` parameter:
+
+```lean
+def numeralIso (b : Nat) (hr : IsRadix b) : Iso Nat (Normal (List UInt8) (normF b))
+```
+
+**Where a porter should look for the boundary, since this is a strengthening and not a
+licence.** The canonical-representative device does **not** make arbitrary lossiness
+free: `basen` still **rejects** any spelling that names no number (a trailing blank
+`"7 "`, a trailing non-digit `"7x"`, an out-of-alphabet digit) rather than normalising
+it — because normalising those would be exactly `[D4]`'s lossy capture, not an
+equivalence class. The quotient absorbs only variation that denotes the _same_ value;
+anything else stays `none`. A porter who reads "modulo equivalence classes" as "anything
+goes" will reproduce the lossy `ignore` that `[D4]` exists to remove.
+
+**Two artefacts that used to disagree, now reconciled.** `design.md` D6 of
+`basen-radix` originally argued that the paper "licenses the quotient … so this adds no
+`[Dn]` departure" — an over-read, because the paper licenses its `Eq` device, not this
+one. And `[D4]`'s own text reads the same §3.1 sentence as a _departure_ the paper
+states and `codec` declines. Both readings are correct about different things: the
+paper's **law** is softened (§3.1), and its **device** is `Eq` (§6.2). `[S7]` is the
+statement that neither is reproduced — a canonical representative replaces the softened
+law with a strict one and the `Eq` parameter with a subtype — which is why it is filed
+here as a strengthening rather than as a departure from either.
 
 Everything not listed under a `[Dn]` is **kept**, and kept strongly: `Rel` is
 preserved as the _specification_ (decoding is the paper's full relation, nothing

@@ -53,6 +53,15 @@ the equivalence SHALL live in the codomain (the quotient type), never as a weake
 The passage from a lax spelling to the quotient is the normaliser's job, and its totality and
 idempotence are a **separate** obligation from the `Iso`'s law, not a hypothesis on it.
 
+This is a **strengthening** of the reference paper, recorded as `[S7]` in `lean-codec`'s
+`README.md`. The paper licenses a quotient by parameterising the constructor over an `Eq`
+instance (`element :: Eq α ⇒ α → Iso () α`, `PAPER.md:789`) — an equivalence threaded as an
+argument. `Codec.Iso.law` has no such parameter (`Codec/Iso.lean:27-33`), so this requirement
+reifies a **canonical representative** instead, and the law is therefore stricter than the
+paper's softened reading rather than merely equal to it. The requirement is deliberately
+scoped by that: the quotient absorbs only variation that denotes the **same** value, so a
+trailing blank, a trailing non-digit and an out-of-alphabet digit remain **rejected**.
+
 The normaliser SHALL be one total, idempotent function, and every lax spelling of a number
 SHALL reach the same canonical form through it. A spelling that names no number SHALL be rejected rather than normalised: the empty input,
 a **trailing blank** (`"7 "`, which is not part of a numeral), a trailing non-digit, and a

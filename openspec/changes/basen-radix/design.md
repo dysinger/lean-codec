@@ -316,12 +316,45 @@ reading the `Maybe` arrow correctly means, since a partial isomorphism's domain 
 what the arrow models. Nothing is lost: the measured iff is still on the record, as its own
 theorem about `apply`'s domain.
 
-`PAPER.md` also licenses the quotient this change already relies on, in the sentence
-after the law — _"we will sometimes interpret this condition modulo equivalence classes"_ —
-and its own worked example (all blank strings in one class) is the `Normal` shape D2 uses. So
-neither the implication pair nor the quotient is a departure from the paper; both are the
-paper's own text. `README.md`'s rule is that every _observable-semantics_ change is filed as
-a `[Dn]` anchor, and this resolution adds none.
+`PAPER.md` also licenses a quotient, in the sentence after the law — _"we will sometimes
+interpret this condition modulo equivalence classes"_ — and its own worked example (all
+blank strings in one class) is the `Normal` shape D2 uses. **But the paper's own device is
+not this one, and an earlier revision of this paragraph over-read the sentence.** The paper
+implements the quotient by **parameterising the constructor over an `Eq` instance**
+(`PAPER.md:789`):
+
+```haskell
+element :: Eq α ⇒ α → Iso () α
+element x = Iso (λ a → Just x) (λ b → if x ≡ b then Just () else Nothing)
+```
+
+with the note above it that _"this is an isomorphism only up to the equivalence class defined
+by the Eq instance"_ (`PAPER.md:786`). So the paper's mechanism is a **typeclass-supplied
+equivalence threaded as an argument**; `codec`'s `Iso` has no `Eq` slot (`law` is a plain
+`↔` field, `Codec/Iso.lean:27-33`), and that absence is exactly what `[D4]` establishes in
+its sharp form.
+
+**What this change actually does is therefore a strengthening, now filed as
+`README.md`'s `[S7]`.** Where the paper softens the law and hands the class out as a
+typeclass, `Normal` reifies a **canonical representative** (the fixed points of the
+normaliser, with a `fixed` witness), so the equivalence lives in the codomain _type_ and the
+inverse law holds unconditionally — strictly stronger than the paper's softened reading, and
+with no `Eq` argument at all.
+
+Two clarifications that keep `[S7]` from being read as a licence:
+
+- **It is not a `[Dn]` departure either**, which is what the earlier revision of this
+  paragraph wrongly denied while asserting the opposite reason. The paper's _law_ is
+  softened (§3.1) and its _device_ is `Eq` (§5.1); this change reproduces neither — it
+  replaces both with a canonical representative. So it is neither a departure from the
+  paper's law nor a copy of its mechanism.
+- **The quotient absorbs only same-value variation.** A trailing blank, a trailing
+  non-digit and an out-of-alphabet digit are **rejected**, not normalised, precisely because
+  absorbing them would be `[D4]`'s lossy capture rather than an equivalence class.
+
+`README.md`'s rule is that every _observable-semantics_ change is filed as a `[Dn]` anchor.
+This resolution is not one, and `[S7]` now says why in the paper's own terms rather than by
+assertion.
 
 **For `_L` (bases 32 and 64) the schema is also wrong**, and 3.2 records the finding when it
 reaches those two: `bytesOfNat` and `natOfBytes` **do not exist in the tree**, so the schema

@@ -86,8 +86,14 @@ Guidance for AI coding agents working in this repository.
 > (revert the allowlist drop) is the one code change and it moves every gate constant back;
 > do it alone, then re-derive. **8.8** (the lakefile flag) is a one-line `lean-basen` fix.
 > **8.10** is genuinely 8 lines and already verified `[propext]`-only by a reviewer and by
-> me independently — prove the iff rather than deleting the word "complete". **8.9** is an
-> owner decision (file `[D9]` or record why not); do not decide it unilaterally.
+> me independently — prove the iff rather than deleting the word "complete".
+>
+> **8.9 is CLOSED — resolved as `[S7]` in `README.md`, a strengthening, not a `[D9]`
+> departure.** The paper _softens the law_ (§3.1) but its _device_ is an `Eq` parameter
+> (`element :: Eq α ⇒ α → Iso () α`, §5.1); `codec`'s `Iso` has no `Eq` slot, so `Normal`
+> reifies a canonical representative instead and the law comes out **stricter** than the
+> paper's softened reading. Do not re-open it as a departure: the observable semantics is
+> stricter, not different (`"7 "`/`"7x"`/off-alphabet stay **rejected**).
 >
 > ### §3's predecessors: what landed before it> ### §3's predecessors: what landed before it
 >
