@@ -576,21 +576,74 @@ Findings: `design.md` D5/D6.
 - [ ] 3.2 Prove, for **each of the seven** bases, that its block iso is tied to `toNat` by
       the **canonicity-filtered implication pair** of `design.md` D6 — _not_ an equality.
 
+      **IN PROGRESS — 3 of 7 landed 2026-11-15** (`../lean-basen` `cd1a371`, `4e85200`):
+      `BaseN.RadixTie` holds the reusable fold machinery (`toNat_eq_natVal_map`, `natVal_*`,
+      `toNat_*` at the block widths), the digit bridges, and the ties for **bases 2, 4 and
+      8**, both directions. Base 8 also has its **overflow law** (`octBlockApply_overflow`),
+      which is the resolution below. Gate `684 = 632 + 52` at **29 jobs**; distribution
+      `519 + 76 + 37 = 632`, matching the per-law counts exactly. Still to do: base 16
+      (digit bridge proved clean, tie unwritten), base 10 (needs the same overflow law as 8),
+      and bases 32/64 (`_L`).
+
+      **D6's statement was false in three ways, all measured — see `design.md` D6's
+      "was wrong in three ways" block.** Read it before writing any further tie. The short
+      version, because each one changes what the next five theorems say:
+
+      1. **The arity hypothesis is missing.** `toNat 2 [48,49] = some 1` while
+         `bitBlockApply [48,49] = none`, so the schema over an arbitrary `List UInt8` is
+         unprovable. **Both directions are therefore stated at the block's LITERAL digit
+         vector** (the owner's decision), where the arity is part of the statement. A port to
+         an arbitrary list must supply `cs.length = blockWidth` itself.
+      2. **Two bases overflow their codomain, and it is not the two D6 names.** Bases 2, 4 and
+         16 reach exactly `255`, so `n ≤ 255` follows from the digit bounds and the strong
+         form needs no hypothesis. Bases 8 (`"777"` → `511`) and 10 (`"999"` → `999`) exceed
+         `UInt8`, so their blocks are **partial** on numerals the fold accepts. D6's claim
+         that base 8's guard "rejects the pad byte" names a different guard; and no
+         `UInt8`-codomain block truncates, because it either fits or is rejected first.
+      3. **The repair keeps the paper's law shape; a disjunction would not.** Bases 2/4/16 get
+         the strong form. Bases 8/10 get the strong form **plus `n ≤ 255` as an explicit
+         hypothesis**, and the rejection gets its **own law**
+         (`octBlockApply_overflow`). A disjunct in the agreement theorem was considered and
+         rejected: `PAPER.md` defines `apply : α → Maybe β` as a **function**, so
+         `apply = some … ∨ apply = none` is a case analysis on a result, not the law
+         `Just b → g b = Just a`; a partial iso's domain is what the `Maybe` arrow models, so
+         the condition belongs in the hypothesis. `PAPER.md` also licenses the quotient this
+         change relies on ("we will sometimes interpret this condition modulo equivalence
+         classes"), and its own blank-string example is the `Normal` shape — so this repair
+         adds **no** new `[Dn]` departure, which `README.md` requires of any observable
+         semantic change.
+
+      **Measured, the rejection is a complete characterisation** — over all 512 octal and all
+      1000 decimal digit triples, `blockApply ds` succeeds **iff** `value ds ≤ 255`. That is
+      what makes the overflow law an iff about the block's domain rather than a sufficient
+      condition, and it is why the law is worth having separately.
+
+      **`Classical.choice` leaked into three laws in this work, in shapes sharper than
+      `AGENTS.md` records.** All three are silent and only `#print axioms` shows them:
+
+      | shape | clean alternative |
+      | --- | --- |
+      | `omega` with a **disjunction in the context** (not only in the goal) | case-split first, so `omega` sees `⟨by omega, by omega⟩` per branch |
+      | `split` on a two-arm `if` | `by_cases h : …` then `rw [ite_eq_left h]` / `ite_eq_right` |
+      | `have h : a ≤ x ∧ x ≤ b := by omega` | `⟨by omega, by omega⟩` |
+
       Seven, not six: `digBlockIso` (`BaseN/Base10.lean:250`, base 10) is the same shape and
       the first draft silently dropped it, which is an unexplained 6-of-7 list.
 
       The statement is NOT `blockIso = toNat` restricted, and attempting that will fail:
       `b64BlockApply` re-encodes and compares (`Base64.lean:265-270`), `digBlockApply`
-      rejects `n > 255` (`Base10.lean:121-128`), and the `UInt8`-valued bases truncate via
-      `UInt8.ofNat`.
+      rejects `n > 255` (`Base10.lean:121-128`), and the `UInt8`-valued bases either fit or
+      are rejected before any conversion happens.
 
       **Two schemas, not one — a single `BlockVal` placeholder does not typecheck.** The seven
       split by codomain: `bitBlockIso`/`quartetBlockIso`/`octBlockIso`/`digBlockIso`/
       `hexBlockIso` are `Iso (List UInt8) UInt8` (schema `_8`, consequent
-      `some (UInt8.ofNat n)`, losslessness from the block's `n < 256` guard);
-      `b32BlockIso`/`b64BlockIso` are `Iso (List UInt8) (List UInt8)` (schema `_L`, consequent
-      `some (bytesOfNat n)`, `→` held by base 64's re-encode guard rather than a range bound).
-      See `design.md` D6 for both statements.
+      `some (UInt8.ofNat n)`); `b32BlockIso`/`b64BlockIso` are
+      `Iso (List UInt8) (List UInt8)` (schema `_L`). **`_L`'s schema in D6 is also wrong**:
+      `bytesOfNat` and `natOfBytes` **do not exist in the tree**, so the schema names two
+      functions that would have to be invented before it could be stated. The tie for those
+      two is stated against the `*BlockDecodeLenient` / `*BlockUnapply` pair that exists.
+      See `design.md` D6 for both statements and the corrections.
 
 - [ ] 3.3 **Mutation-test every 3.2 theorem** by perturbing that block iso's digit order
       and confirming it fails naming that base. Seven theorems, seven mutations.

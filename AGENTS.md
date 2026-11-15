@@ -7,7 +7,46 @@ Guidance for AI coding agents working in this repository.
 > **One change is open: `basen-radix`** — the next session's work. Read its `tasks.md`
 > banner before touching anything.
 >
-> ### NEXT SESSION IS **§3: the ties** (3.1–3.5, then 4.2 + 4.2b with 4.3's constants)
+> ### §3 IS IN PROGRESS — read `design.md` D6's "was wrong in three ways" block FIRST
+>
+> **Before writing any tie, read `design.md` D6's correction block and `tasks.md` 3.2.** The
+> schema this file and the plan carried for a year is **false as written**, and each of the
+> three errors changes what the remaining five theorems say:
+>
+> 1. **Missing arity.** `toNat 2 [48,49] = some 1` but `bitBlockApply [48,49] = none`, so the
+>    tie over an arbitrary `List UInt8` is unprovable. Both directions are stated **at the
+>    block's literal digit vector**. (Owner's decision, 2026-11-15.)
+> 2. **Two bases overflow their codomain, and not the two D6 named.** Bases 2/4/16 reach
+>    exactly `255` — `n ≤ 255` is a theorem there. Bases 8 (`"777"` → `511`) and 10
+>    (`"999"` → `999`) exceed `UInt8`, so their blocks are **partial** on numerals the fold
+>    accepts.
+> 3. **The repair is a hypothesis plus a companion law, never a disjunction.** Bases 8/10 take
+>    `n ≤ 255` as an explicit hypothesis; the rejection gets its own law
+>    (`octBlockApply_overflow`). **`PAPER.md` defines `apply : α → Maybe β` as a function**, so
+>    `apply = some … ∨ apply = none` is a case analysis on a result, not the law
+>    `Just b → g b = Just a` — a partial iso's domain is what the `Maybe` arrow already
+>    models. `PAPER.md`'s own "modulo equivalence classes" sentence is what licenses the
+>    quotient this change already uses, so this repair adds **no new `[Dn]` departure**, which
+>    `README.md` requires of any observable-semantics change.
+>
+> **A fourth answer was proposed and rejected, and the reason generalises:** "state
+> `(apply = some …) ∨ (apply = none)`" is tempting because the rejection _is_ complete — verified
+> for bases 8/10 over all 512 and 1000 digit triples that `blockApply` succeeds **iff**
+> value ≤ 255. Completeness does not make it the paper's law shape. When a measured
+> characterisation is stronger than the statement you are allowed to make, put it on the
+> record as its own theorem rather than folding it into the law.
+>
+> **Landed so far** — `../lean-basen` `cd1a371`: `BaseN.RadixTie` with the reusable fold
+> machinery and **base 2's pair**; gate `669 = 617 + 52` at 29 jobs. Bases 4, 8 and 16's
+> digit bridges are proved clean in scratch but not yet in the module.
+>
+> **`Classical.choice` leaked three times here, in shapes `AGENTS.md` did not have.** All
+> silent; only `#print axioms` shows them: `omega` with a **disjunction in the context**;
+> `split` on a two-arm `if` (use `by_cases` + `ite_eq_left`); and
+> `have h : a ≤ x ∧ x ≤ b := by omega` (use `⟨by omega, by omega⟩`). Every new tie SHALL be
+> measured before it is believed.
+>
+> ### The rest of §3, and what follows (unchanged)
 >
 > **2.2c + 4.1 LANDED 2026-11-15** — `../lean-basen` `9d547dd`, this repo `49238a3`.
 > `BaseN.RadixCodec` is imported and its **117** laws are pinned by hand, and 4.3's

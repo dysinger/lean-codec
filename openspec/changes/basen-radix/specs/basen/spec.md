@@ -98,11 +98,35 @@ byte or block — SHALL be tied to the generic radix fold by a proved theorem. T
 isomorphisms SHALL be retained as fast paths rather than deleted.
 
 The theorem SHALL be a **canonicity-filtered restriction**, not an equality: each block
-`apply` accepts only canonical blocks, and some also guard their value range (`Base64`
-re-encodes and compares; `Base10` rejects `n > 255`; the `UInt8`-valued bases truncate). So
-the statement is the implication pair — a fold that yields `n` on an accepted input agrees
-with the block's value, and a block result agrees with the fold — and the proof obligation
-SHALL include any truncation's losslessness.
+`apply` accepts only canonical blocks, and two of them also reject a block whose value does
+not fit their codomain. So the statement is the implication pair — a fold that yields `n` on
+an accepted input agrees with the block's value, and a block result agrees with the fold —
+and the proof obligation SHALL include each guard's effect.
+
+**Both directions SHALL be stated at the block's own arity** — its literal digit vector — and
+not over an arbitrary `List UInt8`. At the literal arity the arity condition is not
+hypotheses to discharge but part of the statement, and an implementation that states it over
+an arbitrary list SHALL add the length condition explicitly.
+
+**A block whose digits can exceed its codomain SHALL carry the domain condition as an
+explicit hypothesis** on the fold-to-block direction, and its rejection SHALL be stated as a
+**separate** law rather than as a disjunct of the agreement theorem. The reason is the
+paper's law: `PAPER.md` defines `apply : α → Maybe β` as a **function**, so a statement of the
+form `apply = some … ∨ apply = none` is a case analysis on a result, not the law
+`Just b → g b = Just a`. A partial isomorphism's domain is what the `Maybe` arrow models, so
+the condition belongs in the hypothesis.
+
+**Measured, the bases split two ways and the split is arithmetic, not a judgement call:**
+base 2's eight bits, base 4's four quartets and base 16's two nibbles each reach exactly
+`255`, so `n ≤ 255` follows from the digit bounds and the strong form holds with no
+hypothesis. Base 8's three octal digits reach `511` and base 10's three decimal digits reach
+`999`, so `"777"` and `"999"` are numerals the fold accepts (`some 511`, `some 999`) and the
+blocks reject (`none`). For those two the domain condition is a hypothesis and the rejection
+gets its own law.
+
+The rejection law SHALL state the **complete** characterisation, not merely a sufficient
+condition: for bases 8 and 10 a block succeeds **exactly when** its value is at most `255`,
+which makes the rejection law an iff about the block's domain rather than one half of it.
 
 **All seven** block isomorphisms SHALL be covered, base 10's included; excluding it from the
 power-of-two grouping is a classification, not an omission.
@@ -121,9 +145,21 @@ covered by this requirement are over the block layer only.
 #### Scenario: A canonicity guard is not silently dropped
 
 - **WHEN** a digit string is accepted by the generic fold but rejected by the block
-  isomorphism (base 64's re-encode guard, or a base-10 block denoting more than 255)
+  isomorphism (base 64's re-encode guard, or an octal block denoting `511`)
 - **THEN** the theorem states the implication in the direction that holds and does not claim
   the two functions agree on that input — a bare equality would be false here.
+
+#### Scenario: An overflow block is rejected by a named law
+
+- **WHEN** a block's digits denote a value above `255`
+- **THEN** the block isomorphism returns `none`, stated as its own theorem, so the rejection
+  is proved rather than left as an observed behaviour.
+
+#### Scenario: The tie is stated at the block's arity
+
+- **WHEN** the agreement theorem is written for a base
+- **THEN** it names the block's literal digits, so the arity cannot be wrong — and a reader
+  porting it to an arbitrary list must supply the length condition themselves.
 
 #### Scenario: The tie is mutation-tested
 

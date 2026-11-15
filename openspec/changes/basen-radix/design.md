@@ -254,6 +254,81 @@ theorem toNat_of_blockApplyL (cs : List UInt8) (v : List UInt8) :
     blockApply cs = some v -> toNat radix cs = some (natOfBytes v)
 ```
 
+### D6 was wrong in three ways, all found by measurement
+
+**The schemas above are kept as history and corrected here.** Implementing §3 found that the
+statement this section drew does not hold, and the reasons matter because the intuitive
+version is the wrong one — this is the third rewrite of D6, and each earlier one was a
+_different_ error.
+
+**1. The arity hypothesis is missing, and the statement is false without it.**
+
+```
+toNat 2 [48,49]                    -> some 1     -- "01" is a valid numeral
+BaseN.Base2.bitBlockApply [48,49]  -> none       -- the block wants exactly 8 digits
+```
+
+`blockApply8_of_toNat` over an arbitrary `cs` cannot be proved. The fix adopted is to state
+both directions **at each block's literal digit vector** — `d0 … d7` for base 2, `d0 d1 d2`
+for base 8, and so on — where the arity is part of the statement rather than a hypothesis to
+discharge. A port to an arbitrary list must supply `cs.length = blockWidth` itself.
+
+**2. Two bases overflow their codomain, and D6 mislabelled which ones and why.** The table
+above says base 8 sits with the _truncating_ bases and base 10 is the one that "rejects
+`n > 255`". Measured, the opposite is nearer the truth and the cause is the same for both:
+
+| base | widest block value | `blockApply` on it |
+| ---- | ------------------ | ------------------ |
+| 2    | `255`              | `some`             |
+| 4    | `255`              | `some`             |
+| 16   | `255`              | `some`             |
+| 8    | `511` (`"777"`)    | `none`             |
+| 10   | `999` (`"999"`)    | `none`             |
+
+So the split is **arithmetic**: bases 2, 4 and 16 have digit counts whose maximum _is_ `255`,
+so `n ≤ 255` follows from the digit bounds and nothing else is needed. Bases 8 and 10 reach
+`511` and `999`, so their blocks are **partial** on the numerals the fold accepts. D6's claim
+that base 8's guard "rejects the pad byte" is a different guard from the one that bites here;
+and nothing in these five bases truncates via `UInt8.ofNat`, because the only blocks whose
+codomain is `UInt8` either fit or are rejected first.
+
+And the rejection is a **complete** characterisation, verified exhaustively — over all 512
+octal digit triples and all 1000 decimal ones:
+
+```
+octBlockApply ds isSome  <=>  value(ds) <= 255
+digBlockApply ds isSome  <=>  value(ds) <= 255
+```
+
+**3. The repair keeps the paper's law shape, and a disjunction would not.** The resolution
+the owner selected, and the reason it is the most correct one:
+
+- Bases 2, 4, 16 get the **strong form**, no hypothesis — the paper's law verbatim.
+- Bases 8, 10 get the strong form **plus `n ≤ 255` as an explicit hypothesis**, and their
+  rejection gets its **own law** (`octBlockApply_overflow`), not a disjunct of the agreement
+  theorem.
+
+The disjunction was considered and rejected. `PAPER.md` defines `apply : α → Maybe β` as a
+**function**, and its law is `if f a returns Just b, g b returns Just a, and the other way
+round`; a statement shaped `(n ≤ 255 ∧ apply = some …) ∨ (255 < n ∧ apply = none)` is a case
+analysis on a _result_, not that law. Putting the domain condition in the hypothesis is what
+reading the `Maybe` arrow correctly means, since a partial isomorphism's domain is exactly
+what the arrow models. Nothing is lost: the measured iff is still on the record, as its own
+theorem about `apply`'s domain.
+
+`PAPER.md` also licenses the quotient this change already relies on, in the sentence
+after the law — _"we will sometimes interpret this condition modulo equivalence classes"_ —
+and its own worked example (all blank strings in one class) is the `Normal` shape D2 uses. So
+neither the implication pair nor the quotient is a departure from the paper; both are the
+paper's own text. `README.md`'s rule is that every _observable-semantics_ change is filed as
+a `[Dn]` anchor, and this resolution adds none.
+
+**For `_L` (bases 32 and 64) the schema is also wrong**, and 3.2 records the finding when it
+reaches those two: `bytesOfNat` and `natOfBytes` **do not exist in the tree**, so the schema
+names two functions that would have to be invented before it could be stated. Base 32/64
+re-encode-and-compare and reject a pad byte, so their tie is stated against the
+`*BlockDecodeLenient` / `*BlockUnapply` pair that actually exists.
+
 For `_8`, the transport is a **truncating** `UInt8.ofNat` whose losslessness _is part of the
 theorem_ (`n < 256` comes from the block's own guard). For `_L`, the guard that makes `→` hold
 is base 64's re-encode-and-compare, not a range bound.
