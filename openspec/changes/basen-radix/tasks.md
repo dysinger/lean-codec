@@ -1295,8 +1295,8 @@ closed more times than any other: **a claim whose stated method is not its code'
       **LANDED 2026-11-15** (`../lean-basen` `479d612`), and verified load-bearing rather than
       just applied: stubbing one of `Bench.lean`'s own `example`s to `sorry` now fails with
       `error: Bench.lean:54:0: declaration uses 'sorry'`. `lake build bench` green at **53**
-      jobs afterwards (it was 49 before this session added the numeral-layer modules), and
-      `lake build` still green at 29.
+      jobs, `lake build` green at 29 — the same 29 the numeral session ended on (`b29c38c`),
+      so the flag moved nothing but the exe's own arguments.
 
 - [x] 8.9 **[MUST] [PA-M4] design.md refuses a `[Dn]` on an over-read of PAPER.md, and
       contradicts README's own reading of the same sentence.** `codec` reads
