@@ -79,14 +79,24 @@ Guidance for AI coding agents working in this repository.
 > - **No `codec` change was made or needed**; no `Classical.choice`, no `sorryAx` in any
 >   committed footprint block.
 >
-> ### The order §8 should be done in
+> ### The order §8 should be done in — and it is NOT the listed order
 >
-> **8.1, 8.2, 8.5, 8.6, 8.7 are text-only and are the blockers** — fix them first, in one
-> commit, because the spec delta and the gate header must be true before archive. **8.4**
-> (revert the allowlist drop) is the one code change and it moves every gate constant back;
-> do it alone, then re-derive. **8.8** (the lakefile flag) is a one-line `lean-basen` fix.
-> **8.10** is genuinely 8 lines and already verified `[propext]`-only by a reviewer and by
-> me independently — prove the iff rather than deleting the word "complete".
+> **`tasks.md` §8 has the full table; read it before starting.** The items move the same
+> counters in opposite directions, so the naive order produces a _wrong_ intermediate gate:
+>
+> 1. **8.1, 8.2, 8.6, 8.7** — text only, zero gate movement. One commit. (8.5 is **not** here —
+>    see step 6.)
+> 2. **8.8** — the `lean-basen` lakefile one-liner; re-run `lake build bench` afterwards.
+> 3. **8.4** — revert the allowlist drop (−7 theorems, `expectedDefAllow` 11→18), re-derive.
+> 4. **8.3** — the `_L` split; **after** 8.4, not before.
+> 5. **8.10** — the two iff theorems (+2).
+> 6. **8.5 LAST** — rewrite the header paragraph to the numbers the gate then prints, and
+>    **bind it** so the next drift fails the build. It is the only item that reads every
+>    constant, so it cannot precede any change to one.
+> 7. 8.11–8.15 — orphans and wording.
+>
+> **`git show 5044f95~1:Axioms.lean`** holds the pre-drop constants (715/663/539/83/41,
+> mentioned 143, defAllow 18) — use it to _predict direction_, never to paste a number.
 >
 > **8.9 is CLOSED — resolved as `[S7]` in `README.md`, a strengthening, not a `[D9]`
 > departure.** The paper _softens the law_ (§3.1) but its _device_ is an `Eq` parameter
@@ -95,7 +105,7 @@ Guidance for AI coding agents working in this repository.
 > paper's softened reading. Do not re-open it as a departure: the observable semantics is
 > stricter, not different (`"7 "`/`"7x"`/off-alphabet stay **rejected**).
 >
-> ### §3's predecessors: what landed before it> ### §3's predecessors: what landed before it
+> ### §3's predecessors: what landed before it
 >
 > **2.2c + 4.1 LANDED 2026-11-15** — `../lean-basen` `9d547dd`, this repo `49238a3`.
 > `BaseN.RadixCodec` is imported and its **117** laws are pinned by hand, and 4.3's

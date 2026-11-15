@@ -1224,6 +1224,56 @@ closed more times than any other: **a claim whose stated method is not its code'
       "proved equal"; `radixInstances_radices` is `rfl` on a literal (harmless, but it is a
       restatement, not a constraint).
 
+### The ordering constraints, and why they are not obvious
+
+**§8's items are not independent, and three of them move the same counters in opposite
+directions.** A session that does them in the listed order lands on a _wrong_ intermediate
+gate and will spend a build cycle thinking it introduced a defect. Measured from git and from
+the current constants:
+
+| item                           | what it does to `expectedPub` / `expectedGated`                                                                                                                                                   | depends on                                     |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| 8.3 split the `_L` conjunction | **+2 then +0** — one theorem becomes two; both arms already exist, so it is a _restructure_, net **+2** if the arms are named separately, **0** if the conjunction is kept and only re-documented | —                                              |
+| 8.4 revert the allowlist drop  | **−7** (delete the seven `*BlockIso_apply`), and `expectedDefAllow` **11 → 18**, `expectedMentioned` **150 → 143**                                                                                | must land **after** 8.3, or 8.3 is split twice |
+| 8.10 prove the domain iff      | **+2** (`octBlockApply_domain_iff`, `digBlockApply_domain_iff`), both `[propext]`-only → `statedDistP` **+2**                                                                                     | independent                                    |
+| 8.2 fix the b64 docstring      | 0 (docstring)                                                                                                                                                                                     | —                                              |
+| 8.5 / 8.6 / 8.7                | 0 theorems; 8.5 is the only one that touches asserted constants (it _reads_ them)                                                                                                                 | must be **last**, after all deltas             |
+
+**The exact revert target for 8.4, so nobody re-derives it.** `git show 5044f95~1:Axioms.lean`
+is the commit before the drop; its constants were:
+
+```
+expectedPub 715   expectedGated 663   statedPrintBlockCount 669   statedGatedNamesCount 663
+statedDistPS 539  statedDistP  83     statedDistZ 41
+expectedMentioned 143                expectedDefAllow 18
+```
+
+**Do not paste those.** They are the values _before_ 8.3's `+2` and 8.10's `+2`, and 8.9's
+`[S7]` commit added nothing. The only safe procedure is: land all code changes, then read
+`lake build`'s own `theorems not pinned` / `table is stale` output and set the constants from
+it. The table above is for _predicting_ the direction, never for filling in the number.
+
+**Recommended order, one commit each:**
+
+1. **8.1, 8.2, 8.6, 8.7** — text only, no gate movement. Safe in one commit.
+2. **8.8** — the `lean-basen` lakefile one-liner. Independent, but verify `lake build bench`
+   still passes _afterwards_ (it now carries `warningAsError`, which can surface a latent
+   warning).
+3. **8.4** — revert the drop, delete seven theorems, restore the allowlist reasons, re-derive
+   `expectedPub/Gated/Mentioned/DefAllow`, `statedPrintBlockCount/GatedNamesCount`, `statedDist*`.
+4. **8.3** — split the `_L` conjunctions if keeping the split (decide with 8.4 in mind: after
+   8.4 the `*BlockIso` values are allowlisted again, so naming `apply` in a theorem is no longer
+   load-bearing for the mention proxy and 8.3 becomes a pure statement-shape choice).
+5. **8.10** — add the two iff theorems, `+2` to `expectedPub`/`expectedGated`/`statedPrint*`/
+   `statedDistP`.
+6. **8.5** — LAST. Rewrite the header paragraph to the final numbers the gate prints, and
+   **bind it** so the next drift fails the build.
+7. **8.11–8.15** — orphan deletion and wording; each a small commit.
+
+**A green build at every step is required** (`AGENTS.md`: a partial state is a red gate). If a
+session runs out of time, stop after step 1, 2, or any whole numbered step — never inside 3, 5
+or 6, because those leave the constants mid-delta.
+
 **What the reviewers explicitly REFUTED, recorded so it is not re-litigated.**
 
 - The `_8` ties are **not** vacuous. Measured: swapping `bitVal d0`/`bitVal d1` in
