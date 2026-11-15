@@ -570,11 +570,52 @@ Findings: `design.md` D2/D4.
 
 Findings: `design.md` D5/D6.
 
-- [ ] 3.1 Instantiate `numeralIso` at radices 2, 4, 8, 10, 16, 32, 64. Each SHALL carry its
+- [x] 3.1 Instantiate `numeralIso` at radices 2, 4, 8, 10, 16, 32, 64. Each SHALL carry its
       `2 ≤ b` witness explicitly. Enumerate the seven from one source in the gate so a
       missing radix is a build failure rather than a shorter list.
-- [ ] 3.2 Prove, for **each of the seven** bases, that its block iso is tied to `toNat` by
+
+      **LANDED 2026-11-15** (`../lean-basen` `28014b7`). `BaseN.RadixTie.radixInstances`
+      is the single source — `[2,4,8,10,16,32,64]` — with `radixInstances_areRadix`
+      supplying each `IsRadix` witness, and **two** assertions pinning it down:
+      `radixInstances_length` (`= 7`) and `radixInstances_radices` (`= [2,4,8,10,16,32,64]`,
+      so it cannot drift into a subset). `numeralIsoAt` reads `numeralIso` at an enumerated
+      radix.
+
+      **One correction, found by the compiler:** the witness tuple cannot be a `Σ` —
+      `IsRadix` is a `Prop`, so `Σ b, IsRadix b` does not typecheck. The shape that does is
+      a `List Nat` plus a `∀ b ∈ …, IsRadix b` proof. `numeralIsoAt` then joins the
+      `Iso`-law-as-field allowlist group with its own reason (it is an application of that
+      `def` to an already-gated witness, so no new law appears).
+
+- [x] 3.2 Prove, for **each of the seven** bases, that its block iso is tied to `toNat` by
       the **canonicity-filtered implication pair** of `design.md` D6 — _not_ an equality.
+
+      **COMPLETE — 7 of 7 landed 2026-11-15.** Bases 2/4/8 (`cd1a371`, `4e85200`), base 16
+      (`11b67b9`), base 10 (`db7efea`), bases 32/64 (`aa0957f`, `bd41fa7`, `b29c38c`).
+      Gate **`712 = 660 + 52`** at 29 jobs when the ties closed.
+
+      **The `_L` statements were decided against the code before any proof was written**, as
+      this task required, and **both** did not fit D6's schema:
+
+      ```
+      toNat 64 [81,81,81,81]        -> some 4260880
+      b64BlockApply [81,81,81,81]   -> some [65, 4, 16]      beVal [65,4,16] = 4260880
+      toNat 32 [77,89,61,61,61,61,61,61] -> none      ('=' is not a base-32 digit)
+      b32BlockApply [77,89,61,...]  -> some [102]     the block accepts what the fold cannot read
+      ```
+
+      So the tie is **`toNat b cs = some (beVal bs) ↔ blockApply cs = some bs`**, stated at
+      each block's literal arity and **on pad-free vectors only**. Padding is an **arity**
+      fact here, not a canonicity guard: `=` is outside the fold's alphabet, so a padded block
+      is outside its domain exactly as a short one is. That is a *third* consequence D6 did
+      not have, and it is why the `←` direction is stated for the 3-byte (base 64) and 5-byte
+      (base 32) blocks only.
+
+      `bytesOfNat`/`natOfBytes` were not invented; the bridge is `beVal` (the big-endian byte
+      fold, `beVal_eq_natVal` tying it to `natVal 256`), which is what both blocks already
+      rest on. **Measured, neither base needs an overflow law**: base 32's eight characters
+      reach `32^8 - 1 = 2^40 - 1` and base 64's four reach `2^24 - 1` — a whole block each —
+      so the codomain cannot overflow, unlike bases 8 and 10.
 
       **IN PROGRESS — 3 of 7 landed 2026-11-15** (`../lean-basen` `cd1a371`, `4e85200`):
       `BaseN.RadixTie` holds the reusable fold machinery (`toNat_eq_natVal_map`, `natVal_*`,
@@ -645,13 +686,20 @@ Findings: `design.md` D5/D6.
       two is stated against the `*BlockDecodeLenient` / `*BlockUnapply` pair that exists.
       See `design.md` D6 for both statements and the corrections.
 
-- [ ] 3.3 **Mutation-test every 3.2 theorem** by perturbing that block iso's digit order
+- [x] 3.3 **Mutation-test every 3.2 theorem** by perturbing that block iso's digit order
       and confirming it fails naming that base. Seven theorems, seven mutations.
-- [ ] 3.4 Record, in the module docstring, that `numeralIso` is **not** defined through the
+
+      **RUN 2026-11-15, all seven.** Each mutation reverses (or swaps) the digit order in
+      that base's `*_of_toNat` statement and the build fails at that theorem:
+      base 2 / 4 / 8 / 16 / 10 → **3 errors** each; base 32 → **2**; base 64 → **4**.
+      Working tree restored after each; `git status --porcelain` empty and the module green.
+      A tie that survived its own digit-order mutation would not be constraining the block.
+
+- [x] 3.4 Record, in the module docstring, that `numeralIso` is **not** defined through the
       padded bases' `B32`/`B64` tail spine (D5), and why — padding there encodes a _length
       class_, which a minimal-width numeral does not have. State it where a future
       implementer will reach for `b64BlockIso`.
-- [ ] 3.5 **Reconcile `BaseN.lean`'s design sentence.** `BaseN.lean:20-22` states: _"There is
+- [x] 3.5 **Reconcile `BaseN.lean`'s design sentence.** `BaseN.lean:20-22` states: _"There is
       **no** `Base` enum and **no** `encode (b : Base)` / `decode (b : Base)` facade: the
       radix lives in the value the caller already holds, **never on a dispatch index**."_
       `toNat : (radix : Nat) → …` puts the radix on exactly such an index.
@@ -735,9 +783,27 @@ section described `codec`'s machinery and `basen` does not have it.**
       design — but it means "delete a block and watch the coverage arm fire" does not
       reproduce, and the mutation that does is the `gatedNames` one.
 
-- [ ] 4.2 **Drop the seven block isos from `definitionSurfaceAllowlist`** — and **keep three**.
+- [x] 4.2 **Drop the seven block isos from `definitionSurfaceAllowlist`** — and **keep three**.
       This is the task the first draft did not have; the second draft's version of it was
       ambiguous, which is why it is now an explicit name list.
+
+      **LANDED 2026-11-15** (`../lean-basen` `5044f95`) — **and the premise below was FALSE as
+      executed, measured.** The text predicted the seven would become *mentioned* because
+      §3.2's ties name them. They do not: the ties name `bitBlockApply`, `octBlockApply`, …,
+      while the allowlist holds `bitBlockIso`, `octBlockIso`, …. Removing them as written
+      made the def arm fire on **all seven**, naming each — so the drop would have been a red
+      build, not a cleaner gate.
+
+      **The fix is what the task actually intends, and it is more correct than the original
+      text:** make the theorems name the **value**. Each `*BlockIso`'s `apply` is
+      definitionally its `*BlockApply` (`rfl`, checked for all seven before writing anything),
+      so each gained a `*BlockIso_apply` law stating exactly that. The values are now
+      mentioned, "no theorem names it" is false of them, and the seven were dropped
+      legitimately. **Allowlist 18 → 11, mentioned 143 → 150.**
+
+      The three kept are exactly what this task listed (`hexBlockIsoF`, `b32TailIso`,
+      `b64TailIso`) — the ones §3.2 generates no theorem for, so their reason stays true. The
+      `Iso`-law-as-field group is now **3**, not 10.
 
       The allowlist region is `Axioms.lean:1922-1946` (the `def` at 1922, not 1920). It holds
       **ten** `Iso`-law-as-field entries, not seven. **Remove exactly these seven:**
@@ -769,14 +835,23 @@ section described `codec`'s machinery and `basen` does not have it.**
       neither `both` nor `silent`; only a def that is **mentioned and allowlisted** trips
       `both`. That is the state the seven move *into*, and the three must stay out of.
 
-- [ ] 4.2b **Record the reason where it moves.** `Axioms.lean:1699`'s prose says "the 15
+- [x] 4.2b **Record the reason where it moves.** `Axioms.lean:1699`'s prose says "the 15
       allowlisted are 10 `Iso`-law-as-field values"; after 4.2 that is "15 − 7 = 8 allowlisted,
       of which 3 are `Iso`-law-as-field" — re-derive from the list, do not paste. The
       "no theorem names it" justification is now false of the seven **by design**, so the
       header prose must say the seven have a constraining theorem instead.
 
-- [ ] 4.3 Update **every** asserted constant the gate checks — there are **11**, in **four**
-      arms, not "the header counts":
+- [x] 4.3 Update **every** asserted constant the gate checks — there are **11**, in **four**
+      arms, not "the header counts".
+
+      **LANDED 2026-11-15, in the same commits as the counts it moved.** The gate's own log
+      line verifies all four groups together (`header numbers verified (722 = 670 + 52);
+      prose paragraph says 673 pins = 670 BaseN + 3 Codec`), plus the distribution
+      (`546 + 82 + 41 = 669` before the isos' `apply` laws, `553/82/41` after) and the def
+      table (`161 = 150 + 11`). The task's "worked example" was right to warn that the delta
+      is not `+7`: this session's real deltas were `+7` (base 16), `+8` (base 10),
+      `+13` (bases 32/64), `+3` (radix instances), `+7` (`*BlockIso_apply`) — **not**
+      uniform, and **not** the `+14` the example guessed either.
 
       | arm | constants | line |
       | --- | --- | --- |
@@ -873,19 +948,36 @@ section described `codec`'s machinery and `basen` does not have it.**
       exited 0, which is correct rather than a silent skip. The gate's own `native_decide` arm
       re-verified the count (12, all bench-lane), so nothing was added or dropped.
 
-- [ ] 5.1c `nix build '.#bench'` in `../lean-basen` — the **sandboxed** lane, which is the
+- [x] 5.1c `nix build '.#bench'` in `../lean-basen` — the **sandboxed** lane, which is the
       only one that proves the Nix build still works after a module was added. It is a long
       build: `nohup … &`, then poll. Never foreground it.
+
+      **RUN 2026-11-15:** `Build completed successfully (53 jobs)` in the sandbox, all phases
+      green. So the Nix lane — not just the dev-shell `lake build` — survives the three new
+      modules.
+
 - [x] 5.2 `nix develop --command openspec validate --all` in **this** repo.
 
       **RUN 2026-11-15:** `Totals: 13 passed, 0 failed (13 items)`. The `requirements[…]`
       `>500 characters` warnings are pre-existing across every spec in the repo, not introduced
       here.
 
-- [ ] 5.3 Every value-checked claim in this change is a _theorem_, not an `example`; if any
+- [x] 5.3 Every value-checked claim in this change is a _theorem_, not an `example`; if any
       run-time check is added, it goes in the bench and `checks.bench` must reach it.
-- [ ] 5.4 `CHANGELOG.md` entry in the register of an **addition**, naming the three new
+
+      **Measured 2026-11-15:** `grep -c '^\s*example '` over `Radix.lean`, `RadixCodec.lean`
+      and `RadixTie.lean` → **0** in all three. Every claim this change adds is a `theorem`.
+      No run-time check was added, so `checks.bench` needed no new reach. The two posture
+      greps reproduce §4.4's baseline exactly: **0** `native_decide` in `BaseN/`, and the
+      same **3** `sorry` hits, all docstring prose.
+
+- [x] 5.4 `CHANGELOG.md` entry in the register of an **addition**, naming the three new
       requirements.
+
+      **LANDED 2026-11-15** (`../lean-basen` `bae490a`): a dated section naming all three
+      added requirements, the seven radices and the single-source enumeration, plus the two
+      corrections the code forced (D6's `_L` schema naming functions that do not exist; the
+      allowlist drop needing `*BlockIso_apply` first).
 
 ## 6. [S] Retire `basen-nat-iso`
 
@@ -910,7 +1002,7 @@ section described `codec`'s machinery and `basen` does not have it.**
       stories and two zero conventions — `basen-nat-iso`'s proposal left "is the empty
       encoding zero?" open, and `design.md` D4 answers it once for all seven radices.
 
-- [ ] 6.2 Confirm nothing in that change's analysis is lost: its `Nat`-first scoping, its
+- [x] 6.2 Confirm nothing in that change's analysis is lost: its `Nat`-first scoping, its
       codomain-in-the-quotient decision, and its `Nat`-only recommendation are all carried
       forward in `design.md` D2/D4/D7.
 
@@ -926,15 +1018,15 @@ it was measured rather than assumed.
 | the **code** it changes          | `../lean-basen/BaseN/`                              |
 | the `codec` layer it consumes    | `lean-codec/Codec/`, via `../lean-basen/flake.lock` |
 
-- [ ] 6b.1 **Two histories.** `../lean-basen` is a separate git repo. Committing
+- [x] 6b.1 **Two histories.** `../lean-basen` is a separate git repo. Committing
       `BaseN/Radix.lean` does not commit the spec delta, and vice versa. Each repo is
       committed and pushed on its own; a session that commits only one leaves the other
       dirty, and `AGENTS.md`'s "commit early" rule applies **per repo**.
-- [ ] 6b.2 **A `codec` change is not needed.** `basen-radix` consumes `Codec/Normal.lean`
+- [x] 6b.2 **A `codec` change is not needed.** `basen-radix` consumes `Codec/Normal.lean`
       as it exists at the pin (`14b54fa`). If an implementation step is tempted to edit
       `Codec/`, stop: that is a different change, in a different repo, and it would need its
       own delta and its own gate run.
-- [ ] 6b.3 **Do not bump the `codec` pin as part of this change.** It is unnecessary (§0.2:
+- [x] 6b.3 **Do not bump the `codec` pin as part of this change.** It is unnecessary (§0.2:
       the `Normal` API is identical at the pin and at HEAD), and a bump would move 68
       commits of unrelated `codec` work into this change's blast radius. If a bump ever
       becomes necessary, it is `nix flake update codec` + `lake update codec` in
@@ -942,12 +1034,18 @@ it was measured rather than assumed.
 
 ## 7. Recorded, deliberately not in this change
 
-- [ ] 7.1 **`varint`.** Enabled by this layer (radix 128 with a continuation bit) but not
+- [x] 7.1 **`varint`.** Enabled by this layer (radix 128 with a continuation bit) but not
       delivered: it is a run triple over bytes with its own benchmark, and this change stops
       so the numeral layer can be measured first (`design.md` D7).
-- [ ] 7.2 **`Int`.** Deferred; `-0x10` raises sign canonicalisation, which is a design
+- [x] 7.2 **`Int`.** Deferred; `-0x10` raises sign canonicalisation, which is a design
       question in its own right.
-- [ ] 7.3 **`basen-uppercase-prepass`.** Parked on the owner's library-division decision.
+- [x] 7.3 **`basen-uppercase-prepass`.** Parked on the owner's library-division decision.
       Untouched.
-- [ ] 7.4 **Reading a padded encoding as a number.** Out of scope by D5, and stated as a
+- [x] 7.4 **Reading a padded encoding as a number.** Out of scope by D5, and stated as a
       requirement so no theorem accidentally claims it.
+
+      **All four non-goals verified 2026-11-15, by command.** `grep -rn 'varint\|radix 128'`
+      over `BaseN/*.lean` → nothing. `grep -n 'Int\b'` over the three radix modules →
+      nothing. The only `b32TailIso`/`b64TailIso` mention anywhere in them is
+      `RadixCodec.lean:74`'s docstring *disclaiming* them — i.e. D5's boundary is stated and
+      no theorem crosses it.
