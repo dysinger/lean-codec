@@ -2,31 +2,41 @@
 
 Guidance for AI coding agents working in this repository.
 
-> ## START HERE: run `openspec list --json` — `basen-radix` is **ready to archive**
+> ## START HERE: run `openspec list --json` — **nothing is open; `basen-uppercase-prepass` is next**
 >
-> **`basen-radix` is 59/59 complete and archivable.** §8's post-implementation review
-> (13 MUST / 17 SHOULD / 14 NITPICK = 44) was **closed in full on 2026-11-15**: twelve
-> MUST/SHOULD items fixed, 8.9 resolved earlier as a `[S7]` strengthening, and **three
-> findings refuted by measurement** rather than accepted. Reports remain at
-> `openspec/changes/basen-radix/reviews/post-impl-*.md` as the evidence base, not as a
-> backlog.
+> **No change is in flight.** `basen-radix` landed 2026-11-15 and is **archived**; `basen`
+> now carries its numeral layer (13 requirements, up from 10). The one remaining authored
+> change is **`basen-uppercase-prepass`**, 20/20 complete, awaiting its own archive.
 >
-> **Gate: `716 = 664 + 52` at 29 jobs; defs `159 = 142 + 17`; dist `540 + 83 + 41`.**
-> Sandboxed `nix build '.#bench'` green; `lake build bench` green at 53 jobs;
-> `openspec validate --all` 13/13; `checks.{formatting,gate-lines,values,reviews,mirror}`
-> all green. `../lean-basen` commits `bb63ff8 9973729 8caba02 4a90529 479d612 9c7ec20
-5ee976c c1fcb66`; this repo from `046e857` to `0079e03`.
+> **Gate: `basen` `698 = 646 + 52` at 29 jobs; defs `156 = 140 + 16`; bench 53 jobs.**
+> `codec` unchanged: `lake build` green at 15 jobs, `openspec validate --all` 12/12.
 >
-> ### What §8 landed, by defect class
+> ### What `basen-uppercase-prepass` landed (2026-11-15)
 >
-> | class                                             | items                              | what closed it                                                                                                                                                                                                                                                                                                                                                                               |
-> | ------------------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-> | **a claim whose method is not its code's method** | 8.1, 8.2, 8.5, 8.6, 8.7, 8.12–8.15 | the spec's `toNat b []` claim was false (`some 0`, measured); three pad docstrings called a canonicity divergence an arity fact; the header paragraph was 189 theorems stale and its "cannot be stale" sentence is now **bound to the source text**; 4.3's distribution triple was spliced and is replaced by the two real states; the `CHANGELOG`'s two universals are now a measured table |
-> | **a gate-satisfier, not a law**                   | 8.4                                | the seven `*BlockIso_apply` `:= rfl`s are **deleted** and 4.2's allowlist drop reverted (18 back, mentioned 143). A theorem restating a proved structure field is `Axioms.lean`'s own named `propProjections` defect                                                                                                                                                                         |
-> | **a spec violation, not a style preference**      | 8.3                                | `b32/b64BlockApply_of_toNat` were conjunctions with no hypothesis whose second arm never mentions `toNat`; restated as a genuine implication pair (`+2` theorems)                                                                                                                                                                                                                            |
-> | **a mandated statement never proved**             | 8.10                               | `octBlockApply_domain_iff` / `digBlockApply_domain_iff`, both `[propext]`-only                                                                                                                                                                                                                                                                                                               |
-> | **flag not reaching an exe root**                 | 8.8                                | `-DwarningAsError` on `lean_exe bench`; verified by stubbing a `sorry`                                                                                                                                                                                                                                                                                                                       |
-> | **orphans**                                       | 8.11                               | four theorems and one `def` deleted (not allowlisted)                                                                                                                                                                                                                                                                                                                                        |
+> **`Base16`'s 24-theorem case-folding tier is deleted** — 29 pins — and replaced by **one
+> shared pre-pass** in `BaseN.Common`: `upperByte`/`upperBytes`, a total idempotent
+> `UInt8 → UInt8` map lifted pointwise, with a `Normalizer` instance from its idempotence.
+> Base 16 and base 32 compose it **outside** their strict decoders; base 64 refuses it.
+>
+> | what                   | measured                                                    |
+> | ---------------------- | ----------------------------------------------------------- |
+> | gate universe          | **722 → 698** (net **−24**, not the estimated −16)          |
+> | `Base16.lean` decls    | **88 → 53**                                                 |
+> | `hexBlockIsoF` callers | **none** — confirmed, which is why the tier was dead weight |
+> | `Base32`               | **+3 theorems**, purely additive                            |
+>
+> **The tier existed on a misquoted RFC, and that is the finding worth carrying.** The
+> header said _"RFC 4648 §8 requires a decoder to accept both cases"_. §8 says decoders
+> **MAY** accept lowercase. No RFC text is vendored anywhere in this ecosystem, so nothing
+> ever compared the claim to the standard; `codec` had corrected the same misquote in
+> `codec-audit-round-eight` M-1 and `basen` never got the fix. **A conformance obligation
+> nobody can point at the text for is an obligation nobody checked.**
+>
+> **Base 64's exclusion is an assertion, not a comment.** There, case is _data_ — the
+> alphabet uses all 64 symbols including 26 lowercase letters — so `"TWFu"` decodes to
+> `[77, 97, 110]` ("Man") while `"twfu"` decodes to `[183, 7, 238]`, a different,
+> equally well-formed value. `Bench.b64Lower_decodes` pins both, so a later "helpful"
+> extension breaks the build.
 >
 > ### The four findings that matter most
 >
@@ -302,15 +312,15 @@ Quot.sound]`-only, zero `Classical.choice`. At that landing the gate still read 
 > equality is **false** and D6's implication-pair shape is confirmed. The seven ties
 > themselves are still unwritten.
 >
-> | session          | tasks                                                                         | green at the end means                                                                                                                             | **not yet true**                                      |
-> | ---------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-> | **1** ✅ landed  | 1.1–1.4, **4.1**, 4.3's constants, + the throwaway block-iso probe            | `toNat`/`ofNat` exist, round-trip proved, `RadixAlphabets` agrees at all seven radices, gate green with the new laws pinned (`533 = 484 + 49`)     | no `numeralIso`, no ties, no instances                |
-> | **2a** ✅ landed | 2.1 (+ the uniqueness lemma 2.2's `←` needs)                                  | `strip`/`trimFor` total + idempotent; `trimFor_ofNat`; `natVal_inj_head`; all `[propext, Quot.sound]`-only                                         | `numeralIso` itself, no ties                          |
-> | **2b** ✅ landed | 2.2b, 2.2, 2.2b′                                                              | the value↔byte bridge; `numeralIso` a full `Iso`, law unconditional on the quotient                                                                | `trimFor`'s zero-spelling bug; the witness; 2.2c pins |
-> | **2c** ✅ landed | **fix `trimFor`, then** 2.3, 2.4, **2.2c + 4.1**, 4.4, 4.5, 5.1/5.1b/5.2      | zero spellings accepted; witness mutation-tested; rejection laws; 117 laws imported and pinned by hand; gate `653 = 601 + 52` / 28 jobs            | no ties, no radix instances                           |
-> | **3** ✅ landed  | 3.1's radix instances, 3.2 (all seven bases), 3.3–3.5, 4.2, 4.2b, 4.3 (again) | all seven block isos tied; allowlist **18 → 11**; header constants re-derived; gate `722 = 670 + 52` at 29 jobs                                    | **its own review findings (§8)**                      |
-> | **4** ✅ landed  | 5.3, 5.4, 6.2, 6b.x, 7.x                                                      | value-check inventory, `CHANGELOG`, two-repo commits recorded, non-goals stated                                                                    | —                                                     |
-> | **5** ✅ landed  | `tasks.md` §8's 13 MUST / 17 SHOULD / 14 NITPICK                              | every MUST closed or one of the three refuted by measurement; spec delta true of the code; gate `716 = 664 + 52` at 29 jobs, defs `159 = 142 + 17` | — (`basen-radix` is archivable)                       |
+> | session          | tasks                                                                         | green at the end means                                                                                                                         | **not yet true**                                      |
+> | ---------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+> | **1** ✅ landed  | 1.1–1.4, **4.1**, 4.3's constants, + the throwaway block-iso probe            | `toNat`/`ofNat` exist, round-trip proved, `RadixAlphabets` agrees at all seven radices, gate green with the new laws pinned (`533 = 484 + 49`) | no `numeralIso`, no ties, no instances                |
+> | **2a** ✅ landed | 2.1 (+ the uniqueness lemma 2.2's `←` needs)                                  | `strip`/`trimFor` total + idempotent; `trimFor_ofNat`; `natVal_inj_head`; all `[propext, Quot.sound]`-only                                     | `numeralIso` itself, no ties                          |
+> | **2b** ✅ landed | 2.2b, 2.2, 2.2b′                                                              | the value↔byte bridge; `numeralIso` a full `Iso`, law unconditional on the quotient                                                            | `trimFor`'s zero-spelling bug; the witness; 2.2c pins |
+> | **2c** ✅ landed | **fix `trimFor`, then** 2.3, 2.4, **2.2c + 4.1**, 4.4, 4.5, 5.1/5.1b/5.2      | zero spellings accepted; witness mutation-tested; rejection laws; 117 laws imported and pinned by hand; gate `653 = 601 + 52` / 28 jobs        | no ties, no radix instances                           |
+> | **3** ✅ landed  | 3.1's radix instances, 3.2 (all seven bases), 3.3–3.5, 4.2, 4.2b, 4.3 (again) | all seven block isos tied; allowlist **18 → 11**; header constants re-derived; gate `722 = 670 + 52` at 29 jobs                                | **its own review findings (§8)**                      |
+> | **4** ✅ landed  | 5.3, 5.4, 6.2, 6b.x, 7.x                                                      | value-check inventory, `CHANGELOG`, two-repo commits recorded, non-goals stated                                                                | —                                                     |
+> | **5** ✅ landed  | `tasks.md` §8's 13 MUST / 17 SHOULD / 14 NITPICK                              | every MUST closed or one of the three refuted by measurement; spec delta true of the code; **archived 2026-11-15**                             | — (`basen-radix` is archived)                         |
 >
 > **Why session 2 moved from §3 to §2, and session 3 is now the ties.** §4.1 plus the
 > asserted constants had to land with §1 (a `BaseN` theorem with no `#guard_msgs` block is
@@ -425,8 +435,9 @@ Quot.sound]`-only, zero `Classical.choice`. At that landing the gate still read 
 > two zero conventions. Its analysis is carried forward; `basen-radix/tasks.md` §6.1
 > tabulates where each requirement went. Do not reopen it.
 >
-> `basen-uppercase-prepass` is **still PARKED by the owner** pending a library-division
-> decision. Do not start it.
+> `basen-uppercase-prepass` **landed 2026-11-15** — the library-division decision was made in
+> favour of keeping the pre-pass in `basen` (see its `tasks.md` §6.5). Do not reopen the
+> question of whether it belongs in `codec`; the answer is recorded.
 >
 > ### `codec-drift-closure` attacks the one class the gate arms cannot see
 >
@@ -621,8 +632,7 @@ previous defect_. A fix is a check, and a check is only as good as what enters i
 `codec-drift-closure` (the closure of round nine's residue plus the one defect class the gate
 arms cannot see — a claim whose stated method is not its code's method) landed and archived
 2026-11-12; `codec-audit-round-nine` landed and archived 2026-11-13. Everything below is
-archived history, except `basen-radix` (**59/59 complete, archivable**) and
-`basen-uppercase-prepass` (parked on the owner's library-division decision).
+archived history, except `basen-uppercase-prepass` (**20/20 complete, archivable**).
 
 - `codec-drift-closure` — **archived** 2026-11-12 as
   `openspec/changes/archive/2026-11-12-codec-drift-closure/` (33/33). It closed round nine's
@@ -679,15 +689,18 @@ archived history, except `basen-radix` (**59/59 complete, archivable**) and
   Its §6 records the paper/numbers SHOULDs it fixed and the ones it **refuted** (S-6's
   suffix-vs-component, N-7's "15 jobs" — `lake build` really does print that).
 
-- `basen-uppercase-prepass` — **in-progress, PARKED**, 0/20. Replaces `Base16`'s
-  24-theorem case-folding tier with an `upperBytes` pre-pass through
-  `Codec/Normal.lean`, corrects the RFC `MAY`-vs-`MUST` misquote that justified the
-  tier, and **excludes base64** because its lowercase letters are data. Three ADDED
-  `basen` requirements. **Disjoint from `basen-radix`'s** — case folding concerns the
-  _alphabet_, `basen-radix` concerns _padding_ — so neither can drop the other's
-  scenarios. Its fate still depends on the owner's library-division decision.
+- `basen-uppercase-prepass` — **20/20 complete 2026-11-15, awaiting archive.** Replaced
+  `Base16`'s 24-theorem case-folding tier with the shared `BaseN.Common.upperBytes`
+  pre-pass, corrected the RFC §8 `MAY`-vs-`MUST` misquote that had justified the tier, gave
+  `Base32` the same decoder (purely additive), and **excluded base64** with an assertion
+  rather than a comment. Three ADDED `basen` requirements. Gate `722 → 698` (−24). The
+  library-division question — whether a case-folding pre-pass belongs in `codec` — was
+  answered **no** and recorded at `tasks.md` §6.5: `upperBytes` is a concrete alphabet
+  operation and `codec` ships no concrete format (`[S3]`); what it supplies is the
+  `Normalizer`/`decodeNormal` mechanism, which both bases now use.
 
-- `basen-radix` — **59/59 complete, §8 closed 2026-11-15, awaiting archive.** Adds the
+- `basen-radix` — **ARCHIVED 2026-11-15** as
+  `openspec/changes/archive/2026-11-15-basen-radix/` (59/59). Adds the
   missing rung in `basen`: a radix-generic
   `digitVal`/`toNat`/`ofNat` over `Nat` plus `numeralIso` per radix over the `Normal`
   quotient, for bases **2, 4, 8, 10, 16, 32, 64**, and ties all seven block isomorphisms
