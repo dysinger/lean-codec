@@ -7,16 +7,46 @@ Guidance for AI coding agents working in this repository.
 > **One change is open: `basen-radix`** — the next session's work. Read its `tasks.md`
 > banner before touching anything.
 >
-> **Session 1 (the fold) LANDED 2026-11-14** — `../lean-basen` `c1cfe50` + `61e00eb`.
-> `BaseN/Radix.lean` and `BaseN/RadixAlphabets.lean` exist, the round trip is proved, and
-> the gate moved to **`533 = 484 + 49` / 27 jobs** with §4.1's pins.
+> ### NEXT SESSION STARTS AT **2.2c + 4.1** — one commit, cannot be left half-done
 >
-> **Session 2 part 1 LANDED 2026-11-14** — `../lean-basen` `5a3e1fc` → `c18b6a3`.
-> `BaseN/RadixCodec.lean` exists and builds: `strip`/`trimFor` (the normaliser),
-> `trimFor_ofNat` + `trimFor_idem` (the fixed-point laws), and **`natVal_inj_head`**
-> (minimal-digit numerals are unique). Every law is `[propext, Quot.sound]`-only, **zero**
-> `Classical.choice` (measured).
+> Section 2 is **closed** (2.1–2.4 all landed). The next task is the one the gate has been
+> blind to all along:
 >
+> 1. **Add `import BaseN.RadixCodec` to `BaseN.lean`** (`../lean-basen`). Measured
+>    2026-11-14: this makes the coverage arm name **~99 unpinned theorems plus one uncovered
+>    `def`** (`isNumeral`). The import is _not_ optional and _not_ safe to land alone — a
+>    module built but not imported is indistinguishable from a module with no laws, and the
+>    gate stayed green through three sessions for exactly that reason.
+> 2. **Pin every new law by hand.** `basen` has **no generator**:
+>    `ls ../lean-basen/scripts/` fails, `grep -c 'BEGIN GENERATED' Axioms.lean` is `0`.
+>    Per new theorem: a `#guard_msgs` / `#print axioms` block (exactly as the existing 484
+>    are written) **and** the name added to `BaseNAxioms.gatedNames` — find it with
+>    `grep -n 'BEGIN PINNED' ../lean-basen/Axioms.lean`, **never a line number written here**:
+>    it was `2066` when this paragraph was first drafted and is `2242` at `ca552c7`.
+> 3. **`isNumeral` needs a `definitionSurfaceAllowlist` entry** or a mention by some gated
+>    theorem's type — the def-coverage arm is a _mention proxy_ and cannot be satisfied by
+>    silence.
+> 4. **Re-derive the header constants.** Pinning moves the pinned count, so
+>    `headerNumbers` fires and `Axioms.lean`'s header table + `expected*` constants must move
+>    together. A stale header is a **build failure**, which is the check working.
+>
+> The coverage arm is the enforcement, not this paragraph: it fails the build naming every
+> public `BaseN` theorem that is in neither `gatedNames` nor `generatedAuxAllowlist`, with
+> the message `theorems not pinned by this gate`. Read its output, not any count written in a
+> file — including the `~99` above, which is a 2026-11-14 measurement and has certainly moved
+> as 2.3/2.4 added ten theorems.
+>
+> **Budget a full session.** This is mechanical but error-prone, and stopping mid-way leaves a
+> RED gate — which this repo forbids per commit. If time runs short, stop **before** the
+> import, not after.
+>
+> ### Where the work goes after 2.2c: session 3 (the ties)
+>
+> §3.1's seven radix instances, then 3.2–3.5 (the seven block-iso ties by the
+> canonicity-filtered implication pair of `design.md` D6), then §4.2/4.2b (**which can only
+> land with 4.3** — trimming `definitionSurfaceAllowlist` without re-deriving the header
+> constants trips `headerNumbers`, so those three are one commit).
+
 > **Session 2c LANDED 2026-11-15** — `../lean-basen` `8aec2a8` → `909babe`. **The zero-spelling
 > bug is FIXED and its witness landed.** `trimFor`'s all-absorbed branch now tests
 > `isZeroSpelling` instead of `isDigits`, so `"  0"` reaches `some [48]` at every radix.
