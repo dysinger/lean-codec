@@ -1115,7 +1115,7 @@ closed more times than any other: **a claim whose stated method is not its code'
       b32BlockApply [77,89,61,61,…] ->  some [102]      toNat 32 [77,89,61,61,…] ->  none
       ```
 
-- [ ] 8.3 **[MUST] [GC-M2] The `_L` "tie" is a conjunction whose second arm never mentions
+- [x] 8.3 **[MUST] [GC-M2] The `_L` "tie" is a conjunction whose second arm never mentions
       `toNat`, and that is a _spec violation_, not a style preference.**
       `b32BlockApply_of_toNat` / `b64BlockApply_of_toNat` conclude `A ∧ B` where `B` is
       `blockApply … = some bs` and `A` is `toNat_b*_unapply_*` — an existing lemma. So the
@@ -1143,12 +1143,25 @@ closed more times than any other: **a claim whose stated method is not its code'
       `(h : b64BlockApply cs = some bs) → toNat 64 cs = some (beVal bs)` at the pad-free
       arity. **Net +2 theorems** (2 = 2+2−2), and 8.4's revert is then a pure deletion.
 
+      **LANDED 2026-11-15** (`../lean-basen` `9973729`). Each `_L` base now carries three
+      theorems: `b*BlockApply_of_toNat` (the `→`, no hypothesis), `toNat_of_b*BlockApply_five`
+      (the `←` at the literal arity, kept), and `toNat_of_b*BlockApply` (the `←` with an
+      arbitrary `bs` plus `hbs : bs = [b0,…]`). The two `←` forms are the same statement
+      written two ways — `+2` counts the *new* general form, not a second direction.
+
+      **Mutation-tested, and the first attempt was refuted rather than accepted.** Perturbing
+      `b64BlockApply`'s guard to `some bs.reverse` fails `b64BlockIso_law` *inside
+      `Base64.lean`*, so it never exercises this module — the probe has to reach it. With the
+      law replaced by an axiom, the same perturbation makes `toNat_of_b64BlockApply` report
+      `[propext, Quot.sound, BaseN.Base64.b64BlockIso_law]` and the gate fails naming it. So
+      the pair constrains the block's `apply`, not just the `Iso` field.
+
       **`README.md` consistency: no `[Dn]`/`[S]` filing needed.** This restores the paper's
       law shape rather than departing from it; the pad-free restriction is the partiality the
       `Maybe` arrow already models, which is the same argument `[S1]` and D6's correction 3
       make. It is an implementation-vs-spec fix.
 
-- [ ] 8.4 **[MUST] [GC-M4, GC-S3] The seven `*BlockIso_apply` laws are gate-satisfiers, not
+- [x] 8.4 **[MUST] [GC-M4, GC-S3] The seven `*BlockIso_apply` laws are gate-satisfiers, not
       laws.** Each is `:= rfl` on a structure projection (`bitBlockIso` is literally
       `{ apply := bitBlockApply, … }`), so it cannot fail for any edit to `bitBlockApply`. They
       were introduced _because the def arm refused the allowlist drop_ — my own commit message
@@ -1174,6 +1187,15 @@ closed more times than any other: **a claim whose stated method is not its code'
       delete the seven `*BlockIso_apply` theorems, and record 4.2's drop as a correction
       rather than a win. 4.2b's "18 → 11" prose reverses to "back to 18". Direction:
       **−7 theorems** (`expectedPub` 722 → 715 before 8.3's +2).
+
+      **LANDED 2026-11-15** (`../lean-basen` `9973729`, same commit as 8.3, so the
+      intermediate gate never existed). The seven are gone, the seven `Iso` values are back on
+      `definitionSurfaceAllowlist` under the `Iso`-law-as-field reason, and `Axioms.lean`'s
+      drop narrative is replaced by a correction paragraph that quotes `:1963`. Measured, from
+      the gate rather than predicted: `expectedPub` **722 → 717**, `expectedGated` 670 → 665,
+      `expectedMentioned` 150 → 143, `expectedDefAllow` 11 → 18, `statedDistPS` 546 → 541.
+      The `-5` is 8.3's `+2` on top of this item's `−7`, which is why neither number is
+      `715`.
 
 - [x] 8.5 **[MUST] [NB-M1] `Axioms.lean`'s header paragraph is stale by 189 theorems — in a
       paragraph that claims it cannot be stale.** Measured, side by side:
