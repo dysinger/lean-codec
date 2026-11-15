@@ -379,14 +379,32 @@ Findings: `design.md` D2/D4.
       direction: the gate stayed green through the whole session because it could not see
       the file. The import was reverted so the gate stays green; it lands with 4.1's pins,
       which cannot be left half-done.
-- [ ] 2.3 Prove the **three-spelling witness** — canonical, leading-zero, and
+- [x] 2.3 Prove the **three-spelling witness** — canonical, leading-zero, and
       leading-whitespace spellings of one number all reach the same image — and
       **mutation-test it** by removing one absorbed variation and confirming it fires. This
       is the task `basen-nat-iso` §Risk named as "the first task, before any other proof",
       and it stays true here.
 
-      **IT FOUND A REAL DEFECT, AND THE DEFECT IS STILL OPEN.** Measured 2026-11-15 in
-      `../lean-basen` at `9a02f89`, by `#eval` on the shipped `trimFor`:
+      **LANDED 2026-11-15** (`../lean-basen` `8aec2a8` → `909babe`): the `trimFor` fix and
+      the witness, in two commits. `three_spellings` (arbitrary spelling), plus
+      `three_spellings_ten` (`"7"`/`"007"`/`"  7"`) and `three_spellings_zero`
+      (`"0"`/`"00"`/`"  0"`) as `decide`-closed literals. All three
+      `[propext, Quot.sound]`-only.
+
+      **Mutation-tested, and it fires naming the defect.** Removing the leading-blank
+      absorption from `isZeroSpelling` fails the build at `three_spellings_zero`:
+
+      ```
+      Tactic `decide` proved that the proposition
+        trimFor 10 [32, 32, 48] = some [48]
+      is false
+      ```
+
+      The predicate's own proofs fail on the same mutation too, so the defect is caught at
+      both layers — the proof and the witness.
+
+      **The defect it found, now closed.** Measured 2026-11-15 in
+      `../lean-basen` at `9a02f89`, by `#eval` on the then-shipped `trimFor`:
 
       ```
       #eval trimFor 10 [32,32,55]   -- "  7"  -> some [55]
@@ -405,32 +423,100 @@ Findings: `design.md` D2/D4.
       only because `7` is non-zero, so the zero class is the only one affected — which is
       exactly why the three-spelling witness is the task that finds it.
 
-      **So 2.3 is not "prove the witness": it is fix `trimFor`, then prove the witness.**
-      A fix was attempted and **reverted** (nothing landed); the two designs tried, and why
-      each is harder than it looks, so the next session does not repeat them:
+      **So 2.3 was not "prove the witness": it was fix `trimFor`, then prove the witness.**
+      The two designs that were tried and are **superseded** — recorded because the second
+      one is what `2.3`'s own prose used to recommend, and the next reader should not
+      re-derive either:
 
       1. **`ds ≠ []` alone in the all-absorbed branch** — too weak. It accepts `"  "`
          (blanks only, names nothing) and `"0 "` (a trailing blank, which D3 says must be
          rejected). Measured: `trimFor 10 [32,32]` and `trimFor 10 [48,32]` both became
          `some [48]`.
-      2. **A `isZeroSpelling b ds` predicate** (`every byte is a blank or the zero digit`)
-         — correct, and it is the design to finish. The hard lemma is the *converse* that
-         `trimFor_none_toNat_none` needs: a blanks-and-zero-digits list that is not a zero
-         spelling folds to `none`. The route that ran out of room was
-         `toNat_none_of_zeroish : (∀ c ∈ ds, isBlank c ∨ isZeroDigit b c) →
-         isZeroSpelling b ds = false → toNat b ds = none`, by induction on `ds`, whose
-         non-blank head case needs `isZeroDigit b d → digitVal b d = some 0` — which is
-         `digitVal_byteOfDigit hr 0` at an `IsRadix` (it is **not** true at a variable
-         radix, so the lemma must carry `hr`).
+      2. **An `isZeroSpelling b ds` predicate** (`every byte is a blank or the zero digit`)
+         — **also wrong, measured 2026-11-15 in session 2c.** This text previously called it
+         "correct, and it is the design to finish"; that claim is false and is corrected
+         here rather than left standing. It is design 1 above arriving through a predicate
+         instead of through `ds ≠ []`: **both regressions reproduce exactly.**
 
-      **Design note for the fix:** `isZeroSpelling` is the right predicate but it is also
-      true of `[]`, and `trimFor b []` must stay `none` (D4). Keep the `ds = []` test as a
-      **separate** conjunct rather than relying on the predicate to exclude it.
+         ```
+         #eval trimFor 10 [32,32]   -- "  "  -> some [48]   <-- must be none
+         #eval trimFor 10 [48,32]   -- "0 "  -> some [48]   <-- must be none
+         ```
 
-      Six existing proofs read the three-arm `trimFor` body and must be re-shaped with the
-      fix: `trimFor_ofNat`, `trimFor_idem`, `fixed_eq_ofNat`, `trimFor_none_toNat_none`,
-      and two more via `ofNat_isDigits`. Grep `isDigits b ds` before starting — that string
-      is the defect.
+         **The cause, which is the thing design 1 and design 2 share and neither names:**
+         `strip` absorbs `"0 "` and `"  0"` **identically** — the `0` is a zero digit and the
+         blank is a blank, in either order — so *no predicate defined against `strip`'s
+         output can distinguish them*. Any predicate built on `strip` inherits the same
+         blind spot, and the blind spot is precisely the distinction D3's trailing-blank row
+         requires. `design.md` D4's reason 2 already states this constraint — *"leaving
+         `trim` unable to distinguish a zero numeral from a malformed empty input"* — so the
+         design document was right and this task's prose contradicted it.
+
+      **The predicate that is correct has THREE conditions, and the shape is the fix.**
+      `ds` is a zero spelling iff it is **leading blanks, then one or more zero digits, and
+      nothing else** — with the blanks and the zeros *separated in the definition's own
+      recursion*, not conflated by `strip`:
+
+      ```
+      isZeroZeros b zs      = false on [], else  isZeroDigit b c && zs.all (isZeroDigit b)
+      isZeroSpelling b []   = false
+      isZeroSpelling b (c::cs) = if isBlank c then isZeroSpelling b cs
+                                 else isZeroZeros b (c :: cs)
+      ```
+
+      The three conditions, each with the witness it exists for:
+
+      | condition               | witness it rejects | why the weaker version fails |
+      | ----------------------- | ------------------ | ---------------------------- |
+      | leading blanks only     | `"0 "`            | a blank after a zero digit is trailing whitespace (D3) |
+      | at least one zero digit | `"  "`            | blanks alone name nothing    |
+      | every other byte a zero digit | `"0x"`      | `strip` never saw it         |
+
+      Because `isZeroSpelling b [] = false`, D4's `[]` test and the predicate agree and the
+      branch needs **no** separate `ds = []` conjunct — an earlier note here said to keep
+      one; it is now redundant, and keeping both would be two guards where the predicate is
+      total.
+
+      **Measured: 20 witness rows against a model written straight from the spec.**
+      `scratch/spec_table.lean` in `../lean-basen` compares the shipped `trimFor` with a
+      predicate written directly from `spec.md` + D3/D4 (not from this task's prose), over
+      the whole of D3's table plus the zero class at radices 2, 10 and 16. Result:
+      **exactly 3 disagreements, all one class — lead-blank zeros.**
+
+      ```
+      ("  0",  10, shipped=false, model=true)   <-- the defect
+      ("  00", 10, shipped=false, model=true)   <-- the defect, multi-zero
+      ("  0",   2, shipped=false, model=true)   <-- the defect, base 2
+      ("  0",  16, shipped=false, model=true)   <-- the defect, base 16
+      ```
+
+      (four rows shown because radix is part of the row; the three *strings* are `"  0"`,
+      `"  00"` and `"  0"` — the count of failing **rows** is 4 and of distinct **strings**
+      is 3. State which is meant; this is the padding trap `AGENTS.md` names.)
+
+      **Six existing proofs read the three-arm `trimFor` body** and must be re-shaped with
+      the fix. Grep `isDigits b ds` first — that string is the defect. Two behave in ways
+      this plan did not predict, both measured:
+
+      - **`trimFor_idem` LOSES its `IsRadix` hypothesis.** Under the fix both branches settle
+        on `strip`'s own equations (`strip_idem`, and `strip`'s recursion for the zero arm)
+        plus the canonical form `trimFor` returns, so idempotence is a fact about the
+        normaliser's shape and not about the alphabet. It was carried *while* the zero
+        branch tested `isDigits`; drop the hypothesis rather than keep an argument the
+        theorem does not use — a hypothesis that is not needed is a false claim about the
+        theorem. (Verified: the build reports `Variable name 'hr' is not explicitly
+        referenced` and fails on `warningAsError`, which is the compiler making the same
+        point.)
+      - **`trimFor_none_toNat_none`'s zero branch must NOT go through the spelling
+        predicate.** The converse this task previously described (`toNat_none_of_zeroish`:
+        blanks-and-zero-digits that is not a zero spelling folds to `none`) needs the
+        non-blank head case to give `digitVal b d = some 0`, which is **false** at a
+        variable radix and needs `hr` — but the *cleaner* route is one level up: a `strip`-
+        empty list whose `isZeroSpelling` is false must contain a **blank**, and a blank
+        anywhere makes the fold reject. `toNat_none_of_mem_blank : (∃ c ∈ ds, isBlank c =
+        true) → toNat b ds = none` is proved and does not need the zero-digit arm at all.
+        The `isZeroZeros ⇒ toNat = some 0` and `isBlank ⇒ digitVal = none` lemmas are the
+        only alphabet facts required, and both are one `IsRadix` case split.
 
 - [ ] 2.4 Prove the rejection direction: a trailing non-digit, an out-of-alphabet digit, and
       trailing data after a valid numeral all yield `none`. State these as their own laws
