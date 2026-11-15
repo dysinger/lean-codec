@@ -1349,10 +1349,24 @@ closed more times than any other: **a claim whose stated method is not its code'
       `PAPER.md:789` (not 787), and the section is §5.1 (not §6.2). Recorded because a wrong
       citation in a normative anchor is the padded-range defect in miniature.
 
-- [ ] 8.10 **[SHOULD] [GC-M1] The spec's mandated "iff about the block's domain" is not proved
+- [x] 8.10 **[SHOULD] [GC-M1] The spec's mandated "iff about the block's domain" is not proved
       anywhere.** `octBlockApply_overflow`/`digBlockApply_overflow` are one-directional; the
       iff exists only as prose in a docstring and in `tasks.md`. A reviewer produced the
       missing 6-line theorem, `[propext]`-only. Either prove it or stop saying "complete".
+
+      **LANDED 2026-11-15** (`../lean-basen` `9c7ec20`). `octBlockApply_domain_iff` and
+      `digBlockApply_domain_iff` are in, both measured `[propext]`-only — so `statedDistP`
+      moved `83 → 85` while `statedDistPS` did not. Three docstrings that called the
+      overflow law "complete" are corrected: the defect was **both** a missing theorem and a
+      false claim, and fixing only the first would have left the second.
+
+      **Mutation, stated for what it shows.** Bound `255 → 254` in the statement fails with
+      `unsolved goals` at both branch arms and the unused-hypothesis linter names
+      `h0`/`h1`/`h2`. The stronger probe — delete `octBlockApply`'s own `n ≤ 255` guard so
+      the iff goes *false* — **does not survive `Base8.lean`**: four proofs in that module
+      depend on the guard, so the mutant cannot reach this module. That is evidence the guard
+      is constrained downstream, not evidence for this theorem, and it is recorded that way
+      rather than as a pass.
 
 - [ ] 8.11 **[SHOULD] [GC-S4, GC-N5] Four orphan theorems and one orphan `def`.** Measured by
       grep: `toNat_eq_natVal_map`, `valAt`, `beVal_eq_natVal`, `beVal_two` and `numeralIsoAt`
