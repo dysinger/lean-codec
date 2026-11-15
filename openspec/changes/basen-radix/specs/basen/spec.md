@@ -22,9 +22,16 @@ agreement law is provable there and is a bonus rather than an obligation. (An ea
 said "radices 2, 4 and 8", which is false of 4 and 8.)
 
 A digit byte that is not in the radix's alphabet SHALL yield `none`, and a sequence
-containing one SHALL NOT be convertible. The empty sequence SHALL NOT be the canonical
-spelling of zero at any radix: `ofNat b 0` is the base's single zero digit, so `toNat b []`
-is `none` and `toNat b` of the zero digit is `some 0`.
+containing one SHALL NOT be convertible.
+
+The empty sequence is **not** the canonical spelling of zero at any radix — `ofNat b 0` is
+the base's single zero digit — but the fold's base case is `some 0`, so **`toNat b [] =
+some 0`**. That is a by-product of the recursion, not a convention: nothing in this layer
+treats `[]` as a numeral. The normaliser rejects it (`trimFor b [] = none`), `isNumeral b
+[] = false`, `normF b []` replaces it with the zero numeral, and every `Iso` path goes
+through the normaliser. `toNat b` of the zero digit is `some 0` as well, so the fold — not
+the layer — admits two spellings of zero, and the quotient of the requirement below has one
+element for them.
 
 #### Scenario: A numeral converts to its value
 

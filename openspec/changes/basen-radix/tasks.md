@@ -1065,19 +1065,33 @@ each entry carries either my own measurement or says plainly that I took it on t
 Two of the MUSTs are **my own work being wrong**, and both are the defect class this repo has
 closed more times than any other: **a claim whose stated method is not its code's method.**
 
-- [ ] 8.1 **[MUST] [PR-M1] The spec asserts a falsehood about the shipped function.**
-      `spec.md` says `toNat b []` is `none`. It is `some 0` — the fold's base case. Measured:
+- [x] 8.1 **[MUST] [PR-M1] The spec asserts a falsehood about the shipped function.**
+      `spec.md` said `toNat b []` is `none`. It is `some 0` — the fold's base case. Measured:
 
       ```
       #eval (BaseN.Radix.toNat 10 [] : Option Nat)   ->  some 0
       ```
 
-      Code and spec disagree; the code's own docstrings say so in five places. Since the
+      Code and spec disagreed; the code's own docstrings say so in five places. Since the
       delta becomes the live spec verbatim at archive, this must be corrected **before**
-      archive. Fix: state `toNat b [] = some 0` and say `[]` is a fold by-product, not a
-      convention (`trimFor b [] = none`, `isNumeral b [] = false`).
+      archive.
 
-- [ ] 8.2 **[MUST] [GC-M3, PA-M3] My base-64 docstring is false, and I wrote it.**
+      **LANDED 2026-11-15.** `spec.md`'s first requirement now states `toNat b [] = some 0`
+      and says `[]` is a fold by-product rather than a convention, naming the three places
+      that reject it. All three re-measured in the same session (`scratch/witness.lean`):
+
+      ```
+      BaseN.RadixCodec.trimFor 10 []  ->  none
+      BaseN.RadixCodec.isNumeral 10 [] ->  false
+      BaseN.RadixCodec.normF 10 []    ->  [48]
+      BaseN.Radix.toNat 10 []         ->  some 0
+      BaseN.Radix.toNat 10 [48]       ->  some 0
+      ```
+
+      Note the last two: the fold admits **two** spellings of zero, which is exactly why the
+      quotient has one element for them and why the by-product reading is the honest one.
+
+- [ ] 8.2 **[MUST] [GC-M3, PA-M3] The base-64 docstring is false.**
       `RadixTie.lean:949-952` claims the two functions "agree on every input the block accepts
       _canonically_ — which … is every input it accepts at all". Measured:
 
